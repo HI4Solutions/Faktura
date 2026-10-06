@@ -11,7 +11,7 @@ import {
 } from "firebase/auth";
 import { hentAuth } from "../firebase";
 import { Feil } from "../felles";
-import { erAvbrutt, loggInnMedPasskey, stotterPasskey } from "../passkey";
+import { erAvbrutt, loggInnMedPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
 const feiltekst: Record<string, string> = {
   "auth/invalid-credential": "Feil e-post eller passord.",
@@ -43,7 +43,8 @@ export function Innlogging() {
     try {
       await loggInnMedPasskey();
     } catch (e) {
-      if (!erAvbrutt(e)) settFeil((e as Error).message);
+      console.error("Passkey-innlogging feilet", e);
+      if (!erAvbrutt(e)) settFeil(passkeyFeil(e));
     } finally {
       settOpptatt(false);
     }

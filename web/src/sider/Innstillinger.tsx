@@ -4,7 +4,7 @@ import { Feil, Laster, tall, useData, useHandling } from "../felles";
 import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
-import { erAvbrutt, foreslattNavn, leggTilPasskey, stotterPasskey } from "../passkey";
+import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
 export function Innstillinger() {
   const { org, meg } = useKonto();
@@ -171,15 +171,21 @@ function Passkeys() {
   const h = useHandling();
   const [lagt, settLagt] = useState(false);
 
+  const [venter, settVenter] = useState(false);
+
   async function leggTil() {
     settLagt(false);
     h.settFeil(null);
+    settVenter(true);
     try {
       await leggTilPasskey(foreslattNavn());
       settLagt(true);
       last();
     } catch (e) {
-      if (!erAvbrutt(e)) h.settFeil((e as Error).message);
+      console.error("Passkey-registrering feilet", e);
+      if (!erAvbrutt(e)) h.settFeil(passkeyFeil(e));
+    } finally {
+      settVenter(false);
     }
   }
 
@@ -214,8 +220,8 @@ function Passkeys() {
         </table>
       )}
       {stotterPasskey() ? (
-        <button className="primar" onClick={leggTil} disabled={h.opptatt}>
-          Legg til passkey
+        <button className="primar" onClick={leggTil} disabled={h.opptatt || venter}>
+          {venter ? "Venter på bekreftelse …" : "Legg til passkey"}
         </button>
       ) : (
         <p className="dempet liten">Nettleseren din støtter ikke passkeys.</p>

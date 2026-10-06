@@ -17,7 +17,20 @@ async function offentlig(sti: string, kropp?: unknown) {
 }
 
 // Avbrutt av brukeren er ikke en feil som skal vises.
-export const erAvbrutt = (e: unknown) => (e as Error)?.name === "NotAllowedError" || (e as Error)?.name === "AbortError";
+export const erAvbrutt = (e: unknown) => (e as Error)?.name === "AbortError";
+
+// Forklaring på feil fra nettleserens passkey-dialog. NotAllowedError kommer både når
+// brukeren avbryter, når tiden går ut, og når nettleseren blokkerer passkeys på siden.
+export function passkeyFeil(e: unknown): string {
+  const navn = (e as Error)?.name;
+  const melding = (e as Error)?.message ?? "";
+  if (navn === "NotAllowedError")
+    return "Passkey ble avbrutt eller ikke tillatt. Fikk du ikke opp noe vindu, sjekk at adresselinjen viser hengelås og ikke «Ikke sikker» (start nettleseren på nytt om nødvendig), og at enheten har skjermlås, Face ID, Touch ID eller Windows Hello slått på.";
+  if (navn === "InvalidStateError") return "Denne enheten har allerede en passkey for kontoen din.";
+  if (navn === "SecurityError") return `Nettleseren godtok ikke domenet for passkey (${melding}). Bruk https://faktura.hi4.no.`;
+  if (navn === "NotSupportedError") return "Enheten eller nettleseren støtter ikke passkeys.";
+  return melding || "Noe gikk galt med passkey.";
+}
 
 export async function loggInnMedPasskey() {
   const start = await offentlig("/start");
