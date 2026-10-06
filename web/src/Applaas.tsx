@@ -127,6 +127,12 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
   const pagaende = useRef<{ nr: number; automatisk: boolean } | null>(null);
   const teller = useRef(0);
 
+  // Bakgrunnen bak låseskjermen (der iOS ikke tegner siden) får samme farge som den.
+  useEffect(() => {
+    document.documentElement.classList.add("laast");
+    return () => document.documentElement.classList.remove("laast");
+  }, []);
+
   // Startes synkront fra trykket, så nettleseren regner forespørselen som brukerens egen.
   const lasOpp = (automatisk: boolean) => {
     if (pagaende.current && !pagaende.current.automatisk) return; // et trykk er allerede i gang
