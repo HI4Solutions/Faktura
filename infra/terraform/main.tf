@@ -20,6 +20,8 @@ locals {
     "sqladmin.googleapis.com",
     "storage.googleapis.com",
     "drive.googleapis.com",
+    "picker.googleapis.com",
+    "apikeys.googleapis.com",
   ]
 
   labels = {

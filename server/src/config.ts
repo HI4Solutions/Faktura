@@ -39,6 +39,9 @@ export const config = {
   googleClientId: valgfri("GOOGLE_OAUTH_CLIENT_ID"),
   googleClientSecret: valgfri("GOOGLE_OAUTH_CLIENT_SECRET"),
   kmsNokkel: valgfri("KMS_KEY"),
+  // Google Picker (mappevalg i nettleseren): offentlig API-nøkkel og prosjektnummer.
+  googlePickerNokkel: valgfri("GOOGLE_PICKER_NOKKEL"),
+  googleProsjektnummer: valgfri("GOOGLE_PROSJEKTNUMMER"),
 
   // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
   adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),

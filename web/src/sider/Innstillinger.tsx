@@ -4,6 +4,7 @@ import { Feil, Laster, tall, useData, useHandling } from "../felles";
 import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
+import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
 export function Innstillinger() {
@@ -261,8 +262,25 @@ function GoogleDisk() {
   const h = useHandling();
   const resultat = new URLSearchParams(window.location.search).get("disk");
 
+  const velger = data?.kobling && data.velger;
+  const [velgerFeil, settVelgerFeil] = useState<string>();
+  useEffect(() => {
+    if (velger) forberedVelger().catch((e) => settVelgerFeil(e.message));
+  }, [Boolean(velger)]);
+
   if (!data || (!data.tilgjengelig && !data.kobling)) return null;
   const k = data.kobling;
+
+  const byttMappe = () =>
+    h
+      .kjor(async () => {
+        const mappe = await velgMappe(data.velger, k.google_epost ?? undefined);
+        if (mappe) await api("PUT", "/disk/mappe", mappe);
+      })
+      .then(last);
+  const standardMappe = () =>
+    confirm("Bruke en ny mappe «HI4 Faktura» øverst i Disk? Fakturaene kopieres dit på nytt.") &&
+    h.kjor(() => api("PUT", "/disk/mappe", { standard: true })).then(last);
 
   const meldinger: Record<string, [string, string]> = {
     ok: ["ok", "Google Disk er koblet til. Fakturaene kopieres nå, også de som er sendt tidligere."],
@@ -276,8 +294,8 @@ function GoogleDisk() {
     <>
       <h2>Google Disk</h2>
       <p className="dempet liten">
-        Få en kopi av fakturaer og kreditnotaer i din egen Google Disk, privat eller jobb, i mappen «HI4 Faktura/organisasjon/år».
-        Appen får bare tilgang til filene den selv lager.
+        Få en kopi av fakturaer og kreditnotaer i din egen Google Disk, privat eller jobb. Du velger mappen selv; fakturaene legges i
+        undermapper per organisasjon og år. Appen får bare tilgang til mappen du velger og filene den selv lager.
       </p>
       {resultat && meldinger[resultat] && <div className={`melding ${meldinger[resultat][0]}`}>{meldinger[resultat][1]}</div>}
       {!k ? (
@@ -291,6 +309,23 @@ function GoogleDisk() {
             {k.google_epost}
             {k.siste_feil && <span className="dempet liten"> · {k.siste_feil}</span>}
           </p>
+          <p>
+            Mappe: <strong>{k.rotmappe_navn ?? "HI4 Faktura"}</strong>
+            <span className="dempet liten"> / organisasjon / år</span>
+          </p>
+          {velger && (
+            <div className="knapper" style={{ marginBottom: 12 }}>
+              <button disabled={h.opptatt || Boolean(velgerFeil)} onClick={byttMappe}>
+                Velg mappe …
+              </button>
+              {k.rotmappe_navn !== "HI4 Faktura" && (
+                <button className="lenke" disabled={h.opptatt} onClick={standardMappe}>
+                  Bruk standardmappe
+                </button>
+              )}
+            </div>
+          )}
+          <Feil melding={velgerFeil} />
           <p className="dempet liten" style={{ marginBottom: 4 }}>
             Kopier fakturaer fra:
           </p>

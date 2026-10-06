@@ -58,6 +58,10 @@ resource "google_cloud_run_v2_service" "api" {
           ADMIN_EPOSTER = var.admin_eposter
           DB_USER       = google_sql_user.api.name
           WORKER_URL    = google_cloud_run_v2_service.worker.uri
+          # Google Picker (mappevalg for Disk) kjører i nettleseren; nøkkelen er offentlig
+          # og begrenset til Picker API og appens domener.
+          GOOGLE_PICKER_NOKKEL  = google_apikeys_key.picker.key_string
+          GOOGLE_PROSJEKTNUMMER = data.google_project.this.number
         })
         content {
           name  = env.key

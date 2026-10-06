@@ -71,6 +71,22 @@ describe.skipIf(!process.env.DATABASE_URL)("Google Disk – kobling per bruker",
     expect((await kall("PUT", `/api/disk/organisasjoner/${org2}`, token, { aktiv: false })).data.aktiv).toBe(false);
     expect((await kall("PUT", `/api/disk/organisasjoner/${fremmed}`, token, { aktiv: true })).status).toBe(403);
 
+    // Velg mappe med Google Picker.
+    c.googlePickerNokkel = "nokkel";
+    c.googleProsjektnummer = "123";
+    expect((await kall("GET", "/api/disk", token)).data).toMatchObject({
+      velger: { klientId: "klient", nokkel: "nokkel", appId: "123" },
+      kobling: { rotmappe_navn: "HI4 Faktura" },
+    });
+    expect((await kall("PUT", "/api/disk/mappe", token, { id: "../../ugyldig", navn: "x" })).status).toBe(400);
+    expect((await kall("PUT", "/api/disk/mappe", annen, { id: "mappe-fra-picker1", navn: "Regnskap" })).status).toBe(409);
+    ko.length = 0;
+    expect((await kall("PUT", "/api/disk/mappe", token, { id: "mappe-fra-picker1", navn: "Regnskap" })).data).toEqual({ rotmappe_navn: "Regnskap" });
+    expect((await kall("GET", "/api/disk", token)).data.kobling.rotmappe_navn).toBe("Regnskap");
+    // Bare aktive organisasjoner kopieres på nytt til den nye mappen.
+    expect(ko).toEqual([expect.objectContaining({ type: "disk-synk", org_id: org1 })]);
+    expect((await kall("PUT", "/api/disk/mappe", token, { standard: true })).data).toEqual({ rotmappe_navn: "HI4 Faktura" });
+
     // Den andre brukeren ser ikke koblingen.
     expect((await kall("GET", "/api/disk", annen)).data.kobling).toBeUndefined();
 

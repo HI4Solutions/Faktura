@@ -154,3 +154,26 @@ resource "google_monitoring_alert_policy" "dlq" {
 
   notification_channels = [google_monitoring_notification_channel.epost[0].id]
 }
+
+# ---------------------------------------------------------------------------
+# Nettlesernøkkel for Google Picker, så brukeren kan velge mappe i sin Google Disk.
+# ---------------------------------------------------------------------------
+
+resource "google_apikeys_key" "picker" {
+  name         = "faktura-picker"
+  display_name = "HI4 Faktura – Google Picker"
+
+  restrictions {
+    api_targets {
+      service = "picker.googleapis.com"
+    }
+    browser_key_restrictions {
+      allowed_referrers = [
+        "https://${var.app_domain}/*",
+        "https://${google_firebase_hosting_site.app.site_id}.web.app/*",
+      ]
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
