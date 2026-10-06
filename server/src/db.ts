@@ -45,11 +45,14 @@ export async function somBetrodd<T>(brukerId: string, fn: (db: Db) => Promise<T>
 
 // Workeren: ingen bruker; tilgangen kommer fra rollen faktura_system.
 export async function somSystem<T>(fn: (db: Db) => Promise<T>): Promise<T> {
-  return transaksjon(fn);
+  return transaksjon(fn, undefined, config.systemDatabaseUrl ? (systemPool ??= new pg.Pool({ connectionString: config.systemDatabaseUrl, max: 5 })) : undefined);
 }
 
-async function transaksjon<T>(fn: (db: Db) => Promise<T>, brukerId?: string): Promise<T> {
-  const p = await hentPool();
+// Bare i tester: workerens rolle (faktura_system) når API og worker kjører i samme prosess.
+let systemPool: pg.Pool | undefined;
+
+async function transaksjon<T>(fn: (db: Db) => Promise<T>, brukerId?: string, egenPool?: pg.Pool): Promise<T> {
+  const p = egenPool ?? (await hentPool());
   const db = await p.connect();
   try {
     await db.query("begin");

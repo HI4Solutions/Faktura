@@ -294,8 +294,8 @@ function GoogleDisk() {
     <>
       <h2>Google Disk</h2>
       <p className="dempet liten">
-        Få en kopi av fakturaer og kreditnotaer i din egen Google Disk, privat eller jobb. Du velger mappen selv; fakturaene legges i
-        undermapper per organisasjon og år. Appen får bare tilgang til mappen du velger og filene den selv lager.
+        Få en kopi av fakturaer og kreditnotaer i din egen Google Disk, privat eller jobb. Velger du en egen mappe, legges fakturaene rett i
+        den; ellers i «HI4 Faktura» med undermapper per organisasjon og år. Appen får bare tilgang til mappen du velger og filene den selv lager.
       </p>
       {resultat && meldinger[resultat] && <div className={`melding ${meldinger[resultat][0]}`}>{meldinger[resultat][1]}</div>}
       {!k ? (
@@ -311,7 +311,11 @@ function GoogleDisk() {
           </p>
           <p>
             Mappe: <strong>{k.rotmappe_navn ?? "HI4 Faktura"}</strong>
-            <span className="dempet liten"> / organisasjon / år</span>
+            {k.undermapper ? (
+              <span className="dempet liten"> / organisasjon / år</span>
+            ) : (
+              <span className="dempet liten"> · fakturaene legges rett i mappen</span>
+            )}
           </p>
           {velger && (
             <div className="knapper" style={{ marginBottom: 12 }}>

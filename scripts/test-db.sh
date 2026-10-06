@@ -54,5 +54,5 @@ if [[ $feil == 0 ]]; then echo "Alle databasetester er grønne."; else echo "Dat
 # Servertestene (API mot samme database) når SERVER_TESTER=1.
 if [[ "${SERVER_TESTER:-}" == "1" ]]; then
   echo "Servertester"
-  (cd "$rot/server" && DATABASE_URL="$(printf "$base" test_api)" AUTH_TEST=1 npx vitest run)
+  (cd "$rot/server" && DATABASE_URL="$(printf "$base" test_api)" SYSTEM_DATABASE_URL="$(printf "$base" test_worker)" AUTH_TEST=1 npx vitest run)
 fi

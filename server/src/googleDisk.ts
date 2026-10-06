@@ -1,6 +1,6 @@
 // Google Disk: OAuth med scope drive.file (bare filer appen selv lager, og mapper
 // brukeren velger i Google Picker), kryptert refresh token (Cloud KMS) og kopi av
-// fakturaer til «<valgt mappe>/<organisasjon>/<år>/».
+// fakturaer rett i mappen brukeren har valgt, eller i «HI4 Faktura/<organisasjon>/<år>/».
 import { Hono, type Context } from "hono";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { KeyManagementServiceClient } from "@google-cloud/kms";
@@ -96,10 +96,17 @@ async function finnFil(token: string, navn: string, forelder: string): Promise<s
   return d.files?.[0]?.id ?? null;
 }
 
-async function lastOpp(token: string, navn: string, forelder: string, data: Uint8Array): Promise<string> {
+// Fakturaen merkes med id-en sin, så samme faktura ikke kopieres to ganger.
+async function finnFaktura(token: string, fakturaId: string, forelder: string): Promise<boolean> {
+  const sok = `appProperties has { key='faktura_id' and value='${q(fakturaId)}' } and '${forelder}' in parents and trashed=false`;
+  const d = await drive(token, `/drive/v3/files?fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&q=${encodeURIComponent(sok)}`);
+  return Boolean(d.files?.length);
+}
+
+async function lastOpp(token: string, navn: string, forelder: string, data: Uint8Array, fakturaId: string): Promise<string> {
   const grense = `faktura${randomBytes(8).toString("hex")}`;
   const kropp = Buffer.concat([
-    Buffer.from(`--${grense}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: navn, parents: [forelder] })}\r\n`),
+    Buffer.from(`--${grense}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: navn, parents: [forelder], appProperties: { faktura_id: fakturaId } })}\r\n`),
     Buffer.from(`--${grense}\r\nContent-Type: application/pdf\r\n\r\n`),
     Buffer.from(data),
     Buffer.from(`\r\n--${grense}--`),
@@ -129,7 +136,7 @@ export function diskRuter() {
             : null,
         kobling: await en(
           db,
-          "select google_epost, status, siste_feil, rotmappe_navn, opprettet from faktura.disk_koblinger where bruker_id = faktura.bruker_id()",
+          "select google_epost, status, siste_feil, rotmappe_navn, undermapper, opprettet from faktura.disk_koblinger where bruker_id = faktura.bruker_id()",
         ),
         organisasjoner: await alle(
           db,
@@ -158,8 +165,8 @@ export function diskRuter() {
     return c.json({ url: url.toString() });
   });
 
-  // Bytt mappe: { id, navn } fra Google Picker i nettleseren, eller { standard: true } for
-  // en ny «HI4 Faktura»-mappe. Picker gir appen tilgang til mappen selv med drive.file.
+  // Bytt mappe: { id, navn } fra Google Picker i nettleseren (fakturaene legges rett i
+  // mappen), eller { standard: true } for en ny «HI4 Faktura» med undermapper. Picker gir appen tilgang til mappen selv med drive.file.
   // API-et kan ikke dekryptere Google-tilgangen, så workeren oppdager en ugyldig mappe
   // ved neste kopiering og markerer koblingen med feil. Valgte organisasjoner kopieres
   // på nytt til den nye mappen.
@@ -172,9 +179,9 @@ export function diskRuter() {
     const orgs = await somBruker(b.id, async (db) => {
       const k = await en(
         db,
-        `update faktura.disk_koblinger set rotmappe = $1, rotmappe_navn = $2, status = 'aktiv', siste_feil = null
+        `update faktura.disk_koblinger set rotmappe = $1, rotmappe_navn = $2, undermapper = $3, status = 'aktiv', siste_feil = null
           where bruker_id = faktura.bruker_id() returning bruker_id`,
-        [mappe.id, mappe.navn],
+        [mappe.id, mappe.navn, mappe.id === null],
       );
       if (!k) throw new ApiFeil(409, "Koble til Google Disk først");
       return alle<{ id: string }>(
@@ -238,8 +245,8 @@ export function googleCallback() {
       const orgs = await somBruker(bruker, async (db) => {
         await db.query("delete from faktura.disk_koblinger where bruker_id = faktura.bruker_id()");
         await db.query(
-          `insert into faktura.disk_koblinger (bruker_id, google_epost, rotmappe, rotmappe_navn, hemmelighet_kryptert)
-           values (faktura.bruker_id(), $1, $2, $3, $4)`,
+          `insert into faktura.disk_koblinger (bruker_id, google_epost, rotmappe, rotmappe_navn, undermapper, hemmelighet_kryptert)
+           values (faktura.bruker_id(), $1, $2, $3, true, $4)`,
           [googleEpost, rotmappe, ROTMAPPE, kryptert],
         );
         // Start med organisasjonene brukeren er direkte medlem av.
@@ -271,8 +278,10 @@ const erPermanent = (e: unknown) => {
   return /invalid_grant|unauthorized_client/.test(melding) || [401, 403, 404].includes(status);
 };
 
-async function tokenFor(db: Db, brukerId: string): Promise<{ token: string; rotmappe: string } | null> {
-  const k = await en(db, "select rotmappe, hemmelighet_kryptert from faktura.disk_koblinger where bruker_id = $1 and status = 'aktiv'", [brukerId]);
+type Tilgang = { token: string; rotmappe: string; undermapper: boolean };
+
+async function tokenFor(db: Db, brukerId: string): Promise<Tilgang | null> {
+  const k = await en(db, "select rotmappe, undermapper, hemmelighet_kryptert from faktura.disk_koblinger where bruker_id = $1 and status = 'aktiv'", [brukerId]);
   if (!k) return null;
   const { access_token } = await tokenKall({ refresh_token: await dekrypter(k.hemmelighet_kryptert), grant_type: "refresh_token" });
   // Ingen mappe valgt (brukeren gikk tilbake til standard): lag «HI4 Faktura».
@@ -282,7 +291,7 @@ async function tokenFor(db: Db, brukerId: string): Promise<{ token: string; rotm
     await db.query("update faktura.disk_koblinger set rotmappe = $2 where bruker_id = $1 and rotmappe is null", [brukerId, ny]);
     rotmappe = (await en(db, "select rotmappe from faktura.disk_koblinger where bruker_id = $1", [brukerId]))!.rotmappe;
   }
-  return { token: access_token, rotmappe };
+  return { token: access_token, rotmappe, undermapper: k.undermapper };
 }
 
 async function mappeFor(db: Db, d: any, token: string, rotmappe: string, orgNavn: string, aar: string): Promise<string> {
@@ -303,13 +312,24 @@ async function mappeFor(db: Db, d: any, token: string, rotmappe: string, orgNavn
   return id;
 }
 
-async function kopierEn(db: Db, d: any, tilgang: { token: string; rotmappe: string }, f: any, orgNavn: string, hentPdf: HentPdf, filnavn: Filnavn) {
-  const mappe = await mappeFor(db, d, tilgang.token, tilgang.rotmappe, orgNavn, String(f.fakturadato).slice(0, 4));
-  const navn = filnavn(f);
-  if (await finnFil(tilgang.token, navn, mappe)) return; // allerede kopiert (Pub/Sub kan levere to ganger)
+async function kopierEn(db: Db, d: any, tilgang: Tilgang, f: any, orgNavn: string, hentPdf: HentPdf, filnavn: Filnavn) {
+  let mappe: string;
+  let navn = filnavn(f);
+  if (tilgang.undermapper) {
+    mappe = await mappeFor(db, d, tilgang.token, tilgang.rotmappe, orgNavn, String(f.fakturadato).slice(0, 4));
+    // Eldre kopier har ikke faktura-id på seg; da holder det at navnet finnes i mappen.
+    if (await finnFil(tilgang.token, navn, mappe)) return;
+  } else {
+    // Rett i mappen brukeren valgte. Kopierer brukeren fra flere organisasjoner,
+    // får filnavnet organisasjonen med, så fakturanumrene ikke blandes.
+    mappe = tilgang.rotmappe;
+    const flere = await en(db, "select count(*) > 1 as flere from faktura.disk_organisasjoner where bruker_id = $1 and aktiv", [d.bruker_id]);
+    if (flere!.flere) navn = navn.replace(/\.pdf$/, ` - ${mappenavn(orgNavn)}.pdf`);
+  }
+  if (await finnFaktura(tilgang.token, f.id, mappe)) return; // allerede kopiert (Pub/Sub kan levere to ganger)
   const linjer = await alle(db, "select * from faktura.faktura_linjer where faktura_id = $1 order by rekke", [f.id]);
   const { data } = await hentPdf(db, { ...f, linjer });
-  await lastOpp(tilgang.token, navn, mappe, data);
+  await lastOpp(tilgang.token, navn, mappe, data, f.id);
 }
 
 async function markerFeil(db: Db, brukerId: string, e: unknown) {
