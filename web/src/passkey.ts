@@ -1,9 +1,24 @@
-import { browserSupportsWebAuthn, startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import { browserSupportsWebAuthn, startAuthentication, startRegistration, WebAuthnAbortService } from "@simplewebauthn/browser";
 import { signInWithCustomToken } from "firebase/auth";
 import { hentAuth } from "./firebase";
 import { api, ApiFeil } from "./api";
 
 export const stotterPasskey = () => browserSupportsWebAuthn();
+
+// SimpleWebAuthn avbryter forrige passkey-forespørsel når en ny starter, også når den
+// forrige for lengst er ferdig. I WebKit (Safari og alle nettlesere på iPhone) settes den
+// nye forespørselen da i kø til avbrytingen er gjort, og den mister trykket som startet den:
+// iPhone viser ingenting, og et nytt trykk hjelper ikke. Derfor glemmes den forrige her
+// uten å avbrytes, før og etter hver forespørsel. Kall fn med en gang i trykket.
+export async function utenAvbrudd<T>(fn: () => Promise<T>): Promise<T> {
+  const tjeneste = WebAuthnAbortService as unknown as { controller?: AbortController };
+  tjeneste.controller = undefined;
+  try {
+    return await fn();
+  } finally {
+    tjeneste.controller = undefined;
+  }
+}
 
 async function offentlig(sti: string, kropp?: unknown) {
   const r = await fetch(`/api/offentlig/passkey${sti}`, {
@@ -34,14 +49,14 @@ export function passkeyFeil(e: unknown): string {
 
 export async function loggInnMedPasskey() {
   const start = await offentlig("/start");
-  const svar = await startAuthentication({ optionsJSON: start.valg });
+  const svar = await utenAvbrudd(() => startAuthentication({ optionsJSON: start.valg }));
   const { token } = await offentlig("/fullfor", { utfordring_id: start.utfordring_id, svar });
   await signInWithCustomToken(await hentAuth(), token);
 }
 
 export async function leggTilPasskey(navn: string) {
   const start = await api("POST", "/passkeys/registrering/start");
-  const svar = await startRegistration({ optionsJSON: start.valg });
+  const svar = await utenAvbrudd(() => startRegistration({ optionsJSON: start.valg }));
   return api("POST", "/passkeys/registrering/fullfor", { utfordring_id: start.utfordring_id, svar, navn });
 }
 

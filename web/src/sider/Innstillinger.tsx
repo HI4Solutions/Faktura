@@ -323,7 +323,7 @@ function Passkeys() {
         </table>
       )}
       {stotterPasskey() ? (
-        <button className="primar" onClick={leggTil} disabled={h.opptatt || venter}>
+        <button className="primar" data-passkey onClick={leggTil} disabled={h.opptatt || venter}>
           {venter ? "Venter på bekreftelse …" : "Legg til passkey"}
         </button>
       ) : (

@@ -5,7 +5,6 @@
 // Er appen låst fra start, vises ikke innholdet og ingen data hentes før den er låst opp.
 // Låses den senere, ligger innholdet skjult bak låsen, så halvferdige skjemaer ikke går tapt.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { useKonto } from "./konto";
 import { LogoIkon } from "./Logo";
 import { erAvbrutt } from "./passkey";
@@ -124,7 +123,6 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
   laasRef.current = laas;
   const opplastRef = useRef(opplast);
   opplastRef.current = opplast;
-  const pagaende = useRef<{ nr: number; automatisk: boolean } | null>(null);
   const teller = useRef(0);
 
   // Bakgrunnen bak låseskjermen (der iOS ikke tegner siden) får samme farge som den.
@@ -134,26 +132,23 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
   }, []);
 
   // Startes synkront fra trykket, så nettleseren regner forespørselen som brukerens egen.
+  // Hvert trykk starter en ny forespørsel (en eldre avbrytes ikke; svaret på den ignoreres).
   const lasOpp = (automatisk: boolean) => {
-    if (pagaende.current && !pagaende.current.automatisk) return; // et trykk er allerede i gang
     const nr = ++teller.current;
-    pagaende.current = { nr, automatisk };
     settFeil(null);
-    lasOppMedPasskey(laasRef.current)
-      .then(
-        () => teller.current === nr && opplastRef.current(automatisk),
-        (e: Error) => {
-          if (teller.current !== nr) return;
-          settTrykk(true);
-          // Et automatisk forsøk kan avvises av nettleseren uten at brukeren har sett noe.
-          if (automatisk || erAvbrutt(e)) return;
-          if (e.name === "NotAllowedError") settMislykket((n) => n + 1);
-          else settFeil(e.message);
-        },
-      )
-      .finally(() => {
-        if (teller.current === nr) pagaende.current = null;
-      });
+    lasOppMedPasskey(laasRef.current).then(
+      () => teller.current === nr && opplastRef.current(automatisk),
+      (e: Error) => {
+        if (teller.current !== nr) return;
+        settTrykk(true);
+        // Et automatisk forsøk kan avvises av nettleseren uten at brukeren har sett noe.
+        if (automatisk) return;
+        if (e.name === "NotAllowedError" || erAvbrutt(e)) {
+          settMislykket((n) => n + 1);
+          settFeil(`${biometriNavn()} ble avbrutt eller kom ikke opp. Trykk for å prøve igjen.`);
+        } else settFeil(e.message);
+      },
+    );
   };
 
   // Start Face ID / Touch ID av seg selv når appen vises og har fokus. Kommer appen fra
@@ -170,10 +165,12 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
       }
       if (forsokt === periode) return;
       const denne = (forsokt = periode);
+      const forsok = teller.current;
       await ventPaFokus(stopp.signal);
       const vent = 400 - tidSidenSynlig();
       if (vent > 0) await new Promise((ok) => setTimeout(ok, vent));
-      if (stopp.signal.aborted || denne !== periode || skjult()) return;
+      // Har brukeren trykket i mellomtiden, er Face ID allerede startet av trykket.
+      if (stopp.signal.aborted || denne !== periode || skjult() || teller.current !== forsok) return;
       lasOpp(true);
     };
     const synlighet = () => void prov();
@@ -182,7 +179,6 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
     return () => {
       stopp.abort();
       document.removeEventListener("visibilitychange", synlighet);
-      if (pagaende.current) WebAuthnAbortService.cancelCeremony();
     };
   }, []);
 
@@ -203,7 +199,7 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
         </button>
         {trykk && !feil && mislykket < 2 && <p className="laas-trykk">Trykk hvor som helst for å låse opp.</p>}
         {feil && <p className="laas-feil">{feil}</p>}
-        {mislykket >= 2 && (
+        {mislykket >= 3 && (
           <p className="laas-hjelp">
             Fungerer det ikke? Passkeyen kan være slettet fra enheten. Logg ut og logg inn med passord; under Innstillinger kan du lage en
             ny passkey eller slå av applåsen.
@@ -214,7 +210,6 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
           className="lenke laas-ut"
           onClick={(e) => {
             e.stopPropagation();
-            if (pagaende.current) WebAuthnAbortService.cancelCeremony();
             void loggUt();
           }}
         >

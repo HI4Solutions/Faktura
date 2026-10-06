@@ -178,7 +178,7 @@ export function Innlogging() {
         {!resolver && modus === "inn" && stotterPasskey() && (
           <>
             <div className="skille">eller</div>
-            <button type="button" onClick={passkey} disabled={opptatt} style={{ width: "100%", justifyContent: "center", padding: "10px 16px" }}>
+            <button type="button" data-passkey onClick={passkey} disabled={opptatt} style={{ width: "100%", justifyContent: "center", padding: "10px 16px" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="9" cy="8" r="4" />
                 <path d="M2.5 20a6.5 6.5 0 0 1 10.6-5" />

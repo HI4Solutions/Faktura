@@ -11,6 +11,7 @@
 // med en gang appen åpnes. Låsen skjuler appen på enheten; API-et krever innlogging som før.
 import { startAuthentication } from "@simplewebauthn/browser";
 import { api } from "./api";
+import { utenAvbrudd } from "./passkey";
 
 export interface Laas {
   bruker: string; // brukerens id i databasen
@@ -122,7 +123,7 @@ const utfordring = () => base64url(crypto.getRandomValues(new Uint8Array(32)));
 // Returnerer passkeyens id.
 export async function bekreftMedServer(): Promise<string> {
   const s = await api<{ utfordring_id: string; valg: any }>("POST", "/passkeys/bekreft/start");
-  const svar = await startAuthentication({ optionsJSON: s.valg });
+  const svar = await utenAvbrudd(() => startAuthentication({ optionsJSON: s.valg }));
   await api("POST", "/passkeys/bekreft/fullfor", { utfordring_id: s.utfordring_id, svar });
   return svar.id;
 }
@@ -131,15 +132,17 @@ export async function bekreftMedServer(): Promise<string> {
 // øyeblikk som funksjonen kalles, uten å vente på nettet: Safari godtar bare
 // passkey-forespørsler som starter med en gang etter et trykk (eller når siden åpnes).
 export function lasOppMedPasskey(laas: Laas): Promise<string> {
-  return startAuthentication({
-    optionsJSON: {
-      challenge: utfordring(),
-      rpId: window.location.hostname,
-      allowCredentials: laas.legitimasjon.map((id) => ({ id, type: "public-key", transports: ["internal", "hybrid"] })),
-      userVerification: "required",
-      timeout: 60_000,
-    },
-  }).then((svar) => {
+  return utenAvbrudd(() =>
+    startAuthentication({
+      optionsJSON: {
+        challenge: utfordring(),
+        rpId: window.location.hostname,
+        allowCredentials: laas.legitimasjon.map((id) => ({ id, type: "public-key", transports: ["internal", "hybrid"] })),
+        userVerification: "required",
+        timeout: 60_000,
+      },
+    }),
+  ).then((svar) => {
     // Enheten skal ha bekreftet at det er eieren (Face ID, Touch ID eller kode), med en av kontoens passkeys.
     const flagg = fraBase64url(svar.response.authenticatorData)[32] ?? 0;
     if (!(flagg & 0x04) || !laas.legitimasjon.includes(svar.id)) throw new Error("Kunne ikke bekrefte at det er deg. Prøv igjen.");
@@ -164,9 +167,11 @@ try {
 
 export function gjenopprettAutomatikk(): () => void {
   if (!erWebKit()) return () => {};
-  const vedTrykk = () => {
+  const vedTrykk = (e: Event) => {
     stopp();
-    if (!autofyll) return;
+    // Trykk som selv starter en passkey (låseskjermen, passkey-knapper) gir den nye sjansen.
+    // Forespørselen her avbrytes med en gang, og i samme trykk ville den satt den andre i kø.
+    if (!autofyll || (e.target as Element | null)?.closest?.(".laas, [data-passkey]")) return;
     const a = new AbortController();
     navigator.credentials
       .get({

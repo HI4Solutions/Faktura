@@ -145,12 +145,12 @@ function AppLaasValg() {
                 </button>
               </>
             ) : (
-              <button className="primar" disabled={h.opptatt} onClick={slaPa}>
+              <button className="primar" data-passkey disabled={h.opptatt} onClick={slaPa}>
                 Slå på applås med {navn}
               </button>
             )}
             {trengerPasskey && !laas && (
-              <button disabled={h.opptatt} onClick={lagPasskey}>
+              <button data-passkey disabled={h.opptatt} onClick={lagPasskey}>
                 Lag passkey på denne enheten
               </button>
             )}
