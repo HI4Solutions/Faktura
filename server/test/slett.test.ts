@@ -68,4 +68,28 @@ describe.skipIf(!process.env.DATABASE_URL)("Sletting av fakturaer", () => {
     expect((await kall("POST", `/api/org/${org}/fakturaer/${f1.id}/slett`, eier, { grunn: "Testfaktura" })).status).toBe(200);
     expect((await nyFaktura()).fakturanummer).toBe(3);
   });
+
+  it("sletter kunder og produkter uten fakturaer, men ikke de som er brukt", async () => {
+    const ny = (await kall("POST", `/api/org/${org}/kunder`, eier, { navn: "Ubrukt kunde" })).data.id;
+    expect((await kall("DELETE", `/api/org/${org}/kunder/${ny}`, eier)).status).toBe(204);
+    expect((await kall("GET", `/api/org/${org}/kunder/${ny}`, eier)).status).toBe(404);
+
+    const brukt = await kall("DELETE", `/api/org/${org}/kunder/${kunde}`, eier);
+    expect(brukt.status).toBe(409);
+    expect(brukt.data.error).toContain("inaktiv");
+    expect((await kall("DELETE", `/api/org/${org}/kunder/${kunde}`, fremmed)).status).toBe(404); // ser ikke kunden
+
+    const medAvtale = (await kall("POST", `/api/org/${org}/kunder`, eier, { navn: "Avtalekunde" })).data.id;
+    await kall("POST", `/api/org/${org}/gjentakelser`, eier, {
+      kunde_id: medAvtale,
+      linjer: [{ beskrivelse: "Abonnement", antall: 1, enhetspris: 100, mva_sats: 25 }],
+      intervall: "maaned",
+      forfall_dag: 1,
+      neste_forfall: "2030-01-01",
+    });
+    expect((await kall("DELETE", `/api/org/${org}/kunder/${medAvtale}`, eier)).data.error).toContain("gjentakende");
+
+    const produkt = (await kall("POST", `/api/org/${org}/produkter`, eier, { navn: "Ubrukt", enhetspris: 1 })).data.id;
+    expect((await kall("DELETE", `/api/org/${org}/produkter/${produkt}`, eier)).status).toBe(204);
+  });
 });

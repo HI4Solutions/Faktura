@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
-import { kr, orgnr } from "../format";
+import { dato, kr, orgnr } from "../format";
 
 export function Kunder() {
   const { org } = useKonto();
@@ -66,13 +66,17 @@ export function Kunder() {
             last();
           }}
           avbryt={() => settRedigerer(null)}
+          slettet={() => {
+            settRedigerer(null);
+            last();
+          }}
         />
       </Dialog>
     </>
   );
 }
 
-export function KundeSkjema({ kunde, lagret, avbryt }: { kunde: any; lagret: (k: any) => void; avbryt: () => void }) {
+export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; lagret: (k: any) => void; avbryt: () => void; slettet?: () => void }) {
   const { org } = useKonto();
   const [k, settK] = useState<any>({ ...kunde });
   const { opptatt, feil, kjor } = useHandling();
@@ -172,6 +176,21 @@ export function KundeSkjema({ kunde, lagret, avbryt }: { kunde: any; lagret: (k:
         <button type="button" onClick={avbryt}>
           Avbryt
         </button>
+        {k.id && slettet && (
+          <button
+            type="button"
+            className="fare"
+            style={{ marginLeft: "auto" }}
+            disabled={opptatt}
+            onClick={async () => {
+              if (!confirm(`Slette ${k.navn}? Det går bare for kunder uten fakturaer.`)) return;
+              const r = await kjor(async () => (await api("DELETE", `/org/${org!.id}/kunder/${k.id}`), true));
+              if (r !== undefined) slettet();
+            }}
+          >
+            Slett kunde
+          </button>
+        )}
       </div>
     </form>
   );
@@ -216,7 +235,10 @@ export function Produkter() {
                   <td>{p.enhet}</td>
                   <td className="tall">{kr(p.enhetspris)}</td>
                   <td className="tall">{p.mva_sats} %</td>
-                  <td>{!p.aktiv && <span className="merke merke-noytral">Inaktiv</span>}</td>
+                  <td>
+                    {p.indeks_aktiv && <span className="merke merke-info" title="Indeksreguleres årlig etter KPI">KPI</span>}{" "}
+                    {!p.aktiv && <span className="merke merke-noytral">Inaktiv</span>}
+                  </td>
                 </tr>
               ))}
               {data?.length === 0 && (
@@ -262,6 +284,13 @@ function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () =
       enhetspris: tall(String(p.enhetspris)),
       mva_sats: utenMva ? 0 : Number(p.mva_sats),
       aktiv: p.aktiv !== false,
+      indeks_aktiv: Boolean(p.indeks_aktiv),
+      indeks_maaned: p.indeks_aktiv ? Number(p.indeks_maaned) : (p.indeks_maaned ? Number(p.indeks_maaned) : null),
+      indeks_basis: p.indeks_basis ? String(p.indeks_basis).slice(0, 10) : null,
+      indeks_andel: Number(String(p.indeks_andel ?? 100).replace(",", ".")),
+      indeks_bare_okning: p.indeks_bare_okning !== false,
+      indeks_hele_kroner: p.indeks_hele_kroner !== false,
+      indeks_varsle: p.indeks_varsle !== false,
     };
     const r = await kjor(() => (p.id ? api("PATCH", `/org/${org!.id}/produkter/${p.id}`, kropp) : api("POST", `/org/${org!.id}/produkter`, kropp)));
     if (r) lagret();
@@ -313,6 +342,7 @@ function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () =
         <input type="checkbox" checked={p.aktiv !== false} onChange={(e) => settP({ ...p, aktiv: e.target.checked })} />
         Aktiv
       </label>
+      <Indeksregulering p={p} settP={settP} />
       <Feil melding={feil} />
       <div className="knapper">
         <button className="primar" disabled={opptatt}>
@@ -321,7 +351,157 @@ function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () =
         <button type="button" onClick={avbryt}>
           Avbryt
         </button>
+        {p.id && (
+          <button
+            type="button"
+            className="fare"
+            style={{ marginLeft: "auto" }}
+            disabled={opptatt}
+            onClick={async () => {
+              if (!confirm(`Slette ${p.navn}? Det går bare for produkter som ikke er brukt på fakturaer.`)) return;
+              const r = await kjor(async () => (await api("DELETE", `/org/${org!.id}/produkter/${p.id}`), true));
+              if (r !== undefined) lagret();
+            }}
+          >
+            Slett produkt
+          </button>
+        )}
       </div>
     </form>
+  );
+}
+
+const MAANEDER = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
+const maanedTekst = (iso: string) => `${MAANEDER[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+const kpiTall = (n: number) => n.toLocaleString("nb-NO", { minimumFractionDigits: 1 });
+
+// Årlig regulering etter konsumprisindeksen (husleie, parkeringsleie o.l.).
+function Indeksregulering({ p, settP }: { p: any; settP: (p: any) => void }) {
+  const { org } = useKonto();
+  const kpi = useData(() => hent<{ maaned: string; verdi: number }[]>("/kpi"), []);
+  const status = useData(() => (p.id ? hent(`/org/${org!.id}/produkter/${p.id}/indeksregulering`) : Promise.resolve(null)), [p.id]);
+  const h = useHandling();
+  const siste = kpi.data?.[0];
+
+  const slaaPaa = (paa: boolean) =>
+    settP({
+      ...p,
+      indeks_aktiv: paa,
+      indeks_maaned: p.indeks_maaned ?? 1,
+      indeks_basis: p.indeks_basis ?? siste?.maaned ?? null,
+      indeks_andel: p.indeks_andel ?? 100,
+    });
+  const felt = (navn: string) => ({ value: p[navn] ?? "", onChange: (e: any) => settP({ ...p, [navn]: e.target.value }) });
+  const avkryss = (navn: string) => ({ checked: p[navn] !== false, onChange: (e: any) => settP({ ...p, [navn]: e.target.checked }) });
+
+  const b = status.data?.beregning;
+  const reguleringer: any[] = status.data?.reguleringer ?? [];
+  const statusTekst: Record<string, string> = { planlagt: "Planlagt", gjennomfort: "Gjennomført", avbrutt: "Avbrutt", uendret: "Uendret (KPI gikk ned)" };
+
+  return (
+    <fieldset className="indeks">
+      <label>
+        <input type="checkbox" checked={Boolean(p.indeks_aktiv)} onChange={(e) => slaaPaa(e.target.checked)} />
+        Indeksreguler prisen årlig etter KPI (husleie, parkeringsleie o.l.)
+      </label>
+      {p.indeks_aktiv && (
+        <>
+          <div className="rad">
+            <label>
+              Ny pris gjelder fra
+              <select {...felt("indeks_maaned")}>
+                {MAANEDER.map((m, i) => (
+                  <option key={m} value={i + 1}>
+                    1. {m}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              KPI-grunnlag (måneden prisen bygger på)
+              <select value={p.indeks_basis ? String(p.indeks_basis).slice(0, 10) : ""} onChange={(e) => settP({ ...p, indeks_basis: e.target.value })}>
+                {!kpi.data?.length && <option value="">KPI er ikke hentet ennå</option>}
+                {(kpi.data ?? []).map((k) => (
+                  <option key={k.maaned} value={String(k.maaned).slice(0, 10)}>
+                    {maanedTekst(String(k.maaned))}: {kpiTall(k.verdi)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Andel av KPI-endringen (%)
+              <input inputMode="decimal" {...felt("indeks_andel")} />
+            </label>
+          </div>
+          <label>
+            <input type="checkbox" {...avkryss("indeks_bare_okning")} /> Bare økning (prisen settes ikke ned hvis KPI faller)
+          </label>
+          <label>
+            <input type="checkbox" {...avkryss("indeks_hele_kroner")} /> Rund av til hele kroner
+          </label>
+          <label>
+            <input type="checkbox" {...avkryss("indeks_varsle")} /> Varsle kundene på e-post minst én måned før ny pris gjelder
+          </label>
+          <p className="dempet liten">
+            Reguleringen planlegges inntil 60 dager før og gjennomføres automatisk. Gjentakende fakturaer for produktet med forfall fra datoen
+            får ny pris; har en kunde egen pris, reguleres den med samme prosent. Husleieloven § 4-2 krever minst én måneds skriftlig varsel og
+            minst ett år mellom hver regulering.
+          </p>
+          {b && (
+            <p className="liten">
+              Med dagens tall (KPI {maanedTekst(String(b.kpi_fra))}: {kpiTall(b.kpi_fra_verdi)} → {maanedTekst(String(b.kpi_til))}:{" "}
+              {kpiTall(b.kpi_til_verdi)}) blir prisen <strong>{kr(b.ny_pris)}</strong> fra {dato(b.gjelder_fra)}.
+            </p>
+          )}
+        </>
+      )}
+      {reguleringer.length > 0 && (
+        <table className="liten">
+          <thead>
+            <tr>
+              <th>Gjelder fra</th>
+              <th className="hoyre">Pris</th>
+              <th className="hoyre">KPI</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {reguleringer.map((r) => (
+              <tr key={r.id}>
+                <td>{dato(r.gjelder_fra)}</td>
+                <td className="tall">
+                  {kr(r.gammel_pris)} → {kr(r.ny_pris)}
+                </td>
+                <td className="tall">{((r.faktor - 1) * 100).toLocaleString("nb-NO", { maximumFractionDigits: 1 })} %</td>
+                <td>
+                  {statusTekst[r.status] ?? r.status}
+                  {r.varslet > 0 && <span className="dempet"> · {r.varslet} varslet</span>}
+                </td>
+                <td>
+                  {r.status === "planlagt" && (
+                    <button
+                      type="button"
+                      className="lenke"
+                      disabled={h.opptatt}
+                      onClick={() =>
+                        confirm(
+                          r.varslet > 0
+                            ? `Avbryte reguleringen? ${r.varslet} kunde(r) har fått varsel og får ikke beskjed automatisk om at den er avbrutt.`
+                            : "Avbryte reguleringen?",
+                        ) && h.kjor(() => api("POST", `/org/${org!.id}/prisreguleringer/${r.id}/avbryt`)).then(status.last)
+                      }
+                    >
+                      Avbryt
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <Feil melding={h.feil} />
+    </fieldset>
   );
 }

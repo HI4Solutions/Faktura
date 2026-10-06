@@ -4,6 +4,7 @@ import { alle, en, somSystem } from "./db.js";
 import { feilhandterer } from "./feil.js";
 import { fakturaEpost, hentFaktura, pdfFilnavn, purringEpost, sikrePdf } from "./dokument.js";
 import { epost, leggIKo, publiser, type Oppgave } from "./tjenester.js";
+import { kjorIndeksregulering } from "./indeksregulering.js";
 import { kopierTilDisk, slettFraDisk, synkOrganisasjon } from "./googleDisk.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
@@ -100,6 +101,13 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
 // Daglig: planlagte utkast og gjentakende fakturaer. En feil på én stopper ikke de andre.
 export async function gjenta() {
   const resultat: { id: string; ok: boolean; feil?: string }[] = [];
+
+  // Indeksregulering først, så gjentakelser med forfall fra reguleringsdatoen får ny pris.
+  try {
+    await kjorIndeksregulering();
+  } catch (e) {
+    logg("ERROR", "Indeksregulering feilet", { feil: (e as Error).message });
+  }
 
   const planlagte = await somSystem((db) =>
     alle<{ id: string }>(db, "select id from faktura.fakturaer where status = 'utkast' and planlagt_sending <= faktura.i_dag() order by planlagt_sending"),

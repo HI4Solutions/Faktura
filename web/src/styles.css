@@ -190,3 +190,6 @@ code.hemmelig { word-break: break-all; font-size: 0.85rem; }
 @media (prefers-reduced-motion: reduce) {
   .logo-ikon.animert * { animation: none !important; }
 }
+
+fieldset.indeks { border: 1px solid var(--kant, #ddd); border-radius: 8px; padding: 12px 14px 4px; margin: 8px 0 12px; }
+fieldset.indeks table { width: 100%; margin: 8px 0; }

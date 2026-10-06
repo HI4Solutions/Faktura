@@ -91,6 +91,14 @@ const produktSkjema = z.object({
   enhetspris: z.number(),
   mva_sats: z.number().min(0).max(100).optional(),
   aktiv: z.boolean().optional(),
+  // Indeksregulering (KPI)
+  indeks_aktiv: z.boolean().optional(),
+  indeks_maaned: z.number().int().min(1).max(12).nullish(),
+  indeks_basis: z.string().regex(/^\d{4}-\d{2}-01$/, "Velg en KPI-måned").nullish(),
+  indeks_andel: z.number().gt(0).max(100).optional(),
+  indeks_bare_okning: z.boolean().optional(),
+  indeks_hele_kroner: z.boolean().optional(),
+  indeks_varsle: z.boolean().optional(),
 });
 
 const linjeSkjema = z.object({
@@ -159,6 +167,11 @@ export function lagApi() {
   api.route("/passkeys", passkeyRuter());
   api.route("/admin", adminRuter());
   api.route("/disk", diskRuter());
+
+  // Konsumprisindeksen (SSB), siste tre år.
+  api.get("/kpi", async (c) =>
+    c.json(await somBruker(c.get("bruker").id, (db) => alle(db, "select maaned, verdi from faktura.kpi order by maaned desc limit 36"))),
+  );
 
   api.get("/meg", async (c) =>
     c.json(
@@ -389,12 +402,50 @@ export function lagApi() {
       return c.json(r);
     });
 
+    // Bare kunder og produkter som ikke er brukt, kan slettes; ellers settes de inaktive.
     org.delete(`/${sti}/:id`, async (c) => {
-      const r = await bruk(c, (db) => db.query(`delete from faktura.${tabell} where id = $1 and org_id = $2`, [uuid.parse(c.req.param("id")), orgId(c)]));
+      const id = uuid.parse(c.req.param("id"));
+      const r = await bruk(c, async (db) => {
+        const bruk =
+          tabell === "kunder"
+            ? await en(
+                db,
+                `select (select count(*) from faktura.fakturaer where kunde_id = $1)::int as fakturaer,
+                        (select count(*) from faktura.gjentakelser where kunde_id = $1)::int as gjentakelser`,
+                [id],
+              )
+            : await en(db, "select (select count(*) from faktura.faktura_linjer where produkt_id = $1)::int as fakturaer, 0 as gjentakelser", [id]);
+        if (bruk!.fakturaer > 0)
+          throw new ApiFeil(409, `${tabell === "kunder" ? "Kunden" : "Produktet"} er brukt på ${bruk!.fakturaer} faktura(er) og kan ikke slettes. Sett ${tabell === "kunder" ? "kunden" : "produktet"} som inaktiv i stedet.`);
+        if (bruk!.gjentakelser > 0) throw new ApiFeil(409, `Kunden har ${bruk!.gjentakelser} gjentakende faktura(er). Slett dem først.`);
+        return db.query(`delete from faktura.${tabell} where id = $1 and org_id = $2`, [id, orgId(c)]);
+      });
       if (!r.rowCount) throw new ApiFeil(404, "Finnes ikke");
       return c.body(null, 204);
     });
   }
+
+  // --- Indeksregulering ----------------------------------------------------
+  org.get("/produkter/:id/indeksregulering", async (c) => {
+    const id = uuid.parse(c.req.param("id"));
+    return c.json(
+      await bruk(c, async (db) => ({
+        beregning: (await en(db, "select * from faktura.beregn_indeksregulering($1)", [id])) ?? null,
+        reguleringer: await alle(
+          db,
+          `select r.*, (select count(*) from faktura.prisregulering_gjentakelser pg where pg.regulering_id = r.id)::int as gjentakelser
+             from faktura.prisreguleringer r where r.produkt_id = $1 and r.org_id = $2 order by r.gjelder_fra desc`,
+          [id, orgId(c)],
+        ),
+      })),
+    );
+  });
+
+  org.post("/prisreguleringer/:id/avbryt", async (c) => {
+    const id = uuid.parse(c.req.param("id"));
+    await bruk(c, (db) => db.query("select faktura.avbryt_indeksregulering($1, $2)", [orgId(c), id]));
+    return c.json({ status: "avbrutt" });
+  });
 
   // --- Fakturaer ---------------------------------------------------------
   org.get("/fakturaer", async (c) => {
