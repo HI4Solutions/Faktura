@@ -4,7 +4,7 @@ import { hentAuth } from "./firebase";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster } from "./felles";
-import { KontoProvider, useKonto } from "./konto";
+import { KontoProvider, kanSkrive, useKonto } from "./konto";
 import { BekreftEpost, Innlogging } from "./sider/Innlogging";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
@@ -15,11 +15,11 @@ import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
 import { Rapporter } from "./sider/Rapporter";
-import { Logo } from "./Logo";
+import { Logo, LogoIkon } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { installer } from "./pwa";
 import {
-  IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
+  IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -93,7 +93,27 @@ function Ramme() {
   const { kanInstallere } = usePwa();
   useVarselNavigering();
   const sted = useLocation();
-  useEffect(() => settMenyApen(false), [sted.pathname]);
+  // Ny side: lukk menyen og start øverst (ellers lander man midt på siden etter en lang liste).
+  useEffect(() => {
+    settMenyApen(false);
+    window.scrollTo(0, 0);
+  }, [sted.pathname]);
+
+  // Mobil: skjul bunnmenyen mens tastaturet er oppe, så den ikke dekker feltet man skriver i.
+  useEffect(() => {
+    const erFelt = (e: Event) => {
+      const el = e.target as HTMLElement;
+      return el.matches?.("textarea, select, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])");
+    };
+    const inn = (e: FocusEvent) => erFelt(e) && document.body.classList.add("skriver");
+    const ut = (e: FocusEvent) => erFelt(e) && document.body.classList.remove("skriver");
+    document.addEventListener("focusin", inn);
+    document.addEventListener("focusout", ut);
+    return () => {
+      document.removeEventListener("focusin", inn);
+      document.removeEventListener("focusout", ut);
+    };
+  }, []);
   const orgs = meg?.organisasjoner ?? [];
 
   if (ny || orgs.length === 0) {
@@ -111,12 +131,59 @@ function Ramme() {
 
   return (
     <div className="ramme">
+      {/* Mobil: organisasjonen øverst (trykk for å bytte), meny nederst. */}
       <header className="mobiltopp">
-        <Logo storrelse={28} />
-        <button className="ikon" aria-label="Meny" onClick={() => settMenyApen(true)}>
-          <IkonMeny />
-        </button>
+        <div className="mobil-org">
+          <span className="avatar">{initialer(org?.navn ?? "?")}</span>
+          <span className="navn">{org?.navn}</span>
+          {orgs.length > 1 && <IkonVelg storrelse={16} />}
+          <select value={org?.id} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.navn}
+                {o.direkte_medlem ? "" : " (klient)"}
+              </option>
+            ))}
+            <option value="__ny">+ Ny organisasjon</option>
+          </select>
+        </div>
+        <LogoIkon storrelse={28} animert={false} />
       </header>
+      <nav className="bunnmeny" aria-label="Hovedmeny">
+        <NavLink to="/" end>
+          <IkonOversikt storrelse={22} />
+          <span>{org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}</span>
+        </NavLink>
+        {org?.type !== "regnskapsbyraa" && (
+          <>
+            <NavLink to="/fakturaer" end={false}>
+              <IkonFaktura storrelse={22} />
+              <span>Fakturaer</span>
+            </NavLink>
+            {kanSkrive(org?.rolle) && (
+              <NavLink to="/fakturaer/ny" className="ny" aria-label="Ny faktura">
+                <span className="pluss">
+                  <IkonPluss storrelse={24} />
+                </span>
+              </NavLink>
+            )}
+            <NavLink to="/kunder">
+              <IkonKunder storrelse={22} />
+              <span>Kunder</span>
+            </NavLink>
+          </>
+        )}
+        {org?.type === "regnskapsbyraa" && (
+          <NavLink to="/innstillinger">
+            <IkonInnstillinger storrelse={22} />
+            <span>Innstillinger</span>
+          </NavLink>
+        )}
+        <button type="button" className={menyApen ? "aktiv" : ""} onClick={() => settMenyApen(true)}>
+          <IkonMeny storrelse={22} />
+          <span>Mer</span>
+        </button>
+      </nav>
       <div className={`meny-skygge${menyApen ? " apen" : ""}`} onClick={() => settMenyApen(false)} />
       <nav className={`meny${menyApen ? " apen" : ""}`}>
         <div className="logo">

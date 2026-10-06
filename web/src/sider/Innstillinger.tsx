@@ -108,7 +108,7 @@ function Organisasjon() {
         Status: {o.verifisering === "verifisert" ? "Verifisert" : o.verifisering === "sperret" ? "Sperret" : "Ikke verifisert"}
       </p>
       <div className="rad">
-        <label>
+        <label className="hel">
           Navn
           <input required {...felt("navn")} />
         </label>
@@ -127,7 +127,7 @@ function Organisasjon() {
             Innehaver (for enkeltpersonforetak)
             <input {...felt("innehaver")} placeholder="Ola Nordmann" />
           </label>
-          <label>
+          <label className="hel">
             Avsender på fakturaene
             <select {...felt("standard_avsender")} disabled={!o.innehaver?.trim()}>
               <option value="firma">Firmanavnet ({o.navn})</option>
@@ -149,7 +149,7 @@ function Organisasjon() {
           Poststed
           <input {...felt("poststed")} />
         </label>
-        <label>
+        <label className="hel">
           E-post (svar på fakturaer)
           <input type="email" {...felt("epost")} />
         </label>
@@ -253,7 +253,7 @@ function Passkeys() {
         totrinnsbekreftelse.
       </p>
       {(data ?? []).length > 0 && (
-        <table style={{ marginBottom: 12 }}>
+        <table className="kompakt" style={{ marginBottom: 12 }}>
           <tbody>
             {data!.map((p) => (
               <tr key={p.id}>
@@ -476,7 +476,7 @@ function Medlemmer() {
   return (
     <div className="kort">
       <h2 style={{ marginTop: 0 }}>Brukere</h2>
-      <table>
+      <table className="kompakt">
         <tbody>
           {(data ?? []).map((m: any) => (
             <tr key={m.bruker_id}>
@@ -555,7 +555,7 @@ function Regnskapsforer() {
           : "Gi regnskapsføreren tilgang med byråets organisasjonsnummer. Byrået må godta, og du kan trekke tilgangen når som helst."}{" "}
         Begge organisasjonene må være verifisert.
       </p>
-      <table>
+      <table className="kompakt">
         <tbody>
           {(data ?? []).map((t: any) => (
             <tr key={t.id}>
@@ -631,7 +631,7 @@ function Kontoer() {
         konto på hver faktura og gjentakende faktura.
       </p>
       {(data ?? []).length > 0 && (
-        <table>
+        <table className="kompakt">
           <tbody>
             {(data ?? []).map((k: any) => (
               <tr key={k.id}>

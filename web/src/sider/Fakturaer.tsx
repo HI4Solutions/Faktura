@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apnePdf, hent } from "../api";
-import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
+import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
 import { KundeSkjema } from "./Register";
@@ -51,6 +51,32 @@ export function Fakturaliste() {
 }
 
 export function Fakturatabell({ rader, klikk }: { rader: any[]; klikk: (id: string) => void }) {
+  const smal = useSmal();
+  if (smal) {
+    return (
+      <div className="kort liste">
+        {rader.map((f) => {
+          const m = fakturaMerke(f);
+          return (
+            <button key={f.id} type="button" className="liste-rad" onClick={() => klikk(f.id)}>
+              <span className="linje">
+                <span className="tittel">{f.kunde_navn}</span>
+                <span className="belop">{f.sum_inkl_mva == null ? "" : kr(f.sum_inkl_mva)}</span>
+              </span>
+              <span className="linje">
+                <span className="under">
+                  {f.fakturanummer ? `Nr. ${f.fakturanummer}` : "Utkast"}
+                  {f.type === "kreditnota" ? " · kreditnota" : f.forfallsdato ? ` · forfall ${dato(f.forfallsdato)}` : ""}
+                </span>
+                <span className={`merke ${m.klasse}`}>{m.tekst}</span>
+              </span>
+            </button>
+          );
+        })}
+        {rader.length === 0 && <p className="dempet" style={{ padding: "16px" }}>Ingen fakturaer her.</p>}
+      </div>
+    );
+  }
   return (
     <div className="kort tabell">
       <table>
@@ -217,7 +243,7 @@ export function FakturaSkjema() {
       )}
       <div className="kort">
         <div className="rad">
-          <label>
+          <label className="hel">
             Kunde
             <select value={f.kunde_id} onChange={(e) => (e.target.value === "__ny" ? settNyKunde(true) : settF({ ...f, kunde_id: e.target.value }))}>
               <option value="">Velg kunde</option>
@@ -261,7 +287,7 @@ export function FakturaSkjema() {
       </div>
 
       <div className="kort tabell linjer">
-        <table>
+        <table className="stabel">
           <thead>
             <tr>
               <th style={{ width: "16%" }}>Produkt</th>
@@ -281,7 +307,7 @@ export function FakturaSkjema() {
               const b = l.enhetspris !== "" ? summer([{ antall: tall(l.antall), enhetspris: tall(l.enhetspris), mva_sats: 0 }]).eks : null;
               return (
                 <tr key={i}>
-                  <td>
+                  <td className="hel" data-label="Produkt">
                     <select value={l.produkt_id ?? ""} onChange={(e) => velgProdukt(i, e.target.value)}>
                       <option value="">Fritekst</option>
                       {(produkter.data ?? []).map((p: any) => (
@@ -291,20 +317,20 @@ export function FakturaSkjema() {
                       ))}
                     </select>
                   </td>
-                  <td>
+                  <td className="hel" data-label="Beskrivelse">
                     <input value={l.beskrivelse} onChange={(e) => settLinje(i, { beskrivelse: e.target.value })} />
                   </td>
-                  <td>
+                  <td data-label="Antall">
                     <input inputMode="decimal" value={l.antall} onChange={(e) => settLinje(i, { antall: e.target.value })} />
                   </td>
-                  <td>
+                  <td data-label="Enhet">
                     <input value={l.enhet} onChange={(e) => settLinje(i, { enhet: e.target.value })} />
                   </td>
-                  <td>
+                  <td data-label="Pris eks. mva">
                     <input inputMode="decimal" value={l.enhetspris} onChange={(e) => settLinje(i, { enhetspris: e.target.value })} />
                   </td>
                   {!utenMva && (
-                    <td>
+                    <td data-label="Mva">
                       <select value={l.mva_sats} onChange={(e) => settLinje(i, { mva_sats: e.target.value })}>
                         <option value="25">25 %</option>
                         <option value="15">15 %</option>
@@ -313,8 +339,8 @@ export function FakturaSkjema() {
                       </select>
                     </td>
                   )}
-                  <td className="tall">{b == null || Number.isNaN(b) ? "" : kr(b)}</td>
-                  <td>
+                  <td className="tall sum">{b == null || Number.isNaN(b) ? "" : kr(b)}</td>
+                  <td className="fjern">
                     <button type="button" className="lenke" aria-label="Fjern linje" onClick={() => settLinjer(linjer.filter((_, j) => j !== i))}>
                       ✕
                     </button>
@@ -425,7 +451,7 @@ export function FakturaVisning() {
         <h1>
           {f.type === "kreditnota" ? "Kreditnota" : "Faktura"} {f.fakturanummer ?? "(utkast)"} <span className={`merke ${m.klasse}`}>{m.tekst}</span>
         </h1>
-        <div className="knapper">
+        <div className="knapper handlinger">
           <button onClick={() => h.kjor(() => apnePdf(org!.id, f.id))}>{f.status === "utkast" ? "Forhåndsvis PDF" : "PDF"}</button>
           {f.status === "utkast" && kanSkrive(rolle) && (
             <>
@@ -479,7 +505,7 @@ export function FakturaVisning() {
       )}
 
       <div className="kort">
-        <div className="rad">
+        <div className="rad info">
           <div>
             <div className="dempet liten">Kunde</div>
             {f.kunde?.navn ?? ""}
@@ -511,7 +537,7 @@ export function FakturaVisning() {
       </div>
 
       <div className="kort tabell">
-        <table>
+        <table className="stabel">
           <thead>
             <tr>
               <th>Beskrivelse</th>
@@ -524,13 +550,13 @@ export function FakturaVisning() {
           <tbody>
             {f.linjer.map((l: any) => (
               <tr key={l.id}>
-                <td>{l.beskrivelse}</td>
-                <td className="tall">
+                <td className="hel tittel">{l.beskrivelse}</td>
+                <td className="tall" data-label="Antall">
                   {String(l.antall).replace(".", ",")} {l.enhet !== "stk" ? l.enhet : ""}
                 </td>
-                <td className="tall">{kr(l.enhetspris)}</td>
-                <td className="tall">{l.mva_sats} %</td>
-                <td className="tall">{kr(l.belop_eks ?? summer([{ ...l, mva_sats: 0 }]).eks)}</td>
+                <td className="tall" data-label="Pris">{kr(l.enhetspris)}</td>
+                <td className="tall" data-label="Mva">{l.mva_sats} %</td>
+                <td className="tall" data-label="Beløp eks. mva">{kr(l.belop_eks ?? summer([{ ...l, mva_sats: 0 }]).eks)}</td>
               </tr>
             ))}
           </tbody>

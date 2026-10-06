@@ -1,7 +1,7 @@
 // Kunder og produkter: liste og skjema i dialog.
 import { useState, type FormEvent } from "react";
 import { api, hent } from "../api";
-import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
+import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
 import { dato, kr, orgnr } from "../format";
 
@@ -10,6 +10,7 @@ export function Kunder() {
   const [sok, settSok] = useState("");
   const [redigerer, settRedigerer] = useState<any | null>(null);
   const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/kunder${sok ? `?sok=${encodeURIComponent(sok)}` : ""}`), [org?.id, sok]);
+  const smal = useSmal();
 
   return (
     <>
@@ -21,10 +22,26 @@ export function Kunder() {
           </button>
         )}
       </div>
-      <input placeholder="Søk etter navn" value={sok} onChange={(e) => settSok(e.target.value)} style={{ maxWidth: 320, marginBottom: 12 }} />
+      <input type="search" className="sok" placeholder="Søk etter navn" value={sok} onChange={(e) => settSok(e.target.value)} />
       <Feil melding={feil} />
       {laster && !data ? (
         <Laster />
+      ) : smal ? (
+        <div className="kort liste">
+          {(data ?? []).map((k: any) => (
+            <button key={k.id} type="button" className="liste-rad" onClick={() => kanSkrive(org?.rolle) && settRedigerer(k)}>
+              <span className="linje">
+                <span className="tittel">{k.navn}</span>
+                <span className="under">{k.kundenummer}</span>
+              </span>
+              <span className="linje">
+                <span className="under">{k.epost ?? k.telefon ?? (k.orgnr ? `Org.nr. ${orgnr(k.orgnr)}` : "")}</span>
+                {!k.epost ? <span className="merke merke-advarsel">Mangler e-post</span> : !k.aktiv && <span className="merke merke-noytral">Inaktiv</span>}
+              </span>
+            </button>
+          ))}
+          {data?.length === 0 && <p className="dempet" style={{ padding: 16 }}>Ingen kunder ennå.</p>}
+        </div>
       ) : (
         <div className="kort tabell">
           <table>
@@ -200,6 +217,7 @@ export function Produkter() {
   const { org } = useKonto();
   const [redigerer, settRedigerer] = useState<any | null>(null);
   const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/produkter`), [org?.id]);
+  const smal = useSmal();
 
   return (
     <>
@@ -214,6 +232,27 @@ export function Produkter() {
       <Feil melding={feil} />
       {laster && !data ? (
         <Laster />
+      ) : smal ? (
+        <div className="kort liste">
+          {(data ?? []).map((p: any) => (
+            <button key={p.id} type="button" className="liste-rad" onClick={() => kanSkrive(org?.rolle) && settRedigerer(p)}>
+              <span className="linje">
+                <span className="tittel">{p.navn}</span>
+                <span className="belop">{kr(p.enhetspris)}</span>
+              </span>
+              <span className="linje">
+                <span className="under">
+                  per {p.enhet} · {p.mva_sats} % mva{p.varenummer ? ` · nr. ${p.varenummer}` : ""}
+                </span>
+                <span>
+                  {p.indeks_aktiv && <span className="merke merke-info">KPI</span>}
+                  {!p.aktiv && <span className="merke merke-noytral">Inaktiv</span>}
+                </span>
+              </span>
+            </button>
+          ))}
+          {data?.length === 0 && <p className="dempet" style={{ padding: 16 }}>Ingen produkter ennå.</p>}
+        </div>
       ) : (
         <div className="kort tabell">
           <table>
@@ -456,7 +495,7 @@ function Indeksregulering({ p, settP }: { p: any; settP: (p: any) => void }) {
         </>
       )}
       {reguleringer.length > 0 && (
-        <table className="liten">
+        <table className="liten kompakt">
           <thead>
             <tr>
               <th>Gjelder fra</th>

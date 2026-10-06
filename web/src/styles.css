@@ -85,6 +85,8 @@ body::before {
   background: var(--meny-bg); z-index: 100; pointer-events: none;
 }
 a { color: var(--aksent); text-decoration: none; }
+/* Raskere trykk på mobil: ingen dobbelttrykk-zoom eller grå blink på knapper og lenker */
+a, button, input, select, textarea, label { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 a:hover { text-decoration: underline; }
 h1 { font-size: 1.65rem; line-height: 1.25; letter-spacing: -0.02em; font-weight: 700; margin: 0 0 1rem; }
 h2 { font-size: 1.05rem; letter-spacing: -0.01em; font-weight: 650; margin: 1.6rem 0 0.75rem; }
@@ -151,25 +153,62 @@ strong { font-weight: 650; }
 .topp h1 { margin: 0; }
 .undertittel { color: var(--dempet); margin: -0.6rem 0 1.25rem; }
 
-/* Mobil: topplinje og meny som skuff */
-.mobiltopp { display: none; }
-.meny-skygge { display: none; }
+/* Grid-barn må kunne krympe. Ellers blir hele siden like bred som den bredeste
+   tabellen, og mobilen zoomer ut (alt blir «veldig stort»). */
+.ramme > *, .dash-rad > *, .nokkeltall > *, .rad > * { min-width: 0; }
+
+/* Mobil: organisasjonen øverst, bunnmeny nederst, full meny som skuff */
+.mobiltopp, .bunnmeny, .meny-skygge { display: none; }
 @media (max-width: 860px) {
-  .ramme { grid-template-columns: 1fr; }
+  /* align-content: ellers strekkes topplinjen når siden er kortere enn skjermen */
+  .ramme { grid-template-columns: 1fr; align-content: start; }
   .mobiltopp {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px;
+    padding: 8px max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left));
     background: var(--meny-bg); position: sticky; top: env(safe-area-inset-top); z-index: 15;
   }
-  .mobiltopp .logo-tekst { color: #fff; }
-  .mobiltopp .logo-tekst span { color: #9db4ff; }
-  .mobiltopp button { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.18); padding: 7px; }
-  .meny { position: fixed; inset: env(safe-area-inset-top) auto 0 0; width: 280px; padding-bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-100%); visibility: hidden; transition: transform .22s ease, visibility .22s; }
+  .mobil-org { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; color: #fff; }
+  .mobil-org .avatar { width: 30px; height: 30px; font-size: 0.75rem; border-radius: 8px; }
+  .mobil-org .navn { font-weight: 650; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobil-org svg { flex: none; color: var(--meny-dempet); }
+  .mobil-org select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; font-size: 16px; }
+
+  .bunnmeny {
+    display: flex; align-items: stretch; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    padding: 4px max(6px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--flate) 90%, transparent);
+    -webkit-backdrop-filter: saturate(1.8) blur(16px); backdrop-filter: saturate(1.8) blur(16px);
+    border-top: 1px solid var(--kant);
+  }
+  .bunnmeny a, .bunnmeny button {
+    flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 54px; padding: 4px 2px; border: 0; border-radius: 12px; background: none; box-shadow: none;
+    color: var(--dempet); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.01em; text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bunnmeny a:hover, .bunnmeny button:hover:not(:disabled) { text-decoration: none; color: var(--tekst); background: none; }
+  .bunnmeny a.active, .bunnmeny button.aktiv { color: var(--aksent); }
+  .bunnmeny a.active svg { stroke-width: 2.2; }
+  .bunnmeny a.ny { flex: 0 0 68px; }
+  .bunnmeny .pluss {
+    width: 50px; height: 50px; border-radius: 16px; display: grid; place-items: center; color: var(--aksent-tekst);
+    background: var(--aksent); box-shadow: 0 8px 18px -6px rgba(47, 86, 216, 0.55);
+  }
+  .bunnmeny a.ny.active .pluss { background: var(--aksent-hover); }
+
+  .meny {
+    position: fixed; inset: env(safe-area-inset-top) auto 0 0; width: min(300px, 86vw); z-index: 40;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    transform: translateX(-100%); visibility: hidden; transition: transform .22s ease, visibility .22s;
+  }
   .meny.apen { transform: none; visibility: visible; box-shadow: var(--skygge-3); }
-  .tabell td { white-space: nowrap; }
-  .meny-skygge.apen { display: block; position: fixed; inset: 0; background: rgba(5, 10, 25, 0.5); z-index: 19; }
-  .innhold { padding: 20px max(16px, env(safe-area-inset-right)) calc(48px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-  h1 { font-size: 1.4rem; }
+  .meny { overscroll-behavior: contain; }
+  body.skriver .bunnmeny { display: none; }
+  .meny-skygge.apen { display: block; position: fixed; inset: 0; background: rgba(5, 10, 25, 0.5); z-index: 39; }
+  .innhold {
+    padding: 18px max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  .bannere { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
 
 /* --------------------------------------------------------------------------
@@ -328,7 +367,10 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 .tom strong { display: block; color: var(--tekst); margin-bottom: 4px; }
 
 .linjer td input { min-width: 70px; }
+.linjer td select { padding-left: 10px; padding-right: 28px; background-position: right 8px center; }
 .kort.tabell .summer { margin: 14px 24px 20px auto; }
+.kort.tabell > .knapper { padding: 0 24px; }
+.rad.info { row-gap: 14px; }
 .summer { margin-left: auto; max-width: 340px; background: var(--flate-2); border: 1px solid var(--kant); border-radius: var(--radius-s); padding: 12px 16px; }
 .summer div { display: flex; justify-content: space-between; padding: 4px 0; }
 .summer .total { font-weight: 700; font-size: 1.05rem; border-top: 1px solid var(--kant); margin-top: 6px; padding-top: 10px; }
@@ -439,3 +481,127 @@ code.hemmelig { word-break: break-all; font-size: 0.85rem; }
   .logo-ikon.animert * { animation: none !important; }
 }
 
+
+/* --------------------------------------------------------------------------
+   Lister som kort (brukes på smale skjermer i stedet for tabeller)
+   -------------------------------------------------------------------------- */
+.kort.liste { padding: 0; overflow: hidden; }
+.liste-rad {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; min-height: 0; margin: 0;
+  padding: 13px 16px; border: 0; border-bottom: 1px solid var(--kant); border-radius: 0;
+  background: none; box-shadow: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.liste-rad:last-child { border-bottom: 0; }
+.liste-rad:hover:not(:disabled) { background: var(--flate-2); }
+.liste-rad:active:not(:disabled) { background: var(--aksent-lys); transform: none; }
+.liste-rad .linje { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.liste-rad .tittel { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.liste-rad .belop { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.liste-rad .under { color: var(--dempet); font-size: 0.84rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.liste-rad .merke { flex: none; }
+.liste-rad .merke + .merke { margin-left: 4px; }
+.liste-rad button.lenke { flex: none; font-size: 0.86rem; }
+input.sok { max-width: 340px; margin-bottom: 14px; }
+
+/* --------------------------------------------------------------------------
+   Telefon
+   -------------------------------------------------------------------------- */
+/* Felt på 16 px: ellers zoomer iPhone inn når man trykker i dem. Større trykkflater. */
+@media (pointer: coarse), (max-width: 700px) {
+  input, select, textarea { font-size: 16px; }
+  input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
+  button, .knapp { min-height: 42px; }
+  button.lenke, .dialog-topp button { min-height: 0; }
+  .meny a { padding: 11px 12px; }
+  label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { padding: 4px 0; }
+}
+
+@media (max-width: 700px) {
+  h1 { font-size: 1.35rem; }
+  h2 { font-size: 1rem; }
+  .topp { margin-bottom: 14px; gap: 10px; }
+  .topp h1 { flex: 1 1 auto; min-width: 0; }
+  .kort { padding: 16px; margin-bottom: 14px; border-radius: 14px; }
+  .kort.tabell { padding: 2px 0; }
+  .kort.tabell table th:first-child, .kort.tabell table td:first-child { padding-left: 16px; }
+  .kort.tabell table th:last-child, .kort.tabell table td:last-child { padding-right: 16px; }
+  .tabell { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .rad { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+  .rad > .hel { grid-column: 1 / -1; }
+  .rad > div { overflow-wrap: anywhere; }
+  input.sok { max-width: none; }
+
+  /* Oversikt */
+  .velkommen { margin-bottom: 16px; }
+  .velkommen .knapper { display: none; } /* «+» ligger i bunnmenyen */
+  .nokkeltall { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .nokkeltall .kort { padding: 14px; }
+  .nokkeltall .etikett { gap: 8px; font-size: 0.78rem; line-height: 1.25; }
+  .nokkeltall .ikonboks { width: 28px; height: 28px; border-radius: 8px; flex: none; }
+  .nokkeltall .ikonboks svg { width: 16px; height: 16px; }
+  .nokkeltall .verdi { font-size: 1.2rem; margin-top: 8px; }
+  .nokkeltall .under { font-size: 0.74rem; }
+  .dash-rad { gap: 14px; }
+
+  /* Faner sveipes sidelengs i stedet for å bryte over flere linjer */
+  .faner { display: flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; margin-bottom: 14px; }
+  .faner::-webkit-scrollbar { display: none; }
+  .faner button { flex: none; min-height: 36px; }
+
+  /* Handlinger på fakturasiden: to kolonner med like store knapper */
+  .topp .handlinger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 8px; }
+  .handlinger > button { justify-content: center; }
+  .knapper > button.primar:only-child { width: 100%; justify-content: center; }
+
+  .summer { max-width: none; margin-left: 0; }
+  .kort.tabell .summer { margin: 12px 16px 16px; }
+  .kort.tabell > .knapper { padding: 0 16px; }
+
+  /* Tabeller som stables: én blokk per rad, med etiketter fra data-label */
+  table.stabel, table.stabel > tbody { display: block; width: 100%; }
+  table.stabel > thead { display: none; }
+  table.stabel > tbody > tr {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px;
+    padding: 14px 16px; border-bottom: 1px solid var(--kant); position: relative;
+  }
+  table.stabel > tbody > tr:last-child { border-bottom: 0; }
+  table.stabel > tbody > tr > td,
+  .kort.tabell table.stabel > tbody > tr > td:nth-child(n) { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.stabel td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 4px;
+    font-size: 0.68rem; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dempet);
+  }
+  table.stabel > tbody > tr > td[style] { width: auto !important; } /* faste kolonnebredder gjelder bare tabellvisningen */
+  table.stabel td.hel { grid-column: 1 / -1; }
+  table.stabel td.tittel { font-weight: 600; }
+  table.stabel td.sum { grid-column: 1 / -1; text-align: right; font-weight: 650; }
+  table.stabel td.sum:empty { display: none; }
+  table.stabel td.fjern { position: absolute; top: 10px; right: 12px; }
+  table.stabel td.fjern button { padding: 4px 6px; }
+  .dialog-innhold table.stabel > tbody > tr { padding: 12px 0; }
+  .linjer td input { min-width: 0; }
+
+  /* Små tabeller i innstillingene: cellene flyter som tekst */
+  table.kompakt, table.kompakt > tbody { display: block; width: 100%; }
+  table.kompakt > thead { display: none; }
+  table.kompakt > tbody > tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--kant); }
+  table.kompakt > tbody > tr > td { display: block; padding: 0; border: 0; min-width: 0; overflow-wrap: anywhere; }
+  table.kompakt > tbody > tr > td:first-child { flex: 1 1 100%; font-weight: 600; }
+  table.kompakt > tbody > tr > td.hoyre { margin-left: auto; }
+
+  /* Dialoger som ark nederst på skjermen */
+  dialog {
+    width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 20px 20px 0 0; border-bottom: 0;
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top));
+  }
+  dialog[open] { animation: ark-inn .24s cubic-bezier(.2, .8, .2, 1); }
+  .dialog-topp { padding: 14px 16px; }
+  .dialog-topp::before {
+    content: ""; position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; margin-left: -18px;
+    border-radius: 999px; background: var(--kant-sterk);
+  }
+  .dialog-innhold { padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); }
+  .dialog-innhold .knapper > button { flex: 1 1 auto; justify-content: center; }
+}
+@keyframes ark-inn { from { transform: translateY(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }

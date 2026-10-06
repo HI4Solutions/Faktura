@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, hent } from "../api";
 import { AvsenderKonto } from "./AvsenderKonto";
-import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
+import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
 import { dato, iDag, kr, summer } from "../format";
 
@@ -14,6 +14,7 @@ export function Gjentakende() {
   const { data, feil, last } = useData(() => hent<any[]>(`/org/${org!.id}/gjentakelser`), [org?.id]);
   const [redigerer, settRedigerer] = useState<any | null>(null);
   const h = useHandling();
+  const smal = useSmal();
 
   if (feil) return <Feil melding={feil} />;
   if (!data) return <Laster />;
@@ -32,6 +33,48 @@ export function Gjentakende() {
         Fakturaene lages og sendes automatisk hver morgen, så mange dager før forfall som du velger.
       </p>
       <Feil melding={h.feil} />
+      {smal ? (
+        <div className="kort liste">
+          {data.map((g) => {
+            const sum = summer(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25 })));
+            const apne = () => kanSkrive(org?.rolle) && settRedigerer(g);
+            return (
+              <div key={g.id} className="liste-rad" role="button" tabIndex={0} onClick={apne} onKeyDown={(e) => e.key === "Enter" && apne()}>
+                <span className="linje">
+                  <span className="tittel">{g.kunde_navn}</span>
+                  <span className="belop">{kr(sum.inkl)}</span>
+                </span>
+                <span className="linje">
+                  <span className="under">
+                    {intervallTekst[g.intervall]} · forfall {dato(g.neste_forfall)}
+                  </span>
+                  <span className={`merke ${g.aktiv ? "merke-ok" : "merke-noytral"}`}>{g.aktiv ? "Aktiv" : "Stoppet"}</span>
+                </span>
+                {g.aktiv && (
+                  <span className="linje">
+                    <span className="under">Sendes {dato(g.neste_dato)}</span>
+                    {kanSkrive(org?.rolle) && (
+                      <button
+                        className="lenke"
+                        disabled={h.opptatt}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm("Lage og sende neste faktura nå? Neste forfall flyttes én periode fram.")) return;
+                          const f = await h.kjor(() => api("POST", `/org/${org!.id}/gjentakelser/${g.id}/kjor`));
+                          if (f) nav(`/fakturaer/${f.id}`);
+                        }}
+                      >
+                        Send nå
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          {data.length === 0 && <p className="dempet" style={{ padding: 16 }}>Ingen gjentakende fakturaer ennå.</p>}
+        </div>
+      ) : (
       <div className="kort tabell">
         <table>
           <thead>
@@ -86,6 +129,7 @@ export function Gjentakende() {
           </tbody>
         </table>
       </div>
+      )}
       <Dialog apen={!!redigerer} lukk={() => settRedigerer(null)} tittel={redigerer?.id ? "Endre gjentakelse" : "Ny gjentakelse"}>
         <Skjema
           g={redigerer}
@@ -210,11 +254,11 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
       </div>
       <p className="liten dempet">Forfallsdagen ({f.neste_forfall ? Number(f.neste_forfall.slice(8, 10)) : "–"}.) holdes hver periode; kortere måneder får siste dag.</p>
 
-      <table className="linjer">
+      <table className="linjer stabel">
         <tbody>
           {linjer.map((l, i) => (
             <tr key={i}>
-              <td style={{ width: "28%" }}>
+              <td className="hel" data-label="Produkt" style={{ width: "28%" }}>
                 <select
                   value={l.produkt_id ?? ""}
                   onChange={(e) => {
@@ -230,17 +274,17 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
                   ))}
                 </select>
               </td>
-              <td>
+              <td className="hel" data-label="Beskrivelse">
                 <input placeholder="Beskrivelse" value={l.beskrivelse} onChange={(e) => settL(i, { beskrivelse: e.target.value })} />
               </td>
-              <td style={{ width: 70 }}>
+              <td data-label="Antall" style={{ width: 70 }}>
                 <input inputMode="decimal" value={l.antall} onChange={(e) => settL(i, { antall: e.target.value })} />
               </td>
-              <td style={{ width: 100 }}>
+              <td data-label="Pris eks. mva" style={{ width: 100 }}>
                 <input inputMode="decimal" placeholder="Pris" value={l.enhetspris} onChange={(e) => settL(i, { enhetspris: e.target.value })} />
               </td>
               {!utenMva && (
-                <td style={{ width: 80 }}>
+                <td data-label="Mva" style={{ width: 80 }}>
                   <select value={l.mva_sats} onChange={(e) => settL(i, { mva_sats: e.target.value })}>
                     <option value="25">25 %</option>
                     <option value="15">15 %</option>
@@ -249,7 +293,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
                   </select>
                 </td>
               )}
-              <td>
+              <td className="fjern">
                 <button type="button" className="lenke" aria-label="Fjern linje" onClick={() => settLinjer(linjer.filter((_, j) => j !== i))}>
                   ✕
                 </button>

@@ -15,7 +15,7 @@ export function AvsenderKonto({ org: o, verdi, endre }: { org: any; verdi: { kon
   return (
     <div className="rad">
       {harInnehaver && (
-        <label>
+        <label className="hel">
           Avsender
           <select value={v.avsender ?? ""} onChange={(e) => endre({ ...v, avsender: e.target.value || null })}>
             <option value="">Standard ({o.standard_avsender === "innehaver" ? o.innehaver : o.navn})</option>
@@ -25,7 +25,7 @@ export function AvsenderKonto({ org: o, verdi, endre }: { org: any; verdi: { kon
         </label>
       )}
       {(kontoer.data?.length ?? 0) > 0 && (
-        <label>
+        <label className="hel">
           Betales til konto
           <select value={v.konto_id ?? ""} onChange={(e) => endre({ ...v, konto_id: e.target.value || null })}>
             <option value="">Standard ({kto(o.kontonr) ?? "ikke satt"})</option>

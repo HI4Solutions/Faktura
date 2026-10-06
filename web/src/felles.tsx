@@ -64,6 +64,20 @@ export function Laster() {
   );
 }
 
+// Smal skjerm (mobil): lister vises som kort i stedet for tabeller.
+export function useSmal(px = 700) {
+  const sporring = `(max-width: ${px}px)`;
+  const [smal, settSmal] = useState(() => window.matchMedia(sporring).matches);
+  useEffect(() => {
+    const m = window.matchMedia(sporring);
+    const endret = () => settSmal(m.matches);
+    m.addEventListener("change", endret);
+    endret();
+    return () => m.removeEventListener("change", endret);
+  }, [sporring]);
+  return smal;
+}
+
 // Tom tilstand i lister: ikon, kort forklaring og gjerne en handling.
 export function Tom({ ikon, tittel, children }: { ikon?: ReactNode; tittel: string; children?: ReactNode }) {
   return (
