@@ -105,6 +105,26 @@ describe.skipIf(!harDb)("API", () => {
     expect(liste.data.map((x: any) => x.fakturanummer)).toEqual([2, 1]);
   });
 
+  it("gjentakende faktura: opprett, kjør nå, stopp", async () => {
+    const g = await kall("POST", `/api/org/${org}/gjentakelser`, ola, {
+      kunde_id: kunde,
+      linjer: [{ beskrivelse: "Abonnement", antall: 1, enhetspris: 500, mva_sats: 25 }],
+      intervall: "maaned",
+      forfall_dag: 15,
+      neste_forfall: "2030-01-15",
+    });
+    expect(g.status).toBe(201);
+    expect(g.data.send_dager_foer).toBe(14);
+    const f = await kall("POST", `/api/org/${org}/gjentakelser/${g.data.id}/kjor`, ola);
+    expect(f.status).toBe(201);
+    expect(f.data.sum_inkl_mva).toBe(625);
+    expect(f.data.gjentakelse_id).toBe(g.data.id);
+    const etter = (await kall("GET", `/api/org/${org}/gjentakelser`, ola)).data.find((x: any) => x.id === g.data.id);
+    expect(etter.neste_forfall).toBe("2030-02-15");
+    await kall("PATCH", `/api/org/${org}/gjentakelser/${g.data.id}`, ola, { aktiv: false });
+    expect((await kall("POST", `/api/org/${org}/gjentakelser/${g.data.id}/kjor`, ola)).status).toBe(409);
+  });
+
   it("feil fra databasen blir riktige HTTP-statuser", async () => {
     const f = await kall("POST", `/api/org/${org}/fakturaer`, ola, { kunde_id: kunde, linjer: [] });
     expect((await kall("POST", `/api/org/${org}/fakturaer/${f.data.id}/utsted`, ola, {})).status).toBe(400);

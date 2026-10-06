@@ -589,6 +589,27 @@ export function lagApi() {
     return c.json(r);
   });
 
+  // Lager og sender neste faktura fra gjentakelsen med en gang.
+  org.post("/gjentakelser/:id/kjor", async (c) => {
+    krevMfa(c);
+    const id = uuid.parse(c.req.param("id"));
+    const f = await bruk(c, async (db) => {
+      const g = await en(db, "select id from faktura.gjentakelser where id = $1 and org_id = $2", [id, orgId(c)]);
+      if (!g) throw new ApiFeil(404, "Finnes ikke");
+      const fid = (await en(db, "select faktura.lag_fra_gjentakelse($1) as id", [id]))!.id;
+      if (!fid) throw new ApiFeil(409, "Gjentakelsen er stoppet, utløpt eller kunden er inaktiv");
+      return en(db, "select * from faktura.utsted($1)", [fid]);
+    });
+    await leggIKo({ type: "send-faktura", faktura_id: f.id, send_epost: true });
+    return c.json(f, 201);
+  });
+
+  org.delete("/gjentakelser/:id", async (c) => {
+    const r = await bruk(c, (db) => db.query("delete from faktura.gjentakelser where id = $1 and org_id = $2", [uuid.parse(c.req.param("id")), orgId(c)]));
+    if (!r.rowCount) throw new ApiFeil(404, "Finnes ikke");
+    return c.body(null, 204);
+  });
+
   // --- Revisjonslogg -----------------------------------------------------
   org.get("/revisjonslogg", async (c) =>
     c.json(

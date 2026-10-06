@@ -11,6 +11,7 @@ import { FakturaSkjema, FakturaVisning, Fakturaliste } from "./sider/Fakturaer";
 import { Innstillinger } from "./sider/Innstillinger";
 import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
+import { Gjentakende } from "./sider/Gjentakende";
 
 function Invitasjon() {
   const { token } = useParams();
@@ -71,6 +72,7 @@ function Ramme() {
         {org?.type !== "regnskapsbyraa" && (
           <>
             <NavLink to="/fakturaer">Fakturaer</NavLink>
+            <NavLink to="/gjentakende">Gjentakende</NavLink>
             <NavLink to="/kunder">Kunder</NavLink>
             <NavLink to="/produkter">Produkter</NavLink>
           </>
@@ -91,6 +93,7 @@ function Ramme() {
             <Route path="/fakturaer/ny" element={<FakturaSkjema key="ny" />} />
             <Route path="/fakturaer/:id/endre" element={<FakturaSkjema />} />
             <Route path="/fakturaer/:id" element={<FakturaVisning />} />
+            <Route path="/gjentakende" element={<Gjentakende />} />
             <Route path="/kunder" element={<Kunder />} />
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
