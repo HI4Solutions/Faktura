@@ -86,11 +86,25 @@ export async function hentBanker(n: BankNokkel, land = "NO"): Promise<Bank[]> {
   return (await kall(n, "GET", `/aspsps?country=${encodeURIComponent(land)}`))?.aspsps ?? [];
 }
 
-// Banken med dette navnet (store og små bokstaver spiller ingen rolle): Enable Banking
-// krever det nøyaktige navnet.
-export function finnBank(banker: Bank[], navn: string): Bank | null {
+// Banken brukeren mener: Enable Banking krever det nøyaktige navnet. Store og små
+// bokstaver spiller ingen rolle, og «Storebrand» finner «Storebrand Bank» når det bare er
+// én bank som passer. Feiler med en forklaring (og forslag) ellers.
+export function velgBank(banker: Bank[], navn: string, psuType: "business" | "personal"): Bank {
   const v = navn.trim().toLowerCase();
-  return banker.find((b) => b.name.toLowerCase() === v) ?? null;
+  const like = banker.filter((b) => b.name.toLowerCase() === v);
+  const delvis = banker.filter((b) => b.name.toLowerCase().includes(v) || v.includes(b.name.toLowerCase()));
+  const treff = like.length ? like : delvis;
+  const medType = treff.filter((b) => !b.psu_types?.length || b.psu_types.includes(psuType));
+  if (medType.length === 1 || (medType.length > 1 && like.length)) return medType[0];
+  const type = psuType === "business" ? "bedriftskontoer" : "privatkontoer";
+  if (treff.length && !medType.length) throw new BankFeil(`${treff[0].name} støtter ikke ${type} gjennom Enable Banking.`, 400);
+  const forslag = (medType.length ? medType : banker.filter((b) => b.name.toLowerCase().includes(v.split(/\s+/)[0] ?? ""))).map((b) => b.name);
+  throw new BankFeil(
+    medType.length > 1
+      ? `Flere banker passer med «${navn}»: ${forslag.slice(0, 6).join(", ")}. Skriv hele navnet.`
+      : `Fant ikke banken «${navn}» hos Enable Banking.${forslag.length ? ` Mente du ${forslag.slice(0, 5).join(", ")}?` : ""}`,
+    400,
+  );
 }
 
 // Samtykket varer så lenge banken tillater (oftest 180 dager), litt kortere for å ha margin.

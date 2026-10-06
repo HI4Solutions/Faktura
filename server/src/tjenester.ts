@@ -71,10 +71,10 @@ export type Oppgave =
   | { type: "varsel"; varsel: Varsel }
   | { type: "epost"; til: string[]; emne: string; tekst: string; fra_navn?: string; svar_til?: string }
   // Bank (Enable Banking): ny BankID-adresse, fullfør koblingen, hent innbetalinger, koble fra.
-  | { type: "bank-auth"; org_id: string }
-  | { type: "bank-okt"; org_id: string; kode: string }
-  | { type: "bank-hent"; org_id: string; psu?: { ip: string; agent: string } }
-  | { type: "bank-slett"; org_id: string };
+  | { type: "bank-auth"; org_id: string; kobling_id: string }
+  | { type: "bank-okt"; org_id: string; kobling_id: string; kode: string }
+  | { type: "bank-hent"; org_id: string; kobling_id?: string; psu?: { ip: string; agent: string } }
+  | { type: "bank-slett"; org_id: string; okt_ider: string[]; alt?: boolean };
 
 let tasks: CloudTasksClient | undefined;
 

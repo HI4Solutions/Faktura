@@ -6,7 +6,7 @@ import { kanSkrive, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { IkonFaktura, IkonHake, IkonKlokke, IkonKroner, IkonKunder, IkonPluss, IkonUtkast, IkonVarsel } from "../ikoner";
 import { Fakturatabell } from "./Fakturaer";
-import type { BankStatus } from "./Bank";
+import { dagerTil, navnListe, type BankStatus } from "./Bank";
 
 export function Oversikt() {
   const { org, meg, velgOrg } = useKonto();
@@ -284,20 +284,24 @@ function Stolper({ data }: { data: { nokkel: string; navn: string; sum: number }
 // Innbetalinger fra banken som venter, og tilgang til banken som går ut eller har gått ut.
 function BankMelding({ s }: { s: BankStatus }) {
   const venter = s.antall.forslag + s.antall.uavklart;
-  const igjen = s.gyldig_til ? Math.ceil((Date.parse(s.gyldig_til) - Date.now()) / 86_400_000) : null;
+  const feil = s.koblinger.filter((k) => k.status === "feil");
+  const snart = s.koblinger.filter((k) => k.tilkoblet && (dagerTil(k.gyldig_til) ?? Infinity) < 14);
   return (
     <>
-      {s.status === "feil" && (
+      {feil.length > 0 && (
         <div className="melding feil">
-          Appen får ikke lenger lese innbetalingene fra banken. <Link to="/innstillinger?fane=betaling">Koble til på nytt</Link>
+          Appen får ikke lenger lese innbetalingene fra {navnListe(feil.map((k) => k.bank))}. <Link to="/innstillinger?fane=betaling">Koble til på nytt</Link>
         </div>
       )}
-      {s.tilkoblet && igjen !== null && igjen < 14 && (
-        <div className="melding info">
-          Tilgangen til banken går ut {igjen <= 0 ? "i dag" : `om ${igjen} ${igjen === 1 ? "dag" : "dager"}`}.{" "}
-          <Link to="/innstillinger?fane=betaling">Forny med BankID</Link>
-        </div>
-      )}
+      {snart.map((k) => {
+        const igjen = dagerTil(k.gyldig_til)!;
+        return (
+          <div key={k.id} className="melding info">
+            Tilgangen til {k.bank} går ut {igjen <= 0 ? "i dag" : `om ${igjen} ${igjen === 1 ? "dag" : "dager"}`}.{" "}
+            <Link to="/innstillinger?fane=betaling">Forny med BankID</Link>
+          </div>
+        );
+      })}
       {venter > 0 && (
         <div className="melding info">
           {venter === 1 ? "En innbetaling fra banken venter" : `${venter} innbetalinger fra banken venter`} på deg.{" "}

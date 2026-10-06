@@ -601,6 +601,18 @@ ol.steg { padding-left: 20px; margin: 4px 0 16px; }
 ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 .kopier-felt { display: flex; align-items: center; gap: 10px; margin: 6px 0; flex-wrap: wrap; }
 .kopier-felt code { background: var(--flate-2); border: 1px solid var(--kant); padding: 3px 8px; border-radius: 6px; font-size: 0.85rem; overflow-wrap: anywhere; }
+/* Bankene under Innstillinger → Betaling: én boks per bank. */
+.banker { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.bank { border: 1px solid var(--kant); border-radius: var(--radius-s); padding: 12px 14px; min-width: 0; }
+.bank-topp { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; }
+.bank p { margin: 8px 0 0; }
+.bank .melding { margin: 10px 0 0; }
+.bank .valgliste { margin-bottom: 0; }
+.bank .knapper { margin-top: 10px; }
+.ny-bank { border: 1px dashed var(--kant); border-radius: var(--radius-s); padding: 12px 14px 14px; margin: 14px 0 4px; }
+.ny-bank h3 { margin: 0 0 4px; font-size: 1rem; }
+.bank-app { margin: 14px 0 0; }
+@media (max-width: 700px) { .ny-bank .rad, .bank-skjema .rad { grid-template-columns: minmax(0, 1fr); } }
 
 /* Kopier med ett trykk i fakturalistene: knappen står ved siden av raden. */
 .liste-rad-ramme { display: flex; align-items: center; border-bottom: 1px solid var(--kant); }

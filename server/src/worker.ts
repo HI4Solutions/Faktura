@@ -11,7 +11,7 @@ import { varsleForfalte, varsleGjentakende, varsleOmHendelse } from "./varsler.j
 import { sjekkEhf } from "./peppol.js";
 import { ryddVedlegg, vedleggFiler } from "./vedlegg.js";
 import { oppdaterEhfKoblinger, sendSomEhf, sjekkEhfLevering } from "./ehfSending.js";
-import { fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, slettBankKobling } from "./bank.js";
+import { fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, slettBankOkter } from "./bank.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -142,10 +142,10 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "disk-synk") return synkOrganisasjon(o.bruker_id, o.org_id, sikrePdf, pdfFilnavn);
   if (o.type === "disk-slett") return slettFraDisk(o.org_id, o.faktura_ider, pdfFilnavn);
   if (o.type === "varsel") return void (await sendVarsel(o.varsel));
-  if (o.type === "bank-auth") return lagBankAdresse(o.org_id);
-  if (o.type === "bank-okt") return fullforBankOkt(o.org_id, o.kode);
-  if (o.type === "bank-hent") return void (await hentInnbetalinger(o.org_id, o.psu));
-  if (o.type === "bank-slett") return slettBankKobling(o.org_id);
+  if (o.type === "bank-auth") return lagBankAdresse(o.org_id, o.kobling_id);
+  if (o.type === "bank-okt") return fullforBankOkt(o.org_id, o.kobling_id, o.kode);
+  if (o.type === "bank-hent") return void (await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu }));
+  if (o.type === "bank-slett") return slettBankOkter(o.org_id, o.okt_ider, o.alt);
   return sendEpost(o);
 }
 
@@ -438,20 +438,24 @@ export function lagWorker() {
   // av innbetalinger og frakobling.
   const bankOppgave = z.object({ org_id: z.string().uuid(), oppgave_id: z.string() });
   app.post("/oppgaver/bank-auth", async (c) => {
-    await lagBankAdresse(bankOppgave.parse(await c.req.json()).org_id);
+    const o = bankOppgave.extend({ kobling_id: z.string().uuid() }).parse(await c.req.json());
+    await lagBankAdresse(o.org_id, o.kobling_id);
     return c.json({ ok: true });
   });
   app.post("/oppgaver/bank-okt", async (c) => {
-    const o = bankOppgave.extend({ kode: z.string().min(1).max(4000) }).parse(await c.req.json());
-    await fullforBankOkt(o.org_id, o.kode);
+    const o = bankOppgave.extend({ kobling_id: z.string().uuid(), kode: z.string().min(1).max(4000) }).parse(await c.req.json());
+    await fullforBankOkt(o.org_id, o.kobling_id, o.kode);
     return c.json({ ok: true });
   });
   app.post("/oppgaver/bank-hent", async (c) => {
-    const o = bankOppgave.extend({ psu: z.object({ ip: z.string().max(100), agent: z.string().max(500) }).optional() }).parse(await c.req.json());
-    return c.json(await hentInnbetalinger(o.org_id, o.psu));
+    const o = bankOppgave
+      .extend({ kobling_id: z.string().uuid().optional(), psu: z.object({ ip: z.string().max(100), agent: z.string().max(500) }).optional() })
+      .parse(await c.req.json());
+    return c.json(await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu }));
   });
   app.post("/oppgaver/bank-slett", async (c) => {
-    await slettBankKobling(bankOppgave.parse(await c.req.json()).org_id);
+    const o = bankOppgave.extend({ okt_ider: z.array(z.string().max(500)).max(50), alt: z.boolean().optional() }).parse(await c.req.json());
+    await slettBankOkter(o.org_id, o.okt_ider, o.alt);
     return c.json({ ok: true });
   });
 

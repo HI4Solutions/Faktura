@@ -10,48 +10,65 @@ import { erAdmin, kanBokfore, useKonto } from "../konto";
 import { Sokefelt } from "../sokefelt";
 import { IkonKroner } from "../ikoner";
 
-export interface BankStatus {
+export interface BankKonto {
+  uid: string;
+  kontonr: string;
+  navn: string | null;
+  valgt: boolean;
+}
+
+// Én bank (DNB, Storebrand …) med egen BankID-innlogging, eget samtykke og egne kontoer.
+export interface Bankkobling {
+  id: string;
+  bank: string;
+  psu_type: "business" | "personal";
+  status: "venter" | "aktiv" | "feil";
   tilkoblet: boolean;
-  status: "aktiv" | "feil" | null;
-  venter_bankid: boolean;
-  app_id: string | null;
-  app_navn: string | null;
-  bank: string | null;
-  psu_type: "business" | "personal" | null;
-  kontoer: { uid: string; kontonr: string; navn: string | null; valgt: boolean }[];
+  kontoer: BankKonto[];
   gyldig_til: string | null;
+  fullfort: string | null;
   sist_hentet: string | null;
   siste_feil: string | null;
   auth_url: string | null;
   auth_tid: string | null;
+}
+
+export interface BankStatus {
+  app: { app_id: string; app_navn: string | null } | null; // applikasjonen hos Enable Banking
+  koblinger: Bankkobling[];
+  tilkoblet: boolean;
   tilbake_url: string;
   antall: { forslag: number; uavklart: number; koblet: number; ignorert: number };
 }
 
-const BANKER = ["DNB", "Nordea", "Handelsbanken", "Danske Bank", "SpareBank 1 SR-Bank", "SpareBank 1 SMN", "SpareBank 1 Østlandet", "SpareBank 1 Nord-Norge"];
+const BANKER = ["DNB", "Storebrand", "Nordea", "Handelsbanken", "Danske Bank", "SpareBank 1 SR-Bank", "SpareBank 1 SMN", "SpareBank 1 Østlandet", "SpareBank 1 Nord-Norge"];
 const pause = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 const kontonrTekst = (k: string) => k.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3");
+const kontotype = (t: Bankkobling["psu_type"]) => (t === "personal" ? "privatkonto" : "bedriftskonto");
 const tid = (iso: string | null) => (iso ? new Date(iso).toLocaleString("nb-NO", { dateStyle: "short", timeStyle: "short" }) : "");
-const dagerTil = (iso: string | null) => (iso ? Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000) : null);
+export const dagerTil = (iso: string | null) => (iso ? Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000) : null);
+// «DNB», «DNB og Storebrand Bank», «DNB, Nordea og Storebrand Bank».
+export const navnListe = (navn: string[]) => (navn.length <= 1 ? navn.join("") : `${navn.slice(0, -1).join(", ")} og ${navn.at(-1)}`);
 
-// Ny BankID-adresse fra workeren (fornyelse): spør til den er klar.
-async function nyBankIdAdresse(orgId: string): Promise<string> {
-  await api("POST", `/org/${orgId}/bank/forny`);
+// BankID-adressen workeren lager for banken: spør til den er klar.
+async function ventPaBankId(orgId: string, koblingId: string): Promise<string> {
   for (let i = 0; i < 40; i++) {
     await pause(1000);
-    const s = await hent<BankStatus>(`/org/${orgId}/bank`);
-    if (s.auth_url) return s.auth_url;
-    if (s.auth_tid && s.siste_feil) throw new Error(s.siste_feil);
+    const k = (await hent<BankStatus>(`/org/${orgId}/bank`)).koblinger.find((x) => x.id === koblingId);
+    if (!k) throw new Error("Banken er fjernet.");
+    if (k.auth_url) return k.auth_url;
+    if (k.siste_feil) throw new Error(k.siste_feil);
   }
   throw new Error("Banken svarte ikke. Prøv igjen om litt.");
 }
 
-// Venter til en henting er ferdig (sist_hentet endres), høyst et halvt minutt.
-async function ventPaHenting(orgId: string, forrige: string | null) {
+// Venter til hentingen er ferdig i bankene (sist_hentet endres), høyst et halvt minutt.
+async function ventPaHenting(orgId: string, for_: BankStatus): Promise<BankStatus | null> {
+  const forrige = new Map(for_.koblinger.map((k) => [k.id, k.sist_hentet]));
   for (let i = 0; i < 30; i++) {
     await pause(1000);
     const s = await hent<BankStatus>(`/org/${orgId}/bank`);
-    if (s.sist_hentet !== forrige || s.siste_feil) return s;
+    if (s.koblinger.filter((k) => k.tilkoblet && forrige.has(k.id)).every((k) => k.sist_hentet !== forrige.get(k.id))) return s;
   }
   return null;
 }
@@ -64,10 +81,13 @@ export function BankKobling() {
   const { org, meg } = useKonto();
   const [sok] = useSearchParams();
   const { data, settData, last } = useData(() => hent<BankStatus>(`/org/${org!.id}/bank`), [org?.id]);
+  // Første gang: applikasjonen hos Enable Banking og den første banken.
   const [skjema, settSkjema] = useState<{ app_id: string; privat_nokkel: string; filnavn: string | null; bank: string; psu_type: "business" | "personal" } | null>(null);
+  // En bank til, med samme applikasjon.
+  const [nyBank, settNyBank] = useState<{ bank: string; psu_type: "business" | "personal" } | null>(null);
   const [venter, settVenter] = useState<string | null>(null);
   const h = useHandling();
-  const nyttOk = sok.get("bank") === "ok";
+  const admin = erAdmin(org?.rolle);
 
   async function koble(e: FormEvent) {
     e.preventDefault();
@@ -80,108 +100,150 @@ export function BankKobling() {
     }
   }
 
-  async function forny() {
-    settVenter("Gjør klar BankID …");
-    const url = await h.kjor(() => nyBankIdAdresse(org!.id));
-    if (url) window.location.assign(url);
-    else settVenter(null);
+  // Workeren sjekker banken og lager BankID-adressen; brukeren sendes videre når den er klar.
+  async function tilBankId(bank: string, start: () => Promise<{ kobling_id: string; ny?: boolean }>) {
+    settVenter(`Gjør klar BankID for ${bank} …`);
+    const url = await h.kjor(async () => {
+      const r = await start();
+      try {
+        return await ventPaBankId(org!.id, r.kobling_id);
+      } catch (feil) {
+        // En ny bank som ikke kunne startes (feil navn o.l.), blir ikke liggende i listen.
+        if (r.ny) await api("DELETE", `/org/${org!.id}/bank/koblinger/${r.kobling_id}`).catch(() => undefined);
+        throw feil;
+      }
+    });
+    if (url) return window.location.assign(url);
+    settVenter(null);
+    last();
+  }
+
+  function leggTil(e: FormEvent) {
+    e.preventDefault();
+    if (!nyBank) return;
+    const bank = nyBank.bank.trim();
+    void tilBankId(bank, () => api("POST", `/org/${org!.id}/bank/koblinger`, { ...nyBank, bank }));
+  }
+
+  const forny = (k: Bankkobling) => tilBankId(k.bank, () => api("POST", `/org/${org!.id}/bank/koblinger/${k.id}/forny`));
+
+  async function fjern(k: Bankkobling) {
+    if (!confirm(`Fjerne ${k.bank}? Innbetalinger hentes ikke lenger fra ${k.bank}. De som allerede er hentet og registrert, blir stående.`)) return;
+    if (await h.kjor(async () => (await api("DELETE", `/org/${org!.id}/bank/koblinger/${k.id}`), true))) last();
+  }
+
+  async function velgKonto(k: Bankkobling, uid: string, valgt: boolean) {
+    const valgte = k.kontoer.filter((x) => (x.uid === uid ? valgt : x.valgt)).map((x) => x.uid);
+    const r = await h.kjor(() => api<BankStatus>("PUT", `/org/${org!.id}/bank/koblinger/${k.id}/kontoer`, { valgte }));
+    if (r) settData(r);
   }
 
   async function hentNa() {
     settVenter("Henter innbetalinger …");
     await h.kjor(async () => {
       await api("POST", `/org/${org!.id}/bank/hent`);
-      const s = await ventPaHenting(org!.id, data?.sist_hentet ?? null);
+      const s = await ventPaHenting(org!.id, data!);
       if (s) settData(s);
     });
     settVenter(null);
   }
 
-  async function velgKonto(uid: string, valgt: boolean) {
-    const valgte = data!.kontoer.filter((k) => (k.uid === uid ? valgt : k.valgt)).map((k) => k.uid);
-    const r = await h.kjor(() => api<BankStatus>("PUT", `/org/${org!.id}/bank/kontoer`, { valgte }));
-    if (r) settData(r);
-  }
-
   async function kobleFra() {
-    if (!confirm("Koble fra banken? Innbetalinger hentes ikke lenger. De som allerede er hentet og registrert, blir stående.")) return;
+    if (!confirm("Koble fra alle bankene og slette nøkkelen? Innbetalinger hentes ikke lenger. De som allerede er hentet og registrert, blir stående.")) return;
     if (await h.kjor(async () => (await api("DELETE", `/org/${org!.id}/bank`), true))) last();
   }
 
   if (!data) return null;
-  const igjen = dagerTil(data.gyldig_til);
   const venterAntall = data.antall.forslag + data.antall.uavklart;
+  const ny = sok.get("bank") === "ok" ? (data.koblinger.find((k) => k.id === sok.get("kobling")) ?? null) : null;
+  const mfa = !meg?.mfa && <div className="melding info">Du må være logget inn med passkey eller kode fra autentiseringsappen for å koble til.</div>;
 
   return (
     <div className="kort">
       <h2 style={{ marginTop: 0 }}>Innbetalinger fra banken</h2>
       <p className="dempet liten">
-        Appen leser innbetalingene på bedriftskontoen og registrerer betalinger på fakturaene av seg selv, uten KID-avtale med banken. Står
+        Appen leser innbetalingene på kontoene dine og registrerer betalinger på fakturaene av seg selv, uten KID-avtale med banken. Står
         fakturanummeret i meldingen, eller stemmer beløpet med det kunden skylder, kobles betalingen til fakturaen. Det du må se over, får du
-        under Innbetalinger. Appen kan bare lese kontoen, ikke flytte penger.
+        under Innbetalinger. Appen kan bare lese kontoene, ikke flytte penger.
       </p>
-      {nyttOk && data.tilkoblet && <div className="melding ok">Banken er koblet til. Innbetalingene hentes nå.</div>}
+      {sok.get("bank") === "ok" && (ny ? ny.tilkoblet : data.tilkoblet) && (
+        <div className="melding ok">{ny ? ny.bank : "Banken"} er koblet til. Innbetalingene hentes nå.</div>
+      )}
       {venter && <div className="melding info">{venter}</div>}
 
-      {data.tilkoblet || data.status === "feil" || data.venter_bankid ? (
-        <div className="bank-status">
-          <p>
-            {data.tilkoblet ? (
-              <span className="merke merke-ok">Tilkoblet</span>
-            ) : data.venter_bankid ? (
-              <span className="merke merke-advarsel">BankID ikke fullført</span>
-            ) : (
-              <span className="merke merke-fare">Må kobles til på nytt</span>
-            )}{" "}
-            <strong>{data.bank}</strong> · {data.psu_type === "personal" ? "privatkonto" : "bedriftskonto"}
-            {data.app_navn && <span className="dempet liten"> · applikasjon «{data.app_navn}»</span>}
-          </p>
-          {data.siste_feil && <div className="melding feil">{data.siste_feil}</div>}
-          {data.tilkoblet && (
-            <>
-              <p className={`liten ${igjen !== null && igjen < 14 ? "advarsel-tekst" : "dempet"}`}>
-                Lesetilgang til {dato(data.gyldig_til)}
-                {igjen !== null && igjen < 14 ? ` (${igjen <= 0 ? "går ut i dag" : `${igjen} dager igjen`}). Forny med BankID.` : "."}
-                {data.sist_hentet && ` Sist hentet ${tid(data.sist_hentet)}.`}
+      {data.app ? (
+        <>
+          {data.koblinger.length > 0 ? (
+            <div className="banker">
+              {data.koblinger.map((k) => (
+                <BankRad key={k.id} k={k} admin={admin} opptatt={h.opptatt || Boolean(venter)} forny={forny} fjern={fjern} velgKonto={velgKonto} />
+              ))}
+            </div>
+          ) : (
+            <p>Ingen bank er koblet til ennå.</p>
+          )}
+          {venterAntall > 0 && (
+            <p className="liten">
+              <Link to="/innbetalinger">
+                {venterAntall} {venterAntall === 1 ? "innbetaling venter" : "innbetalinger venter"} på deg
+              </Link>
+            </p>
+          )}
+          {nyBank ? (
+            <form onSubmit={leggTil} className="ny-bank">
+              <h3>Legg til bank</h3>
+              <p className="dempet liten">
+                Samme applikasjon hos Enable Banking brukes for alle bankene. Kontoen må først være koblet til applikasjonen der (Link accounts i
+                Control Panel). Så logger du inn i banken med BankID her.
               </p>
-              {data.kontoer.length > 0 && (
-                <div className="valgliste">
-                  {data.kontoer.map((k) => (
-                    <label key={k.uid}>
-                      <input type="checkbox" checked={k.valgt} disabled={h.opptatt || !erAdmin(org?.rolle)} onChange={(e) => velgKonto(k.uid, e.target.checked)} />
-                      {k.navn ?? "Konto"} <span className="dempet">{kontonrTekst(k.kontonr)}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              {venterAntall > 0 && (
-                <p className="liten">
-                  <Link to="/innbetalinger">
-                    {venterAntall} {venterAntall === 1 ? "innbetaling venter" : "innbetalinger venter"} på deg
-                  </Link>
-                </p>
-              )}
+              <div className="rad">
+                <label>
+                  Bank
+                  <input required autoFocus list="banker" value={nyBank.bank} onChange={(e) => settNyBank({ ...nyBank, bank: e.target.value })} />
+                </label>
+                <label>
+                  Kontotype
+                  <select value={nyBank.psu_type} onChange={(e) => settNyBank({ ...nyBank, psu_type: e.target.value as "business" | "personal" })}>
+                    <option value="business">Bedriftskonto</option>
+                    <option value="personal">Privatkonto</option>
+                  </select>
+                </label>
+              </div>
+              {mfa}
+              <Feil melding={h.feil} />
+              <div className="knapper">
+                <button className="primar" disabled={h.opptatt || Boolean(venter)}>
+                  {h.opptatt ? "Gjør klar BankID …" : "Koble til med BankID"}
+                </button>
+                <button type="button" className="lenke" disabled={h.opptatt} onClick={() => (settNyBank(null), h.settFeil(null))}>
+                  Avbryt
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <Feil melding={h.feil} />
+              <div className="knapper">
+                {data.tilkoblet && (
+                  <button type="button" className="primar" disabled={h.opptatt || Boolean(venter)} onClick={hentNa}>
+                    Hent nå
+                  </button>
+                )}
+                {admin && (
+                  <button type="button" disabled={h.opptatt || Boolean(venter)} onClick={() => (h.settFeil(null), settNyBank({ bank: "", psu_type: "business" }))}>
+                    Legg til bank
+                  </button>
+                )}
+                {admin && (
+                  <button type="button" className="fare" disabled={h.opptatt || Boolean(venter)} onClick={kobleFra}>
+                    Koble fra alt
+                  </button>
+                )}
+              </div>
             </>
           )}
-          <Feil melding={h.feil} />
-          <div className="knapper">
-            {data.tilkoblet && (
-              <button type="button" className="primar" disabled={h.opptatt} onClick={hentNa}>
-                Hent nå
-              </button>
-            )}
-            {erAdmin(org?.rolle) && (
-              <button type="button" className={data.tilkoblet ? undefined : "primar"} disabled={h.opptatt} onClick={forny}>
-                {data.venter_bankid ? "Fortsett med BankID" : data.tilkoblet ? "Forny tilgang" : "Koble til på nytt"}
-              </button>
-            )}
-            {erAdmin(org?.rolle) && (
-              <button type="button" className="fare" disabled={h.opptatt} onClick={kobleFra}>
-                Koble fra
-              </button>
-            )}
-          </div>
-        </div>
+          {data.app.app_navn && <p className="dempet liten bank-app">Applikasjon hos Enable Banking: «{data.app.app_navn}»</p>}
+        </>
       ) : skjema ? (
         <form onSubmit={koble} className="bank-skjema">
           <ol className="steg liten">
@@ -204,10 +266,13 @@ export function BankKobling() {
               Nettleseren laster ned en <strong>.pem-fil</strong> med den private nøkkelen. Ta vare på den.
             </li>
             <li>
-              Velg <strong>Activate by linking accounts</strong> og koble til bedriftskontoen med BankID. Da kan applikasjonen bare lese kontoene
-              du selv har koblet til, og den koster ingenting.
+              Velg <strong>Activate by linking accounts</strong> og koble til kontoene appen skal lese, med BankID i hver bank. Da kan
+              applikasjonen bare lese kontoene du selv har koblet til, og den koster ingenting.
             </li>
-            <li>Last opp .pem-filen her og lim inn applikasjonens ID (Application ID). Så logger du inn i banken med BankID en gang til.</li>
+            <li>
+              Last opp .pem-filen her og lim inn applikasjonens ID (Application ID). Så logger du inn i den første banken med BankID en gang
+              til. Flere banker legger du til etterpå.
+            </li>
           </ol>
           <div className="rad">
             <div className="hel">
@@ -231,7 +296,7 @@ export function BankKobling() {
                 />
               </label>
               <p className="felt-hjelp" style={{ margin: "0 0 14px" }}>
-                {skjema.filnavn ? `Valgt: ${skjema.filnavn}. ` : ""}Nøkkelen lagres kryptert, vises ikke igjen og brukes bare til å lese kontoen.{" "}
+                {skjema.filnavn ? `Valgt: ${skjema.filnavn}. ` : ""}Nøkkelen lagres kryptert, vises ikke igjen og brukes bare til å lese kontoene.{" "}
                 {!skjema.filnavn && skjema.privat_nokkel === "" && (
                   <button type="button" className="lenke" onClick={() => settSkjema({ ...skjema, privat_nokkel: " " })}>
                     Lim inn nøkkelen i stedet
@@ -258,21 +323,16 @@ export function BankKobling() {
             <label>
               Bank
               <input required list="banker" value={skjema.bank} onChange={(e) => settSkjema({ ...skjema, bank: e.target.value })} />
-              <datalist id="banker">
-                {BANKER.map((b) => (
-                  <option key={b} value={b} />
-                ))}
-              </datalist>
             </label>
             <label>
-              Konto
+              Kontotype
               <select value={skjema.psu_type} onChange={(e) => settSkjema({ ...skjema, psu_type: e.target.value as "business" | "personal" })}>
                 <option value="business">Bedriftskonto</option>
                 <option value="personal">Privatkonto (enkeltpersonforetak)</option>
               </select>
             </label>
           </div>
-          {!meg?.mfa && <div className="melding info">Du må være logget inn med passkey eller kode fra autentiseringsappen for å koble til.</div>}
+          {mfa}
           <Feil melding={h.feil} />
           <div className="knapper">
             <button className="primar" disabled={h.opptatt || Boolean(venter)}>
@@ -286,7 +346,7 @@ export function BankKobling() {
       ) : (
         <>
           <p>Banken er ikke koblet til. Betalinger registreres for hånd på fakturaen.</p>
-          {erAdmin(org?.rolle) && (
+          {admin && (
             <div className="knapper">
               <button type="button" className="primar" onClick={() => settSkjema({ app_id: "", privat_nokkel: "", filnavn: null, bank: "DNB", psu_type: "business" })}>
                 Koble til banken
@@ -295,7 +355,75 @@ export function BankKobling() {
           )}
         </>
       )}
+      <datalist id="banker">
+        {BANKER.map((b) => (
+          <option key={b} value={b} />
+        ))}
+      </datalist>
     </div>
+  );
+}
+
+function BankRad({
+  k,
+  admin,
+  opptatt,
+  forny,
+  fjern,
+  velgKonto,
+}: {
+  k: Bankkobling;
+  admin: boolean;
+  opptatt: boolean;
+  forny: (k: Bankkobling) => void;
+  fjern: (k: Bankkobling) => void;
+  velgKonto: (k: Bankkobling, uid: string, valgt: boolean) => void;
+}) {
+  const igjen = dagerTil(k.gyldig_til);
+  const snart = igjen !== null && igjen < 14;
+  return (
+    <section className="bank" aria-label={k.bank}>
+      <div className="bank-topp">
+        <span>
+          <strong>{k.bank}</strong> <span className="dempet liten">· {kontotype(k.psu_type)}</span>
+        </span>
+        {k.tilkoblet ? (
+          <span className="merke merke-ok">Tilkoblet</span>
+        ) : k.status === "venter" ? (
+          <span className="merke merke-advarsel">BankID ikke fullført</span>
+        ) : (
+          <span className="merke merke-fare">Må kobles til på nytt</span>
+        )}
+      </div>
+      {k.siste_feil && <div className="melding feil">{k.siste_feil}</div>}
+      {k.tilkoblet && (
+        <p className={`liten ${snart ? "advarsel-tekst" : "dempet"}`}>
+          Lesetilgang til {dato(k.gyldig_til)}
+          {snart ? ` (${igjen! <= 0 ? "går ut i dag" : `${igjen} ${igjen === 1 ? "dag" : "dager"} igjen`}). Forny med BankID.` : "."}
+          {k.sist_hentet && ` Sist hentet ${tid(k.sist_hentet)}.`}
+        </p>
+      )}
+      {k.tilkoblet && k.kontoer.length > 0 && (
+        <div className="valgliste">
+          {k.kontoer.map((x) => (
+            <label key={x.uid}>
+              <input type="checkbox" checked={x.valgt} disabled={opptatt || !admin} onChange={(e) => velgKonto(k, x.uid, e.target.checked)} />
+              {x.navn ?? "Konto"} <span className="dempet">{kontonrTekst(x.kontonr)}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      {admin && (
+        <div className="knapper">
+          <button type="button" className={k.tilkoblet && !snart ? undefined : "primar"} disabled={opptatt} onClick={() => forny(k)}>
+            {k.status === "venter" ? "Fortsett med BankID" : k.tilkoblet ? "Forny tilgang" : "Koble til på nytt"}
+          </button>
+          <button type="button" className="lenke" disabled={opptatt} onClick={() => fjern(k)}>
+            Fjern
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -323,12 +451,14 @@ export function BankTilbake() {
     velgOrg(orgId);
     (async () => {
       try {
-        await api("POST", `/org/${orgId}/bank/fullfor`, { code: kode, state });
+        // Workeren bytter koden mot en ny økt; fullfort endres når den er klar.
+        const r = await api<{ kobling_id: string; forrige: string | null }>("POST", `/org/${orgId}/bank/fullfor`, { code: kode, state });
         for (let i = 0; i < 45; i++) {
           await pause(1000);
-          const s = await hent<BankStatus>(`/org/${orgId}/bank`);
-          if (s.tilkoblet) return nav("/innstillinger?fane=betaling&bank=ok", { replace: true });
-          if (s.siste_feil) throw new Error(s.siste_feil);
+          const k = (await hent<BankStatus>(`/org/${orgId}/bank`)).koblinger.find((x) => x.id === r.kobling_id);
+          if (!k) throw new Error("Banken er fjernet. Legg den til på nytt under Innstillinger → Betaling.");
+          if (k.siste_feil) throw new Error(k.siste_feil);
+          if (k.tilkoblet && k.fullfort !== r.forrige) return nav(`/innstillinger?fane=betaling&bank=ok&kobling=${k.id}`, { replace: true });
         }
         throw new Error("Banken svarte ikke i tide. Se statusen under Innstillinger → Betaling.");
       } catch (e) {
@@ -386,7 +516,7 @@ export function Innbetalinger() {
     settHenter(true);
     await h.kjor(async () => {
       await api("POST", `/org/${org!.id}/bank/hent`);
-      await ventPaHenting(org!.id, bank.data?.sist_hentet ?? null);
+      await ventPaHenting(org!.id, bank.data!);
     });
     settHenter(false);
     last();
@@ -394,6 +524,11 @@ export function Innbetalinger() {
   }
 
   const antall = data?.antall ?? bank.data?.antall;
+  const aktive = bank.data?.koblinger.filter((k) => k.tilkoblet) ?? [];
+  const sist = aktive.map((k) => k.sist_hentet ?? "").sort().at(-1) || null;
+  // Med flere kontoer vises kontoen innbetalingen kom til.
+  const kontoer = (bank.data?.koblinger ?? []).flatMap((k) => k.kontoer);
+  const kontoNavn = kontoer.length > 1 ? new Map(kontoer.map((x) => [x.kontonr, x.navn ?? kontonrTekst(x.kontonr)])) : null;
   const faner: [Fane, string][] = [
     ["se", `Å se på${antall && antall.forslag + antall.uavklart ? ` (${antall.forslag + antall.uavklart})` : ""}`],
     ["koblet", "Registrert"],
@@ -405,7 +540,7 @@ export function Innbetalinger() {
     <>
       <div className="topp">
         <h1>Innbetalinger</h1>
-        {bank.data?.tilkoblet && bokfore && (
+        {aktive.length > 0 && bokfore && (
           <button onClick={hentNa} disabled={henter}>
             {henter ? "Henter …" : "Hent nå"}
           </button>
@@ -413,13 +548,25 @@ export function Innbetalinger() {
       </div>
       {bank.data && (
         <p className="undertittel">
-          {bank.data.tilkoblet
-            ? `Fra ${bank.data.bank}${bank.data.sist_hentet ? ` · sist hentet ${tid(bank.data.sist_hentet)}` : ""}. Hentes automatisk noen ganger om dagen.`
+          {aktive.length
+            ? `Fra ${navnListe(aktive.map((k) => k.bank))}${sist ? ` · sist hentet ${tid(sist)}` : ""}. Hentes automatisk noen ganger om dagen.`
             : "Banken er ikke koblet til."}{" "}
-          {!bank.data.tilkoblet && erAdmin(org?.rolle) && <Link to="/innstillinger?fane=betaling">Koble til under Innstillinger → Betaling</Link>}
+          {!aktive.length && erAdmin(org?.rolle) && <Link to="/innstillinger?fane=betaling">Koble til under Innstillinger → Betaling</Link>}
         </p>
       )}
-      {bank.data?.siste_feil && <div className="melding feil">{bank.data.siste_feil}</div>}
+      {bank.data?.koblinger
+        .filter((k) => k.siste_feil)
+        .map((k) => (
+          <div key={k.id} className="melding feil">
+            {k.bank}: {k.siste_feil}
+            {erAdmin(org?.rolle) && (
+              <>
+                {" "}
+                <Link to="/innstillinger?fane=betaling">Til Innstillinger → Betaling</Link>
+              </>
+            )}
+          </div>
+        ))}
       <div className="faner" role="tablist">
         {faner.map(([v, t]) => (
           <button key={v} role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : ""} onClick={() => settSok(v === "se" ? {} : { vis: v }, { replace: true })}>
@@ -441,7 +588,7 @@ export function Innbetalinger() {
       ) : (
         <div className="kort liste innbetalinger">
           {data.transaksjoner.map((t) => (
-            <Innbetaling key={t.id} t={t} bokfore={bokfore} opptatt={h.opptatt} handling={handling} velg={() => settVelg(t)} />
+            <Innbetaling key={t.id} t={t} konto={kontoNavn?.get(t.konto) ?? null} bokfore={bokfore} opptatt={h.opptatt} handling={handling} velg={() => settVelg(t)} />
           ))}
         </div>
       )}
@@ -460,7 +607,21 @@ export function Innbetalinger() {
   );
 }
 
-function Innbetaling({ t, bokfore, opptatt, handling, velg }: { t: any; bokfore: boolean; opptatt: boolean; handling: (sti: string, kropp?: unknown) => void; velg: () => void }) {
+function Innbetaling({
+  t,
+  konto,
+  bokfore,
+  opptatt,
+  handling,
+  velg,
+}: {
+  t: any;
+  konto: string | null;
+  bokfore: boolean;
+  opptatt: boolean;
+  handling: (sti: string, kropp?: unknown) => void;
+  velg: () => void;
+}) {
   const faktura = t.faktura_id ? (
     <Link to={`/fakturaer/${t.faktura_id}`}>
       Faktura {t.fakturanummer}
@@ -479,6 +640,7 @@ function Innbetaling({ t, bokfore, opptatt, handling, velg }: { t: any; bokfore:
       <div className="linje under">
         <span>
           {dato(t.dato)}
+          {konto ? ` · til ${konto}` : ""}
           {t.melding ? ` · «${t.melding}»` : ""}
           {t.referanse && t.referanse !== t.melding ? ` · ref. ${t.referanse}` : ""}
         </span>

@@ -3,50 +3,60 @@
 //
 // Koblingen: organisasjonen registrerer sin egen applikasjon hos Enable Banking og limer
 // inn applikasjons-ID-en og den private nøkkelen. API-et sjekker nøkkelen og starter
-// BankID-innloggingen med en gang (nøkkelen er ennå ikke kryptert), og krypterer den
-// med Cloud KMS. Deretter er det bare workeren som kan bruke nøkkelen: den fullfører
-// koblingen, fornyer den og henter innbetalingene. Appen venter på svaret ved å spørre
-// etter statusen.
+// BankID for den første banken med en gang (nøkkelen er ennå ikke kryptert), og krypterer
+// den med Cloud KMS. Deretter er det bare workeren som kan bruke nøkkelen: den legger til
+// flere banker, fornyer, fullfører BankID og henter innbetalingene. Appen venter på svaret
+// ved å spørre etter statusen.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { krevMfa } from "./auth.js";
 import { krypter } from "./kryptering.js";
-import { BankFeil, finnBank, gyldigTil, hentApplikasjon, hentBanker, nokkelFeil, startAutorisering, type BankNokkel } from "./enableBanking.js";
-import { nyState, tilbakeUrl, type BankKonfig } from "./bank.js";
+import { BankFeil, gyldigTil, hentApplikasjon, hentBanker, nokkelFeil, startAutorisering, velgBank, type BankNokkel } from "./enableBanking.js";
+import { nyState, tilbakeUrl, type BankAppKonfig, type Bankkobling } from "./bank.js";
 import { leggIKo } from "./tjenester.js";
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
+const koblingId = (c: Context) => z.string().uuid().parse(c.req.param("id"));
 const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("bruker").id, fn);
 const krev = (c: Context, db: Db, handling: string) => db.query("select faktura.krev($1, $2)", [orgId(c), handling]);
 
-const hent = (db: Db, org: string) =>
-  en(db, "select status, konfig, siste_feil, opprettet, oppdatert from faktura.integrasjoner where org_id = $1 and type = 'bank'", [org]);
+const hentApp = (db: Db, org: string) =>
+  en(db, "select status, konfig, opprettet, oppdatert from faktura.integrasjoner where org_id = $1 and type = 'bank' and status <> 'frakoblet'", [org]);
+const hentKoblinger = (db: Db, org: string) =>
+  alle<Bankkobling>(db, "select * from faktura.bankkoblinger where org_id = $1 order by opprettet", [org]);
+const tekst = (d: unknown) => (d instanceof Date ? d.toISOString() : d == null ? null : String(d));
 
-// Det appen viser om koblingen (aldri nøkkelen).
-function status(r: any, antall: Record<string, number>) {
-  const k: Partial<BankKonfig> = r?.konfig ?? {};
-  const aktiv = r && r.status !== "frakoblet";
+// Det appen viser om en bank (aldri nøkkelen).
+function koblingStatus(k: Bankkobling) {
   // Adressen workeren lagde til BankID, så lenge den er fersk.
-  const fersk = k.auth_url && k.auth_tid && Date.now() - Date.parse(k.auth_tid) < 10 * 60_000;
+  const fersk = k.auth_url && k.auth_tid && Date.now() - Date.parse(tekst(k.auth_tid)!) < 10 * 60_000;
   return {
-    tilkoblet: Boolean(aktiv && r.status === "aktiv" && k.okt_id),
-    status: aktiv ? r.status : null, // aktiv, feil (må kobles til på nytt)
-    venter_bankid: Boolean(aktiv && !k.okt_id),
-    app_id: aktiv ? (k.app_id ?? null) : null,
-    app_navn: aktiv ? (k.app_navn ?? null) : null,
-    bank: aktiv ? (k.bank ?? null) : null,
-    psu_type: aktiv ? (k.psu_type ?? null) : null,
-    kontoer: aktiv ? (k.kontoer ?? []).map(({ uid, kontonr, navn, valgt }) => ({ uid, kontonr, navn, valgt })) : [],
-    gyldig_til: aktiv ? (k.gyldig_til ?? null) : null,
-    sist_hentet: aktiv ? (k.sist_hentet ?? null) : null,
-    siste_feil: aktiv ? (r.siste_feil ?? null) : null,
-    auth_url: aktiv && fersk ? k.auth_url : null,
-    auth_tid: aktiv ? (k.auth_tid ?? null) : null,
-    oppdatert: r?.oppdatert ?? null,
+    id: k.id,
+    bank: k.bank,
+    psu_type: k.psu_type,
+    status: k.status, // venter (BankID ikke fullført), aktiv, feil (må kobles til på nytt)
+    tilkoblet: k.status === "aktiv" && Boolean(k.okt_id),
+    kontoer: (k.kontoer ?? []).map(({ uid, kontonr, navn, valgt }) => ({ uid, kontonr, navn, valgt })),
+    gyldig_til: tekst(k.gyldig_til),
+    fullfort: tekst(k.fullfort), // når BankID sist ble fullført
+    sist_hentet: tekst(k.sist_hentet),
+    siste_feil: k.siste_feil,
+    auth_url: fersk ? k.auth_url : null,
+    auth_tid: tekst(k.auth_tid),
+  };
+}
+
+async function status(db: Db, org: string) {
+  const app = await hentApp(db, org);
+  const koblinger = app ? (await hentKoblinger(db, org)).map(koblingStatus) : [];
+  return {
+    app: app ? { app_id: (app.konfig as BankAppKonfig).app_id, app_navn: (app.konfig as BankAppKonfig).app_navn ?? null } : null,
+    koblinger,
+    tilkoblet: koblinger.some((k) => k.tilkoblet),
     tilbake_url: tilbakeUrl(),
-    antall,
+    antall: await antall(db, org),
   };
 }
 
@@ -63,9 +73,15 @@ function fraEnableBanking(e: unknown): ApiFeil {
   const f = e as BankFeil;
   if (f.status === 401 || f.status === 403)
     return new ApiFeil(400, "Enable Banking godtok ikke nøkkelen. Sjekk at applikasjons-ID-en og .pem-filen er fra samme applikasjon, og at applikasjonen er aktivert.");
+  if (f.status === 400) return new ApiFeil(400, f.message);
   if (f.status === 0) return new ApiFeil(503, "Fikk ikke kontakt med Enable Banking. Prøv igjen om litt.");
   return new ApiFeil(502, `Enable Banking svarte med en feil: ${f.message}`);
 }
+
+const bankSkjema = z.object({
+  bank: z.string().trim().min(2, "Velg banken").max(100),
+  psu_type: z.enum(["business", "personal"]),
+});
 
 export function bankRuter() {
   const r = new Hono();
@@ -74,20 +90,19 @@ export function bankRuter() {
     c.json(
       await bruk(c, async (db) => {
         await krev(c, db, "les");
-        return status(await hent(db, orgId(c)), await antall(db, orgId(c)));
+        return status(db, orgId(c));
       }),
     ),
   );
 
-  // Koble til: sjekk nøkkelen og banken, lagre kryptert, og send brukeren til BankID.
+  // Første gang (eller ny nøkkel): sjekk nøkkelen, applikasjonen og banken, lagre nøkkelen
+  // kryptert, og send brukeren til BankID for banken.
   r.put("/bank", async (c) => {
     krevMfa(c);
-    const b = z
-      .object({
+    const b = bankSkjema
+      .extend({
         app_id: z.string().trim().min(8, "Mangler applikasjons-ID-en").max(100),
         privat_nokkel: z.string().trim().min(100, "Mangler den private nøkkelen").max(20_000),
-        bank: z.string().trim().min(2, "Velg banken").max(100),
-        psu_type: z.enum(["business", "personal"]),
       })
       .parse(await c.req.json().catch(() => ({})));
     await bruk(c, (db) => krev(c, db, "admin"));
@@ -96,24 +111,17 @@ export function bankRuter() {
     const n: BankNokkel = { appId: b.app_id, privatNokkel: b.privat_nokkel };
 
     let app: any;
-    let banker;
+    let bank;
     try {
       app = await hentApplikasjon(n);
-      banker = await hentBanker(n, "NO");
+      // Adressen brukeren sendes tilbake til, må være lagt inn i applikasjonen.
+      const adresser: unknown = app?.redirect_urls;
+      if (Array.isArray(adresser) && adresser.length && !adresser.includes(tilbakeUrl()))
+        throw new ApiFeil(400, `Legg inn ${tilbakeUrl()} som «Allowed redirect URL» i applikasjonen hos Enable Banking, og prøv igjen.`);
+      bank = velgBank(await hentBanker(n, "NO"), b.bank, b.psu_type);
     } catch (e) {
-      throw fraEnableBanking(e);
+      throw e instanceof ApiFeil ? e : fraEnableBanking(e);
     }
-    // Adressen brukeren sendes tilbake til, må være lagt inn i applikasjonen.
-    const adresser: unknown = app?.redirect_urls;
-    if (Array.isArray(adresser) && adresser.length && !adresser.includes(tilbakeUrl()))
-      throw new ApiFeil(400, `Legg inn ${tilbakeUrl()} som «Allowed redirect URL» i applikasjonen hos Enable Banking, og prøv igjen.`);
-    const bank = finnBank(banker, b.bank);
-    if (!bank) {
-      const forslag = banker.filter((x) => x.name.toLowerCase().includes(b.bank.toLowerCase().split(" ")[0])).map((x) => x.name);
-      throw new ApiFeil(400, `Fant ikke banken «${b.bank}» hos Enable Banking.${forslag.length ? ` Mente du ${forslag.slice(0, 5).join(", ")}?` : ""}`);
-    }
-    if (bank.psu_types?.length && !bank.psu_types.includes(b.psu_type))
-      throw new ApiFeil(400, `${bank.name} støtter ikke ${b.psu_type === "business" ? "bedriftskontoer" : "privatkontoer"} gjennom Enable Banking.`);
 
     const state = nyState(orgId(c));
     const gyldig = gyldigTil(bank.maximum_consent_validity);
@@ -125,27 +133,10 @@ export function bankRuter() {
     }
 
     const kryptert = await krypter(b.privat_nokkel);
-    const konfig: BankKonfig = {
-      leverandor: "enablebanking",
-      app_id: b.app_id,
-      app_navn: typeof app?.name === "string" ? app.name : null,
-      bank: bank.name,
-      land: "NO",
-      psu_type: b.psu_type,
-      maks_sek: bank.maximum_consent_validity ?? null,
-      state,
-      auth_url: null,
-      auth_tid: new Date().toISOString(),
-      auth_gyldig_til: gyldig.toISOString(),
-      okt_id: null,
-      gyldig_til: null,
-      kontoer: [],
-      hent_fra: null,
-      sist_hentet: null,
-      varslet_utlop: null,
-    };
-    // Ikke «on conflict … excluded»: API-et har ikke lov til å lese den krypterte kolonnen.
-    const rad = await bruk(c, async (db) => {
+    const konfig: BankAppKonfig = { leverandor: "enablebanking", app_id: b.app_id, app_navn: typeof app?.name === "string" ? app.name : null };
+    const svar = await bruk(c, async (db) => {
+      const for_ = await en(db, "select konfig from faktura.integrasjoner where org_id = $1 and type = 'bank' and status <> 'frakoblet'", [orgId(c)]);
+      // Ikke «on conflict … excluded»: API-et har ikke lov til å lese den krypterte kolonnen.
       const u = await db.query(
         "update faktura.integrasjoner set status = 'aktiv', konfig = $2, hemmelighet_kryptert = $3, siste_feil = null where org_id = $1 and type = 'bank'",
         [orgId(c), JSON.stringify(konfig), kryptert],
@@ -155,80 +146,136 @@ export function bankRuter() {
           "insert into faktura.integrasjoner (org_id, type, status, konfig, hemmelighet_kryptert, koblet_av) values ($1, 'bank', 'aktiv', $2, $3, faktura.bruker_id())",
           [orgId(c), JSON.stringify(konfig), kryptert],
         );
-      return hent(db, orgId(c));
+      // Ny applikasjon: øktene fra den gamle virker ikke lenger.
+      if (for_?.konfig?.app_id && for_.konfig.app_id !== b.app_id)
+        await db.query(
+          "update faktura.bankkoblinger set status = 'feil', okt_id = null, siste_feil = 'Ny applikasjon hos Enable Banking. Koble til banken på nytt.' where org_id = $1",
+          [orgId(c)],
+        );
+      const k = await en<{ id: string }>(
+        db,
+        `insert into faktura.bankkoblinger (org_id, bank, land, psu_type, status, maks_sek, state, auth_tid, auth_gyldig_til)
+         values ($1, $2, 'NO', $3, 'venter', $4, $5, now(), $6)
+         on conflict (org_id, bank, psu_type) do update
+           set state = excluded.state, auth_tid = excluded.auth_tid, auth_gyldig_til = excluded.auth_gyldig_til,
+               maks_sek = excluded.maks_sek, auth_url = null, siste_feil = null
+         returning id`,
+        [orgId(c), bank.name, b.psu_type, bank.maximum_consent_validity ?? null, state, gyldig.toISOString()],
+      );
+      return { ...(await status(db, orgId(c))), kobling_id: k!.id };
     });
-    return c.json({ ...status(rad, {}), url });
+    return c.json({ ...svar, url });
   });
 
-  // Forny samtykket (eller fullfør en kobling som ble avbrutt): workeren lager en ny
-  // BankID-adresse, og appen venter på den.
-  r.post("/bank/forny", async (c) => {
-    const k = await bruk(c, async (db) => {
+  // Ny bank med samme applikasjon: workeren sjekker navnet og lager BankID-adressen, og
+  // appen venter på den.
+  r.post("/bank/koblinger", async (c) => {
+    krevMfa(c);
+    const b = bankSkjema.parse(await c.req.json().catch(() => ({})));
+    const { id, ny } = await bruk(c, async (db) => {
       await krev(c, db, "admin");
-      const k = await hent(db, orgId(c));
-      if (!k || k.status === "frakoblet") throw new ApiFeil(404, "Banken er ikke koblet til");
-      await db.query("update faktura.integrasjoner set konfig = konfig || $2::jsonb where org_id = $1 and type = 'bank'", [
-        orgId(c),
-        JSON.stringify({ auth_url: null, auth_tid: null }),
-      ]);
-      return k;
+      if (!(await hentApp(db, orgId(c)))) throw new ApiFeil(409, "Koble til den første banken med nøkkelen fra Enable Banking først.");
+      // Finnes banken fra før, fornyes den i stedet.
+      const finnes = await en<{ id: string }>(
+        db,
+        "select id from faktura.bankkoblinger where org_id = $1 and lower(bank) = lower($2) and psu_type = $3",
+        [orgId(c), b.bank, b.psu_type],
+      );
+      if (finnes) {
+        await db.query("update faktura.bankkoblinger set auth_url = null, auth_tid = null, siste_feil = null where id = $1", [finnes.id]);
+        return { id: finnes.id, ny: false };
+      }
+      const k = await en<{ id: string }>(
+        db,
+        "insert into faktura.bankkoblinger (org_id, bank, land, psu_type, status) values ($1, $2, 'NO', $3, 'venter') returning id",
+        [orgId(c), b.bank, b.psu_type],
+      );
+      return { id: k!.id, ny: true };
     });
-    await leggIKo({ type: "bank-auth", org_id: orgId(c) });
-    return c.json({ ok: true, bestilt: new Date().toISOString(), bank: k.konfig?.bank ?? null }, 202);
+    await leggIKo({ type: "bank-auth", org_id: orgId(c), kobling_id: id });
+    return c.json({ ok: true, kobling_id: id, ny }, 202);
+  });
+
+  // Forny samtykket (eller fullfør en BankID som ble avbrutt).
+  r.post("/bank/koblinger/:id/forny", async (c) => {
+    await bruk(c, async (db) => {
+      await krev(c, db, "admin");
+      const u = await db.query("update faktura.bankkoblinger set auth_url = null, auth_tid = null, siste_feil = null where id = $1 and org_id = $2", [
+        koblingId(c),
+        orgId(c),
+      ]);
+      if (!u.rowCount) throw new ApiFeil(404, "Fant ikke banken");
+    });
+    await leggIKo({ type: "bank-auth", org_id: orgId(c), kobling_id: koblingId(c) });
+    return c.json({ ok: true, kobling_id: koblingId(c) }, 202);
   });
 
   // Tilbake fra banken med koden: workeren bytter den mot tilgang til kontoene.
   r.post("/bank/fullfor", async (c) => {
     const b = z.object({ code: z.string().min(1).max(4000), state: z.string().min(10).max(200) }).parse(await c.req.json().catch(() => ({})));
-    await bruk(c, async (db) => {
+    const k = await bruk(c, async (db) => {
       await krev(c, db, "admin");
-      const k = await hent(db, orgId(c));
-      if (!k || k.status === "frakoblet") throw new ApiFeil(404, "Banken er ikke koblet til");
-      if (!k.konfig?.state || k.konfig.state !== b.state) throw new ApiFeil(400, "Innloggingen hos banken passer ikke med denne koblingen. Start på nytt.");
+      const k = await en<{ id: string; fullfort: unknown }>(db, "select id, fullfort from faktura.bankkoblinger where org_id = $1 and state = $2", [orgId(c), b.state]);
+      if (!k) throw new ApiFeil(400, "Innloggingen hos banken passer ikke med noen av koblingene. Start på nytt.");
       // Engangs: samme svar fra banken kan ikke brukes to ganger.
-      await db.query("update faktura.integrasjoner set konfig = konfig || $2::jsonb, siste_feil = null where org_id = $1 and type = 'bank'", [
-        orgId(c),
-        JSON.stringify({ state: null }),
-      ]);
+      await db.query("update faktura.bankkoblinger set state = null, siste_feil = null where id = $1", [k.id]);
+      return k;
     });
-    await leggIKo({ type: "bank-okt", org_id: orgId(c), kode: b.code });
-    return c.json({ ok: true }, 202);
+    await leggIKo({ type: "bank-okt", org_id: orgId(c), kobling_id: k.id, kode: b.code });
+    // Appen venter til fullfort er endret (eller det kommer en feil).
+    return c.json({ ok: true, kobling_id: k.id, forrige: tekst(k.fullfort) }, 202);
   });
 
-  // Hvilke kontoer innbetalingene hentes fra.
-  r.put("/bank/kontoer", async (c) => {
+  // Hvilke kontoer i banken innbetalingene hentes fra.
+  r.put("/bank/koblinger/:id/kontoer", async (c) => {
     const b = z.object({ valgte: z.array(z.string().max(200)).max(50) }).parse(await c.req.json().catch(() => ({})));
-    const rad = await bruk(c, async (db) => {
-      await krev(c, db, "admin");
-      const k = await hent(db, orgId(c));
-      if (!k || k.status === "frakoblet") throw new ApiFeil(404, "Banken er ikke koblet til");
-      const kontoer = (k.konfig?.kontoer ?? []).map((x: any) => ({ ...x, valgt: b.valgte.includes(x.uid) }));
-      if (!kontoer.some((x: any) => x.valgt)) throw new ApiFeil(400, "Velg minst én konto");
-      await db.query("update faktura.integrasjoner set konfig = konfig || $2::jsonb where org_id = $1 and type = 'bank'", [orgId(c), JSON.stringify({ kontoer })]);
-      return hent(db, orgId(c));
-    });
-    return c.json(status(rad, await bruk(c, (db) => antall(db, orgId(c)))));
+    return c.json(
+      await bruk(c, async (db) => {
+        await krev(c, db, "admin");
+        const k = await en<Bankkobling>(db, "select * from faktura.bankkoblinger where id = $1 and org_id = $2", [koblingId(c), orgId(c)]);
+        if (!k) throw new ApiFeil(404, "Fant ikke banken");
+        const kontoer = (k.kontoer ?? []).map((x) => ({ ...x, valgt: b.valgte.includes(x.uid) }));
+        if (!kontoer.some((x) => x.valgt)) throw new ApiFeil(400, "Velg minst én konto");
+        await db.query("update faktura.bankkoblinger set kontoer = $2 where id = $1", [k.id, JSON.stringify(kontoer)]);
+        return status(db, orgId(c));
+      }),
+    );
   });
 
-  // Hent nå. Brukeren er til stede, så det teller ikke mot bankens grense for henting.
+  // Hent nå fra alle bankene. Brukeren er til stede, så det teller ikke mot bankenes grense.
   r.post("/bank/hent", async (c) => {
     await bruk(c, async (db) => {
       await krev(c, db, "bokfor");
-      const k = await hent(db, orgId(c));
-      if (!k || k.status !== "aktiv" || !k.konfig?.okt_id) throw new ApiFeil(409, "Banken er ikke koblet til");
+      const k = await en(db, "select 1 from faktura.bankkoblinger where org_id = $1 and status = 'aktiv' and okt_id is not null limit 1", [orgId(c)]);
+      if (!k) throw new ApiFeil(409, "Ingen bank er koblet til");
     });
     const ip = (c.req.header("x-forwarded-for") ?? "").split(",")[0].trim() || "0.0.0.0";
     await leggIKo({ type: "bank-hent", org_id: orgId(c), psu: { ip, agent: (c.req.header("user-agent") ?? "HI4 Faktura").slice(0, 500) } });
     return c.json({ ok: true }, 202);
   });
 
-  r.delete("/bank", async (c) => {
-    const n = await bruk(c, async (db) => {
+  // Fjern én bank. Workeren avslutter økten hos Enable Banking.
+  r.delete("/bank/koblinger/:id", async (c) => {
+    const okt = await bruk(c, async (db) => {
       await krev(c, db, "admin");
-      return (await db.query("update faktura.integrasjoner set status = 'frakoblet' where org_id = $1 and type = 'bank' and status <> 'frakoblet'", [orgId(c)])).rowCount;
+      const k = await en<{ okt_id: string | null }>(db, "delete from faktura.bankkoblinger where id = $1 and org_id = $2 returning okt_id", [koblingId(c), orgId(c)]);
+      if (!k) throw new ApiFeil(404, "Fant ikke banken");
+      return k.okt_id;
     });
-    if (!n) throw new ApiFeil(404, "Banken er ikke koblet til");
-    await leggIKo({ type: "bank-slett", org_id: orgId(c) });
+    if (okt) await leggIKo({ type: "bank-slett", org_id: orgId(c), okt_ider: [okt] });
+    return c.body(null, 204);
+  });
+
+  // Koble fra alt: bankene og nøkkelen. Workeren avslutter øktene og sletter nøkkelen.
+  r.delete("/bank", async (c) => {
+    const okter = await bruk(c, async (db) => {
+      await krev(c, db, "admin");
+      const n = (await db.query("update faktura.integrasjoner set status = 'frakoblet' where org_id = $1 and type = 'bank' and status <> 'frakoblet'", [orgId(c)])).rowCount;
+      if (!n) throw new ApiFeil(404, "Banken er ikke koblet til");
+      const k = await alle<{ okt_id: string | null }>(db, "delete from faktura.bankkoblinger where org_id = $1 returning okt_id", [orgId(c)]);
+      return k.map((x) => x.okt_id).filter(Boolean) as string[];
+    });
+    await leggIKo({ type: "bank-slett", org_id: orgId(c), okt_ider: okter, alt: true });
     return c.body(null, 204);
   });
 
