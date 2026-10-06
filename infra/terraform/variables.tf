@@ -12,7 +12,7 @@ variable "region" {
 variable "github_repo" {
   description = "GitHub-repoet som får rulle ut (eier/navn)."
   type        = string
-  default     = "hi4solutions/faktura"
+  default     = "HI4Solutions/Faktura"
 }
 
 variable "db_tier" {

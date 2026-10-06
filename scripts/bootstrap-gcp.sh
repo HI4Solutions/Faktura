@@ -16,7 +16,8 @@ set -euo pipefail
 : "${PROJECT_ID:?Sett PROJECT_ID, f.eks. faktura-prod}"
 : "${BILLING_ACCOUNT:?Sett BILLING_ACCOUNT (gcloud billing accounts list)}"
 REGION="${REGION:-europe-north1}"
-GITHUB_REPO="${GITHUB_REPO:-hi4solutions/faktura}"
+# Må stå nøyaktig som på GitHub; Google skiller mellom store og små bokstaver.
+GITHUB_REPO="${GITHUB_REPO:-HI4Solutions/Faktura}"
 STATE_BUCKET="${STATE_BUCKET:-${PROJECT_ID}-tfstate}"
 DEPLOYER="faktura-deployer"
 POOL="github"

@@ -27,7 +27,7 @@ Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og ve
    tilstandsbøtte, en deployer-konto og nøkkelfri innlogging fra GitHub Actions:
 
    ```bash
-   git clone https://github.com/hi4solutions/faktura && cd faktura
+   git clone https://github.com/HI4Solutions/Faktura && cd faktura
    gcloud billing accounts list
    PROJECT_ID=faktura-prod BILLING_ACCOUNT=XXXXXX-XXXXXX-XXXXXX bash scripts/bootstrap-gcp.sh
    ```
