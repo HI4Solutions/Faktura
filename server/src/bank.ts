@@ -71,6 +71,7 @@ const iDag = (dager = 0) => {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(d);
 };
 const somDato = (d: unknown) => (d instanceof Date ? d.toISOString() : d == null ? null : String(d));
+const senest = (a: string, b: string) => (a > b ? a : b); // datoer som ÅÅÅÅ-MM-DD
 
 // Applikasjonen med nøkkelen dekryptert (bare workeren kan dekryptere).
 export async function bankApp(db: Db, orgId: string): Promise<{ appId: string; nokkel: BankNokkel } | null> {
@@ -350,7 +351,7 @@ const merkHentet = (id: string, kontonr: string[], fra: string) =>
 // bankene, og kobler dem til fakturaene.
 export async function hentInnbetalinger(orgId: string, valg: { koblingId?: string; psu?: Psu } = {}): Promise<Resultat> {
   const resultat: Resultat = { nye: 0, koblet: 0, forslag: 0 };
-  const [app, koblinger, egne] = await somSystem(
+  const [app, koblinger, egne, start] = await somSystem(
     async (db) =>
       [
         await bankApp(db, orgId),
@@ -360,17 +361,27 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
           [orgId, valg.koblingId ?? null],
         ),
         await egneKontoer(db, orgId),
+        (await en<{ fra: string | null }>(db, "select faktura.bank_fra($1)::text as fra", [orgId]))?.fra ?? null,
       ] as const,
   );
   if (!app) return resultat;
+  // Innbetalinger fra før startdatoen (som standard dagen organisasjonen begynte med HI4
+  // Faktura) hentes ikke, og de som er hentet fra før, ryddes bort.
+  const startdato = start ?? iDag(-60);
+  try {
+    await somSystem((db) => db.query("select faktura.rydd_banktransaksjoner($1)", [orgId]));
+  } catch (e) {
+    logg("ERROR", "Kunne ikke rydde gamle innbetalinger", { org_id: orgId, feil: (e as Error).message });
+  }
 
   for (const k of koblinger) {
     const kontoer = (k.kontoer ?? []).filter((x) => egne.has(x.kontonr));
     if (!kontoer.length) continue;
     try {
       for (const konto of kontoer) {
-        const fra = hentesFra(k, konto) ?? iDag(-60);
-        for (const t of tilInnbetalinger(await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu))) await lagreOgKoble(orgId, konto.kontonr, t, resultat);
+        const fra = senest(hentesFra(k, konto) ?? iDag(-60), startdato);
+        for (const t of tilInnbetalinger(await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu)))
+          if (t.dato >= startdato) await lagreOgKoble(orgId, konto.kontonr, t, resultat);
       }
       // Neste gang hentes de siste dagene på nytt: banker kan bokføre noen dager etter.
       await merkHentet(k.id, kontoer.map((x) => x.kontonr), iDag(-5));

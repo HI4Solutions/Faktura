@@ -185,6 +185,8 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
 
     org = (await api("POST", "/api/organisasjoner", { navn: "Bank Test AS" })).data.id;
     expect((await api("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
+    // Organisasjonen er opprettet i dag; testene henter de siste 60 dagene (se «startdato» under).
+    expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: "2026-01-01" })).status).toBe(200);
     const kari = (await api("POST", `/api/org/${org}/kunder`, { navn: "Kari Hansen", type: "person", epost: "kari@hansen.no" })).data.id;
     const fjord = (await api("POST", `/api/org/${org}/kunder`, { navn: "Fjordline Logistikk AS", epost: "faktura@fjordline.no" })).data.id;
     for (const [kunde, pris] of [[kari, 800], [fjord, 2000], [kari, 800]] as const) {
@@ -524,6 +526,44 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect((await api("DELETE", `/api/org/${org}/bank/koblinger/${sbId}`)).status).toBe(404);
   });
 
+  it("startdato: eldre innbetalinger hentes ikke, og de som er hentet, ryddes bort", async () => {
+    const per = (await api("POST", `/api/org/${org}/kunder`, { navn: "Per Olsen", type: "person", epost: "per@olsen.no" })).data.id;
+    const f = (await api("POST", `/api/org/${org}/fakturaer`, { kunde_id: per, linjer: [{ beskrivelse: "Husleie", antall: 1, enhet: "mnd", enhetspris: 800, mva_sats: 25 }] })).data;
+    const u = await api("POST", `/api/org/${org}/fakturaer/${f.id}/utsted`, { send_epost: false });
+    expect(u.data.fakturanummer).toBe(4);
+    fakturaer[4] = f.id;
+    // Husleien for september (betalt før startdatoen) har samme beløp og fakturanummer i meldingen.
+    svar["GET /accounts/:uid/transactions"] = () =>
+      json(200, { transactions: [{ ...inn("g1", 1000, "PER OLSEN", "Faktura 4"), booking_date: "2026-09-15" }, { ...inn("g2", 77, "Ukjent"), booking_date: "2026-09-16" }, inn("n1", 55, "Ukjent")] });
+    expect(await hentInnbetalinger(org)).toEqual({ nye: 3, koblet: 1, forslag: 0 });
+    expect(await status(4)).toBe("betalt");
+
+    expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: dag }, fremmed)).status).toBe(403);
+    expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: "2026-13-01" })).status).toBe(400);
+    expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: "2999-01-01" })).data.error).toBe("Startdatoen kan ikke være fram i tid");
+    // Fra i dag: den gamle som ble registrert av seg selv, angres, og begge de gamle fjernes.
+    const r = await api("PUT", `/api/org/${org}/bank/fra`, { fra: dag });
+    expect(r.data).toMatchObject({ fra: dag, fra_satt: true, fjernet: 2 });
+    expect(await status(4)).toBe("utstedt");
+    expect((await transaksjoner()).map((x: any) => x.ekstern_id).filter((x: string) => /^[gn]\d$/.test(x))).toEqual(["n1"]);
+    // Neste henting starter på startdatoen, og eldre innbetalinger lagres ikke.
+    const for_ = kall.length;
+    expect(await hentInnbetalinger(org)).toEqual({ nye: 0, koblet: 0, forslag: 0 });
+    expect(kall.slice(for_).map((k) => k.sti)).toEqual([`/accounts/k-drift-2/transactions?date_from=${dag}`]);
+    // Workeren rydder også bort gamle innbetalinger ved hver henting.
+    await somSystem((db) => db.query("insert into faktura.banktransaksjoner (org_id, konto, ekstern_id, dato, belop) values ($1, '86011117947', 'gammel', '2026-08-01', 10)", [org]));
+    await hentInnbetalinger(org);
+    expect((await transaksjoner()).some((x: any) => x.ekstern_id === "gammel")).toBe(false);
+
+    // Standard er dagen organisasjonen ble opprettet (i dag).
+    expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: null })).data).toMatchObject({ fra: dag, fra_satt: false, fjernet: 0 });
+    // Bakover: kontoene hentes på nytt fra den nye datoen.
+    expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: "2026-09-01" })).data).toMatchObject({ fra: "2026-09-01", fra_satt: true });
+    const for2 = kall.length;
+    expect(await hentInnbetalinger(org)).toEqual({ nye: 2, koblet: 1, forslag: 0 });
+    expect(kall.slice(for2).map((k) => k.sti)).toEqual(["/accounts/k-drift-2/transactions?date_from=2026-09-01"]);
+  });
+
   it("kobler fra alt: øktene avsluttes, og nøkkelen og bankene slettes", async () => {
     expect((await api("DELETE", `/api/org/${org}/bank`, undefined, fremmed)).status).toBe(403);
     expect((await api("DELETE", `/api/org/${org}/bank`)).status).toBe(204);
@@ -536,6 +576,6 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect((await api("DELETE", `/api/org/${org}/bank`)).status).toBe(404);
     expect((await api("POST", `/api/org/${org}/bank/koblinger`, { bank: "DNB", psu_type: "business" })).status).toBe(409);
     // Innbetalingene og betalingene står igjen.
-    expect((await api("GET", `/api/org/${org}/banktransaksjoner?status=alle`)).data.transaksjoner).toHaveLength(5);
+    expect((await api("GET", `/api/org/${org}/banktransaksjoner?status=alle`)).data.transaksjoner).toHaveLength(8);
   });
 });

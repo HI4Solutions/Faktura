@@ -36,6 +36,8 @@ export interface Bankkobling {
 export interface BankStatus {
   app: { app_id: string; app_navn: string | null } | null; // applikasjonen hos Enable Banking
   koblinger: Bankkobling[];
+  fra: string | null; // innbetalinger hentes fra og med denne datoen
+  fra_satt: boolean; // valgt av en administrator (ellers dagen organisasjonen ble opprettet)
   tilkoblet: boolean;
   tilbake_url: string;
   antall: { forslag: number; uavklart: number; koblet: number; ignorert: number };
@@ -45,6 +47,7 @@ const BANKER = ["DNB", "Storebrand", "Nordea", "Handelsbanken", "Danske Bank", "
 const pause = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 const kontonrTekst = (k: string) => k.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3");
 const kontotype = (t: Bankkobling["psu_type"]) => (t === "personal" ? "privatkonto" : "bedriftskonto");
+const iDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
 const tid = (iso: string | null) => (iso ? new Date(iso).toLocaleString("nb-NO", { dateStyle: "short", timeStyle: "short" }) : "");
 export const dagerTil = (iso: string | null) => (iso ? Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000) : null);
 // «DNB», «DNB og Storebrand Bank», «DNB, Nordea og Storebrand Bank».
@@ -87,7 +90,10 @@ export function BankKobling() {
   const [skjema, settSkjema] = useState<{ app_id: string; privat_nokkel: string; filnavn: string | null; bank: string; psu_type: "business" | "personal" } | null>(null);
   // En bank til, med samme applikasjon.
   const [nyBank, settNyBank] = useState<{ bank: string; psu_type: "business" | "personal" } | null>(null);
+  // Ny startdato for innbetalingene.
+  const [endreFra, settEndreFra] = useState<string | null>(null);
   const [venter, settVenter] = useState<string | null>(null);
+  const [melding, settMelding] = useState<string | null>(null);
   const h = useHandling();
   const admin = erAdmin(org?.rolle);
 
@@ -150,6 +156,15 @@ export function BankKobling() {
     settVenter(null);
   }
 
+  async function lagreFra(e: FormEvent) {
+    e.preventDefault();
+    const r = await h.kjor(() => api<BankStatus & { fjernet: number }>("PUT", `/org/${org!.id}/bank/fra`, { fra: endreFra || null }));
+    if (!r) return;
+    settData(r);
+    settEndreFra(null);
+    settMelding(r.fjernet ? `Fjernet ${r.fjernet} ${r.fjernet === 1 ? "innbetaling" : "innbetalinger"} fra før ${dato(r.fra)}.` : null);
+  }
+
   async function kobleFra() {
     if (!confirm("Koble fra alle bankene og slette nøkkelen? Innbetalinger hentes ikke lenger. De som allerede er hentet og registrert, blir stående.")) return;
     if (await h.kjor(async () => (await api("DELETE", `/org/${org!.id}/bank`), true))) last();
@@ -173,6 +188,7 @@ export function BankKobling() {
         <div className="melding ok">{ny ? ny.bank : "Banken"} er koblet til. Innbetalingene hentes nå.</div>
       )}
       {venter && <div className="melding info">{venter}</div>}
+      {melding && <div className="melding ok">{melding}</div>}
 
       {data.app ? (
         <>
@@ -184,6 +200,17 @@ export function BankKobling() {
             </div>
           ) : (
             <p>Ingen bank er koblet til ennå.</p>
+          )}
+          {endreFra === null && data.fra && (
+            <p className="dempet liten">
+              Henter innbetalinger fra og med {dato(data.fra)}
+              {data.fra_satt ? "" : ", dagen dere begynte med HI4 Faktura"}. Eldre innbetalinger hentes ikke.{" "}
+              {admin && !nyBank && (
+                <button type="button" className="lenke" onClick={() => (h.settFeil(null), settMelding(null), settEndreFra(data.fra ?? iDag()))}>
+                  Endre
+                </button>
+              )}
+            </p>
           )}
           {venterAntall > 0 && (
             <p className="liten">
@@ -223,6 +250,27 @@ export function BankKobling() {
                 </button>
               </div>
             </form>
+          ) : endreFra !== null ? (
+            <form onSubmit={lagreFra} className="ny-bank">
+              <h3>Startdato for innbetalinger</h3>
+              <p className="dempet liten">
+                Eldre innbetalinger hentes ikke, og de som allerede er hentet, fjernes. Ble noen av dem registrert på en faktura av seg selv, tas
+                betalingen bort igjen. Det du har registrert selv, blir stående.
+              </p>
+              <label>
+                Hent innbetalinger fra og med
+                <input type="date" required max={iDag()} value={endreFra} onChange={(e) => settEndreFra(e.target.value)} />
+              </label>
+              <Feil melding={h.feil} />
+              <div className="knapper">
+                <button className="primar" disabled={h.opptatt}>
+                  {h.opptatt ? "Lagrer …" : "Lagre"}
+                </button>
+                <button type="button" className="lenke" disabled={h.opptatt} onClick={() => (settEndreFra(null), h.settFeil(null))}>
+                  Avbryt
+                </button>
+              </div>
+            </form>
           ) : (
             <>
               <Feil melding={h.feil} />
@@ -233,7 +281,11 @@ export function BankKobling() {
                   </button>
                 )}
                 {admin && (
-                  <button type="button" disabled={h.opptatt || Boolean(venter)} onClick={() => (h.settFeil(null), settNyBank({ bank: "", psu_type: "business" }))}>
+                  <button
+                    type="button"
+                    disabled={h.opptatt || Boolean(venter)}
+                    onClick={() => (h.settFeil(null), settMelding(null), settNyBank({ bank: "", psu_type: "business" }))}
+                  >
                     Legg til bank
                   </button>
                 )}

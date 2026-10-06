@@ -57,7 +57,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   privat nøkkel KMS-kryptert, bare workeren bruker den). Workeren henter høyst hver sjette
   time på dagtid og kobler innbetalingene til fakturaer: KID eller fakturanummer i meldingen
   registreres med en gang (`koble_banktransaksjon`), samme beløp og betaler blir forslag,
-  resten uavklart. Uten KID-avtale med banken
+  resten uavklart. Uten KID-avtale med banken. Innbetalinger fra før startdatoen
+  (`organisasjoner.bank_fra`, som standard dagen organisasjonen ble opprettet) hentes ikke,
+  og `rydd_banktransaksjoner` fjerner de som er hentet (automatisk registrerte angres)
 - `bankkoblinger`: én rad per bank (f.eks. DNB og Storebrand) på samme applikasjon, med egen
   BankID-innlogging, eget samtykke (økt og utløpsdato) og egen henting. Alle kontoene i økten
   lagres, men bare de som er lagt inn i HI4 Faktura (organisasjonens kontonummer og

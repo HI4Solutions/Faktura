@@ -56,9 +56,18 @@ async function status(db: Db, org: string) {
   const app = await hentApp(db, org);
   const egne = app ? await egneKontoer(db, org) : new Map<string, string | null>();
   const koblinger = app ? (await hentKoblinger(db, org)).map((k) => koblingStatus(k, egne)) : [];
+  // Innbetalinger hentes fra og med denne datoen (satt: valgt av en administrator, ellers
+  // dagen organisasjonen ble opprettet).
+  const start = await en<{ fra: string | null; satt: boolean }>(
+    db,
+    "select faktura.bank_fra(id) as fra, bank_fra is not null as satt from faktura.organisasjoner where id = $1",
+    [org],
+  );
   return {
     app: app ? { app_id: (app.konfig as BankAppKonfig).app_id, app_navn: (app.konfig as BankAppKonfig).app_navn ?? null } : null,
     koblinger,
+    fra: start?.fra ?? null,
+    fra_satt: start?.satt ?? false,
     tilkoblet: koblinger.some((k) => k.tilkoblet),
     tilbake_url: tilbakeUrl(),
     antall: await antall(db, org),
@@ -229,6 +238,22 @@ export function bankRuter() {
     await leggIKo({ type: "bank-okt", org_id: orgId(c), kobling_id: k.id, kode: b.code });
     // Appen venter til fullfort er endret (eller det kommer en feil).
     return c.json({ ok: true, kobling_id: k.id, forrige: tekst(k.fullfort) }, 202);
+  });
+
+  // Startdato for innbetalingene (null: dagen organisasjonen ble opprettet). Eldre hentes
+  // ikke, og de som allerede er hentet, ryddes bort.
+  r.put("/bank/fra", async (c) => {
+    const dato = z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato")
+      .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v), "Ugyldig dato");
+    const b = z.object({ fra: dato.nullable() }).parse(await c.req.json().catch(() => ({})));
+    return c.json(
+      await bruk(c, async (db) => {
+        const r = await en<{ fjernet: number }>(db, "select faktura.sett_bank_fra($1, $2) as fjernet", [orgId(c), b.fra]);
+        return { ...(await status(db, orgId(c))), fjernet: r!.fjernet };
+      }),
+    );
   });
 
   // Hent nå fra alle bankene. Brukeren er til stede, så det teller ikke mot bankenes grense.
