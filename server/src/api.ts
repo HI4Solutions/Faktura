@@ -12,6 +12,7 @@ import { adminRuter, erPlattformadmin, verifiseringRuter } from "./verifisering.
 import { hentEnhet } from "./brreg.js";
 import { rapportRuter } from "./rapporter.js";
 import { resendWebhook } from "./resendWebhook.js";
+import { googleCallback, integrasjonRuter } from "./googleDisk.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -149,6 +150,7 @@ export function lagApi() {
   // Åpne ruter (uten innlogging) ligger under /api/offentlig.
   app.route("/api/offentlig/passkey", passkeyInnlogging());
   app.route("/api/offentlig/resend", resendWebhook());
+  app.route("/api/offentlig/google", googleCallback());
 
   const api = new Hono();
   api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevInnlogging(c, next)));
@@ -228,6 +230,7 @@ export function lagApi() {
 
   org.route("/verifisering", verifiseringRuter());
   org.route("/", rapportRuter());
+  org.route("/integrasjoner", integrasjonRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som rå PNG/JPG (maks 1,5 MB). Hver opplasting får nytt filnavn, så

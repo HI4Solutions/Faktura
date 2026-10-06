@@ -36,6 +36,9 @@ export const config = {
   epostAvsender: valgfri("EPOST_AVSENDER") ?? "faktura@hi4.no",
   resendNokkel: valgfri("RESEND_API_KEY"),
   resendWebhookHemmelighet: valgfri("RESEND_WEBHOOK_SECRET"),
+  googleClientId: valgfri("GOOGLE_OAUTH_CLIENT_ID"),
+  googleClientSecret: valgfri("GOOGLE_OAUTH_CLIENT_SECRET"),
+  kmsNokkel: valgfri("KMS_KEY"),
 
   // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
   adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),

@@ -80,3 +80,9 @@ variable "admin_eposter" {
   type        = string
   default     = ""
 }
+
+variable "google_oauth_client_id" {
+  description = "Klient-ID for Google OAuth (Google Disk). Settes med GitHub-variabelen GOOGLE_OAUTH_CLIENT_ID. Hemmeligheten ligger i Secret Manager."
+  type        = string
+  default     = ""
+}

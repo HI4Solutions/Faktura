@@ -17,7 +17,14 @@ klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
 | CI (databasetester, Terraform) og utrulling med GitHub Actions | Ferdig |
 | Infrastruktur rullet ut i `hi4-faktura-prod` | Ferdig |
 | API og worker (`server/`, TypeScript på Cloud Run) | Ferdig, testet mot Postgres |
-| Nettapp (`web/`, React + Vite) på `faktura.hi4.no` | Første versjon: innlogging med MFA, organisasjon, kunder, produkter, fakturaer, regnskapsfører |
+| Nettapp (`web/`, React + Vite) på `faktura.hi4.no` | I drift |
+| Innlogging: passord, TOTP-MFA og passkeys | Ferdig |
+| Verifisering av organisasjoner og adminside | Ferdig (admin via GitHub-variabelen `ADMIN_EPOSTER`) |
+| Gjentakende fakturaer, purring og inkassovarsel | Ferdig |
+| Rapporter (reskontro, mva, salg) og CSV-eksport | Ferdig |
+| E-postsporing (Resend-webhook) | Ferdig, krever webhook i Resend |
+| Google Disk | Ferdig, krever OAuth-klient (`GOOGLE_OAUTH_CLIENT_ID`) |
+| Bank (KID/OCR), regnskapssystemer, EHF/Peppol | Ikke startet |
 
 Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og veikart.
 

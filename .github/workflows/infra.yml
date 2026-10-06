@@ -31,6 +31,7 @@ jobs:
       TF_VAR_region: ${{ vars.GCP_REGION }}
       TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
       TF_VAR_admin_eposter: ${{ vars.ADMIN_EPOSTER }}
+      TF_VAR_google_oauth_client_id: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
 

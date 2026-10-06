@@ -4,6 +4,7 @@ import { alle, en, somSystem } from "./db.js";
 import { feilhandterer } from "./feil.js";
 import { fakturaEpost, hentFaktura, pdfFilnavn, purringEpost, sikrePdf } from "./dokument.js";
 import { epost, leggIKo, publiser, type Oppgave } from "./tjenester.js";
+import { kopierTilDisk } from "./googleDisk.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -245,7 +246,18 @@ export function lagWorker() {
   app.post("/jobber/utboks", async (c) => c.json(await publiserUtboks()));
   app.post("/jobber/bank", (c) => c.json({ ok: true, melding: "Bankintegrasjon er ikke konfigurert ennå" }));
 
-  // Pub/Sub push per integrasjon. Kvitteres foreløpig; adapterne kommer i senere faser.
+  // Google Disk: kopi av PDF når en faktura eller kreditnota er utstedt. Feil gir 500, så Pub/Sub prøver igjen.
+  app.post("/hendelser/google-disk", async (c) => {
+    const kropp: any = await c.req.json().catch(() => ({}));
+    const hendelse = kropp?.message?.attributes?.hendelse;
+    if (hendelse === "faktura.utstedt" || hendelse === "kreditnota.utstedt") {
+      const data = JSON.parse(Buffer.from(kropp.message.data ?? "", "base64").toString() || "{}");
+      if (data.faktura_id) await kopierTilDisk(data.faktura_id, sikrePdf, pdfFilnavn);
+    }
+    return c.body(null, 204);
+  });
+
+  // Øvrige integrasjoner kvitteres foreløpig; adapterne kommer i senere faser.
   app.post("/hendelser/:integrasjon", async (c) => {
     const kropp: any = await c.req.json().catch(() => ({}));
     logg("INFO", "Hendelse mottatt", { integrasjon: c.req.param("integrasjon"), hendelse: kropp?.message?.attributes?.hendelse });

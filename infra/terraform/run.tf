@@ -9,20 +9,21 @@
 
 locals {
   db_env = {
-    PROJECT_ID       = var.project_id
-    REGION           = var.region
-    DB_INSTANCE      = google_sql_database_instance.db.connection_name
-    DB_NAME          = google_sql_database.faktura.name
-    FAKTURA_BUCKET   = google_storage_bucket.fakturaer.name
-    FILER_BUCKET     = google_storage_bucket.filer.name
-    KMS_KEY          = google_kms_crypto_key.tokens.id
-    TASKS_QUEUE      = google_cloud_tasks_queue.utsending.id
-    TASKS_INVOKER_SA = google_service_account.invoker.email
-    PUBSUB_TOPIC     = google_pubsub_topic.hendelser.id
-    APP_URL          = "https://${var.app_domain}"
-    EPOST_AVSENDER   = var.epost_avsender
-    TZ               = "Europe/Oslo"
-    NODE_ENV         = "production"
+    PROJECT_ID             = var.project_id
+    REGION                 = var.region
+    DB_INSTANCE            = google_sql_database_instance.db.connection_name
+    DB_NAME                = google_sql_database.faktura.name
+    FAKTURA_BUCKET         = google_storage_bucket.fakturaer.name
+    FILER_BUCKET           = google_storage_bucket.filer.name
+    KMS_KEY                = google_kms_crypto_key.tokens.id
+    TASKS_QUEUE            = google_cloud_tasks_queue.utsending.id
+    TASKS_INVOKER_SA       = google_service_account.invoker.email
+    PUBSUB_TOPIC           = google_pubsub_topic.hendelser.id
+    APP_URL                = "https://${var.app_domain}"
+    GOOGLE_OAUTH_CLIENT_ID = var.google_oauth_client_id
+    EPOST_AVSENDER         = var.epost_avsender
+    TZ                     = "Europe/Oslo"
+    NODE_ENV               = "production"
   }
 }
 

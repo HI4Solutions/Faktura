@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@google-cloud/cloud-sql-connector": "^1.12.0",
+    "@google-cloud/kms": "^6.2.1",
     "@google-cloud/pubsub": "^6.1.0",
     "@google-cloud/storage": "^8.2.0",
     "@google-cloud/tasks": "^7.2.1",

@@ -28,6 +28,7 @@ export function Innstillinger() {
         <>
           <Organisasjon />
           <Logo />
+          <GoogleDisk />
           <Medlemmer />
           <Regnskapsforer />
         </>
@@ -250,6 +251,62 @@ function Passkeys() {
       {lagt && <div className="melding ok" style={{ marginTop: 12 }}>Passkeyen er lagt til. Neste gang kan du logge inn med den.</div>}
       <Feil melding={h.feil} />
     </>
+  );
+}
+
+function GoogleDisk() {
+  const { org } = useKonto();
+  const { data, last } = useData(() => hent(`/org/${org!.id}/integrasjoner`), [org?.id]);
+  const h = useHandling();
+  const resultat = new URLSearchParams(window.location.search).get("disk");
+  const disk = data?.integrasjoner?.find((i: any) => i.type === "google_drive");
+
+  if (!data) return null;
+  if (!data.google_disk_tilgjengelig && !disk) return null;
+
+  const meldinger: Record<string, [string, string]> = {
+    ok: ["ok", "Google Disk er koblet til. Nye fakturaer kopieres til mappen «HI4 Faktura»."],
+    avbrutt: ["info", "Koblingen ble avbrutt."],
+    feil: ["feil", "Koblingen mot Google Disk feilet. Prøv igjen."],
+    "mangler-tilgang": ["feil", "Google ga ikke varig tilgang. Fjern HI4 Faktura under myaccount.google.com/permissions og prøv igjen."],
+  };
+
+  return (
+    <div className="kort">
+      <h2 style={{ marginTop: 0 }}>Google Disk</h2>
+      <p className="dempet liten">
+        Kopi av hver faktura og kreditnota som PDF i mappen «HI4 Faktura/år» på Google Disk. Appen får bare tilgang til filer
+        den lager selv. Originalen oppbevares alltid hos oss i fem år, uansett hva som skjer med kopien.
+      </p>
+      {resultat && meldinger[resultat] && <div className={`melding ${meldinger[resultat][0]}`}>{meldinger[resultat][1]}</div>}
+      {disk ? (
+        <>
+          <p>
+            <span className={`merke ${disk.status === "aktiv" ? "merke-ok" : "merke-fare"}`}>{disk.status === "aktiv" ? "Koblet til" : "Feil"}</span>
+            {disk.siste_feil && <span className="dempet liten"> {disk.siste_feil}</span>}
+          </p>
+          <div className="knapper">
+            {disk.status !== "aktiv" && (
+              <button className="primar" disabled={h.opptatt} onClick={() => h.kjor(async () => (window.location.href = (await api("POST", `/org/${org!.id}/integrasjoner/google-disk/start`)).url))}>
+                Koble til på nytt
+              </button>
+            )}
+            <button
+              className="fare"
+              disabled={h.opptatt}
+              onClick={() => confirm("Koble fra Google Disk? Filer som allerede er kopiert, blir liggende.") && h.kjor(() => api("DELETE", `/org/${org!.id}/integrasjoner/google-disk`)).then(last)}
+            >
+              Koble fra
+            </button>
+          </div>
+        </>
+      ) : (
+        <button className="primar" disabled={h.opptatt} onClick={() => h.kjor(async () => (window.location.href = (await api("POST", `/org/${org!.id}/integrasjoner/google-disk/start`)).url))}>
+          Koble til Google Disk
+        </button>
+      )}
+      <Feil melding={h.feil} />
+    </div>
   );
 }
 
