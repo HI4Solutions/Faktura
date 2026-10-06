@@ -112,6 +112,41 @@ export function Dialog({ apen, lukk, tittel, children }: { apen: boolean; lukk: 
   );
 }
 
+// E-postadresser i ett felt, skilt med komma, semikolon eller mellomrom.
+export const tilEpostliste = (s: string) => s.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean);
+export const ugyldigeEposter = (s: string) => tilEpostliste(s).filter((e) => !/^[^@\s,;<>"]+@[^@\s,;<>"]+\.[^@\s,;<>"]+$/.test(e));
+
+// Felt for én eller flere e-postadresser. Ugyldige adresser vises når feltet forlates.
+export function EpostlisteFelt({ etikett, verdi, endre, hjelp, plassholder, className }: {
+  etikett: string;
+  verdi: string;
+  endre: (v: string) => void;
+  hjelp?: ReactNode;
+  plassholder?: string;
+  className?: string;
+}) {
+  const [forlatt, settForlatt] = useState(false);
+  const feil = forlatt ? ugyldigeEposter(verdi) : [];
+  return (
+    <label className={className}>
+      {etikett}
+      <input
+        inputMode="email"
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        value={verdi}
+        placeholder={plassholder}
+        aria-invalid={feil.length > 0 || undefined}
+        onChange={(e) => endre(e.target.value)}
+        onBlur={() => settForlatt(true)}
+      />
+      {feil.length > 0 ? <span className="felt-feil">Ugyldig e-postadresse: {feil.join(", ")}</span> : hjelp && <span className="felt-hjelp">{hjelp}</span>}
+    </label>
+  );
+}
+
 // Tall-felt som tåler norsk desimalkomma.
 export function tall(v: string): number {
   return Number(v.replace(/\s/g, "").replace(",", "."));

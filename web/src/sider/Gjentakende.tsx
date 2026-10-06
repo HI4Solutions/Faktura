@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, hent } from "../api";
 import { AvsenderKonto } from "./AvsenderKonto";
-import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
+import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
 import { dato, iDag, kr, summer } from "../format";
 
@@ -176,12 +176,15 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
       mva_sats: String(l.mva_sats ?? 25),
     })) ?? [{ produkt_id: null, beskrivelse: "", antall: "1", enhetspris: "", mva_sats: "25" }],
   );
+  const [kopi, settKopi] = useState((g.kopi_til ?? []).join(", "));
   const h = useHandling();
   const utenMva = orgData.data && !orgData.data.mva_registrert;
   const settL = (i: number, e: Partial<L>) => settLinjer(linjer.map((l, j) => (j === i ? { ...l, ...e } : l)));
 
   async function lagre(e: FormEvent) {
     e.preventDefault();
+    const ugyldige = ugyldigeEposter(kopi);
+    if (ugyldige.length) return h.settFeil(`Ugyldig e-postadresse for kopi: ${ugyldige.join(", ")}`);
     const neste = f.neste_forfall;
     const kropp = {
       kunde_id: f.kunde_id,
@@ -194,6 +197,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
       aktiv: f.aktiv,
       konto_id: f.konto_id ?? null,
       avsender: f.avsender ?? null,
+      kopi_til: tilEpostliste(kopi),
       linjer: linjer
         .filter((l) => l.beskrivelse.trim() && l.enhetspris !== "")
         .map((l) => ({
@@ -309,6 +313,13 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
         Deres referanse
         <input value={f.deres_referanse} onChange={(e) => settF({ ...f, deres_referanse: e.target.value })} />
       </label>
+      <EpostlisteFelt
+        etikett="Kopi til (valgfritt)"
+        verdi={kopi}
+        endre={settKopi}
+        plassholder="f.eks. regnskap@kunde.no"
+        hjelp="Får hver faktura på e-post sammen med kunden. Skill flere adresser med komma."
+      />
       <AvsenderKonto org={orgData.data} verdi={f} endre={(v) => settF({ ...f, ...v })} />
       {g.id && (
         <label>

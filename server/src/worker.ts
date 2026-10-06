@@ -15,6 +15,32 @@ import { varsleForfalte, varsleGjentakende, varsleOmHendelse } from "./varsler.j
 const logg = (severity: string, message: string, data: Record<string, unknown> = {}) =>
   console.log(JSON.stringify({ severity, message, ...data }));
 
+type SystemDb = Parameters<Parameters<typeof somSystem>[0]>[0];
+
+// Hvem en faktura (eller purring) sendes til: kunden, med e-posten slik den står i
+// kunderegisteret nå (den kan være rettet etter utstedelsen), kopimottakerne på fakturaen
+// (synlig kopi) og organisasjonens faste kopiadresse (blindkopi). Uten fast kopiadresse
+// går blindkopien til organisasjonens egen e-post. Ingen får e-posten to ganger.
+export async function mottakere(db: SystemDb, f: any) {
+  const r = await en(
+    db,
+    `select k.epost, o.kopi_til as fast from faktura.kunder k join faktura.organisasjoner o on o.id = k.org_id where k.id = $1`,
+    [f.kunde_id],
+  );
+  const til = (r?.epost ?? f.kunde?.epost ?? undefined) as string | undefined;
+  const sett = new Set<string>(til ? [til.toLowerCase()] : []);
+  const unike = (liste: string[]) =>
+    liste.filter((e) => {
+      const k = e.toLowerCase();
+      if (sett.has(k)) return false;
+      sett.add(k);
+      return true;
+    });
+  const kopi = unike((f.kopi_til ?? []) as string[]);
+  const fast = ((r?.fast ?? []) as string[]).length ? (r!.fast as string[]) : f.selger?.epost ? [f.selger.epost as string] : [];
+  return { til, kopi, blindkopi: unike(fast) };
+}
+
 // Lager PDF, lagrer den og sender e-post til kunden. Trygg å kjøre flere ganger:
 // PDF-en gjenbrukes, og e-posten har idempotensnøkkel per oppgave.
 export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; oppgave_id: string }) {
@@ -26,22 +52,23 @@ export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; 
 
     const { sti, data } = await sikrePdf(db, f);
     let sendtTil: string | null = null;
-    const til = f.kunde?.epost as string | undefined;
-    if (o.send_epost && til) {
+    const m = await mottakere(db, f);
+    if (o.send_epost && m.til) {
       const e = fakturaEpost(f);
       const sendt = await epost().send({
         fraNavn: f.selger.navn,
-        til: [til],
+        til: [m.til],
         svarTil: f.selger.epost ?? undefined,
-        kopi: f.selger.epost ? [f.selger.epost] : undefined,
+        kopi: m.kopi,
+        blindkopi: m.blindkopi,
         emne: e.emne,
         tekst: e.tekst,
         html: e.html,
         vedlegg: [{ filnavn: pdfFilnavn(f), data }],
         idempotensnokkel: `faktura-${o.oppgave_id}`,
       });
-      await db.query("select faktura.logg_epost($1, $2, null, $3, $4, $5)", [f.org_id, f.id, sendt.id, til, e.emne]);
-      sendtTil = til;
+      await db.query("select faktura.logg_epost($1, $2, null, $3, $4, $5, $6)", [f.org_id, f.id, sendt.id, m.til, e.emne, m.kopi]);
+      sendtTil = m.til;
     }
     await db.query("select faktura.marker_sendt($1, $2, $3)", [f.id, sti, sendtTil]);
     logg("INFO", "Faktura sendt", { faktura_id: f.id, fakturanummer: f.fakturanummer, epost: Boolean(sendtTil) });
@@ -69,25 +96,24 @@ export async function sendPurring(o: { purring_id: string; oppgave_id: string })
     if (!p) return logg("WARNING", "Fant ikke purringen", o);
     if (p.sendt_at) return;
     const f = await hentFaktura(db, p.org_id, p.faktura_id);
-    // Bruk kundens e-post slik den er nå; den kan være rettet etter at fakturaen ble sendt.
-    const naa = await en(db, "select epost from faktura.kunder where id = $1", [f.kunde_id]);
-    const til = (naa?.epost ?? f.kunde?.epost) as string | undefined;
-    if (!til) return logg("WARNING", "Kunden mangler e-post; purringen ble ikke sendt", { purring_id: p.id });
+    const m = await mottakere(db, f);
+    if (!m.til) return logg("WARNING", "Kunden mangler e-post; purringen ble ikke sendt", { purring_id: p.id });
     const { data } = await sikrePdf(db, f);
     const e = purringEpost(f, p);
     const sendt = await epost().send({
       fraNavn: f.selger.navn,
-      til: [til],
+      til: [m.til],
       svarTil: f.selger.epost ?? undefined,
-      kopi: f.selger.epost ? [f.selger.epost] : undefined,
+      kopi: m.kopi,
+      blindkopi: m.blindkopi,
       emne: e.emne,
       tekst: e.tekst,
       html: e.html,
       vedlegg: [{ filnavn: pdfFilnavn(f), data }],
       idempotensnokkel: `purring-${p.id}`,
     });
-    await db.query("select faktura.logg_epost($1, $2, $3, $4, $5, $6)", [f.org_id, f.id, p.id, sendt.id, til, e.emne]);
-    await db.query("select faktura.marker_purring_sendt($1, $2)", [p.id, til]);
+    await db.query("select faktura.logg_epost($1, $2, $3, $4, $5, $6, $7)", [f.org_id, f.id, p.id, sendt.id, m.til, e.emne, m.kopi]);
+    await db.query("select faktura.marker_purring_sendt($1, $2)", [p.id, m.til]);
     logg("INFO", "Purring sendt", { purring_id: p.id, type: p.type });
   });
 }
@@ -200,6 +226,7 @@ export async function publiserUtboks(maks = 500) {
       try {
         await publiser(r.hendelse, r.org_id, { ...r.data, hendelse: r.hendelse, org_id: r.org_id, tid: r.opprettet }, String(r.id));
         if (r.hendelse === "organisasjon.kontonr_endret") await varsleKontonr(db, r);
+        if (r.hendelse === "organisasjon.kopi_endret") await varsleKopiadresse(db, r);
         await db.query("update faktura.utboks set publisert_at = now() where id = $1", [r.id]);
         ok++;
       } catch (e) {
@@ -210,33 +237,67 @@ export async function publiserUtboks(maks = 500) {
   });
 }
 
-// Varsler alle eiere når kontonummeret endres – det vanligste svindelforsøket.
-async function varsleKontonr(db: Parameters<Parameters<typeof somSystem>[0]>[0], r: any) {
-  const o = await en(db, "select navn from faktura.organisasjoner where id = $1", [r.org_id]);
+async function varsleEiere(db: SystemDb, orgId: string, emne: (navn: string) => string, tekst: (navn: string) => string, idempotensnokkel: string) {
+  const o = await en(db, "select navn from faktura.organisasjoner where id = $1", [orgId]);
   const eiere = await alle<{ epost: string }>(
     db,
     "select b.epost from faktura.medlemmer m join faktura.brukere b on b.id = m.bruker_id where m.org_id = $1 and m.rolle = 'eier'",
-    [r.org_id],
+    [orgId],
   );
-  const endretAv = r.data?.endret_av ? await en(db, "select epost from faktura.brukere where id = $1", [r.data.endret_av]) : null;
   if (!eiere.length) return;
-  const tekst = [
-    `Kontonummeret for ${o?.navn} ble endret ${new Date(r.opprettet).toLocaleString("nb-NO", { timeZone: "Europe/Oslo" })}.`,
-    "",
-    `Fra: ${r.data?.fra ?? "(ingen)"}`,
-    `Til: ${r.data?.til ?? "(ingen)"}`,
-    `Endret av: ${endretAv?.epost ?? "ukjent"}`,
-    "",
-    "Var ikke dette deg eller en du kjenner til, logg inn og endre kontonummeret tilbake med en gang, og bytt passord.",
-  ].join("\n");
+  const t = tekst(o?.navn ?? "");
   await epost().send({
     fraNavn: "HI4 Faktura",
     til: eiere.map((e) => e.epost),
-    emne: `Kontonummeret for ${o?.navn} er endret`,
-    tekst,
-    html: `<pre style="font-family:Arial,Helvetica,sans-serif;font-size:14px">${tekst.replace(/</g, "&lt;")}</pre>`,
-    idempotensnokkel: `kontonr-${r.id}`,
+    emne: emne(o?.navn ?? ""),
+    tekst: t,
+    html: `<pre style="font-family:Arial,Helvetica,sans-serif;font-size:14px">${t.replace(/</g, "&lt;")}</pre>`,
+    idempotensnokkel,
   });
+}
+
+// Varsler alle eiere når kopiadressen endres: den som får kopi av alle fakturaer, vet nok
+// til å lage overbevisende falske fakturaer eller «nytt kontonummer»-e-poster til kundene.
+async function varsleKopiadresse(db: SystemDb, r: any) {
+  const endretAv = r.data?.endret_av ? await en(db, "select epost from faktura.brukere where id = $1", [r.data.endret_av]) : null;
+  const liste = (v: unknown) => (Array.isArray(v) && v.length ? v.join(", ") : "(organisasjonens e-post)");
+  await varsleEiere(
+    db,
+    r.org_id,
+    (navn) => `Kopi av fakturaene til ${navn} går til en ny adresse`,
+    (navn) =>
+      [
+        `Adressen som får kopi av alle fakturaer fra ${navn}, ble endret ${new Date(r.opprettet).toLocaleString("nb-NO", { timeZone: "Europe/Oslo" })}.`,
+        "",
+        `Fra: ${liste(r.data?.fra)}`,
+        `Til: ${liste(r.data?.til)}`,
+        `Endret av: ${endretAv?.epost ?? "ukjent"}`,
+        "",
+        "Var ikke dette deg eller en du kjenner til, logg inn og endre den tilbake under Innstillinger med en gang, og bytt passord.",
+      ].join("\n"),
+    `kopi-${r.id}`,
+  );
+}
+
+// Varsler alle eiere når kontonummeret endres – det vanligste svindelforsøket.
+async function varsleKontonr(db: SystemDb, r: any) {
+  const endretAv = r.data?.endret_av ? await en(db, "select epost from faktura.brukere where id = $1", [r.data.endret_av]) : null;
+  await varsleEiere(
+    db,
+    r.org_id,
+    (navn) => `Kontonummeret for ${navn} er endret`,
+    (navn) =>
+      [
+        `Kontonummeret for ${navn} ble endret ${new Date(r.opprettet).toLocaleString("nb-NO", { timeZone: "Europe/Oslo" })}.`,
+        "",
+        `Fra: ${r.data?.fra ?? "(ingen)"}`,
+        `Til: ${r.data?.til ?? "(ingen)"}`,
+        `Endret av: ${endretAv?.epost ?? "ukjent"}`,
+        "",
+        "Var ikke dette deg eller en du kjenner til, logg inn og endre kontonummeret tilbake med en gang, og bytt passord.",
+      ].join("\n"),
+    `kontonr-${r.id}`,
+  );
 }
 
 export function lagWorker() {

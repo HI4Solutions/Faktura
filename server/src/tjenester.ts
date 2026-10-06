@@ -118,7 +118,8 @@ export interface EpostMelding {
   fraNavn: string;
   til: string[];
   svarTil?: string;
-  kopi?: string[];
+  kopi?: string[]; // synlig kopi (cc)
+  blindkopi?: string[]; // bcc
   emne: string;
   tekst: string;
   html: string;
@@ -142,7 +143,8 @@ export const resendEpost: Epost = {
         from: `${navn} <${config.epostAvsender}>`,
         to: m.til,
         replyTo: m.svarTil,
-        bcc: m.kopi,
+        cc: m.kopi?.length ? m.kopi : undefined,
+        bcc: m.blindkopi?.length ? m.blindkopi : undefined,
         subject: m.emne,
         text: m.tekst,
         html: m.html,

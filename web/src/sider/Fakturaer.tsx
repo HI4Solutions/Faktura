@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apnePdf, hent } from "../api";
-import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
+import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
-import { KundeSkjema } from "./Register";
+import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto } from "./AvsenderKonto";
 import { IkonPluss } from "../ikoner";
 
@@ -133,6 +133,14 @@ interface LinjeUtkast {
 }
 
 const tomLinje = (): LinjeUtkast => ({ produkt_id: null, beskrivelse: "", antall: "1", enhet: "stk", enhetspris: "", mva_sats: "25" });
+const erTom = (l: LinjeUtkast) => !l.produkt_id && !l.beskrivelse.trim() && l.enhetspris === "";
+const fraProdukt = (p: any): Partial<LinjeUtkast> => ({
+  produkt_id: p.id,
+  beskrivelse: p.beskrivelse ? `${p.navn} – ${p.beskrivelse}` : p.navn,
+  enhet: p.enhet,
+  enhetspris: String(p.enhetspris).replace(".", ","),
+  mva_sats: String(p.mva_sats),
+});
 
 export function FakturaSkjema() {
   const { id } = useParams();
@@ -145,7 +153,9 @@ export function FakturaSkjema() {
   const [linjer, settLinjer] = useState<LinjeUtkast[]>([tomLinje()]);
   const [gebyr, settGebyr] = useState(false);
   const [nyKunde, settNyKunde] = useState(false);
-  const { opptatt, feil, kjor } = useHandling();
+  const [nyttProdukt, settNyttProdukt] = useState<number | "ny" | null>(null); // linjen produktet skal inn på
+  const [kopi, settKopi] = useState("");
+  const { opptatt, feil, settFeil, kjor } = useHandling();
 
   // Fyll inn eksisterende utkast.
   useEffect(() => {
@@ -163,6 +173,7 @@ export function FakturaSkjema() {
         konto_id: u.konto_id ?? null,
         avsender: u.avsender ?? null,
       });
+      settKopi((u.kopi_til ?? []).join(", "));
       settLinjer(
         u.linjer.map((l: any) => ({
           produkt_id: l.produkt_id,
@@ -195,18 +206,25 @@ export function FakturaSkjema() {
   const settLinje = (i: number, endring: Partial<LinjeUtkast>) => settLinjer(linjer.map((l, j) => (j === i ? { ...l, ...endring } : l)));
 
   function velgProdukt(i: number, produktId: string) {
+    if (produktId === "__ny") return settNyttProdukt(i);
     const p = produkter.data?.find((x: any) => x.id === produktId);
-    if (!p) return settLinje(i, { produkt_id: null });
-    settLinje(i, {
-      produkt_id: p.id,
-      beskrivelse: p.beskrivelse ? `${p.navn} – ${p.beskrivelse}` : p.navn,
-      enhet: p.enhet,
-      enhetspris: String(p.enhetspris).replace(".", ","),
-      mva_sats: String(p.mva_sats),
+    settLinje(i, p ? fraProdukt(p) : { produkt_id: null });
+  }
+
+  // Et produkt laget fra skjemaet havner på linjen det ble laget fra, ellers på første
+  // tomme linje (eller en ny linje).
+  function brukNyttProdukt(p: any, hvor: number | "ny") {
+    void produkter.last();
+    settLinjer((ls) => {
+      const i = hvor === "ny" ? ls.findIndex(erTom) : hvor;
+      if (i < 0 || i >= ls.length) return [...ls, { ...tomLinje(), ...fraProdukt(p) }];
+      return ls.map((l, j) => (j === i ? { ...l, ...fraProdukt(p) } : l));
     });
   }
 
   async function lagre(utsted: boolean) {
+    const feilAdresser = ugyldigeEposter(kopi);
+    if (feilAdresser.length) return settFeil(`Ugyldig e-postadresse for kopi: ${feilAdresser.join(", ")}`);
     const kropp = {
       kunde_id: f.kunde_id,
       fakturadato: f.fakturadato || null,
@@ -218,6 +236,7 @@ export function FakturaSkjema() {
       notat: f.notat || null,
       konto_id: f.konto_id ?? null,
       avsender: f.avsender ?? null,
+      kopi_til: tilEpostliste(kopi),
       gebyr,
       linjer: tallLinjer.map((l) => ({ produkt_id: l.produkt_id, beskrivelse: l.beskrivelse, antall: l.antall, enhet: l.enhet, enhetspris: l.enhetspris, mva_sats: l.mva_sats })),
     };
@@ -230,6 +249,7 @@ export function FakturaSkjema() {
   }
 
   if (!kunder.data || !orgData.data) return <Laster />;
+  const fastKopi: string[] = orgData.data.kopi_til?.length ? orgData.data.kopi_til : orgData.data.epost ? [orgData.data.epost] : [];
 
   return (
     <>
@@ -245,15 +265,20 @@ export function FakturaSkjema() {
         <div className="rad">
           <label className="hel">
             Kunde
-            <select value={f.kunde_id} onChange={(e) => (e.target.value === "__ny" ? settNyKunde(true) : settF({ ...f, kunde_id: e.target.value }))}>
-              <option value="">Velg kunde</option>
-              {kunder.data.map((k: any) => (
-                <option key={k.id} value={k.id}>
-                  {k.navn} ({k.kundenummer})
-                </option>
-              ))}
-              <option value="__ny">+ Ny kunde …</option>
-            </select>
+            <div className="med-knapp">
+              <select aria-label="Kunde" value={f.kunde_id} onChange={(e) => (e.target.value === "__ny" ? settNyKunde(true) : settF({ ...f, kunde_id: e.target.value }))}>
+                <option value="">Velg kunde</option>
+                {kunder.data.map((k: any) => (
+                  <option key={k.id} value={k.id}>
+                    {k.navn} ({k.kundenummer})
+                  </option>
+                ))}
+                <option value="__ny">+ Ny kunde …</option>
+              </select>
+              <button type="button" onClick={() => settNyKunde(true)}>
+                <IkonPluss storrelse={16} /> Ny kunde
+              </button>
+            </div>
           </label>
           <label>
             Fakturadato
@@ -283,6 +308,21 @@ export function FakturaSkjema() {
             <input value={f.var_referanse} onChange={(e) => settF({ ...f, var_referanse: e.target.value })} />
           </label>
         </div>
+        <EpostlisteFelt
+          etikett="Kopi til (valgfritt)"
+          verdi={kopi}
+          endre={(v) => {
+            settKopi(v);
+            if (feil?.startsWith("Ugyldig e-postadresse")) settFeil(null);
+          }}
+          plassholder="f.eks. regnskap@kunde.no"
+          hjelp={
+            <>
+              Får fakturaen på e-post sammen med kunden, og ser hverandre som mottakere. Skill flere adresser med komma.
+              {fastKopi.length > 0 && <> En skjult kopi går også til {fastKopi.join(", ")}.</>}
+            </>
+          }
+        />
         <AvsenderKonto org={orgData.data} verdi={f} endre={(v) => settF({ ...f, ...v })} />
       </div>
 
@@ -315,6 +355,7 @@ export function FakturaSkjema() {
                           {p.navn}
                         </option>
                       ))}
+                      <option value="__ny">+ Nytt produkt …</option>
                     </select>
                   </td>
                   <td className="hel" data-label="Beskrivelse">
@@ -353,6 +394,9 @@ export function FakturaSkjema() {
         <div className="knapper" style={{ marginTop: 12 }}>
           <button type="button" onClick={() => settLinjer([...linjer, tomLinje()])}>
             + Linje
+          </button>
+          <button type="button" onClick={() => settNyttProdukt("ny")}>
+            + Nytt produkt
           </button>
           {orgData.data.standard_gebyr > 0 && (
             <label style={{ margin: 0 }}>
@@ -404,9 +448,19 @@ export function FakturaSkjema() {
           lagret={async (k) => {
             settNyKunde(false);
             await kunder.last();
-            settF({ ...f, kunde_id: k.id });
+            settF((x: any) => ({ ...x, kunde_id: k.id }));
           }}
           avbryt={() => settNyKunde(false)}
+        />
+      </Dialog>
+      <Dialog apen={nyttProdukt !== null} lukk={() => settNyttProdukt(null)} tittel="Nytt produkt">
+        <ProduktSkjema
+          produkt={{ enhet: "stk", mva_sats: utenMva ? 0 : 25, aktiv: true }}
+          lagret={(p) => {
+            if (p && nyttProdukt !== null) brukNyttProdukt(p, nyttProdukt);
+            settNyttProdukt(null);
+          }}
+          avbryt={() => settNyttProdukt(null)}
         />
       </Dialog>
     </>
@@ -423,7 +477,7 @@ export function FakturaVisning() {
   const nav = useNavigate();
   const { data: f, feil, last } = useData(() => hent(`/org/${org!.id}/fakturaer/${id}`), [org?.id, id]);
   const h = useHandling();
-  const [dialog, settDialog] = useState<"betaling" | "refusjon" | "krediter" | "slett" | null>(null);
+  const [dialog, settDialog] = useState<"betaling" | "refusjon" | "krediter" | "slett" | "send" | null>(null);
 
   if (feil) return <Feil melding={feil} />;
   if (!f) return <Laster />;
@@ -464,9 +518,7 @@ export function FakturaVisning() {
               </button>
             </>
           )}
-          {f.status !== "utkast" && kanSkrive(rolle) && (
-            <button onClick={() => handling(() => api("POST", `/org/${org!.id}/fakturaer/${f.id}/send`))}>Send på nytt</button>
-          )}
+          {f.status !== "utkast" && kanSkrive(rolle) && <button onClick={() => settDialog("send")}>Send på nytt</button>}
           {kanPurre && kanSkrive(rolle) && (
             <button
               onClick={() =>
@@ -499,7 +551,9 @@ export function FakturaVisning() {
       <Feil melding={h.feil} />
       {sisteEpost && ["sprett", "klage"].includes(sisteEpost.status) && (
         <div className="melding feil">
-          E-posten til {sisteEpost.til} {sisteEpost.status === "sprett" ? "kom i retur" : "ble merket som søppelpost"}
+          E-posten til {sisteEpost.til}
+          {sisteEpost.kopi?.length > 0 && ` (med kopi til ${sisteEpost.kopi.join(", ")})`}{" "}
+          {sisteEpost.status === "sprett" ? "kom i retur" : "ble merket som søppelpost"}
           {sisteEpost.detaljer ? ` (${sisteEpost.detaljer})` : ""}. Rett e-postadressen under Kunder og send på nytt, eller kontakt kunden.
         </div>
       )}
@@ -531,6 +585,12 @@ export function FakturaVisning() {
               <div className="dempet liten">Sendt til</div>
               {f.sendt_til}{" "}
               {sisteEpost && <span className={`merke ${epostStatus[sisteEpost.status]?.klasse}`}>{epostStatus[sisteEpost.status]?.tekst}</span>}
+            </div>
+          )}
+          {f.kopi_til?.length > 0 && (
+            <div>
+              <div className="dempet liten">Kopi til</div>
+              {f.kopi_til.join(", ")}
             </div>
           )}
         </div>
@@ -666,6 +726,15 @@ export function FakturaVisning() {
           }}
         />
       </Dialog>
+      <Dialog apen={dialog === "send"} lukk={() => settDialog(null)} tittel={`Send ${f.type === "kreditnota" ? "kreditnotaen" : "fakturaen"} på nytt`}>
+        <SendPaNytt
+          faktura={f}
+          ferdig={() => {
+            settDialog(null);
+            last();
+          }}
+        />
+      </Dialog>
       <Dialog apen={dialog === "slett"} lukk={() => settDialog(null)} tittel="Slett faktura">
         <SlettFaktura faktura={f} ferdig={() => nav("/fakturaer")} />
       </Dialog>
@@ -679,6 +748,63 @@ export function FakturaVisning() {
         />
       </Dialog>
     </>
+  );
+}
+
+// Send på nytt, til kundens e-post slik den er nå, med mulighet til å endre kopimottakerne.
+function SendPaNytt({ faktura, ferdig }: { faktura: any; ferdig: () => void }) {
+  const { org } = useKonto();
+  const kunde = useData(() => hent(`/org/${org!.id}/kunder/${faktura.kunde_id}`), [org?.id, faktura.kunde_id]);
+  const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
+  const [kopi, settKopi] = useState((faktura.kopi_til ?? []).join(", "));
+  const [sendt, settSendt] = useState(false);
+  const h = useHandling();
+
+  if (!kunde.data || !orgData.data) return <Laster />;
+  const til = kunde.data.epost as string | null;
+  const fast: string[] = orgData.data.kopi_til?.length ? orgData.data.kopi_til : orgData.data.epost ? [orgData.data.epost] : [];
+
+  async function send(ev: FormEvent) {
+    ev.preventDefault();
+    const feil = ugyldigeEposter(kopi);
+    if (feil.length) return h.settFeil(`Ugyldig e-postadresse: ${feil.join(", ")}`);
+    const r = await h.kjor(() => api("POST", `/org/${org!.id}/fakturaer/${faktura.id}/send`, { kopi_til: tilEpostliste(kopi) }));
+    if (r !== undefined) {
+      settSendt(true);
+      setTimeout(ferdig, 1200);
+    }
+  }
+
+  if (!til)
+    return (
+      <p>
+        {faktura.kunde?.navn ?? "Kunden"} har ingen e-postadresse. Legg den inn under <Link to="/kunder">Kunder</Link> først.
+      </p>
+    );
+  return (
+    <form onSubmit={send}>
+      <p>
+        Sendes til <strong>{til}</strong>
+        {faktura.sendt_til && faktura.sendt_til !== til && <span className="dempet"> (sist sendt til {faktura.sendt_til})</span>}.
+      </p>
+      <EpostlisteFelt
+        etikett="Kopi til (valgfritt)"
+        verdi={kopi}
+        endre={settKopi}
+        plassholder="f.eks. regnskap@kunde.no"
+        hjelp={<>Kopimottakerne får også eventuelle purringer. Skill flere adresser med komma.{fast.length > 0 && <> En skjult kopi går til {fast.join(", ")}.</>}</>}
+      />
+      <Feil melding={h.feil} />
+      {sendt && <div className="melding ok">Sendt. E-posten går ut i løpet av noen sekunder.</div>}
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt || sendt}>
+          Send
+        </button>
+        <button type="button" onClick={ferdig}>
+          Avbryt
+        </button>
+      </div>
+    </form>
   );
 }
 

@@ -305,7 +305,7 @@ export function Produkter() {
   );
 }
 
-function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () => void; avbryt: () => void }) {
+export function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: (p?: any) => void; avbryt: () => void }) {
   const { org } = useKonto();
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const utenMva = orgData.data && !orgData.data.mva_registrert;
@@ -332,7 +332,7 @@ function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () =
       indeks_varsle: p.indeks_varsle !== false,
     };
     const r = await kjor(() => (p.id ? api("PATCH", `/org/${org!.id}/produkter/${p.id}`, kropp) : api("POST", `/org/${org!.id}/produkter`, kropp)));
-    if (r) lagret();
+    if (r) lagret(r);
   }
 
   return (

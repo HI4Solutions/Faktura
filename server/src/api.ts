@@ -20,6 +20,12 @@ const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
 const tekstS = (maks = 500) => z.string().trim().max(maks);
 const valgfriTekst = (maks = 500) => tekstS(maks).nullish().transform((v) => (v === "" ? null : v ?? null));
+// E-postadresser for kopi; like adresser (uansett store/små bokstaver) tas med én gang.
+const epostliste = (maks: number) =>
+  z
+    .array(z.string().trim().max(254).email("Ugyldig e-postadresse"))
+    .max(maks, `Høyst ${maks} adresser`)
+    .transform((l) => l.filter((e, i) => l.findIndex((x) => x.toLowerCase() === e.toLowerCase()) === i));
 
 // Bygger «update ... set a = $1, b = $2» av de feltene som faktisk er sendt.
 function settFelter(data: Record<string, unknown>, start = 1) {
@@ -69,6 +75,7 @@ const orgSkjema = z.object({
   purregebyr: z.number().min(0).max(200).optional(),
   innehaver: valgfriTekst(200).optional(),
   standard_avsender: z.enum(["firma", "innehaver"]).optional(),
+  kopi_til: epostliste(5).optional(), // fast blindkopi av alle fakturaer
 });
 
 const kundeSkjema = z.object({
@@ -125,6 +132,7 @@ const fakturaSkjema = z.object({
   planlagt_sending: datoS.nullish(),
   konto_id: uuid.nullish(),
   avsender: z.enum(["firma", "innehaver"]).nullish(),
+  kopi_til: epostliste(10).optional(), // får fakturaen sammen med kunden
   linjer: z.array(linjeSkjema).max(500),
   gebyr: z.boolean().optional(), // legg til organisasjonens standard fakturagebyr som egen linje
 });
@@ -237,7 +245,7 @@ export function lagApi() {
 
   org.patch("/", async (c) => {
     const b = await kropp(c, orgSkjema);
-    if (b.kontonr !== undefined) krevMfa(c);
+    if (b.kontonr !== undefined || b.kopi_til !== undefined) krevMfa(c);
     const s = settFelter(b, 2);
     if (s.tom) throw new ApiFeil(400, "Ingen felt å endre");
     const o = await bruk(c, async (db) => {
@@ -528,7 +536,7 @@ export function lagApi() {
         const betalinger = await alle(db, "select * from faktura.betalinger where faktura_id = $1 order by betalt_dato, opprettet", [f.id]);
         const kreditnotaer = await alle(db, "select id, fakturanummer, sum_inkl_mva, fakturadato from faktura.fakturaer where kreditnota_for = $1 order by fakturanummer", [f.id]);
         const purringer = await alle(db, "select * from faktura.purringer where faktura_id = $1 order by nummer", [f.id]);
-        const eposter = await alle(db, "select id, purring_id, til, emne, status, detaljer, siste_hendelse_at, opprettet from faktura.eposter where faktura_id = $1 order by opprettet", [f.id]);
+        const eposter = await alle(db, "select id, purring_id, til, kopi, emne, status, detaljer, siste_hendelse_at, opprettet from faktura.eposter where faktura_id = $1 order by opprettet", [f.id]);
         return { ...f, betalinger, kreditnotaer, purringer, eposter };
       }),
     ),
@@ -540,10 +548,10 @@ export function lagApi() {
       const f = await en(
         db,
         `insert into faktura.fakturaer (org_id, kunde_id, fakturadato, forfallsdato, periode_fra, periode_til,
-                                        deres_referanse, var_referanse, notat, planlagt_sending, konto_id, avsender, opprettet_av)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, faktura.bruker_id()) returning id`,
+                                        deres_referanse, var_referanse, notat, planlagt_sending, konto_id, avsender, kopi_til, opprettet_av)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, faktura.bruker_id()) returning id`,
         [orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
-         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null],
+         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? []],
       );
       await skrivLinjer(db, orgId(c), f.id, b.linjer, b.gebyr ?? false);
       return hentFaktura(db, orgId(c), f.id);
@@ -557,10 +565,11 @@ export function lagApi() {
     const f = await bruk(c, async (db) => {
       const r = await db.query(
         `update faktura.fakturaer set kunde_id = $3, fakturadato = $4, forfallsdato = $5, periode_fra = $6, periode_til = $7,
-                deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11, konto_id = $12, avsender = $13
+                deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11, konto_id = $12, avsender = $13,
+                kopi_til = coalesce($14, kopi_til)
           where id = $1 and org_id = $2 and status = 'utkast'`,
         [id, orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
-         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null],
+         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? null],
       );
       if (!r.rowCount) throw new ApiFeil(409, "Bare utkast kan endres");
       await skrivLinjer(db, orgId(c), id, b.linjer, b.gebyr ?? false);
@@ -599,12 +608,15 @@ export function lagApi() {
     return c.json(f);
   });
 
+  // Sender på nytt, eventuelt med endrede kopimottakere (de gjelder også purringer senere).
   org.post("/fakturaer/:id/send", async (c) => {
+    const b = await kropp(c, z.object({ kopi_til: epostliste(10).optional() }));
     const id = uuid.parse(c.req.param("id"));
     await bruk(c, async (db) => {
       const f = await hentFaktura(db, orgId(c), id);
       if (f.status === "utkast") throw new ApiFeil(409, "Fakturaen er ikke utstedt");
       if (!(await en(db, "select faktura.kan($1, 'utsted') as k", [orgId(c)]))!.k) throw new ApiFeil(403, "Ingen tilgang");
+      if (b.kopi_til) await db.query("select faktura.sett_kopi_til($1, $2)", [id, b.kopi_til]);
     });
     await leggIKo({ type: "send-faktura", faktura_id: id, send_epost: true });
     return c.json({ ok: true }, 202);
@@ -684,6 +696,7 @@ export function lagApi() {
     deres_referanse: valgfriTekst(100),
     konto_id: uuid.nullish(),
     avsender: z.enum(["firma", "innehaver"]).nullish(),
+    kopi_til: epostliste(10).optional(),
   });
 
   org.get("/gjentakelser", async (c) =>
@@ -706,11 +719,11 @@ export function lagApi() {
         en(
           db,
           `insert into faktura.gjentakelser (org_id, kunde_id, linjer, intervall, forfall_dag, neste_forfall, send_dager_foer,
-                                            slutt_dato, aktiv, deres_referanse, konto_id, avsender, opprettet_av)
+                                            slutt_dato, aktiv, deres_referanse, konto_id, avsender, kopi_til, opprettet_av)
            values ($1, $2, $3, $4, $5, $6, coalesce($7, (select standard_dager_foer_forfall from faktura.organisasjoner where id = $1)),
-                   $8, coalesce($9, true), $10, $11, $12, faktura.bruker_id()) returning *`,
+                   $8, coalesce($9, true), $10, $11, $12, $13, faktura.bruker_id()) returning *`,
           [orgId(c), b.kunde_id, JSON.stringify(b.linjer), b.intervall, b.forfall_dag, b.neste_forfall, b.send_dager_foer ?? null,
-           b.slutt_dato ?? null, b.aktiv ?? null, b.deres_referanse, b.konto_id ?? null, b.avsender ?? null],
+           b.slutt_dato ?? null, b.aktiv ?? null, b.deres_referanse, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? []],
         ),
       ),
       201,

@@ -80,10 +80,12 @@
 html, body { margin: 0; background: var(--bg); }
 /* Installert app på iPhone: statuslinjen ligger over toppen av siden. Toppelementene
    (headeren, menyen, låseskjermen) går helt opp bak den med mørk bakgrunn og flytter
-   innholdet ned; denne stripen dekker sider uten mørk topp. */
-body::before {
-  content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top);
-  background: var(--meny-bg); z-index: 100; pointer-events: none;
+   innholdet ned, og en fast, mørk stripe (i index.html, så den er med fra første bilde)
+   dekker statuslinjen. iOS farger området bak statuslinjen etter faste elementer i
+   toppkanten; uten dem legger iOS 26 en lys, dempet toning over toppen av appen. */
+#statuslinje {
+  position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top);
+  background: var(--meny-bg); z-index: 100;
 }
 a { color: var(--aksent); text-decoration: none; }
 /* Raskere trykk på mobil: ingen dobbelttrykk-zoom eller grå blink på knapper og lenker */
@@ -158,16 +160,21 @@ strong { font-weight: 650; }
    tabellen, og mobilen zoomer ut (alt blir «veldig stort»). */
 .ramme > *, .dash-rad > *, .nokkeltall > *, .rad > * { min-width: 0; }
 
-/* Mobil: organisasjonen øverst, bunnmeny nederst, full meny som skuff */
+/* Mobil: header med logo øverst, bunnmeny nederst, full meny som skuff */
 .mobiltopp, .bunnmeny, .meny-skygge { display: none; }
 @media (max-width: 860px) {
-  /* align-content: ellers strekkes topplinjen når siden er kortere enn skjermen */
-  .ramme { grid-template-columns: 1fr; align-content: start; }
+  /* Headeren ligger fast øverst (heldekkende farge helt opp i kanten, så iOS ikke legger
+     sin egen toning over logoen), og innholdet starter under den. align-content: ellers
+     strekkes topplinjen når siden er kortere enn skjermen. */
+  :root { --topp-hoyde: 66px; }
+  .ramme { grid-template-columns: 1fr; align-content: start; padding-top: calc(var(--topp-hoyde) + env(safe-area-inset-top)); }
+  html { scroll-padding-top: calc(var(--topp-hoyde) + env(safe-area-inset-top) + 8px); }
   .mobiltopp {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    min-height: calc(56px + env(safe-area-inset-top));
-    padding: calc(10px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
-    background: var(--meny-bg); position: sticky; top: 0; z-index: 15;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 15;
+    height: calc(var(--topp-hoyde) + env(safe-area-inset-top));
+    padding: calc(16px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+    background: var(--meny-bg);
   }
   .mobiltopp .logo-tekst { font-size: 1.05rem; }
   .mobiltopp button.ikon {
@@ -229,7 +236,8 @@ strong { font-weight: 650; }
 .kort.tabell table th:last-child, .kort.tabell table td:last-child { padding-right: 24px; }
 .kort.tabell tbody tr:last-child td { border-bottom: 0; }
 .sentrert { min-height: 100vh; display: grid; place-items: center; padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); }
-#app > .innhold:first-child { padding-top: calc(24px + env(safe-area-inset-top)); }
+/* Sider uten meny og header (velkommen, invitasjon): plass til statuslinjen på iPhone */
+.innhold.frittstaende { padding-top: calc(24px + env(safe-area-inset-top)); }
 .sentrert > .kort, .sentrert > form.kort { width: 100%; max-width: 440px; box-shadow: var(--skygge-3); }
 
 button, .knapp {
@@ -256,6 +264,13 @@ button.ikon { padding: 7px; }
 
 label { display: block; font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); margin-bottom: 14px; }
 label > input, label > select, label > textarea, label > div { margin-top: 5px; }
+.felt-hjelp, .felt-feil { display: block; margin-top: 5px; font-size: 0.8rem; font-weight: 450; color: var(--dempet); }
+.felt-feil { color: var(--fare); }
+input[aria-invalid] { border-color: var(--fare); }
+/* Felt med en knapp ved siden av (f.eks. kunde + «Ny kunde») */
+.med-knapp { display: flex; gap: 8px; }
+.med-knapp > select, .med-knapp > input { flex: 1; min-width: 0; }
+.med-knapp > button { flex: none; white-space: nowrap; }
 input, select, textarea {
   font: inherit; font-size: 0.93rem; width: 100%; padding: 9px 12px; border: 1px solid var(--kant-sterk); border-radius: var(--radius-s);
   background: var(--flate); color: var(--tekst); transition: border-color .15s, box-shadow .15s;

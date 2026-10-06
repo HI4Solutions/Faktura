@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, hent, lastOppLogo } from "../api";
-import { Feil, Laster, tall, useData, useHandling } from "../felles";
+import { EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
 import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
@@ -52,7 +52,13 @@ function Organisasjon() {
   const [lagret, settLagret] = useState(false);
 
   useEffect(() => {
-    if (data) settO({ ...data, standard_gebyr: String(data.standard_gebyr).replace(".", ","), purregebyr: String(data.purregebyr ?? 0).replace(".", ",") });
+    if (data)
+      settO({
+        ...data,
+        standard_gebyr: String(data.standard_gebyr).replace(".", ","),
+        purregebyr: String(data.purregebyr ?? 0).replace(".", ","),
+        kopi_tekst: (data.kopi_til ?? []).join(", "),
+      });
   }, [data]);
   if (!o) return <Laster />;
 
@@ -89,6 +95,19 @@ function Organisasjon() {
       delete kropp.innehaver;
       delete kropp.standard_avsender;
     } else if (o.verifisering === "ny") kropp.orgnr = o.orgnr ? o.orgnr.replace(/\s/g, "") : null;
+    // Fast kopiadresse: som kontonummeret varsles alle eiere når den endres.
+    const ugyldige = ugyldigeEposter(o.kopi_tekst ?? "");
+    if (ugyldige.length) return h.settFeil(`Ugyldig e-postadresse for kopi: ${ugyldige.join(", ")}`);
+    const kopi = tilEpostliste(o.kopi_tekst ?? "");
+    if (kopi.length > 5) return h.settFeil("Kopi kan sendes til høyst fem adresser.");
+    const forrige: string[] = data.kopi_til ?? [];
+    if (kopi.join(",").toLowerCase() !== forrige.join(",").toLowerCase()) {
+      const tekst = kopi.length
+        ? `Sende kopi av alle fakturaer til ${kopi.join(", ")}? Alle eiere får beskjed på e-post.`
+        : `Slutte å sende kopi til ${forrige.join(", ")}? Kopien går da til organisasjonens e-post. Alle eiere får beskjed på e-post.`;
+      if (!confirm(tekst)) return;
+      kropp.kopi_til = kopi;
+    }
     const ktnr = (o.kontonr ?? "").replace(/[\s.]/g, "");
     if (ktnr !== (data.kontonr ?? "")) {
       if (!confirm(`Endre kontonummeret til ${ktnr}? Alle eiere får beskjed på e-post.`)) return;
@@ -159,6 +178,18 @@ function Organisasjon() {
           <input {...felt("telefon")} />
         </label>
       </div>
+      <EpostlisteFelt
+        etikett="Send alltid kopi av fakturaer til"
+        verdi={o.kopi_tekst ?? ""}
+        endre={(v) => settO({ ...o, kopi_tekst: v })}
+        plassholder="f.eks. regnskap@firma.no"
+        hjelp={
+          <>
+            Fakturaer, kreditnotaer og purringer som sendes på e-post, går også som skjult kopi hit (kunden ser den ikke). Står feltet
+            tomt, går kopien til {o.epost ? <strong>{o.epost}</strong> : "e-posten over"}. Skill flere adresser med komma.
+          </>
+        }
+      />
       {o.type !== "privatperson" && <>
       <label>
         <input type="checkbox" {...avkryss("mva_registrert")} /> MVA-registrert

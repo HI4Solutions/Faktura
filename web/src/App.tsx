@@ -119,7 +119,7 @@ function Ramme() {
 
   if (ny || orgs.length === 0) {
     return (
-      <div className="innhold" style={{ margin: "0 auto" }}>
+      <div className="innhold frittstaende" style={{ margin: "0 auto" }}>
         <h1>{orgs.length === 0 ? "Velkommen til HI4 Faktura" : "Ny organisasjon"}</h1>
         {orgs.length === 0 && <p className="dempet">Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt.</p>}
         <NyOrganisasjon avbryt={orgs.length ? () => settNy(false) : undefined} />
@@ -304,7 +304,7 @@ function Sider() {
   if (!meg.bruker.navn || meg.bruker.navn.trim().length < 2) return <OppgiNavn />;
   return (
     <Routes>
-      <Route path="/invitasjon/:token" element={<div className="innhold"><Invitasjon /></div>} />
+      <Route path="/invitasjon/:token" element={<div className="innhold frittstaende"><Invitasjon /></div>} />
       <Route path="*" element={<Ramme />} />
     </Routes>
   );
