@@ -56,3 +56,9 @@ variable "placeholder_image" {
   type        = string
   default     = "us-docker.pkg.dev/cloudrun/container/hello"
 }
+
+variable "jobs_region" {
+  description = "Region for Cloud Tasks og Cloud Scheduler, som ikke finnes i europe-north1. Holdes i EU."
+  type        = string
+  default     = "europe-west1"
+}

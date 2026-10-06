@@ -25,7 +25,7 @@
 | API og bakgrunnsjobber | Cloud Run (api, worker) og Cloud Run job (migrate) |
 | Innlogging | Identity Platform: e-post og passord, e-postbekreftelse, TOTP-MFA |
 | Filer | Cloud Storage: `fakturaer` med versjonering og oppbevaringsregel, `filer` for logo og vedlegg |
-| Køer og hendelser | Cloud Tasks (utsending med gjentatte forsøk), Pub/Sub (integrasjoner) |
+| Køer og hendelser | Cloud Tasks (utsending med gjentatte forsøk), Pub/Sub (integrasjoner). Cloud Tasks og Scheduler ligger i europe-west1, som er nærmeste region med disse tjenestene |
 | Planlagte jobber | Cloud Scheduler med OIDC-token mot workeren |
 | Hemmeligheter | Secret Manager. Cloud KMS krypterer OAuth- og integrasjonstokens |
 | Bygg og utrulling | GitHub Actions med Workload Identity Federation, Artifact Registry, Terraform |

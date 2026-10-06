@@ -247,7 +247,7 @@ resource "google_cloud_run_v2_job" "migrate" {
 # Utsending av fakturaer (PDF + e-post) med gjentatte forsøk.
 resource "google_cloud_tasks_queue" "utsending" {
   name     = "utsending"
-  location = var.region
+  location = var.jobs_region
 
   rate_limits {
     max_dispatches_per_second = 10
@@ -335,7 +335,7 @@ locals {
 resource "google_cloud_scheduler_job" "jobb" {
   for_each         = local.jobber
   name             = "faktura-${each.key}"
-  region           = var.region
+  region           = var.jobs_region
   schedule         = each.value.schedule
   time_zone        = "Europe/Oslo"
   attempt_deadline = "300s"

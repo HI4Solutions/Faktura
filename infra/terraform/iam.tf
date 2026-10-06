@@ -52,14 +52,14 @@ resource "google_project_iam_member" "log_writer" {
 # API-et legger jobber i køen og publiserer hendelser; worker publiserer utboksen.
 resource "google_cloud_tasks_queue_iam_member" "api_enqueue" {
   name     = google_cloud_tasks_queue.utsending.name
-  location = var.region
+  location = google_cloud_tasks_queue.utsending.location
   role     = "roles/cloudtasks.enqueuer"
   member   = "serviceAccount:${google_service_account.api.email}"
 }
 
 resource "google_cloud_tasks_queue_iam_member" "worker_enqueue" {
   name     = google_cloud_tasks_queue.utsending.name
-  location = var.region
+  location = google_cloud_tasks_queue.utsending.location
   role     = "roles/cloudtasks.enqueuer"
   member   = "serviceAccount:${google_service_account.worker.email}"
 }
