@@ -15,7 +15,7 @@ import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
 import { Rapporter } from "./sider/Rapporter";
-import { Logo, LogoIkon } from "./Logo";
+import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
 import { installer } from "./pwa";
@@ -133,22 +133,18 @@ function Ramme() {
   return (
     <div className="ramme">
       {/* Mobil: organisasjonen øverst (trykk for å bytte), meny nederst. */}
+      {/* Mobil: logo øverst og logg ut til høyre; menyen ligger i bunnmenyen («Mer»). */}
       <header className="mobiltopp">
-        <div className="mobil-org">
-          <span className="avatar">{initialer(org?.navn ?? "?")}</span>
-          <span className="navn">{org?.navn}</span>
-          {orgs.length > 1 && <IkonVelg storrelse={16} />}
-          <select value={org?.id} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
-            {orgs.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.navn}
-                {o.direkte_medlem ? "" : " (klient)"}
-              </option>
-            ))}
-            <option value="__ny">+ Ny organisasjon</option>
-          </select>
-        </div>
-        <LogoIkon storrelse={28} animert={false} />
+        <Logo storrelse={30} />
+        <button
+          type="button"
+          className="ikon"
+          aria-label="Logg ut"
+          title="Logg ut"
+          onClick={() => confirm("Logge ut av HI4 Faktura?") && void loggUt()}
+        >
+          <IkonLoggUt storrelse={20} />
+        </button>
       </header>
       <nav className="bunnmeny" aria-label="Hovedmeny">
         <NavLink to="/" end>

@@ -78,8 +78,9 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); }
-/* Installert app på iPhone: innholdet starter under statuslinjen, som får menyfargen bak seg. */
-body { padding-top: env(safe-area-inset-top); }
+/* Installert app på iPhone: statuslinjen ligger over toppen av siden. Toppelementene
+   (headeren, menyen, låseskjermen) går helt opp bak den med mørk bakgrunn og flytter
+   innholdet ned; denne stripen dekker sider uten mørk topp. */
 body::before {
   content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top);
   background: var(--meny-bg); z-index: 100; pointer-events: none;
@@ -163,15 +164,17 @@ strong { font-weight: 650; }
   /* align-content: ellers strekkes topplinjen når siden er kortere enn skjermen */
   .ramme { grid-template-columns: 1fr; align-content: start; }
   .mobiltopp {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px;
-    padding: 8px max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left));
-    background: var(--meny-bg); position: sticky; top: env(safe-area-inset-top); z-index: 15;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-height: calc(56px + env(safe-area-inset-top));
+    padding: calc(10px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+    background: var(--meny-bg); position: sticky; top: 0; z-index: 15;
   }
-  .mobil-org { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; color: #fff; }
-  .mobil-org .avatar { width: 30px; height: 30px; font-size: 0.75rem; border-radius: 8px; }
-  .mobil-org .navn { font-weight: 650; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mobil-org svg { flex: none; color: var(--meny-dempet); }
-  .mobil-org select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; font-size: 16px; }
+  .mobiltopp .logo-tekst { font-size: 1.05rem; }
+  .mobiltopp button.ikon {
+    background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.18); box-shadow: none;
+    width: 40px; height: 40px; min-height: 40px; padding: 0; justify-content: center; border-radius: 11px;
+  }
+  .mobiltopp button.ikon:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.4); }
 
   .bunnmeny {
     display: flex; align-items: stretch; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
@@ -197,8 +200,10 @@ strong { font-weight: 650; }
   .bunnmeny a.ny.active .pluss { background: var(--aksent-hover); }
 
   .meny {
-    position: fixed; inset: env(safe-area-inset-top) auto 0 0; width: min(300px, 86vw); z-index: 40;
-    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    /* Fra topp til bunn av skjermen (ikke 100vh, som er høyere enn skjermen på iPhone),
+       med plass til statuslinjen øverst og hjemlinjen nederst. */
+    position: fixed; inset: 0 auto 0 0; height: auto; width: min(300px, 86vw); z-index: 40;
+    padding-top: calc(18px + env(safe-area-inset-top)); padding-bottom: calc(18px + env(safe-area-inset-bottom));
     transform: translateX(-100%); visibility: hidden; transition: transform .22s ease, visibility .22s;
   }
   .meny.apen { transform: none; visibility: visible; box-shadow: var(--skygge-3); }
@@ -223,7 +228,8 @@ strong { font-weight: 650; }
 .kort.tabell table th:first-child, .kort.tabell table td:first-child { padding-left: 24px; }
 .kort.tabell table th:last-child, .kort.tabell table td:last-child { padding-right: 24px; }
 .kort.tabell tbody tr:last-child td { border-bottom: 0; }
-.sentrert { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.sentrert { min-height: 100vh; display: grid; place-items: center; padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); }
+#app > .innhold:first-child { padding-top: calc(24px + env(safe-area-inset-top)); }
 .sentrert > .kort, .sentrert > form.kort { width: 100%; max-width: 440px; box-shadow: var(--skygge-3); }
 
 button, .knapp {
@@ -424,7 +430,7 @@ code.hemmelig { word-break: break-all; font-size: 0.85rem; }
 @media (max-width: 900px) {
   .inngang { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   /* På mobil: bare en mørk topp med logoen. */
-  .inngang-merke { padding: 16px 20px; flex-direction: row; align-items: center; }
+  .inngang-merke { padding: calc(16px + env(safe-area-inset-top)) 20px 16px; flex-direction: row; align-items: center; }
   .inngang-merke > div, .inngang-merke .bunntekst { display: none; }
   .inngang-skjema { place-items: start center; padding-top: 36px; }
 }
