@@ -125,6 +125,23 @@ describe.skipIf(!harDb)("API", () => {
     expect((await kall("POST", `/api/org/${org}/gjentakelser/${g.data.id}/kjor`, ola)).status).toBe(409);
   });
 
+  it("purring av forfalt faktura legges i kø", async () => {
+    const f = await kall("POST", `/api/org/${org}/fakturaer`, ola, {
+      kunde_id: kunde,
+      fakturadato: "2026-01-01",
+      forfallsdato: "2026-01-15",
+      linjer: [{ beskrivelse: "Gammel jobb", antall: 1, enhetspris: 100, mva_sats: 25 }],
+    });
+    await kall("POST", `/api/org/${org}/fakturaer/${f.data.id}/utsted`, ola, {});
+    const p = await kall("POST", `/api/org/${org}/fakturaer/${f.data.id}/purring`, ola, { type: "paaminnelse" });
+    expect(p.status).toBe(201);
+    expect(p.data.utestaende).toBe(125);
+    expect(ko.at(-1)).toMatchObject({ type: "send-purring", purring_id: p.data.id });
+    expect((await kall("POST", `/api/org/${org}/fakturaer/${f.data.id}/purring`, ola, { type: "paaminnelse" })).status).toBe(409);
+    const d = await kall("GET", `/api/org/${org}/fakturaer/${f.data.id}`, ola);
+    expect(d.data.purringer).toHaveLength(1);
+  });
+
   it("feil fra databasen blir riktige HTTP-statuser", async () => {
     const f = await kall("POST", `/api/org/${org}/fakturaer`, ola, { kunde_id: kunde, linjer: [] });
     expect((await kall("POST", `/api/org/${org}/fakturaer/${f.data.id}/utsted`, ola, {})).status).toBe(400);

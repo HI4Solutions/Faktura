@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { alle, en, somSystem } from "./db.js";
 import { feilhandterer } from "./feil.js";
-import { fakturaEpost, hentFaktura, pdfFilnavn, sikrePdf } from "./dokument.js";
+import { fakturaEpost, hentFaktura, pdfFilnavn, purringEpost, sikrePdf } from "./dokument.js";
 import { epost, leggIKo, publiser, type Oppgave } from "./tjenester.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
@@ -57,8 +57,38 @@ export async function sendEpost(o: { til: string[]; emne: string; tekst: string;
   });
 }
 
+// Sender betalingspåminnelse eller inkassovarsel med den opprinnelige fakturaen vedlagt.
+export async function sendPurring(o: { purring_id: string; oppgave_id: string }) {
+  await somSystem(async (db) => {
+    const p = await en(db, "select * from faktura.purringer where id = $1", [o.purring_id]);
+    if (!p) return logg("WARNING", "Fant ikke purringen", o);
+    if (p.sendt_at) return;
+    const f = await hentFaktura(db, p.org_id, p.faktura_id);
+    // Bruk kundens e-post slik den er nå; den kan være rettet etter at fakturaen ble sendt.
+    const naa = await en(db, "select epost from faktura.kunder where id = $1", [f.kunde_id]);
+    const til = (naa?.epost ?? f.kunde?.epost) as string | undefined;
+    if (!til) return logg("WARNING", "Kunden mangler e-post; purringen ble ikke sendt", { purring_id: p.id });
+    const { data } = await sikrePdf(db, f);
+    const e = purringEpost(f, p);
+    await epost().send({
+      fraNavn: f.selger.navn,
+      til: [til],
+      svarTil: f.selger.epost ?? undefined,
+      kopi: f.selger.epost ? [f.selger.epost] : undefined,
+      emne: e.emne,
+      tekst: e.tekst,
+      html: e.html,
+      vedlegg: [{ filnavn: pdfFilnavn(f), data }],
+      idempotensnokkel: `purring-${p.id}`,
+    });
+    await db.query("select faktura.marker_purring_sendt($1, $2)", [p.id, til]);
+    logg("INFO", "Purring sendt", { purring_id: p.id, type: p.type });
+  });
+}
+
 export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "send-faktura") return sendFaktura(o);
+  if (o.type === "send-purring") return sendPurring(o);
   return sendEpost(o);
 }
 
@@ -100,6 +130,29 @@ export async function gjenta() {
         resultat.push({ id, ok: false, feil: (e as Error).message });
         break;
       }
+    }
+  }
+
+  // Automatisk betalingspåminnelse for organisasjoner som har slått det på.
+  const forfalte = await somSystem((db) =>
+    alle<{ id: string }>(
+      db,
+      `select f.id from faktura.fakturaer f
+         join faktura.organisasjoner o on o.id = f.org_id
+        where o.purring_auto and o.verifisering <> 'sperret'
+          and f.type = 'faktura' and f.status = 'utstedt'
+          and f.forfallsdato + o.purring_dager <= faktura.i_dag()
+          and coalesce((select k.epost from faktura.kunder k where k.id = f.kunde_id), f.kunde ->> 'epost') is not null
+          and not exists (select 1 from faktura.purringer p where p.faktura_id = f.id)`,
+    ),
+  );
+  for (const { id } of forfalte) {
+    try {
+      const p = await somSystem((db) => en(db, "select id from faktura.lag_purring($1, 'paaminnelse', true)", [id]));
+      await leggIKo({ type: "send-purring", purring_id: p!.id });
+      resultat.push({ id, ok: true });
+    } catch (e) {
+      resultat.push({ id, ok: false, feil: (e as Error).message });
     }
   }
 
@@ -169,6 +222,12 @@ export function lagWorker() {
   app.post("/oppgaver/send-faktura", async (c) => {
     const o = z.object({ faktura_id: z.string().uuid(), send_epost: z.boolean(), oppgave_id: z.string() }).parse(await c.req.json());
     await sendFaktura(o);
+    return c.json({ ok: true });
+  });
+
+  app.post("/oppgaver/send-purring", async (c) => {
+    const o = z.object({ purring_id: z.string().uuid(), oppgave_id: z.string() }).parse(await c.req.json());
+    await sendPurring(o);
     return c.json({ ok: true });
   });
 

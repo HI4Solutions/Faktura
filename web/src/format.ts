@@ -36,8 +36,9 @@ export const statusTekst: Record<string, string> = {
   kreditert: "Kreditert",
 };
 
-export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: string; refusjon_belop?: number; betalt_belop?: number; kreditert_belop?: number }) {
+export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: string; refusjon_belop?: number; betalt_belop?: number; kreditert_belop?: number; antall_purringer?: number }) {
   if (f.type === "kreditnota") return { tekst: "Kreditnota", klasse: "merke-noytral" };
+  if (f.status === "utstedt" && (f.antall_purringer ?? 0) > 0) return { tekst: `Purret${(f.antall_purringer ?? 0) > 1 ? ` (${f.antall_purringer})` : ""}`, klasse: "merke-fare" };
   if (f.status === "utstedt" && f.forfalt) return { tekst: "Forfalt", klasse: "merke-fare" };
   if (f.status === "utstedt" && (f.kreditert_belop ?? 0) > 0) return { tekst: "Delvis kreditert", klasse: "merke-noytral" };
   if (f.status === "utstedt" && (f.betalt_belop ?? 0) > 0) return { tekst: "Delbetalt", klasse: "merke-advarsel" };

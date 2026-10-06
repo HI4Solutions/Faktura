@@ -59,6 +59,9 @@ const orgSkjema = z.object({
   standard_gebyr: z.number().min(0).optional(),
   bruk_kid: z.boolean().optional(),
   standard_dager_foer_forfall: z.number().int().min(0).max(60).optional(),
+  purring_auto: z.boolean().optional(),
+  purring_dager: z.number().int().min(0).max(60).optional(),
+  purregebyr: z.number().min(0).max(200).optional(),
 });
 
 const kundeSkjema = z.object({
@@ -400,7 +403,8 @@ export function lagApi() {
           `select f.id, f.fakturanummer, f.type, f.status, f.kunde_id, coalesce(f.kunde->>'navn', k.navn) as kunde_navn,
                   f.fakturadato, f.forfallsdato, f.sum_inkl_mva, f.betalt_belop, f.kreditert_belop, f.refusjon_belop,
                   f.sendt_at, f.kreditnota_for, f.planlagt_sending,
-                  (f.status = 'utstedt' and f.type = 'faktura' and f.forfallsdato < faktura.i_dag()) as forfalt
+                  (f.status = 'utstedt' and f.type = 'faktura' and f.forfallsdato < faktura.i_dag()) as forfalt,
+                  (select count(*) from faktura.purringer p where p.faktura_id = f.id) as antall_purringer
              from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id
             where ${vilkar.join(" and ")}
             order by f.fakturanummer desc nulls first, f.opprettet desc
@@ -417,7 +421,8 @@ export function lagApi() {
         const f = await hentFaktura(db, orgId(c), uuid.parse(c.req.param("id")));
         const betalinger = await alle(db, "select * from faktura.betalinger where faktura_id = $1 order by betalt_dato, opprettet", [f.id]);
         const kreditnotaer = await alle(db, "select id, fakturanummer, sum_inkl_mva, fakturadato from faktura.fakturaer where kreditnota_for = $1 order by fakturanummer", [f.id]);
-        return { ...f, betalinger, kreditnotaer };
+        const purringer = await alle(db, "select * from faktura.purringer where faktura_id = $1 order by nummer", [f.id]);
+        return { ...f, betalinger, kreditnotaer, purringer };
       }),
     ),
   );
@@ -497,6 +502,19 @@ export function lagApi() {
     });
     await leggIKo({ type: "send-faktura", faktura_id: kn.id, send_epost: b.send_epost ?? true });
     return c.json(kn, 201);
+  });
+
+  org.post("/fakturaer/:id/purring", async (c) => {
+    const b = await kropp(c, z.object({ type: z.enum(["paaminnelse", "inkassovarsel"]) }));
+    const id = uuid.parse(c.req.param("id"));
+    const p = await bruk(c, async (db) => {
+      const f = await hentFaktura(db, orgId(c), id);
+      const k = await en(db, "select epost from faktura.kunder where id = $1", [f.kunde_id]);
+      if (!k?.epost && !f.kunde?.epost) throw new ApiFeil(400, "Kunden har ingen e-postadresse. Legg den inn under Kunder først.");
+      return en(db, "select * from faktura.lag_purring($1, $2)", [id, b.type]);
+    });
+    await leggIKo({ type: "send-purring", purring_id: p.id });
+    return c.json(p, 201);
   });
 
   org.post("/fakturaer/:id/betalinger", async (c) => {

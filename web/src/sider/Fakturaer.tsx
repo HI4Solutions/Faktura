@@ -392,7 +392,11 @@ export function FakturaVisning() {
   if (feil) return <Feil melding={feil} />;
   if (!f) return <Laster />;
 
-  const m = fakturaMerke({ ...f, forfalt: f.status === "utstedt" && f.forfallsdato < iDag() });
+  const m = fakturaMerke({ ...f, forfalt: f.status === "utstedt" && f.forfallsdato < iDag(), antall_purringer: f.purringer?.length ?? 0 });
+  const forfalt = f.type === "faktura" && f.status === "utstedt" && f.forfallsdato < iDag();
+  const sistePurring = f.purringer?.at(-1);
+  const kanPurre = forfalt && (!sistePurring || sistePurring.ny_frist < iDag());
+  const nestePurring = f.purringer?.some((p: any) => p.type === "paaminnelse") ? "inkassovarsel" : "paaminnelse";
   const aaBetale = f.sum_inkl_mva - f.kreditert_belop - f.betalt_belop;
   const rolle = org?.rolle;
 
@@ -425,6 +429,19 @@ export function FakturaVisning() {
           )}
           {f.status !== "utkast" && kanSkrive(rolle) && (
             <button onClick={() => handling(() => api("POST", `/org/${org!.id}/fakturaer/${f.id}/send`))}>Send på nytt</button>
+          )}
+          {kanPurre && kanSkrive(rolle) && (
+            <button
+              onClick={() =>
+                confirm(
+                  nestePurring === "inkassovarsel"
+                    ? "Sende inkassovarsel? Kunden får 14 dager før kravet kan sendes til inkasso."
+                    : "Sende betalingspåminnelse med 14 dagers ny frist?",
+                ) && handling(() => api("POST", `/org/${org!.id}/fakturaer/${f.id}/purring`, { type: nestePurring }))
+              }
+            >
+              {nestePurring === "inkassovarsel" ? "Send inkassovarsel" : "Send påminnelse"}
+            </button>
           )}
           {f.type === "faktura" && ["utstedt", "betalt"].includes(f.status) && kanBokfore(rolle) && (
             <button onClick={() => settDialog("betaling")}>Registrer betaling</button>
@@ -531,7 +548,13 @@ export function FakturaVisning() {
         )}
       </div>
 
-      {(f.betalinger?.length > 0 || f.kreditnotaer?.length > 0) && (
+      {forfalt && sistePurring && sistePurring.ny_frist >= iDag() && (
+        <div className="melding info">
+          {sistePurring.type === "inkassovarsel" ? "Inkassovarsel" : "Påminnelse"} sendt {dato(sistePurring.sendt_at ?? sistePurring.opprettet)}. Ny frist{" "}
+          {dato(sistePurring.ny_frist)}.
+        </div>
+      )}
+      {(f.betalinger?.length > 0 || f.kreditnotaer?.length > 0 || f.purringer?.length > 0) && (
         <div className="kort">
           <h2 style={{ marginTop: 0 }}>Historikk</h2>
           <table>
@@ -541,6 +564,17 @@ export function FakturaVisning() {
                   <td>{dato(b.betalt_dato)}</td>
                   <td>{b.type === "refusjon" ? "Refusjon" : "Betaling"}{b.notat ? ` – ${b.notat}` : ""}</td>
                   <td className="tall">{kr(b.belop)}</td>
+                </tr>
+              ))}
+              {f.purringer.map((p: any) => (
+                <tr key={p.id}>
+                  <td>{dato(p.sendt_at ?? p.opprettet)}</td>
+                  <td>
+                    {p.type === "inkassovarsel" ? "Inkassovarsel" : "Betalingspåminnelse"}
+                    {p.automatisk ? " (automatisk)" : ""} – frist {dato(p.ny_frist)}
+                    {!p.sendt_at && <span className="dempet"> · sendes …</span>}
+                  </td>
+                  <td className="tall">{p.gebyr > 0 ? `gebyr ${kr(p.gebyr)}` : ""}</td>
                 </tr>
               ))}
               {f.kreditnotaer.map((k: any) => (

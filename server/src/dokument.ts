@@ -110,3 +110,41 @@ export function fakturaEpost(f: any) {
     .join("")}<p style="margin-top:24px;font-size:12px;color:#888">Sendt med HI4 Faktura</p></div>`;
   return { emne, tekst, html };
 }
+
+export function purringEpost(f: any, p: any) {
+  const s = f.selger;
+  const inkasso = p.type === "inkassovarsel";
+  const totalt = Number(p.utestaende) + Number(p.gebyr);
+  const emne = inkasso ? `Inkassovarsel – faktura ${f.fakturanummer} fra ${s.navn}` : `Påminnelse – faktura ${f.fakturanummer} fra ${s.navn}`;
+  const linjer = [
+    `Hei ${f.kunde?.navn ?? ""},`,
+    "",
+    inkasso
+      ? `Vi har fortsatt ikke mottatt betaling for faktura ${f.fakturanummer}, som forfalt ${dato(f.forfallsdato)}, selv om vi har sendt betalingspåminnelse.`
+      : `Vi kan ikke se å ha mottatt betaling for faktura ${f.fakturanummer}, som forfalt ${dato(f.forfallsdato)}. Fakturaen er vedlagt.`,
+    "",
+    `Utestående: ${kr(Number(p.utestaende))} kr`,
+    ...(Number(p.gebyr) > 0 ? [`Purregebyr: ${kr(Number(p.gebyr))} kr`, `Å betale: ${kr(totalt)} kr`] : []),
+    `Ny betalingsfrist: ${dato(p.ny_frist)}`,
+    "",
+    `Kontonummer: ${kontonr(s.kontonr)}`,
+    f.kid ? `KID: ${f.kid}` : `Merk betalingen med fakturanummer ${f.fakturanummer}.`,
+    "",
+    ...(inkasso
+      ? [
+          `Dette er et inkassovarsel. Er beløpet ikke betalt innen ${dato(p.ny_frist)}, kan kravet bli sendt til inkasso. Det medfører ekstra kostnader for deg.`,
+          "Har du innsigelser mot kravet, må du gi beskjed før fristen ved å svare på denne e-posten.",
+          "",
+        ]
+      : ["Har du allerede betalt, kan du se bort fra denne påminnelsen.", ""]),
+    `Spørsmål kan sendes til ${s.epost ?? s.navn} ved å svare på denne e-posten.`,
+    "",
+    "Med vennlig hilsen",
+    s.navn,
+  ];
+  const tekst = linjer.join("\n");
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">${linjer
+    .map((l) => (l ? `<p style="margin:0">${esc(l)}</p>` : "<br>"))
+    .join("")}<p style="margin-top:24px;font-size:12px;color:#888">Sendt med HI4 Faktura</p></div>`;
+  return { emne, tekst, html };
+}

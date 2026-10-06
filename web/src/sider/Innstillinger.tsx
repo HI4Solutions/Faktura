@@ -44,7 +44,7 @@ function Organisasjon() {
   const [lagret, settLagret] = useState(false);
 
   useEffect(() => {
-    if (data) settO({ ...data, standard_gebyr: String(data.standard_gebyr).replace(".", ",") });
+    if (data) settO({ ...data, standard_gebyr: String(data.standard_gebyr).replace(".", ","), purregebyr: String(data.purregebyr ?? 0).replace(".", ",") });
   }, [data]);
   if (!o) return <Laster />;
 
@@ -68,6 +68,9 @@ function Organisasjon() {
       standard_gebyr: tall(String(o.standard_gebyr)),
       standard_dager_foer_forfall: Number(o.standard_dager_foer_forfall),
       farge: o.farge || null,
+      purring_auto: o.purring_auto,
+      purring_dager: Number(o.purring_dager),
+      purregebyr: tall(String(o.purregebyr ?? 0)),
     };
     if (data.mva_registrert && !o.mva_registrert && !confirm("Fakturere uten mva fremover? Alle produkter, utkast og gjentakende fakturaer settes til 0 % mva.")) return;
     if (o.verifisering === "ny") kropp.orgnr = o.orgnr ? o.orgnr.replace(/\s/g, "") : null;
@@ -153,6 +156,24 @@ function Organisasjon() {
       <label>
         <input type="checkbox" {...avkryss("bruk_kid")} /> Bruk KID (krever KID-avtale med banken)
       </label>
+      <h2>Purring</h2>
+      <label>
+        <input type="checkbox" {...avkryss("purring_auto")} /> Send betalingspåminnelse automatisk
+      </label>
+      <div className="rad">
+        <label>
+          Dager etter forfall
+          <input type="number" min={0} max={60} {...felt("purring_dager")} />
+        </label>
+        <label>
+          Purregebyr (kr)
+          <input inputMode="decimal" {...felt("purregebyr")} />
+        </label>
+      </div>
+      <p className="liten dempet">
+        Påminnelsen gir 14 dagers ny frist. Purregebyret kreves én gang per faktura og kan ikke være høyere enn grensen i
+        inkassoforskriften (en tidel av inkassosatsen). Inkassovarsel sendes manuelt fra fakturaen når fristen er ute.
+      </p>
       <label style={{ maxWidth: 200 }}>
         Farge på fakturaen
         <input type="color" value={o.farge || "#1f3a73"} onChange={(e) => settO({ ...o, farge: e.target.value })} />
