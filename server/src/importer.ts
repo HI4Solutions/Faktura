@@ -38,7 +38,7 @@ function feilmelding(e: z.ZodError): string {
   const i = e.issues[0];
   const felt = String(i?.path[0] ?? "");
   if (felt === "navn") return "Mangler navn";
-  if (felt === "enhetspris") return "Mangler pris, eller prisen er ikke et tall";
+  if (felt === "enhetspris") return "Prisen er ikke et tall";
   return `Ugyldig ${FELT[felt] ?? felt}`;
 }
 

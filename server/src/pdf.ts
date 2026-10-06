@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type PDFImage } from "pdf-lib";
-import { dato, kontonr, kr, linjebelop, orgnr, summer, type Linje } from "./regler.js";
+import { dato, kontonr, kr, linjebelop, linjerabatt, orgnr, summer, type Linje } from "./regler.js";
 
 // Data som trengs for å tegne en faktura. For utstedte fakturaer kommer selger og
 // kunde fra kopiene på fakturaen; for utkast fra organisasjonen og kunden nå.
@@ -38,6 +38,7 @@ export interface PdfFaktura {
     poststed?: string | null;
   };
   linjer: Linje[];
+  kommentar?: string | null; // notat til kunden
   logo?: { bytes: Uint8Array; type: "png" | "jpg" } | null;
 }
 
@@ -51,8 +52,30 @@ function farge(hex: string | null | undefined) {
   return rgb(parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255);
 }
 
+// Standardfontene har bare Windows-1252-tegn. Andre tegn byttes ut eller tas bort, så en
+// emoji eller en pil i en tekst ikke stopper PDF-en.
+const ERSTATT: Record<string, string> = { "→": "->", "←": "<-", "⇒": "=>", "≥": ">=", "≤": "<=", "≠": "!=", "−": "-", "✓": "v", "✔": "v", "\u202f": " ", "\u2009": " " };
+const tegnsett = new WeakMap<PDFFont, Set<number>>();
+export function rensTekst(tekst: string, font: PDFFont): string {
+  let lov = tegnsett.get(font);
+  if (!lov) tegnsett.set(font, (lov = new Set(font.getCharacterSet())));
+  let ut = "";
+  for (const c of tekst) {
+    if (c === "\n" || lov.has(c.codePointAt(0)!)) ut += c;
+    else if (ERSTATT[c]) ut += ERSTATT[c];
+    else {
+      // Bokstaver med aksenter uten egen kode (ł, ő …): bruk bokstaven uten aksent.
+      const enkel = c.normalize("NFD").replace(/\p{M}/gu, "");
+      if (enkel && [...enkel].every((x) => lov!.has(x.codePointAt(0)!))) ut += enkel;
+      else if (!/\p{Extended_Pictographic}|\p{M}|\p{Cf}/u.test(c)) ut += "?";
+    }
+  }
+  return ut;
+}
+
 // Bryter tekst så den får plass i en gitt bredde.
 function bryt(tekst: string, font: PDFFont, storrelse: number, bredde: number): string[] {
+  tekst = rensTekst(tekst, font);
   const linjer: string[] = [];
   for (const avsnitt of tekst.split("\n")) {
     let linje = "";
@@ -94,22 +117,28 @@ export async function lagPdf(f: PdfFaktura): Promise<Uint8Array> {
   let y = 0;
 
   const tekst = (t: string, x: number, yy: number, opts: { str?: number; f?: PDFFont; c?: ReturnType<typeof rgb> } = {}) =>
-    side.drawText(t, { x, y: yy, size: opts.str ?? 9, font: opts.f ?? font, color: opts.c ?? rgb(0, 0, 0) });
+    side.drawText(rensTekst(t, opts.f ?? font), { x, y: yy, size: opts.str ?? 9, font: opts.f ?? font, color: opts.c ?? rgb(0, 0, 0) });
   const hoyre = (t: string, xh: number, yy: number, opts: { str?: number; f?: PDFFont } = {}) => {
-    const w = (opts.f ?? font).widthOfTextAtSize(t, opts.str ?? 9);
+    const w = (opts.f ?? font).widthOfTextAtSize(rensTekst(t, opts.f ?? font), opts.str ?? 9);
     tekst(t, xh - w, yy, opts);
   };
 
-  const kol = { beskr: MARG, antall: 330, pris: 410, mva: 455, belop: A4[0] - MARG };
+  // Tallkolonnene står etter høyre kant. Med rabatt på en linje får rabatten egen
+  // kolonne, og beskrivelsen blir smalere.
+  const harRabatt = f.linjer.some((l) => l.rabatt_prosent != null || l.rabatt_belop != null);
+  const kol = harRabatt
+    ? { beskr: MARG, antall: 315, pris: 380, rabatt: 435, mva: 480, belop: A4[0] - MARG }
+    : { beskr: MARG, antall: 360, pris: 440, rabatt: 0, mva: 480, belop: A4[0] - MARG };
   // Selgere uten mva får ingen mva-kolonne (med mindre en linje faktisk har mva, f.eks. på en kreditnota).
   const visMva = f.selger.mva_registrert !== false || f.linjer.some((l) => l.mva_sats !== 0);
 
   const linjeHode = () => {
     side.drawRectangle({ x: MARG - 4, y: y - 4, width: A4[0] - 2 * MARG + 8, height: 16, color: rgb(0.95, 0.95, 0.95) });
     tekst("Beskrivelse", kol.beskr, y, { f: fet });
-    hoyre("Antall", kol.antall + 30, y, { f: fet });
-    hoyre("Pris", kol.pris + 30, y, { f: fet });
-    if (visMva) hoyre("Mva", kol.mva + 25, y, { f: fet });
+    hoyre("Antall", kol.antall, y, { f: fet });
+    hoyre("Pris", kol.pris, y, { f: fet });
+    if (harRabatt) hoyre("Rabatt", kol.rabatt, y, { f: fet });
+    if (visMva) hoyre("Mva", kol.mva, y, { f: fet });
     hoyre("Beløp", kol.belop, y, { f: fet });
     y -= 20;
   };
@@ -184,33 +213,49 @@ export async function lagPdf(f: PdfFaktura): Promise<Uint8Array> {
   }
   y -= 15;
 
+  // Notat til kunden, med en strek i aksentfargen foran.
+  const kommentar = f.kommentar?.trim() ? bryt(f.kommentar.trim(), font, 9, A4[0] - 2 * MARG - 12) : [];
+  if (kommentar.length) {
+    const h = kommentar.length * 11;
+    side.drawRectangle({ x: MARG, y: y - h + 8, width: 2, height: h, color: aksent });
+    kommentar.forEach((t, i) => tekst(t, MARG + 10, y - i * 11));
+    y -= h + 14;
+  }
+
   // Linjer, med ny side når det ikke er plass.
   linjeHode();
   for (const l of f.linjer) {
-    const beskr = bryt(l.beskrivelse, font, 9, kol.antall - kol.beskr - 20);
+    const beskr = bryt(l.beskrivelse, font, 9, kol.antall - kol.beskr - 50);
     const hoyde = beskr.length * 11 + 4;
     if (y - hoyde < BUNN) nySide(false);
     const b = linjebelop(l);
     beskr.forEach((t, i) => tekst(t, kol.beskr, y - i * 11));
     const antall = Number.isInteger(l.antall) ? String(l.antall) : kr(l.antall);
-    hoyre(`${antall}${l.enhet && l.enhet !== "stk" ? " " + l.enhet : ""}`, kol.antall + 30, y);
-    hoyre(kr(l.enhetspris), kol.pris + 30, y);
-    if (visMva) hoyre(`${l.mva_sats.toString().replace(".", ",")} %`, kol.mva + 25, y);
+    hoyre(`${antall}${l.enhet && l.enhet !== "stk" ? " " + l.enhet : ""}`, kol.antall, y);
+    hoyre(kr(l.enhetspris), kol.pris, y);
+    if (l.rabatt_prosent != null) hoyre(`${String(l.rabatt_prosent).replace(".", ",")} %`, kol.rabatt, y);
+    else if (l.rabatt_belop != null) hoyre(kr(l.rabatt_belop), kol.rabatt, y);
+    if (visMva) hoyre(`${l.mva_sats.toString().replace(".", ",")} %`, kol.mva, y);
     hoyre(kr(b.eks), kol.belop, y);
     y -= hoyde;
   }
 
   // Summer og betalingsinformasjon må stå samlet.
   const sum = summer(f.linjer);
-  if (y - 150 < BUNN) nySide(false);
+  const rabatt = f.linjer.reduce((s, l) => s + linjerabatt(l), 0);
+  if (y - (harRabatt ? 176 : 150) < BUNN) nySide(false);
   y -= 8;
-  side.drawLine({ start: { x: 330, y: y + 6 }, end: { x: A4[0] - MARG, y: y + 6 }, thickness: 0.5, color: gra });
+  side.drawLine({ start: { x: 330, y: y + 13 }, end: { x: A4[0] - MARG, y: y + 13 }, thickness: 0.5, color: gra });
   const sumLinje = (navn: string, verdi: string, uthev = false) => {
     tekst(navn, 330, y, { f: uthev ? fet : font, str: uthev ? 11 : 9 });
     hoyre(verdi, kol.belop, y, { f: uthev ? fet : font, str: uthev ? 11 : 9 });
     y -= uthev ? 18 : 13;
   };
   const utenMva = !visMva;
+  if (harRabatt) {
+    sumLinje("Sum før rabatt", kr(sum.eks + rabatt));
+    sumLinje("Rabatt", kr(-rabatt));
+  }
   if (utenMva) {
     sumLinje("Sum", kr(sum.eks));
   } else {

@@ -7,13 +7,23 @@ export interface Linje {
   enhet?: string;
   enhetspris: number;
   mva_sats: number;
+  rabatt_prosent?: number | null; // av linjebeløpet
+  rabatt_belop?: number | null; // kroner for hele linjen
 }
 
 // Runder halv opp til øre som Postgres' round(numeric, 2), også for f.eks. 1.005.
 const rund = (n: number) => Math.sign(n) * Number(Math.round(Number(`${Math.abs(n)}e2`)) + "e-2");
 
+// Rabatten i kroner på linjen (som faktura.linje_netto i databasen).
+export function linjerabatt(l: Linje) {
+  if (l.rabatt_belop != null) return Number(l.rabatt_belop);
+  if (l.rabatt_prosent != null) return rund((l.antall * l.enhetspris * Number(l.rabatt_prosent)) / 100);
+  return 0;
+}
+
 export function linjebelop(l: Linje) {
-  return { eks: rund(l.antall * l.enhetspris), mva: rund((l.antall * l.enhetspris * l.mva_sats) / 100) };
+  const netto = l.antall * l.enhetspris - linjerabatt(l);
+  return { eks: rund(netto), mva: rund((netto * l.mva_sats) / 100) };
 }
 
 export function summer(linjer: Linje[]) {

@@ -59,7 +59,10 @@ export async function pdfData(db: Db, f: any): Promise<PdfFaktura> {
       enhet: l.enhet,
       enhetspris: l.enhetspris,
       mva_sats: l.mva_sats,
+      rabatt_prosent: l.rabatt_prosent,
+      rabatt_belop: l.rabatt_belop,
     })),
+    kommentar: f.kommentar,
     logo: await hentLogo(selger?.logo_sti),
   };
 }
@@ -98,12 +101,15 @@ export function fakturaEpost(f: any) {
   const s = f.selger;
   const navn = f.kunde?.navn ?? "";
   const emne = `${kreditnota ? "Kreditnota" : "Faktura"} ${f.fakturanummer} fra ${s.navn}`;
+  // Notatet på fakturaen står også i e-posten.
+  const notat: string[] = f.kommentar?.trim() ? ["", ...f.kommentar.trim().split(/\r?\n/)] : [];
   const linjer = kreditnota
-    ? [`Hei ${navn},`, "", `Vedlagt er kreditnota ${f.fakturanummer} på ${kr(-f.sum_inkl_mva)} kr.`]
+    ? [`Hei ${navn},`, "", `Vedlagt er kreditnota ${f.fakturanummer} på ${kr(-f.sum_inkl_mva)} kr.`, ...notat]
     : [
         `Hei ${navn},`,
         "",
         `Vedlagt er faktura ${f.fakturanummer} på ${kr(f.sum_inkl_mva)} kr med forfall ${dato(f.forfallsdato)}.`,
+        ...notat,
         "",
         `Kontonummer: ${kontonr(s.kontonr)}`,
         f.kid ? `KID: ${f.kid}` : `Merk betalingen med fakturanummer ${f.fakturanummer}.`,

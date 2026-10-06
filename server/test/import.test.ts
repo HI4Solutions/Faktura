@@ -78,7 +78,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Import av kunder og produkter", () =
     expect((await kall("GET", `/api/org/${org}/kunder/${k.id}`)).data.notat).toBe("Viktig kunde\nKundenr. i tidligere system: 7");
   });
 
-  it("produkter: like varenummer eller navn finnes fra før, pris er påkrevd", async () => {
+  it("produkter: like varenummer eller navn finnes fra før, uten pris får variabel pris", async () => {
     await kall("POST", `/api/org/${org}/produkter`, { varenummer: "100", navn: "Husleie", enhetspris: 14500, mva_sats: 0, enhet: "mnd" });
     await kall("POST", `/api/org/${org}/produkter`, { navn: "Parkering", enhetspris: 950 });
     const r = await kall("POST", `/api/org/${org}/produkter/importer`, {
@@ -87,15 +87,17 @@ describe.skipIf(!process.env.DATABASE_URL)("Import av kunder og produkter", () =
         { navn: "parkering", enhetspris: 900 },
         { varenummer: "300", navn: "Bod", enhetspris: 300, mva_sats: 25, enhet: "mnd" },
         { navn: "Uten pris" },
+        { navn: "Rar pris", enhetspris: "kr 12,-" },
       ],
     });
-    expect(r.data.antall).toEqual({ ny: 1, oppdater: 0, hopp: 2, feil: 1 });
-    expect(r.data.rader[3]).toEqual({ nr: 4, status: "feil", grunn: "Mangler pris, eller prisen er ikke et tall" });
+    expect(r.data.antall).toEqual({ ny: 2, oppdater: 0, hopp: 2, feil: 1 });
+    expect(r.data.rader[4]).toEqual({ nr: 5, status: "feil", grunn: "Prisen er ikke et tall" });
     const produkter = (await kall("GET", `/api/org/${org}/produkter`)).data as any[];
-    expect(produkter.map((p) => [p.varenummer, p.navn, Number(p.enhetspris)]).sort()).toEqual([
+    expect(produkter.map((p) => [p.varenummer, p.navn, p.enhetspris === null ? null : Number(p.enhetspris)]).sort()).toEqual([
       ["100", "Husleie", 14500],
       ["300", "Bod", 300],
       [null, "Parkering", 950],
+      [null, "Uten pris", null],
     ].sort());
   });
 

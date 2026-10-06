@@ -4,14 +4,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
-import { Dialog, EpostlisteFelt, Feil, Laster, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
+import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
 import { iDag, kr, leggTilDager, summer } from "../format";
 import { IkonPluss } from "../ikoner";
-import { gebyrLinjer, LinjeTabell, medProdukt, tilTallLinjer, tomLinje, erTom, type LinjeUtkast } from "../linjer";
+import { gebyrLinjer, harRabatt, LinjeTabell, linjefeil, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tomLinje, erTom, type LinjeUtkast } from "../linjer";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
-import { AvsenderKonto } from "./AvsenderKonto";
+import { AvsenderKonto, fasteValg } from "./AvsenderKonto";
 
 interface Kort {
   nokkel: number;
@@ -19,10 +19,11 @@ interface Kort {
   linjer: LinjeUtkast[];
   deres_referanse: string;
   kopi: string;
+  rabatt: boolean; // rabattkolonnen er slått på
 }
 
 let teller = 0;
-const nyttKort = (kunde_id = ""): Kort => ({ nokkel: ++teller, kunde_id, linjer: [tomLinje()], deres_referanse: "", kopi: "" });
+const nyttKort = (kunde_id = ""): Kort => ({ nokkel: ++teller, kunde_id, linjer: [tomLinje()], deres_referanse: "", kopi: "", rabatt: false });
 const erTomtKort = (k: Kort) => !k.kunde_id && k.linjer.every(erTom);
 
 type Valg =
@@ -39,7 +40,7 @@ export function FlereFakturaer() {
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const kunder = useData(() => hent<any[]>(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
   const produkter = useData(() => hent<any[]>(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
-  const [felles, settFelles] = useState<any>({ fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", var_referanse: "", konto_id: null, avsender: null });
+  const [felles, settFelles] = useState<any>({ fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", var_referanse: "", kommentar: "", konto_id: null, avsender: null });
   const [gebyr, settGebyr] = useState(false);
   const [kort, settKort] = useState<Kort[]>(() => [nyttKort()]);
   const [valg, settValg] = useState<Valg>(null);
@@ -69,14 +70,19 @@ export function FlereFakturaer() {
     const linjer = tilTallLinjer(k.linjer, utenMva);
     const sum = summer([...linjer, ...gebyrLinjer(gebyr, orgData.data)]);
     const kunde = kundeMap.get(k.kunde_id);
+    const feilLinje = linjefeil(k.linjer);
     const mangler = !k.kunde_id
       ? "velg kunde"
-      : linjer.length === 0
-        ? "legg inn minst én linje med beskrivelse og pris"
-        : ugyldigeEposter(k.kopi).length
-          ? "ugyldig e-postadresse for kopi"
-          : null;
-    return { k, nr: i + 1, linjer, sum, kunde, mangler };
+      : feilLinje
+        ? feilLinje.replace(/\.$/, "").replace(/^./, (c) => c.toLowerCase())
+        : linjer.length === 0
+          ? "legg inn minst én linje med beskrivelse og pris"
+          : ugyldigeEposter(k.kopi).length
+            ? "ugyldig e-postadresse for kopi"
+            : null;
+    // Produkter med fast avsender eller konto bestemmer dem for fakturaen.
+    const fast = fasteValg(k.linjer, produkter.data);
+    return { k, nr: i + 1, linjer, sum, kunde, mangler, fast };
   });
   const total = beregnet.reduce((s, b) => s + b.sum.inkl, 0);
   const utenEpost = beregnet.filter((b) => b.kunde && !b.kunde.epost);
@@ -97,11 +103,19 @@ export function FlereFakturaer() {
       periode_fra: felles.periode_fra || null,
       periode_til: felles.periode_til || null,
       var_referanse: felles.var_referanse || null,
+      kommentar: felles.kommentar.trim() || null,
       konto_id: felles.konto_id ?? null,
       avsender: felles.avsender ?? null,
       gebyr,
       utsted: send,
-      fakturaer: beregnet.map((b) => ({ kunde_id: b.k.kunde_id, deres_referanse: b.k.deres_referanse || null, kopi_til: tilEpostliste(b.k.kopi), linjer: b.linjer })),
+      fakturaer: beregnet.map((b) => ({
+        kunde_id: b.k.kunde_id,
+        deres_referanse: b.k.deres_referanse || null,
+        kopi_til: tilEpostliste(b.k.kopi),
+        ...(b.fast.avsender ? { avsender: b.fast.avsender } : {}),
+        ...(b.fast.konto_id ? { konto_id: b.fast.konto_id } : {}),
+        linjer: b.linjer,
+      })),
     };
     const r = await h.kjor(() => api("POST", `/org/${org!.id}/fakturaer/flere`, kropp));
     if (r) {
@@ -203,6 +217,7 @@ export function FlereFakturaer() {
           </label>
         </div>
         <AvsenderKonto org={orgData.data} verdi={felles} endre={(v) => settFelles({ ...felles, ...v })} />
+        <NotatFelt etikett="Notat på fakturaene" verdi={felles.kommentar} endre={(v) => settFelles({ ...felles, kommentar: v })} />
         {orgData.data.standard_gebyr > 0 && (
           <label>
             <input type="checkbox" checked={gebyr} onChange={(e) => settGebyr(e.target.checked)} /> Fakturagebyr på hver faktura ({kr(orgData.data.standard_gebyr)} eks. mva)
@@ -222,7 +237,7 @@ export function FlereFakturaer() {
         </button>
       </div>
 
-      {beregnet.map(({ k, nr, sum, kunde }) => (
+      {beregnet.map(({ k, nr, sum, kunde, fast }) => (
         <div className="kort flere-kort" key={k.nokkel}>
           <div className="flere-topp">
             <span className="flere-nr" aria-hidden="true">
@@ -247,9 +262,15 @@ export function FlereFakturaer() {
               endre={(l) => endreKort(k.nokkel, { linjer: l })}
               produkter={produkter.data!}
               utenMva={utenMva}
+              visRabatt={k.rabatt || harRabatt(k.linjer)}
               nyttProdukt={(i, navn) => settValg({ type: "nytt-produkt", kort: k.nokkel, linje: i, navn })}
             />
           </div>
+          {(fast.avsender || fast.konto_id) && (
+            <p className="flere-info">
+              {fast.ulike ? "Produktene har ulik fast avsender eller konto; det første produktets valg brukes." : "Fast avsender eller konto fra produktet brukes på denne fakturaen."}
+            </p>
+          )}
           <div className="flere-bunn">
             <div className="knapper">
               <button type="button" onClick={() => endreKort(k.nokkel, { linjer: [...k.linjer, tomLinje()] })}>
@@ -258,6 +279,12 @@ export function FlereFakturaer() {
               <button type="button" onClick={() => settValg({ type: "nytt-produkt", kort: k.nokkel, linje: "ny" })}>
                 + Nytt produkt
               </button>
+              <RabattKnapp
+                vis={k.rabatt || harRabatt(k.linjer)}
+                veksle={() =>
+                  k.rabatt || harRabatt(k.linjer) ? endreKort(k.nokkel, { rabatt: false, linjer: k.linjer.map((l) => ({ ...l, rabatt: "" })) }) : endreKort(k.nokkel, { rabatt: true })
+                }
+              />
             </div>
             <span className="flere-sum">
               <span className="dempet liten">{utenMva ? "Å betale" : "Inkl. mva"}</span> {kr(sum.inkl)}
@@ -413,7 +440,10 @@ function VelgKunder({ kunder, brukte, legg }: { kunder: any[]; brukte: Set<strin
 function ProduktPaAlle({ produkter, antallKort, bruk, nytt }: { produkter: any[]; antallKort: number; bruk: (p: any, antall: string) => void; nytt: (antall: string, navn: string) => void }) {
   const [id, settId] = useState<string | null>(null);
   const [antall, settAntall] = useState("1");
+  const [pris, settPris] = useState("");
   const valg = useMemo(() => produktValg(produkter), [produkter]);
+  const p = id ? produkter.find((x) => x.id === id) : null;
+  const variabel = Boolean(p && p.enhetspris == null);
   return (
     <>
       <div className="rad">
@@ -425,12 +455,19 @@ function ProduktPaAlle({ produkter, antallKort, bruk, nytt }: { produkter: any[]
           Antall
           <input inputMode="decimal" value={antall} onChange={(e) => settAntall(e.target.value)} />
         </label>
+        {variabel && (
+          <label>
+            Pris eks. mva
+            <input inputMode="decimal" value={pris} placeholder="Fyll inn" onChange={(e) => settPris(e.target.value)} />
+          </label>
+        )}
       </div>
+      {variabel && <p className="liten dempet">Produktet har ikke fast pris. Fyll inn prisen her for alle fakturaene, eller på hver av dem etterpå.</p>}
       <p className="liten dempet">
         Legges på alle {antallKort} fakturaene, på første tomme linje eller som en ny linje. Pris og antall kan endres på hver faktura etterpå.
       </p>
       <div className="knapper">
-        <button type="button" className="primar" disabled={!id} onClick={() => bruk(produkter.find((p) => p.id === id), antall)}>
+        <button type="button" className="primar" disabled={!p} onClick={() => bruk(variabel && pris.trim() ? { ...p, enhetspris: tall(pris) } : p, antall)}>
           Legg til på alle
         </button>
       </div>

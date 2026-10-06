@@ -101,9 +101,12 @@ const produktSkjema = z.object({
   navn: tekstS(200).min(1),
   beskrivelse: valgfriTekst(2000),
   enhet: tekstS(20).optional(),
-  enhetspris: z.number(),
+  enhetspris: z.number().nullish(), // null: variabel pris, fylles inn på fakturaen
   mva_sats: z.number().min(0).max(100).optional(),
   aktiv: z.boolean().optional(),
+  // Fast avsender og konto: velges på fakturaen når produktet brukes (null: ikke fast)
+  avsender: z.enum(["firma", "innehaver"]).nullish(),
+  konto_id: uuid.nullish(),
   // Indeksregulering (KPI)
   indeks_aktiv: z.boolean().optional(),
   indeks_maaned: z.number().int().min(1).max(12).nullish(),
@@ -114,14 +117,24 @@ const produktSkjema = z.object({
   indeks_varsle: z.boolean().optional(),
 });
 
-const linjeSkjema = z.object({
-  produkt_id: uuid.nullish(),
-  beskrivelse: tekstS(1000).min(1),
-  antall: z.number().refine((n) => n !== 0, "kan ikke være 0"),
-  enhet: tekstS(20).optional(),
-  enhetspris: z.number(),
-  mva_sats: z.number().min(0).max(100).optional(),
-});
+const linjeSkjema = z
+  .object({
+    produkt_id: uuid.nullish(),
+    beskrivelse: tekstS(1000).min(1),
+    antall: z.number().refine((n) => n !== 0, "kan ikke være 0"),
+    enhet: tekstS(20).optional(),
+    enhetspris: z.number(),
+    mva_sats: z.number().min(0).max(100).optional(),
+    // Rabatt i prosent av linjebeløpet, eller i kroner for hele linjen (ikke begge).
+    rabatt_prosent: z.number().gt(0, "Rabatten må være mer enn 0 %").max(100, "Rabatten kan ikke være mer enn 100 %").nullish(),
+    rabatt_belop: z.number().gt(0, "Rabatten må være mer enn 0 kr").nullish(),
+  })
+  .superRefine((l, ctx) => {
+    if (l.rabatt_prosent != null && l.rabatt_belop != null) ctx.addIssue({ code: "custom", path: ["rabatt_belop"], message: "Velg rabatt i prosent eller i kroner, ikke begge" });
+    const brutto = Math.round(l.antall * l.enhetspris * 100) / 100;
+    if (l.rabatt_belop != null && l.rabatt_belop > brutto)
+      ctx.addIssue({ code: "custom", path: ["rabatt_belop"], message: `Rabatten på «${l.beskrivelse}» er større enn beløpet på linjen` });
+  });
 
 const fakturaSkjema = z.object({
   kunde_id: uuid,
@@ -131,7 +144,8 @@ const fakturaSkjema = z.object({
   periode_til: datoS.nullish(),
   deres_referanse: valgfriTekst(100),
   var_referanse: valgfriTekst(100),
-  notat: valgfriTekst(2000),
+  notat: valgfriTekst(2000), // internt, vises ikke på fakturaen
+  kommentar: valgfriTekst(1000), // står på fakturaen
   planlagt_sending: datoS.nullish(),
   konto_id: uuid.nullish(),
   avsender: z.enum(["firma", "innehaver"]).nullish(),
@@ -151,9 +165,11 @@ async function skrivLinjer(db: Db, orgId: string, fakturaId: string, linjer: z.i
   for (const l of alleLinjer) {
     rekke += 1;
     await db.query(
-      `insert into faktura.faktura_linjer (org_id, faktura_id, rekke, produkt_id, beskrivelse, antall, enhet, enhetspris, mva_sats)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [orgId, fakturaId, rekke, l.produkt_id ?? null, l.beskrivelse, l.antall, l.enhet ?? "stk", l.enhetspris, l.mva_sats ?? 25],
+      `insert into faktura.faktura_linjer (org_id, faktura_id, rekke, produkt_id, beskrivelse, antall, enhet, enhetspris, mva_sats,
+                                          rabatt_prosent, rabatt_belop)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [orgId, fakturaId, rekke, l.produkt_id ?? null, l.beskrivelse, l.antall, l.enhet ?? "stk", l.enhetspris, l.mva_sats ?? 25,
+       l.rabatt_prosent ?? null, l.rabatt_belop ?? null],
     );
   }
 }
@@ -527,7 +543,8 @@ export function lagApi() {
           db,
           `select f.id, f.fakturanummer, f.type, f.status, f.kunde_id, coalesce(f.kunde->>'navn', k.navn) as kunde_navn,
                   f.fakturadato, f.forfallsdato, f.betalt_belop, f.kreditert_belop, f.refusjon_belop,
-                  coalesce(f.sum_inkl_mva, (select sum(round(l.antall * l.enhetspris, 2) + round(l.antall * l.enhetspris * l.mva_sats / 100, 2))
+                  coalesce(f.sum_inkl_mva, (select sum(round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop), 2)
+                                                     + round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop) * l.mva_sats / 100, 2))
                                               from faktura.faktura_linjer l where l.faktura_id = f.id)) as sum_inkl_mva,
                   case when f.status = 'utkast' then (select count(*)::int from faktura.faktura_linjer l where l.faktura_id = f.id) end as antall_linjer,
                   case when f.status = 'utkast' then k.epost end as kunde_epost,
@@ -564,10 +581,10 @@ export function lagApi() {
       const f = await en(
         db,
         `insert into faktura.fakturaer (org_id, kunde_id, fakturadato, forfallsdato, periode_fra, periode_til,
-                                        deres_referanse, var_referanse, notat, planlagt_sending, konto_id, avsender, kopi_til, opprettet_av)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, faktura.bruker_id()) returning id`,
+                                        deres_referanse, var_referanse, notat, kommentar, planlagt_sending, konto_id, avsender, kopi_til, opprettet_av)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, faktura.bruker_id()) returning id`,
         [orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
-         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? []],
+         b.deres_referanse, b.var_referanse, b.notat, b.kommentar, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? []],
       );
       await skrivLinjer(db, orgId(c), f.id, b.linjer, b.gebyr ?? false);
       return hentFaktura(db, orgId(c), f.id);
@@ -582,10 +599,11 @@ export function lagApi() {
       const r = await db.query(
         `update faktura.fakturaer set kunde_id = $3, fakturadato = $4, forfallsdato = $5, periode_fra = $6, periode_til = $7,
                 deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11, konto_id = $12, avsender = $13,
-                kopi_til = coalesce($14, kopi_til)
+                kopi_til = coalesce($14, kopi_til), kommentar = $15
           where id = $1 and org_id = $2 and status = 'utkast'`,
         [id, orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
-         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? null],
+         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? null,
+         b.kommentar],
       );
       if (!r.rowCount) throw new ApiFeil(409, "Bare utkast kan endres");
       await skrivLinjer(db, orgId(c), id, b.linjer, b.gebyr ?? false);
@@ -704,7 +722,8 @@ export function lagApi() {
     alle(
       db,
       `select f.id, f.fakturanummer, f.status, f.kunde_id, coalesce(f.kunde->>'navn', k.navn) as kunde_navn, k.epost as kunde_epost,
-              coalesce(f.sum_inkl_mva, (select sum(round(l.antall * l.enhetspris, 2) + round(l.antall * l.enhetspris * l.mva_sats / 100, 2))
+              coalesce(f.sum_inkl_mva, (select sum(round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop), 2)
+                                                     + round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop) * l.mva_sats / 100, 2))
                                           from faktura.faktura_linjer l where l.faktura_id = f.id)) as sum_inkl_mva
          from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id
         where f.id = any($1::uuid[]) order by array_position($1::uuid[], f.id)`,
@@ -727,6 +746,7 @@ export function lagApi() {
     periode_fra: datoS.nullish(),
     periode_til: datoS.nullish(),
     var_referanse: valgfriTekst(100),
+    kommentar: valgfriTekst(1000),
     konto_id: uuid.nullish(),
     avsender: z.enum(["firma", "innehaver"]).nullish(),
     gebyr: z.boolean().optional(),
@@ -737,6 +757,10 @@ export function lagApi() {
           kunde_id: uuid,
           deres_referanse: valgfriTekst(100),
           kopi_til: epostliste(10).optional(),
+          // Overstyrer det felles valget for denne fakturaen (utelatt: felles).
+          avsender: z.enum(["firma", "innehaver"]).nullish(),
+          konto_id: uuid.nullish(),
+          kommentar: valgfriTekst(1000).optional(),
           linjer: z.array(linjeSkjema).min(1, "Fakturaen trenger minst én linje").max(100),
         }),
       )
@@ -759,10 +783,11 @@ export function lagApi() {
           const f = await en(
             db,
             `insert into faktura.fakturaer (org_id, kunde_id, fakturadato, forfallsdato, periode_fra, periode_til,
-                                            deres_referanse, var_referanse, konto_id, avsender, kopi_til, opprettet_av)
-             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, faktura.bruker_id()) returning id`,
+                                            deres_referanse, var_referanse, konto_id, avsender, kopi_til, kommentar, opprettet_av)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, faktura.bruker_id()) returning id`,
             [orgId(c), x.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
-             x.deres_referanse, b.var_referanse, b.konto_id ?? null, b.avsender ?? null, x.kopi_til ?? []],
+             x.deres_referanse, b.var_referanse, x.konto_id === undefined ? (b.konto_id ?? null) : x.konto_id,
+             x.avsender === undefined ? (b.avsender ?? null) : x.avsender, x.kopi_til ?? [], x.kommentar === undefined ? b.kommentar : x.kommentar],
           );
           await skrivLinjer(db, orgId(c), f.id, x.linjer, b.gebyr ?? false);
           if (b.utsted) await db.query("select faktura.utsted($1)", [f.id]);
@@ -929,6 +954,7 @@ export function lagApi() {
     slutt_dato: datoS.nullish(),
     aktiv: z.boolean().optional(),
     deres_referanse: valgfriTekst(100),
+    kommentar: valgfriTekst(1000),
     konto_id: uuid.nullish(),
     avsender: z.enum(["firma", "innehaver"]).nullish(),
     kopi_til: epostliste(10).optional(),
@@ -954,11 +980,11 @@ export function lagApi() {
         en(
           db,
           `insert into faktura.gjentakelser (org_id, kunde_id, linjer, intervall, forfall_dag, neste_forfall, send_dager_foer,
-                                            slutt_dato, aktiv, deres_referanse, konto_id, avsender, kopi_til, opprettet_av)
+                                            slutt_dato, aktiv, deres_referanse, konto_id, avsender, kopi_til, kommentar, opprettet_av)
            values ($1, $2, $3, $4, $5, $6, coalesce($7, (select standard_dager_foer_forfall from faktura.organisasjoner where id = $1)),
-                   $8, coalesce($9, true), $10, $11, $12, $13, faktura.bruker_id()) returning *`,
+                   $8, coalesce($9, true), $10, $11, $12, $13, $14, faktura.bruker_id()) returning *`,
           [orgId(c), b.kunde_id, JSON.stringify(b.linjer), b.intervall, b.forfall_dag, b.neste_forfall, b.send_dager_foer ?? null,
-           b.slutt_dato ?? null, b.aktiv ?? null, b.deres_referanse, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? []],
+           b.slutt_dato ?? null, b.aktiv ?? null, b.deres_referanse, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? [], b.kommentar],
         ),
       ),
       201,

@@ -5,6 +5,7 @@ import { api, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
 import { dato, kr, orgnr } from "../format";
+import { AvsenderKonto } from "./AvsenderKonto";
 
 export function Kunder() {
   const { org } = useKonto();
@@ -302,7 +303,7 @@ export function Produkter() {
             <button key={p.id} type="button" className="liste-rad" onClick={() => kanSkrive(org?.rolle) && settRedigerer(p)}>
               <span className="linje">
                 <span className="tittel">{p.navn}</span>
-                <span className="belop">{kr(p.enhetspris)}</span>
+                <span className="belop">{p.enhetspris == null ? <span className="dempet">Variabel</span> : kr(p.enhetspris)}</span>
               </span>
               <span className="linje">
                 <span className="under">
@@ -336,7 +337,7 @@ export function Produkter() {
                   <td>{p.varenummer}</td>
                   <td>{p.navn}</td>
                   <td>{p.enhet}</td>
-                  <td className="tall">{kr(p.enhetspris)}</td>
+                  <td className="tall">{p.enhetspris == null ? <span className="dempet">Variabel</span> : kr(p.enhetspris)}</td>
                   <td className="tall">{p.mva_sats} %</td>
                   <td>
                     {p.indeks_aktiv && <span className="merke merke-info" title="Indeksreguleres årlig etter KPI">KPI</span>}{" "}
@@ -373,7 +374,11 @@ export function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagre
   const { org } = useKonto();
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const utenMva = orgData.data && !orgData.data.mva_registrert;
-  const [p, settP] = useState<any>({ ...produkt, enhetspris: produkt?.enhetspris?.toString().replace(".", ",") ?? "" });
+  const [p, settP] = useState<any>({
+    ...produkt,
+    enhetspris: produkt?.enhetspris?.toString().replace(".", ",") ?? "",
+    variabel: Boolean(produkt?.id && produkt.enhetspris == null), // ingen fast pris
+  });
   const { opptatt, feil, kjor } = useHandling();
   const felt = (navn: string) => ({ value: p[navn] ?? "", onChange: (e: any) => settP({ ...p, [navn]: e.target.value }) });
 
@@ -384,10 +389,12 @@ export function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagre
       navn: p.navn,
       beskrivelse: p.beskrivelse || null,
       enhet: p.enhet || "stk",
-      enhetspris: tall(String(p.enhetspris)),
+      enhetspris: p.variabel ? null : tall(String(p.enhetspris)),
       mva_sats: utenMva ? 0 : Number(p.mva_sats),
       aktiv: p.aktiv !== false,
-      indeks_aktiv: Boolean(p.indeks_aktiv),
+      avsender: p.avsender ?? null,
+      konto_id: p.konto_id ?? null,
+      indeks_aktiv: !p.variabel && Boolean(p.indeks_aktiv),
       indeks_maaned: p.indeks_aktiv ? Number(p.indeks_maaned) : (p.indeks_maaned ? Number(p.indeks_maaned) : null),
       indeks_basis: p.indeks_basis ? String(p.indeks_basis).slice(0, 10) : null,
       indeks_andel: Number(String(p.indeks_andel ?? 100).replace(",", ".")),
@@ -422,7 +429,11 @@ export function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagre
       <div className="rad">
         <label>
           Pris eks. mva
-          <input required inputMode="decimal" {...felt("enhetspris")} />
+          {p.variabel ? (
+            <input disabled value="" placeholder="Variabel" aria-label="Pris eks. mva" />
+          ) : (
+            <input required inputMode="decimal" {...felt("enhetspris")} />
+          )}
         </label>
         {utenMva ? (
           <label>
@@ -442,10 +453,15 @@ export function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagre
         )}
       </div>
       <label>
+        <input type="checkbox" checked={Boolean(p.variabel)} onChange={(e) => settP({ ...p, variabel: e.target.checked })} />
+        Variabel pris (fylles inn når produktet brukes på en faktura)
+      </label>
+      <AvsenderKonto org={orgData.data} verdi={p} endre={(v) => settP({ ...p, ...v })} forProdukt />
+      <label>
         <input type="checkbox" checked={p.aktiv !== false} onChange={(e) => settP({ ...p, aktiv: e.target.checked })} />
         Aktiv
       </label>
-      <Indeksregulering p={p} settP={settP} />
+      {!p.variabel && <Indeksregulering p={p} settP={settP} />}
       <Feil melding={feil} />
       <div className="knapper">
         <button className="primar" disabled={opptatt}>

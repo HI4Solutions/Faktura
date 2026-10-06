@@ -89,7 +89,7 @@ export function Tom({ ikon, tittel, children }: { ikon?: ReactNode; tittel: stri
   );
 }
 
-export function Dialog({ apen, lukk, tittel, children }: { apen: boolean; lukk: () => void; tittel: string; children: ReactNode }) {
+export function Dialog({ apen, lukk, tittel, children, bred }: { apen: boolean; lukk: () => void; tittel: string; children: ReactNode; bred?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -98,7 +98,7 @@ export function Dialog({ apen, lukk, tittel, children }: { apen: boolean; lukk: 
     if (!apen && d.open) d.close();
   }, [apen]);
   return (
-    <dialog ref={ref} onClose={lukk} onCancel={lukk}>
+    <dialog ref={ref} onClose={lukk} onCancel={lukk} className={bred ? "bred" : undefined}>
       <div className="dialog-topp">
         <h2>{tittel}</h2>
         <button type="button" aria-label="Lukk" onClick={lukk}>

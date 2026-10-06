@@ -6,6 +6,8 @@
 // Mva-kategorier: S (25, 15, 12 % …), E (0 % hos mva-registrert selger: unntatt) og
 // O (selgeren er ikke mva-registrert).
 
+import { linjerabatt } from "./regler.js";
+
 export const CUSTOMIZATION_ID = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0";
 export const PROFIL_ID = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
 export const DOKUMENTTYPE = {
@@ -115,7 +117,9 @@ export function lagEhf(f: any, valg: EhfValg = {}): string {
   const belop = (navn: string, o: number) => el(navn, kroner(o), { currencyID: valuta });
 
   const linjer = (f.linjer as any[]).map((l, i) => {
-    const belopOre = fortegn * ore(l.belop_eks ?? Number(l.antall) * Number(l.enhetspris));
+    // Rabatt på linjen blir et fradrag på linjen (AllowanceCharge), og linjebeløpet er etter rabatt.
+    const rabattOre = fortegn * ore(linjerabatt({ ...l, antall: Number(l.antall), enhetspris: Number(l.enhetspris) }));
+    const belopOre = fortegn * ore(l.belop_eks ?? Number(l.antall) * Number(l.enhetspris)) - (l.belop_eks == null ? rabattOre : 0);
     const mvaOre = fortegn * ore(l.mva_belop ?? 0);
     let antall = fortegn * Number(l.antall);
     let pris = Number(l.enhetspris);
@@ -124,7 +128,7 @@ export function lagEhf(f: any, valg: EhfValg = {}): string {
       pris = -pris;
       antall = -antall;
     }
-    return { nr: i + 1, l, belopOre, mvaOre, antall, pris, k: kategori(s, Number(l.mva_sats ?? 0)) };
+    return { nr: i + 1, l, belopOre, rabattOre, mvaOre, antall, pris, k: kategori(s, Number(l.mva_sats ?? 0)) };
   });
 
   const grupper = new Map<string, { k: Kategori; grunnlag: number; mva: number }>();
@@ -152,7 +156,8 @@ export function lagEhf(f: any, valg: EhfValg = {}): string {
     t("cbc:IssueDate", f.fakturadato),
     !kreditnota && t("cbc:DueDate", f.forfallsdato),
     kreditnota ? t("cbc:CreditNoteTypeCode", "381") : t("cbc:InvoiceTypeCode", "380"),
-    f.var_referanse && t("cbc:Note", `Vår referanse: ${f.var_referanse}`),
+    // PEPPOL tillater ett notat: notatet til kunden og vår referanse.
+    t("cbc:Note", [f.kommentar?.trim(), f.var_referanse && `Vår referanse: ${f.var_referanse}`].filter(Boolean).join("\n")),
     t("cbc:DocumentCurrencyCode", valuta),
     t("cbc:BuyerReference", kjoperRef),
     (f.periode_fra || f.periode_til) && el("cac:InvoicePeriod", [t("cbc:StartDate", f.periode_fra), t("cbc:EndDate", f.periode_til)]),
@@ -210,6 +215,15 @@ export function lagEhf(f: any, valg: EhfValg = {}): string {
         t("cbc:ID", x.nr),
         el(kreditnota ? "cbc:CreditedQuantity" : "cbc:InvoicedQuantity", tall(x.antall), { unitCode: enhetskode(x.l.enhet) }),
         belop("cbc:LineExtensionAmount", x.belopOre),
+        x.rabattOre !== 0 &&
+          el("cac:AllowanceCharge", [
+            t("cbc:ChargeIndicator", "false"),
+            t("cbc:AllowanceChargeReasonCode", "95"), // rabatt (UNCL 5189)
+            t("cbc:AllowanceChargeReason", "Rabatt"),
+            x.l.rabatt_prosent != null && el("cbc:MultiplierFactorNumeric", tall(Number(x.l.rabatt_prosent))),
+            belop("cbc:Amount", x.rabattOre),
+            x.l.rabatt_prosent != null && belop("cbc:BaseAmount", x.belopOre + x.rabattOre),
+          ]),
         el("cac:Item", [
           linjeNavn(x.l.beskrivelse) !== String(x.l.beskrivelse).trim() && t("cbc:Description", x.l.beskrivelse),
           t("cbc:Name", linjeNavn(String(x.l.beskrivelse ?? ""))),

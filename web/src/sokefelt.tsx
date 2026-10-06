@@ -150,7 +150,7 @@ export const produktValg = (produkter: any[]): SokeValg[] =>
   produkter.map((p) => ({
     id: p.id,
     tittel: p.navn,
-    under: [p.varenummer ? `Nr. ${p.varenummer}` : null, `${kr(p.enhetspris)} per ${p.enhet}`].filter(Boolean).join(" · "),
+    under: [p.varenummer ? `Nr. ${p.varenummer}` : null, p.enhetspris == null ? `Variabel pris per ${p.enhet}` : `${kr(p.enhetspris)} per ${p.enhet}`].filter(Boolean).join(" · "),
     sok: `${p.navn} ${p.varenummer ?? ""} ${p.beskrivelse ?? ""}`,
   }));
 

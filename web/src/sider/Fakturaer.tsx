@@ -3,11 +3,11 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api, apnePdf, hent, lastNed } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
-import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
+import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, linjebelop, summer } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
-import { AvsenderKonto } from "./AvsenderKonto";
+import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 import { IkonPluss } from "../ikoner";
-import { gebyrLinjer, LinjeTabell, medProdukt, tilTallLinjer, tomLinje, type LinjeUtkast } from "../linjer";
+import { gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { kundeValg, Sokefelt } from "../sokefelt";
 
 // ---------------------------------------------------------------------------
@@ -242,8 +242,11 @@ export function FakturaSkjema() {
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const kunder = useData(() => hent(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
   const produkter = useData(() => hent(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
-  const [f, settF] = useState<any>({ kunde_id: "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "" });
+  const [f, settF] = useState<any>({ kunde_id: "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "", kommentar: "" });
   const [linjer, settLinjer] = useState<LinjeUtkast[]>([tomLinje()]);
+  const [lastet, settLastet] = useState(!id); // et utkast som endres, er hentet
+  const [rabattValgt, settRabattValgt] = useState(false);
+  const visRabatt = rabattValgt || harRabatt(linjer);
   const [gebyr, settGebyr] = useState(false);
   const [nyKunde, settNyKunde] = useState<{ navn: string } | null>(null);
   const [nyttProdukt, settNyttProdukt] = useState<{ linje: number | "ny"; navn?: string } | null>(null); // linjen produktet skal inn på
@@ -263,20 +266,13 @@ export function FakturaSkjema() {
         deres_referanse: u.deres_referanse ?? "",
         var_referanse: u.var_referanse ?? "",
         notat: u.notat ?? "",
+        kommentar: u.kommentar ?? "",
         konto_id: u.konto_id ?? null,
         avsender: u.avsender ?? null,
       });
       settKopi((u.kopi_til ?? []).join(", "));
-      settLinjer(
-        u.linjer.map((l: any) => ({
-          produkt_id: l.produkt_id,
-          beskrivelse: l.beskrivelse,
-          antall: String(l.antall).replace(".", ","),
-          enhet: l.enhet,
-          enhetspris: String(l.enhetspris).replace(".", ","),
-          mva_sats: String(l.mva_sats),
-        })),
-      );
+      settLinjer(u.linjer.map(tilUtkast));
+      settLastet(true);
     });
   }, [id, org]);
 
@@ -292,6 +288,15 @@ export function FakturaSkjema() {
   const tallLinjer = tilTallLinjer(linjer, utenMva);
   const sum = useMemo(() => summer([...tallLinjer, ...gebyrLinjer(gebyr, orgData.data)]), [JSON.stringify(tallLinjer), gebyr, orgData.data]);
   const kunde = kunder.data?.find((k: any) => k.id === f.kunde_id);
+  const rabatt = Math.round((summer(tallLinjer.map((l) => ({ ...l, rabatt_prosent: null, rabatt_belop: null }))).eks - summer(tallLinjer).eks) * 100) / 100;
+  const sjekkLinjer = useLinjefeil(linjer, settFeil);
+  const vekslRabatt = () => {
+    if (!visRabatt) return settRabattValgt(true);
+    settRabattValgt(false);
+    settLinjer(linjer.map((l) => ({ ...l, rabatt: "" })));
+  };
+  // Produkter med fast avsender eller konto velger dem når de legges på.
+  const ulikeFasteValg = useFasteValg(linjer, produkter.data, lastet, (v) => settF((x: any) => ({ ...x, ...v })));
 
   // Et produkt laget fra skjemaet havner på linjen det ble laget fra, ellers på første
   // tomme linje (eller en ny linje).
@@ -303,6 +308,7 @@ export function FakturaSkjema() {
   async function lagre(utsted: boolean) {
     const feilAdresser = ugyldigeEposter(kopi);
     if (feilAdresser.length) return settFeil(`Ugyldig e-postadresse for kopi: ${feilAdresser.join(", ")}`);
+    if (sjekkLinjer()) return;
     const kropp = {
       kunde_id: f.kunde_id,
       fakturadato: f.fakturadato || null,
@@ -312,6 +318,7 @@ export function FakturaSkjema() {
       deres_referanse: f.deres_referanse || null,
       var_referanse: f.var_referanse || null,
       notat: f.notat || null,
+      kommentar: f.kommentar.trim() || null,
       konto_id: f.konto_id ?? null,
       avsender: f.avsender ?? null,
       kopi_til: tilEpostliste(kopi),
@@ -406,10 +413,18 @@ export function FakturaSkjema() {
           }
         />
         <AvsenderKonto org={orgData.data} verdi={f} endre={(v) => settF({ ...f, ...v })} />
+        {ulikeFasteValg && <div className="melding info">{ulikeFasteValg}</div>}
       </div>
 
       <div className="kort tabell linjer">
-        <LinjeTabell linjer={linjer} endre={settLinjer} produkter={produkter.data ?? []} utenMva={utenMva} nyttProdukt={(linje, navn) => settNyttProdukt({ linje, navn })} />
+        <LinjeTabell
+          linjer={linjer}
+          endre={settLinjer}
+          produkter={produkter.data ?? []}
+          utenMva={utenMva}
+          visRabatt={visRabatt}
+          nyttProdukt={(linje, navn) => settNyttProdukt({ linje, navn })}
+        />
         <div className="knapper" style={{ marginTop: 12 }}>
           <button type="button" onClick={() => settLinjer([...linjer, tomLinje()])}>
             + Linje
@@ -417,6 +432,7 @@ export function FakturaSkjema() {
           <button type="button" onClick={() => settNyttProdukt({ linje: "ny" })}>
             + Nytt produkt
           </button>
+          <RabattKnapp vis={visRabatt} veksle={vekslRabatt} />
           {orgData.data.standard_gebyr > 0 && (
             <label style={{ margin: 0 }}>
               <input type="checkbox" checked={gebyr} onChange={(e) => settGebyr(e.target.checked)} />
@@ -425,6 +441,12 @@ export function FakturaSkjema() {
           )}
         </div>
         <div className="summer">
+          {rabatt !== 0 && (
+            <div className="rabatt">
+              <span>Rabatt</span>
+              <span className="tall">−{kr(rabatt)}</span>
+            </div>
+          )}
           {!utenMva && (
             <>
               <div>
@@ -444,6 +466,7 @@ export function FakturaSkjema() {
         </div>
       </div>
 
+      <NotatFelt verdi={f.kommentar} endre={(v) => settF({ ...f, kommentar: v })} />
       <label>
         Internt notat (vises ikke på fakturaen)
         <textarea rows={2} value={f.notat} onChange={(e) => settF({ ...f, notat: e.target.value })} />
@@ -508,6 +531,7 @@ export function FakturaVisning() {
   const kanPurre = forfalt && (!sistePurring || sistePurring.ny_frist < iDag());
   const nestePurring = f.purringer?.some((p: any) => p.type === "paaminnelse") ? "inkassovarsel" : "paaminnelse";
   const aaBetale = f.sum_inkl_mva - f.kreditert_belop - f.betalt_belop;
+  const linjerMedRabatt = f.linjer.some((l: any) => l.rabatt_prosent != null || l.rabatt_belop != null);
   const rolle = org?.rolle;
 
   const handling = async (fn: () => Promise<unknown>, gaaTil?: string) => {
@@ -618,6 +642,12 @@ export function FakturaVisning() {
             </div>
           )}
         </div>
+        {f.kommentar && (
+          <div className="faktura-kommentar">
+            <div className="dempet liten">Notat på fakturaen</div>
+            {f.kommentar}
+          </div>
+        )}
       </div>
 
       <div className="kort tabell">
@@ -627,6 +657,7 @@ export function FakturaVisning() {
               <th>Beskrivelse</th>
               <th className="hoyre">Antall</th>
               <th className="hoyre">Pris</th>
+              {linjerMedRabatt && <th className="hoyre">Rabatt</th>}
               <th className="hoyre">Mva</th>
               <th className="hoyre">Beløp eks. mva</th>
             </tr>
@@ -639,8 +670,13 @@ export function FakturaVisning() {
                   {String(l.antall).replace(".", ",")} {l.enhet !== "stk" ? l.enhet : ""}
                 </td>
                 <td className="tall" data-label="Pris">{kr(l.enhetspris)}</td>
+                {linjerMedRabatt && (
+                  <td className="tall" data-label="Rabatt">
+                    {l.rabatt_prosent != null ? `${String(l.rabatt_prosent).replace(".", ",")} %` : l.rabatt_belop != null ? kr(l.rabatt_belop) : ""}
+                  </td>
+                )}
                 <td className="tall" data-label="Mva">{l.mva_sats} %</td>
-                <td className="tall" data-label="Beløp eks. mva">{kr(l.belop_eks ?? summer([{ ...l, mva_sats: 0 }]).eks)}</td>
+                <td className="tall" data-label="Beløp eks. mva">{kr(l.belop_eks ?? linjebelop(l))}</td>
               </tr>
             ))}
           </tbody>
@@ -956,3 +992,4 @@ function Kreditering({ faktura, ferdig }: { faktura: any; ferdig: (kn: any) => v
     </>
   );
 }
+

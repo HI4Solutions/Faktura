@@ -34,6 +34,12 @@ const linje = (beskrivelse: string, antall: number, enhetspris: number, mva_sats
   belop_eks: rund(antall * enhetspris),
   mva_belop: rund((antall * enhetspris * mva_sats) / 100),
 });
+// Rabatt i prosent eller kroner, regnet som faktura.linje_netto i databasen.
+const medRabatt = (l: ReturnType<typeof linje>, r: { prosent?: number; belop?: number }) => {
+  const brutto = l.antall * l.enhetspris;
+  const netto = brutto - (r.belop ?? rund((brutto * (r.prosent ?? 0)) / 100));
+  return { ...l, rabatt_prosent: r.prosent ?? null, rabatt_belop: r.belop ?? null, belop_eks: rund(netto), mva_belop: rund((netto * l.mva_sats) / 100) };
+};
 const summer = (linjer: ReturnType<typeof linje>[]) => {
   const eks = rund(linjer.reduce((s, l) => s + l.belop_eks, 0));
   const mva = rund(linjer.reduce((s, l) => s + l.mva_belop, 0));
@@ -102,6 +108,37 @@ describe("EHF", () => {
     expect(xml).toContain(`<cbc:PayableAmount currencyID="NOK">${f.sum_inkl_mva.toFixed(2)}</cbc:PayableAmount>`);
     // Rabatten har positiv pris og negativt antall.
     expect(xml).toMatch(/<cbc:InvoicedQuantity unitCode="C62">-1<\/cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="NOK">-500.00<\/cbc:LineExtensionAmount>/);
+  });
+
+  it("rabatt i prosent og kroner på linjene, og notat til kunden", () => {
+    const f = faktura(
+      [
+        medRabatt(linje("Husleie oktober", 1, 14500, 0, "mnd"), { prosent: 10 }),
+        medRabatt(linje("Parkeringsplass", 2, 950, 25, "mnd"), { belop: 300 }),
+        medRabatt(linje("Konsulentbistand", 1.5, 1250, 25, "time"), { prosent: 12.5 }),
+        linje("Strøm", 1, 412.37, 25),
+      ],
+      { kommentar: "Takk for at du er kunde hos oss!\nNy adresse fra 1. november." },
+    );
+    const xml = lagEhf(f);
+    gyldig(xml);
+    const fradrag = (belop: string, prosent?: string) =>
+      `<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator><cbc:AllowanceChargeReasonCode>95</cbc:AllowanceChargeReasonCode>` +
+      `<cbc:AllowanceChargeReason>Rabatt</cbc:AllowanceChargeReason>${prosent ? `<cbc:MultiplierFactorNumeric>${prosent}</cbc:MultiplierFactorNumeric>` : ""}` +
+      `<cbc:Amount currencyID="NOK">${belop}</cbc:Amount>`;
+    expect(xml).toContain(`<cbc:LineExtensionAmount currencyID="NOK">13050.00</cbc:LineExtensionAmount>${fradrag("1450.00", "10")}<cbc:BaseAmount currencyID="NOK">14500.00</cbc:BaseAmount></cac:AllowanceCharge>`);
+    expect(xml).toContain(`<cbc:LineExtensionAmount currencyID="NOK">1600.00</cbc:LineExtensionAmount>${fradrag("300.00")}</cac:AllowanceCharge>`);
+    expect(xml).toContain(`<cbc:LineExtensionAmount currencyID="NOK">1640.62</cbc:LineExtensionAmount>${fradrag("234.38", "12.5")}<cbc:BaseAmount currencyID="NOK">1875.00</cbc:BaseAmount>`);
+    expect(xml.match(/<cac:AllowanceCharge>/g)).toHaveLength(3);
+    expect(xml).toContain("<cbc:Note>Takk for at du er kunde hos oss!\nNy adresse fra 1. november.\nVår referanse: Ola</cbc:Note>");
+
+    // Kreditnotaen har de samme rabattene, med positive beløp.
+    const linjer = f.linjer.map((l: any) =>
+      medRabatt(linje(l.beskrivelse, -l.antall, l.enhetspris, l.mva_sats, l.enhet), { prosent: l.rabatt_prosent ?? undefined, belop: l.rabatt_belop ? -l.rabatt_belop : undefined }),
+    );
+    const kxml = lagEhf({ ...f, type: "kreditnota", fakturanummer: 1044, kid: null, linjer, ...summer(linjer) }, { kreditertFaktura: { nummer: 1043, dato: "2026-10-06" } });
+    gyldig(kxml);
+    expect(kxml).toContain(`<cbc:LineExtensionAmount currencyID="NOK">1600.00</cbc:LineExtensionAmount>${fradrag("300.00")}</cac:AllowanceCharge>`);
   });
 
   it("enkeltpersonforetak uten mva, med innehaverens navn som avsender og uten referanse", () => {
@@ -225,6 +262,25 @@ describe.skipIf(!process.env.DATABASE_URL)("EHF i API-et", () => {
     expect(kehf.status).toBe(200);
     gyldig(kehf.data);
     expect(kehf.data).toContain(`<cac:InvoiceDocumentReference><cbc:ID>${f.fakturanummer}</cbc:ID>`);
+
+    // Rabatt og notat på fakturaen, også på kreditnotaen.
+    const r = (await kall("POST", `/api/org/${org}/fakturaer`, {
+      kunde_id: k.id,
+      deres_referanse: "Lise",
+      kommentar: "Takk for handelen!",
+      linjer: [
+        { beskrivelse: "Husleie", antall: 1, enhet: "mnd", enhetspris: 14500, mva_sats: 0, rabatt_prosent: 10 },
+        { beskrivelse: "Parkering", antall: 3, enhet: "mnd", enhetspris: 950, mva_sats: 25, rabatt_belop: 100 },
+      ],
+    })).data;
+    const ru = (await kall("POST", `/api/org/${org}/fakturaer/${r.id}/utsted`, { send_epost: false })).data;
+    expect([ru.sum_eks_mva, ru.mva, ru.sum_inkl_mva]).toEqual([13050 + 2750, 687.5, 13050 + 2750 + 687.5]);
+    const rehf = await kall("GET", `/api/org/${org}/fakturaer/${r.id}/ehf`);
+    gyldig(rehf.data);
+    expect(rehf.data).toContain("<cbc:Note>Takk for handelen!</cbc:Note>");
+    const rkn = await kall("POST", `/api/org/${org}/fakturaer/${r.id}/krediter`, { linjer: [{ linje_id: ru.linjer?.[1]?.id ?? (await kall("GET", `/api/org/${org}/fakturaer/${r.id}`)).data.linjer[1].id, antall: 1 }] });
+    expect(rkn.status).toBe(201);
+    gyldig((await kall("GET", `/api/org/${org}/fakturaer/${rkn.data.id}/ehf`)).data);
 
     // Utkast og kunder uten org.nr. kan ikke få EHF.
     const utkast = await kall("POST", `/api/org/${org}/fakturaer`, { kunde_id: k.id, linjer: [{ beskrivelse: "X", antall: 1, enhetspris: 1, mva_sats: 25 }] });

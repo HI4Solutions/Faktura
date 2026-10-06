@@ -83,9 +83,9 @@ export function Importer({ type }: { type: Importtype }) {
         : null
       : !har("navn") && !har("beskrivelse")
         ? "Velg hvilken kolonne som har navnet på produktet."
-        : !har("enhetspris") && !har("pris_inkl")
-          ? "Velg hvilken kolonne som har prisen."
-          : null;
+        : null;
+  // Uten priskolonne får produktene variabel pris (fylles inn på fakturaen).
+  const utenPris = type === "produkter" && ark && !mangler && !har("enhetspris") && !har("pris_inkl");
   const forMange = rader.length > MAKS;
 
   // Prøvekjøring i API-et hver gang radene eller valget for duplikater endres.
@@ -402,6 +402,7 @@ export function Importer({ type }: { type: Importtype }) {
 
       <h2>Forhåndsvisning</h2>
       {mangler && <div className="melding info">{mangler}</div>}
+      {utenPris && <div className="melding info">Ingen kolonne er koblet til pris. Produktene får variabel pris, som fylles inn når de brukes på en faktura.</div>}
       {!rader.length && <div className="melding info">Det er ingen rader under overskriftene.</div>}
       {forMange && <Feil melding={`Fila har ${rader.length} rader. Del den opp i filer med høyst ${MAKS} rader.`} />}
       <Feil melding={feil} />
@@ -484,7 +485,7 @@ export function Importer({ type }: { type: Importtype }) {
                         <>
                           <td data-label="Varenr.">{d.varenummer}</td>
                           <td data-label="Pris eks. mva" className="tall">
-                            {typeof d.enhetspris === "number" ? kr(d.enhetspris) : d.enhetspris}
+                            {typeof d.enhetspris === "number" ? kr(d.enhetspris) : (d.enhetspris ?? <span className="dempet">Variabel</span>)}
                           </td>
                           <td data-label="Mva" className="tall">
                             {typeof d.mva_sats === "number" ? `${d.mva_sats} %` : d.mva_sats}

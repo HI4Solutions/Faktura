@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, hent } from "../api";
-import { AvsenderKonto } from "./AvsenderKonto";
+import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
+import { fraProdukt, harRabatt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { kanSkrive, useKonto } from "../konto";
@@ -37,7 +38,7 @@ export function Gjentakende() {
       {smal ? (
         <div className="kort liste">
           {data.map((g) => {
-            const sum = summer(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25 })));
+            const sum = summer(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25, rabatt_prosent: l.rabatt_prosent, rabatt_belop: l.rabatt_belop })));
             const apne = () => kanSkrive(org?.rolle) && settRedigerer(g);
             return (
               <div key={g.id} className="liste-rad" role="button" tabIndex={0} onClick={apne} onKeyDown={(e) => e.key === "Enter" && apne()}>
@@ -91,7 +92,7 @@ export function Gjentakende() {
           </thead>
           <tbody>
             {data.map((g) => {
-              const sum = summer(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25 })));
+              const sum = summer(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25, rabatt_prosent: l.rabatt_prosent, rabatt_belop: l.rabatt_belop })));
               return (
                 <tr key={g.id} className="klikkbar" onClick={() => kanSkrive(org?.rolle) && settRedigerer(g)}>
                   <td>{g.kunde_navn}</td>
@@ -131,7 +132,7 @@ export function Gjentakende() {
         </table>
       </div>
       )}
-      <Dialog apen={!!redigerer} lukk={() => settRedigerer(null)} tittel={redigerer?.id ? "Endre gjentakelse" : "Ny gjentakelse"}>
+      <Dialog bred apen={!!redigerer} lukk={() => settRedigerer(null)} tittel={redigerer?.id ? "Endre gjentakelse" : "Ny gjentakelse"}>
         <Skjema
           g={redigerer}
           ferdig={() => {
@@ -142,14 +143,6 @@ export function Gjentakende() {
       </Dialog>
     </>
   );
-}
-
-interface L {
-  produkt_id: string | null;
-  beskrivelse: string;
-  antall: string;
-  enhetspris: string;
-  mva_sats: string;
 }
 
 function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
@@ -167,26 +160,25 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
     aktiv: g.aktiv ?? true,
     konto_id: g.konto_id ?? null,
     avsender: g.avsender ?? null,
+    kommentar: g.kommentar ?? "",
   });
-  const [linjer, settLinjer] = useState<L[]>(
-    g.linjer?.map((l: any) => ({
-      produkt_id: l.produkt_id ?? null,
-      beskrivelse: l.beskrivelse,
-      antall: String(l.antall ?? 1).replace(".", ","),
-      enhetspris: String(l.enhetspris).replace(".", ","),
-      mva_sats: String(l.mva_sats ?? 25),
-    })) ?? [{ produkt_id: null, beskrivelse: "", antall: "1", enhetspris: "", mva_sats: "25" }],
-  );
+  const [linjer, settLinjer] = useState<LinjeUtkast[]>(g.linjer?.map(tilUtkast) ?? [tomLinje()]);
   const [kopi, settKopi] = useState((g.kopi_til ?? []).join(", "));
+  const [rabattValgt, settRabattValgt] = useState(false);
+  const visRabatt = rabattValgt || harRabatt(linjer);
   const h = useHandling();
-  const utenMva = orgData.data && !orgData.data.mva_registrert;
-  const settL = (i: number, e: Partial<L>) => settLinjer(linjer.map((l, j) => (j === i ? { ...l, ...e } : l)));
+  const utenMva = Boolean(orgData.data && !orgData.data.mva_registrert);
+  const settL = (i: number, e: Partial<LinjeUtkast>) => settLinjer(linjer.map((l, j) => (j === i ? { ...l, ...e } : l)));
+  // Produkter med fast avsender eller konto velger dem når de legges på.
+  const ulikeFasteValg = useFasteValg(linjer, produkter.data, true, (v) => settF((x: any) => ({ ...x, ...v })));
+  const sjekkLinjer = useLinjefeil(linjer, h.settFeil);
 
   async function lagre(e: FormEvent) {
     e.preventDefault();
     if (!f.kunde_id) return h.settFeil("Velg kunde.");
     const ugyldige = ugyldigeEposter(kopi);
     if (ugyldige.length) return h.settFeil(`Ugyldig e-postadresse for kopi: ${ugyldige.join(", ")}`);
+    if (sjekkLinjer()) return;
     const neste = f.neste_forfall;
     const kropp = {
       kunde_id: f.kunde_id,
@@ -199,16 +191,9 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
       aktiv: f.aktiv,
       konto_id: f.konto_id ?? null,
       avsender: f.avsender ?? null,
+      kommentar: f.kommentar.trim() || null,
       kopi_til: tilEpostliste(kopi),
-      linjer: linjer
-        .filter((l) => l.beskrivelse.trim() && l.enhetspris !== "")
-        .map((l) => ({
-          produkt_id: l.produkt_id,
-          beskrivelse: l.beskrivelse,
-          antall: tall(l.antall),
-          enhetspris: tall(l.enhetspris),
-          mva_sats: utenMva ? 0 : Number(l.mva_sats),
-        })),
+      linjer: tilTallLinjer(linjer, utenMva),
     };
     const r = await h.kjor(() => (g.id ? api("PATCH", `/org/${org!.id}/gjentakelser/${g.id}`, kropp) : api("POST", `/org/${org!.id}/gjentakelser`, kropp)));
     if (r) ferdig();
@@ -264,7 +249,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
                   verdi={l.produkt_id}
                   velg={(id) => {
                     const p = id ? produkter.data!.find((x) => x.id === id) : null;
-                    settL(i, p ? { produkt_id: p.id, beskrivelse: p.navn, enhetspris: String(p.enhetspris).replace(".", ","), mva_sats: String(p.mva_sats) } : { produkt_id: null });
+                    settL(i, p ? fraProdukt(p) : { produkt_id: null });
                   }}
                   tom="Fritekst"
                   plassholder="Søk produkt"
@@ -277,10 +262,21 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
                 <input inputMode="decimal" value={l.antall} onChange={(e) => settL(i, { antall: e.target.value })} />
               </td>
               <td data-label="Pris eks. mva" style={{ width: 100 }}>
-                <input inputMode="decimal" placeholder="Pris" value={l.enhetspris} onChange={(e) => settL(i, { enhetspris: e.target.value })} />
+                <input inputMode="decimal" placeholder={l.produkt_id && produkter.data!.find((x) => x.id === l.produkt_id)?.enhetspris == null ? "Fyll inn" : "Pris"} aria-label={`Pris på linje ${i + 1}`} value={l.enhetspris} onChange={(e) => settL(i, { enhetspris: e.target.value })} />
               </td>
+              {visRabatt && (
+                <td data-label="Rabatt" style={{ width: 140 }}>
+                  <div className="rabatt-felt">
+                    <input inputMode="decimal" aria-label={`Rabatt på linje ${i + 1}`} placeholder="Rabatt" value={l.rabatt} onChange={(e) => settL(i, { rabatt: e.target.value })} />
+                    <select aria-label={`Rabatt i prosent eller kroner, linje ${i + 1}`} value={l.rabatt_type} onChange={(e) => settL(i, { rabatt_type: e.target.value as LinjeUtkast["rabatt_type"] })}>
+                      <option value="prosent">%</option>
+                      <option value="kr">kr</option>
+                    </select>
+                  </div>
+                </td>
+              )}
               {!utenMva && (
-                <td data-label="Mva" style={{ width: 80 }}>
+                <td data-label="Mva" style={{ width: 92 }}>
                   <select value={l.mva_sats} onChange={(e) => settL(i, { mva_sats: e.target.value })}>
                     <option value="25">25 %</option>
                     <option value="15">15 %</option>
@@ -298,13 +294,24 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
           ))}
         </tbody>
       </table>
-      <button type="button" style={{ margin: "8px 0 12px" }} onClick={() => settLinjer([...linjer, { produkt_id: null, beskrivelse: "", antall: "1", enhetspris: "", mva_sats: "25" }])}>
-        + Linje
-      </button>
+      <div className="knapper" style={{ margin: "8px 0 12px" }}>
+        <button type="button" onClick={() => settLinjer([...linjer, tomLinje()])}>
+          + Linje
+        </button>
+        <RabattKnapp
+          vis={visRabatt}
+          veksle={() => {
+            if (!visRabatt) return settRabattValgt(true);
+            settRabattValgt(false);
+            settLinjer(linjer.map((l) => ({ ...l, rabatt: "" })));
+          }}
+        />
+      </div>
       <label>
         Deres referanse
         <input value={f.deres_referanse} onChange={(e) => settF({ ...f, deres_referanse: e.target.value })} />
       </label>
+      <NotatFelt verdi={f.kommentar} endre={(v) => settF({ ...f, kommentar: v })} />
       <EpostlisteFelt
         etikett="Kopi til (valgfritt)"
         verdi={kopi}
@@ -313,6 +320,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
         hjelp="Får hver faktura på e-post sammen med kunden. Skill flere adresser med komma."
       />
       <AvsenderKonto org={orgData.data} verdi={f} endre={(v) => settF({ ...f, ...v })} />
+      {ulikeFasteValg && <div className="melding info">{ulikeFasteValg}</div>}
       {g.id && (
         <label>
           <input type="checkbox" checked={f.aktiv} onChange={(e) => settF({ ...f, aktiv: e.target.checked })} /> Aktiv

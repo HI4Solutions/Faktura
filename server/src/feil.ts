@@ -36,13 +36,24 @@ const pgMeldinger: Record<string, string> = {
   "42501": "Ingen tilgang",
 };
 
+// Begrensninger i databasen med en egen forklaring.
+const begrensninger: Record<string, string> = {
+  produkter_indeks_krever_pris: "Indeksregulering krever fast pris på produktet",
+  faktura_linjer_en_rabatt: "Velg rabatt i prosent eller i kroner, ikke begge",
+};
+
 export function tilHttp(e: unknown): { status: number; error: string } {
   if (e instanceof ApiFeil) return { status: e.status, error: e.message };
   if (e instanceof ZodError) {
     const f = e.issues[0];
+    // Egne meldinger er hele setninger («Rabatten kan ikke være mer enn 100 %»); de vises som
+    // de er. Zods egne (engelske) meldinger får feltnavnet foran.
+    if (f && /^[A-ZÆØÅ«]/.test(f.message) && !/^(Invalid|Too |Unrecognized|Expected|Required)/.test(f.message)) return { status: 400, error: f.message };
     return { status: 400, error: `Ugyldig ${f?.path.join(".") || "forespørsel"}: ${f?.message ?? ""}`.trim() };
   }
   const kode = (e as { code?: string })?.code;
+  const begrensning = (e as { constraint?: string })?.constraint;
+  if (kode === "23514" && begrensning && begrensninger[begrensning]) return { status: 400, error: begrensninger[begrensning] };
   if (kode && pgKoder[kode]) {
     const egen = kode.startsWith("FA") || kode === "P0002";
     return { status: pgKoder[kode], error: egen ? (e as Error).message : pgMeldinger[kode] ?? "Ugyldig forespørsel" };

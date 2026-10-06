@@ -792,3 +792,16 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
   .import-rader .radnr-mobil { display: inline; order: 2; font-size: 0.8rem; color: var(--dempet); margin-left: auto; }
   .import-knapper > * { flex: 1 1 auto; justify-content: center; }
 }
+
+/* --------------------------------------------------------------------------
+   Rabatt, notat på fakturaen og faste valg fra produkter
+   -------------------------------------------------------------------------- */
+.rabatt-felt { display: flex; gap: 4px; }
+.rabatt-felt > input, .linjer .rabatt-felt > input { flex: 1; min-width: 0; padding-left: 8px; padding-right: 8px; }
+.rabatt-felt > select, .linjer td .rabatt-felt > select { flex: none; width: 54px; padding-left: 8px; padding-right: 20px; background-position: right 5px center; }
+.summer .rabatt { color: var(--ok); }
+.faktura-kommentar { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--kant); white-space: pre-line; overflow-wrap: anywhere; }
+.flere-info { margin: 8px 0 0; font-size: 0.84rem; color: var(--info); }
+
+/* Bredere dialog for skjemaer med fakturalinjer (gjentakende fakturaer) */
+@media (min-width: 701px) { dialog.bred { width: min(900px, calc(100vw - 48px)); } }

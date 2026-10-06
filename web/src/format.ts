@@ -19,12 +19,28 @@ export const leggTilDager = (iso: string, dager: number) => {
 
 const rund = (n: number) => Math.sign(n) * Number(Math.round(Number(`${Math.abs(n)}e2`)) + "e-2");
 
-export function summer(linjer: { antall: number; enhetspris: number; mva_sats: number }[]) {
+export interface Tallinje {
+  antall: number;
+  enhetspris: number;
+  mva_sats: number;
+  rabatt_prosent?: number | null;
+  rabatt_belop?: number | null;
+}
+
+// Rabatten i kroner på en linje (som faktura.linje_netto i databasen).
+export const linjerabatt = (l: Tallinje) =>
+  l.rabatt_belop != null ? Number(l.rabatt_belop) : l.rabatt_prosent != null ? rund((l.antall * l.enhetspris * Number(l.rabatt_prosent)) / 100) : 0;
+
+// Linjebeløpet eks. mva etter rabatt.
+export const linjebelop = (l: Tallinje) => rund(l.antall * l.enhetspris - linjerabatt(l));
+
+export function summer(linjer: Tallinje[]) {
   let eks = 0;
   let mva = 0;
   for (const l of linjer) {
-    eks += rund(l.antall * l.enhetspris);
-    mva += rund((l.antall * l.enhetspris * l.mva_sats) / 100);
+    const netto = l.antall * l.enhetspris - linjerabatt(l);
+    eks += rund(netto);
+    mva += rund((netto * l.mva_sats) / 100);
   }
   return { eks: rund(eks), mva: rund(mva), inkl: rund(eks + mva) };
 }
