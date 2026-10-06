@@ -78,17 +78,25 @@ resource "google_pubsub_topic_iam_member" "worker_publish" {
   member = "serviceAccount:${google_service_account.worker.email}"
 }
 
+# Pub/Sub sin tjenesteagent finnes ikke før den blir bedt om; lag den eksplisitt.
+resource "google_project_service_identity" "pubsub" {
+  provider   = google-beta
+  project    = var.project_id
+  service    = "pubsub.googleapis.com"
+  depends_on = [google_project_service.apis]
+}
+
 # Pub/Sub må kunne lage tokens for push og flytte meldinger til dead-letter.
 resource "google_service_account_iam_member" "pubsub_token_creator" {
   service_account_id = google_service_account.invoker.name
   role               = "roles/iam.serviceAccountTokenCreator"
-  member             = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  member             = "serviceAccount:${google_project_service_identity.pubsub.email}"
 }
 
 resource "google_pubsub_topic_iam_member" "dlq_publish" {
   topic  = google_pubsub_topic.hendelser_dlq.name
   role   = "roles/pubsub.publisher"
-  member = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  member = "serviceAccount:${google_project_service_identity.pubsub.email}"
 }
 
 # Identity Platform: API-et verifiserer tokens og kan sette egne claims.

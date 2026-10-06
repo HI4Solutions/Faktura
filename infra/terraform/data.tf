@@ -193,6 +193,18 @@ resource "google_secret_manager_secret" "manuell" {
   depends_on = [google_project_service.apis]
 }
 
+# Cloud Run starter ikke hvis en hemmelighet mangler versjon. Plassholderen gjør at
+# tjenestene kommer opp; den ekte verdien legges til som en ny versjon («latest»).
+resource "google_secret_manager_secret_version" "plassholder" {
+  for_each    = local.manuelle_hemmeligheter
+  secret      = google_secret_manager_secret.manuell[each.key].id
+  secret_data = "ikke-satt"
+
+  lifecycle {
+    ignore_changes = [secret_data, enabled]
+  }
+}
+
 resource "google_secret_manager_secret_iam_member" "manuell" {
   for_each = merge([
     for s, sas in local.manuelle_hemmeligheter : { for sa in sas : "${s}/${sa}" => { secret = s, sa = sa } }

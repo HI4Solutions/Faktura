@@ -84,7 +84,7 @@ resource "google_cloud_run_v2_service" "api" {
     ignore_changes = [template[0].containers[0].image, client, client_version]
   }
 
-  depends_on = [google_secret_manager_secret_iam_member.manuell]
+  depends_on = [google_secret_manager_secret_iam_member.manuell, google_secret_manager_secret_version.plassholder]
 }
 
 # Autentisering skjer i API-et (Identity Platform-tokens og API-nøkler).
@@ -164,7 +164,7 @@ resource "google_cloud_run_v2_service" "worker" {
     ignore_changes = [template[0].containers[0].image, client, client_version]
   }
 
-  depends_on = [google_secret_manager_secret_iam_member.manuell]
+  depends_on = [google_secret_manager_secret_iam_member.manuell, google_secret_manager_secret_version.plassholder]
 }
 
 resource "google_cloud_run_v2_service_iam_member" "worker_invoker" {
@@ -318,7 +318,7 @@ resource "google_pubsub_subscription_iam_member" "dlq_ack" {
   for_each     = google_pubsub_subscription.integrasjon
   subscription = each.value.name
   role         = "roles/pubsub.subscriber"
-  member       = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  member       = "serviceAccount:${google_project_service_identity.pubsub.email}"
 }
 
 locals {
