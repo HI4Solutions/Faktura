@@ -44,6 +44,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `org_tilgang`: regnskapsbyrå ↔ klient (les eller bokfør), alltid med klientens samtykke
 - `kunder`, `produkter`, `gjentakelser`
 - `fakturaer`, `faktura_linjer`, `betalinger`
+- `vedlegg`: filer på fakturaer (PDF, bilder, CSV og regneark, typene EHF godtar).
+  Lastes opp før utkastet lagres, låses ved utstedelse, og workeren legger en kopi i
+  `fakturaer`-bøtta når fakturaen sendes. Filer etter slettede vedlegg ryddes daglig
 - `integrasjoner`: Google Disk, regnskapssystemer, bank, Peppol. Tokens er KMS-kryptert
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
@@ -69,7 +72,7 @@ begge parter kan trekke den.
 - Kolonnerettigheter: appen kan ikke sette status, nummer, summer, KID eller kopiene av
   selger og kunde. Det gjør bare funksjonene `utsted`, `krediter`, `registrer_betaling`
   og `registrer_refusjon`.
-- En utstedt faktura og linjene dens er låst med triggere, også for tabelleieren.
+- En utstedt faktura, linjene og vedleggene dens er låst med triggere, også for tabelleieren.
 - Workeren logger inn som medlem av `faktura_system` og ser alle organisasjoner.
 - Endring av kontonummer gir hendelsen `organisasjon.kontonr_endret`. Workeren varsler
   alle eiere på e-post.

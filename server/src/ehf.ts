@@ -102,6 +102,7 @@ function adresse(p: any) {
 
 export interface EhfValg {
   pdf?: { filnavn: string; data: Uint8Array }; // fakturaen som PDF-vedlegg (anbefalt)
+  vedlegg?: { filnavn: string; type: string; data: Uint8Array }[]; // vedleggene på fakturaen
   kreditertFaktura?: { nummer: string | number; dato?: string | null }; // for kreditnotaer
 }
 
@@ -173,6 +174,14 @@ export function lagEhf(f: any, valg: EhfValg = {}): string {
           el("cbc:EmbeddedDocumentBinaryObject", Buffer.from(valg.pdf.data).toString("base64"), { mimeCode: "application/pdf", filename: valg.pdf.filnavn }),
         ),
       ]),
+    // Vedleggene, med filnavnet som referanse.
+    ...(valg.vedlegg ?? []).map((v) =>
+      el("cac:AdditionalDocumentReference", [
+        t("cbc:ID", v.filnavn),
+        t("cbc:DocumentDescription", "Vedlegg"),
+        el("cac:Attachment", el("cbc:EmbeddedDocumentBinaryObject", Buffer.from(v.data).toString("base64"), { mimeCode: v.type, filename: v.filnavn })),
+      ]),
+    ),
     el(
       "cac:AccountingSupplierParty",
       el("cac:Party", [

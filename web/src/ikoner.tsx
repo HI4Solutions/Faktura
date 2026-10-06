@@ -147,3 +147,8 @@ export const IkonBjelle = (p: P) => (
     <path d="M10 20a2 2 0 0 0 4 0" />
   </Ikon>
 );
+export const IkonBinders = (p: P) => (
+  <Ikon {...p}>
+    <path d="M20.5 11.5l-8.2 8.2a5.2 5.2 0 0 1-7.4-7.4l8.6-8.6a3.5 3.5 0 0 1 5 5l-8.6 8.6a1.75 1.75 0 0 1-2.5-2.5l7.9-7.9" />
+  </Ikon>
+);

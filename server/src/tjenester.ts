@@ -17,7 +17,9 @@ const gcs = () => (storage ??= new Storage());
 export interface Lagring {
   hent(bucket: string, sti: string): Promise<Uint8Array | null>;
   lagre(bucket: string, sti: string, data: Uint8Array, type: string): Promise<void>;
-  signertUrl(bucket: string, sti: string, minutter: number, filnavn?: string): Promise<string>;
+  // valg: hele Content-Disposition (ellers «inline» med filnavnet) og Content-Type.
+  signertUrl(bucket: string, sti: string, minutter: number, filnavn?: string, valg?: { disposisjon?: string; type?: string }): Promise<string>;
+  slett(bucket: string, sti: string): Promise<void>;
 }
 
 export const lagring: Lagring = {
@@ -37,7 +39,7 @@ export const lagring: Lagring = {
       preconditionOpts: { ifGenerationMatch: 0 },
     });
   },
-  async signertUrl(bucket, sti, minutter, filnavn) {
+  async signertUrl(bucket, sti, minutter, filnavn, valg) {
     const [url] = await gcs()
       .bucket(bucket)
       .file(sti)
@@ -45,9 +47,13 @@ export const lagring: Lagring = {
         version: "v4",
         action: "read",
         expires: Date.now() + minutter * 60_000,
-        responseDisposition: filnavn ? `inline; filename="${filnavn}"` : undefined,
+        responseDisposition: valg?.disposisjon ?? (filnavn ? `inline; filename="${filnavn}"` : undefined),
+        responseType: valg?.type,
       });
     return url;
+  },
+  async slett(bucket, sti) {
+    await gcs().bucket(bucket).file(sti).delete({ ignoreNotFound: true });
   },
 };
 
@@ -123,7 +129,7 @@ export interface EpostMelding {
   emne: string;
   tekst: string;
   html: string;
-  vedlegg?: { filnavn: string; data: Uint8Array }[];
+  vedlegg?: { filnavn: string; data: Uint8Array; type?: string }[];
   idempotensnokkel?: string;
 }
 
@@ -151,7 +157,7 @@ export const resendEpost: Epost = {
           subject: m.emne,
           text: m.tekst,
           html: m.html,
-          attachments: m.vedlegg?.map((v) => ({ filename: v.filnavn, content: Buffer.from(v.data) })),
+          attachments: m.vedlegg?.map((v) => ({ filename: v.filnavn, content: Buffer.from(v.data), contentType: v.type })),
         },
         m.idempotensnokkel ? { idempotencyKey: m.idempotensnokkel } : undefined,
       );

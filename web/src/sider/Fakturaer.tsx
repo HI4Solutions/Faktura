@@ -1,14 +1,23 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, apnePdf, hent, lastNed } from "../api";
+import { api, apnePdf, hent, lastNed, type Vedlegg } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, summer } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
-import { IkonPluss } from "../ikoner";
+import { IkonBinders, IkonPluss } from "../ikoner";
 import { gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { kundeValg, Sokefelt } from "../sokefelt";
+import { VedleggFelt, VedleggListe } from "../vedlegg";
+
+// Binders etter kundenavnet i lista når fakturaen har vedlegg.
+const HarVedlegg = ({ antall }: { antall?: number }) =>
+  antall ? (
+    <span className="har-vedlegg" role="img" title={`${antall} vedlegg`} aria-label={`${antall} vedlegg`}>
+      <IkonBinders storrelse={14} />
+    </span>
+  ) : null;
 
 // ---------------------------------------------------------------------------
 // Liste
@@ -174,7 +183,10 @@ export function Fakturatabell({ rader, klikk }: { rader: any[]; klikk: (id: stri
           return (
             <button key={f.id} type="button" className="liste-rad" onClick={() => klikk(f.id)}>
               <span className="linje">
-                <span className="tittel">{f.kunde_navn}</span>
+                <span className="tittel">
+                  {f.kunde_navn}
+                  <HarVedlegg antall={f.antall_vedlegg} />
+                </span>
                 <span className="belop">{f.sum_inkl_mva == null ? "" : kr(f.sum_inkl_mva)}</span>
               </span>
               <span className="linje">
@@ -210,7 +222,10 @@ export function Fakturatabell({ rader, klikk }: { rader: any[]; klikk: (id: stri
             return (
               <tr key={f.id} className="klikkbar" onClick={() => klikk(f.id)}>
                 <td>{f.fakturanummer ?? "–"}</td>
-                <td>{f.kunde_navn}</td>
+                <td>
+                  {f.kunde_navn}
+                  <HarVedlegg antall={f.antall_vedlegg} />
+                </td>
                 <td>{dato(f.fakturadato)}</td>
                 <td>{f.type === "faktura" ? dato(f.forfallsdato) : ""}</td>
                 <td className="tall">{f.sum_inkl_mva == null ? "" : kr(f.sum_inkl_mva)}</td>
@@ -256,6 +271,8 @@ export function FakturaSkjema() {
   const [nyKunde, settNyKunde] = useState<{ navn: string } | null>(null);
   const [nyttProdukt, settNyttProdukt] = useState<{ linje: number | "ny"; navn?: string } | null>(null); // linjen produktet skal inn på
   const [kopi, settKopi] = useState("");
+  const [vedlegg, settVedlegg] = useState<Vedlegg[]>([]);
+  const [lasterOpp, settLasterOpp] = useState(false); // vedlegg som lastes opp
   const { opptatt, feil, settFeil, kjor } = useHandling();
 
   // Fyll inn eksisterende utkast.
@@ -277,6 +294,7 @@ export function FakturaSkjema() {
       });
       settKopi((u.kopi_til ?? []).join(", "));
       settLinjer(u.linjer.map(tilUtkast));
+      settVedlegg(u.vedlegg ?? []);
       if (u.gjenta) {
         settGjenta({
           intervall: u.gjenta.intervall,
@@ -353,6 +371,7 @@ export function FakturaSkjema() {
         : null,
       gebyr,
       linjer: tallLinjer,
+      vedlegg: vedlegg.map((v) => v.id),
     };
     const r = await kjor(async () => {
       const u = id ? await api("PUT", `/org/${org!.id}/fakturaer/${id}`, kropp) : await api("POST", `/org/${org!.id}/fakturaer`, kropp);
@@ -507,16 +526,20 @@ export function FakturaSkjema() {
         standardDager={orgData.data.standard_dager_foer_forfall ?? 14}
       />
       <NotatFelt verdi={f.kommentar} endre={(v) => settF({ ...f, kommentar: v })} />
+      <VedleggFelt orgId={org!.id} vedlegg={vedlegg} endre={settVedlegg} opptatt={settLasterOpp} />
+      {gjenta && vedlegg.length > 0 && (
+        <div className="melding info">Vedleggene sendes bare med denne fakturaen, ikke med de neste fakturaene i gjentakelsen.</div>
+      )}
       <label>
         Internt notat (vises ikke på fakturaen)
         <textarea rows={2} value={f.notat} onChange={(e) => settF({ ...f, notat: e.target.value })} />
       </label>
       <Feil melding={feil} />
       <div className="knapper">
-        <button onClick={() => lagre(false)} disabled={opptatt || !f.kunde_id}>
+        <button onClick={() => lagre(false)} disabled={opptatt || lasterOpp || !f.kunde_id}>
           Lagre utkast
         </button>
-        <button className="primar" onClick={() => lagre(true)} disabled={opptatt || !f.kunde_id || tallLinjer.length === 0 || !orgData.data.kontonr}>
+        <button className="primar" onClick={() => lagre(true)} disabled={opptatt || lasterOpp || !f.kunde_id || tallLinjer.length === 0 || !orgData.data.kontonr}>
           Send faktura
         </button>
         <button className="lenke" onClick={() => nav(-1)}>
@@ -732,6 +755,7 @@ export function FakturaVisning() {
             {f.kommentar}
           </div>
         )}
+        <VedleggListe orgId={org!.id} fakturaId={f.id} vedlegg={f.vedlegg} feil={h.settFeil} />
       </div>
 
       <div className="kort tabell">

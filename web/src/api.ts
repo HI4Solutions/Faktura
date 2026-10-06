@@ -53,6 +53,44 @@ export async function lastOppLogo(orgId: string, fil: File) {
   if (!r.ok) throw new ApiFeil(r.status, (await r.json().catch(() => ({}))).error ?? `Feil ${r.status}`);
 }
 
+export type Vedlegg = { id: string; filnavn: string; type: string; storrelse: number };
+
+// Laster opp et vedlegg. Det står uten faktura til utkastet lagres med det.
+export async function lastOppVedlegg(orgId: string, fil: File): Promise<Vedlegg> {
+  const r = await fetch(`/api/org/${orgId}/vedlegg`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${await token()}`,
+      "content-type": fil.type || "application/octet-stream",
+      "x-filnavn": encodeURIComponent(fil.name),
+    },
+    body: fil,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiFeil(r.status, data.error ?? (r.status === 413 ? "Filen er for stor. Et vedlegg kan være høyst 10 MB." : `Feil ${r.status}`));
+  return data;
+}
+
+// Åpner et vedlegg med en signert lenke: PDF og bilder i en ny fane, resten lastes ned.
+export async function apneVedlegg(orgId: string, fakturaId: string, v: Vedlegg) {
+  const vises = v.type === "application/pdf" || v.type.startsWith("image/");
+  const vindu = vises ? window.open("", "_blank") : null;
+  try {
+    const { url } = await api<{ url: string }>("GET", `/org/${orgId}/fakturaer/${fakturaId}/vedlegg/${v.id}`);
+    if (vindu) vindu.location.href = url;
+    else if (vises) window.location.href = url;
+    else {
+      const a = document.createElement("a");
+      a.href = url;
+      a.rel = "noopener";
+      a.click();
+    }
+  } catch (e) {
+    vindu?.close();
+    throw e;
+  }
+}
+
 export async function lastNed(sti: string, filnavn: string) {
   const blob = await api<Blob>("GET", sti);
   const url = URL.createObjectURL(blob);

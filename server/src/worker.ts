@@ -9,6 +9,7 @@ import { kopierTilDisk, slettFraDisk, synkOrganisasjon } from "./googleDisk.js";
 import { sendVarsel } from "./push.js";
 import { varsleForfalte, varsleGjentakende, varsleOmHendelse } from "./varsler.js";
 import { sjekkEhf } from "./peppol.js";
+import { ryddVedlegg, vedleggFiler } from "./vedlegg.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -42,8 +43,9 @@ export async function mottakere(db: SystemDb, f: any) {
   return { til, kopi, blindkopi: unike(fast) };
 }
 
-// Lager PDF, lagrer den og sender e-post til kunden. Trygg å kjøre flere ganger:
-// PDF-en gjenbrukes, og e-posten har idempotensnøkkel per oppgave.
+// Lager PDF, lagrer den og sender e-post til kunden med vedleggene. Trygg å kjøre flere
+// ganger: PDF-en og arkivkopiene av vedleggene gjenbrukes, og e-posten har
+// idempotensnøkkel per oppgave.
 export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; oppgave_id: string }) {
   await somSystem(async (db) => {
     const rad = await en(db, "select org_id from faktura.fakturaer where id = $1", [o.faktura_id]);
@@ -52,6 +54,7 @@ export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; 
     if (f.status === "utkast") return logg("WARNING", "Fakturaen er ikke utstedt", o);
 
     const { sti, data } = await sikrePdf(db, f);
+    const vedlegg = await vedleggFiler(db, f, true);
     let sendtTil: string | null = null;
     const m = await mottakere(db, f);
     if (o.send_epost && m.til) {
@@ -65,7 +68,7 @@ export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; 
         emne: e.emne,
         tekst: e.tekst,
         html: e.html,
-        vedlegg: [{ filnavn: pdfFilnavn(f), data }],
+        vedlegg: [{ filnavn: pdfFilnavn(f), data, type: "application/pdf" }, ...vedlegg],
         idempotensnokkel: `faktura-${o.oppgave_id}`,
       });
       await db.query("select faktura.logg_epost($1, $2, null, $3, $4, $5, $6)", [f.org_id, f.id, sendt.id, m.til, e.emne, m.kopi]);
@@ -90,7 +93,8 @@ export async function sendEpost(o: { til: string[]; emne: string; tekst: string;
   });
 }
 
-// Sender betalingspåminnelse eller inkassovarsel med den opprinnelige fakturaen vedlagt.
+// Sender betalingspåminnelse eller inkassovarsel med den opprinnelige fakturaen og
+// vedleggene på den.
 export async function sendPurring(o: { purring_id: string; oppgave_id: string }) {
   await somSystem(async (db) => {
     const p = await en(db, "select * from faktura.purringer where id = $1", [o.purring_id]);
@@ -100,6 +104,7 @@ export async function sendPurring(o: { purring_id: string; oppgave_id: string })
     const m = await mottakere(db, f);
     if (!m.til) return logg("WARNING", "Kunden mangler e-post; purringen ble ikke sendt", { purring_id: p.id });
     const { data } = await sikrePdf(db, f);
+    const vedlegg = await vedleggFiler(db, f, true);
     const e = purringEpost(f, p);
     const sendt = await epost().send({
       fraNavn: f.selger.navn,
@@ -110,7 +115,7 @@ export async function sendPurring(o: { purring_id: string; oppgave_id: string })
       emne: e.emne,
       tekst: e.tekst,
       html: e.html,
-      vedlegg: [{ filnavn: pdfFilnavn(f), data }],
+      vedlegg: [{ filnavn: pdfFilnavn(f), data, type: "application/pdf" }, ...vedlegg],
       idempotensnokkel: `purring-${p.id}`,
     });
     await db.query("select faktura.logg_epost($1, $2, $3, $4, $5, $6, $7)", [f.org_id, f.id, p.id, sendt.id, m.til, e.emne, m.kopi]);
@@ -207,6 +212,13 @@ export async function gjenta() {
     await varsleForfalte();
   } catch (e) {
     logg("ERROR", "Push-varsler fra daglig jobb feilet", { feil: (e as Error).message });
+  }
+
+  // Vedlegg som aldri ble lagret på en faktura, og filene etter slettede vedlegg.
+  try {
+    await ryddVedlegg();
+  } catch (e) {
+    logg("ERROR", "Opprydding av vedlegg feilet", { feil: (e as Error).message });
   }
 
   // EHF: hvilke kunder som kan motta EHF, endres sjelden, men kan endres når som helst.

@@ -11,7 +11,8 @@ export async function hentFaktura(db: Db, orgId: string, id: string) {
   const f = await en(db, "select * from faktura.fakturaer where id = $1 and org_id = $2", [id, orgId]);
   if (!f) throw new ApiFeil(404, "Fant ikke fakturaen");
   const linjer = await alle(db, "select * from faktura.faktura_linjer where faktura_id = $1 order by rekke, opprettet", [id]);
-  return { ...f, linjer };
+  const vedlegg = await alle(db, "select id, filnavn, type, storrelse from faktura.vedlegg where faktura_id = $1 order by rekke, opprettet", [id]);
+  return { ...f, linjer, vedlegg };
 }
 
 async function hentLogo(sti: string | null | undefined) {
@@ -36,6 +37,8 @@ export async function pdfData(db: Db, f: any): Promise<PdfFaktura> {
     selger = (await en(db, "select faktura.selger_for($1, $2, $3) as s", [f.org_id, f.konto_id ?? null, f.avsender ?? null]))?.s;
     kunde = await en(db, "select * from faktura.kunder where id = $1", [f.kunde_id]);
   }
+  // Navnene på vedleggene står på PDF-en. Ikke alle som lager PDF-en har hentet dem.
+  const vedlegg = f.vedlegg ?? (await alle(db, "select filnavn from faktura.vedlegg where faktura_id = $1 order by rekke, opprettet", [f.id]));
   const kreditnotaFor = f.kreditnota_for
     ? (await en(db, "select fakturanummer from faktura.fakturaer where id = $1", [f.kreditnota_for]))?.fakturanummer
     : null;
@@ -63,6 +66,7 @@ export async function pdfData(db: Db, f: any): Promise<PdfFaktura> {
       rabatt_belop: l.rabatt_belop,
     })),
     kommentar: f.kommentar,
+    vedlegg: vedlegg.map((v: any) => v.filnavn),
     logo: await hentLogo(selger?.logo_sti),
   };
 }
@@ -101,8 +105,9 @@ export function fakturaEpost(f: any) {
   const s = f.selger;
   const navn = f.kunde?.navn ?? "";
   const emne = `${kreditnota ? "Kreditnota" : "Faktura"} ${f.fakturanummer} fra ${s.navn}`;
-  // Notatet på fakturaen står også i e-posten.
+  // Notatet på fakturaen står også i e-posten, og navnene på vedleggene.
   const notat: string[] = f.kommentar?.trim() ? ["", ...f.kommentar.trim().split(/\r?\n/)] : [];
+  if (f.vedlegg?.length) notat.push("", `Vedlegg: ${f.vedlegg.map((v: any) => v.filnavn).join(", ")}`);
   const linjer = kreditnota
     ? [`Hei ${navn},`, "", `Vedlagt er kreditnota ${f.fakturanummer} på ${kr(-f.sum_inkl_mva)} kr.`, ...notat]
     : [

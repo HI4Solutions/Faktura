@@ -822,6 +822,26 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
 .rabatt-felt > select, .linjer td .rabatt-felt > select { flex: none; width: 54px; padding-left: 8px; padding-right: 20px; background-position: right 5px center; }
 .summer .rabatt { color: var(--ok); }
 .faktura-kommentar { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--kant); white-space: pre-line; overflow-wrap: anywhere; }
+
+/* Vedlegg: i skjemaet (velg og fjern) og på fakturaen (åpne) */
+.vedlegg-felt { margin-bottom: 14px; }
+.vedlegg-topp { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vedlegg-topp .etikett { font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); }
+.vedlegg-topp button { padding: 6px 12px; font-size: 0.85rem; }
+.vedlegg-liste { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate); }
+.vedlegg-liste li { display: flex; align-items: center; gap: 10px; padding: 9px 12px; min-height: 44px; }
+.vedlegg-liste li + li { border-top: 1px solid var(--kant); }
+.vedlegg-liste li > svg { flex: none; color: var(--dempet); }
+.vedlegg-liste .navn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding-right: 2px; }
+.vedlegg-liste .liten { flex: none; }
+.vedlegg-liste li.laster-opp .spinner { width: 16px; height: 16px; flex: none; }
+.faktura-vedlegg { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--kant); }
+.faktura-vedlegg .vedlegg-liste { margin-top: 6px; border: 0; background: none; }
+.faktura-vedlegg .vedlegg-liste li { padding: 6px 0; min-height: 36px; }
+.faktura-vedlegg .vedlegg-liste li + li { border-top: 0; }
+/* På fakturaen vises hele filnavnet, over flere linjer om nødvendig. */
+.faktura-vedlegg button.navn { flex: 0 1 auto; font-weight: 500; white-space: normal; overflow: visible; overflow-wrap: anywhere; line-height: 1.4; }
+.har-vedlegg { display: inline-flex; vertical-align: -2px; margin-left: 6px; color: var(--dempet); }
 .flere-info { margin: 8px 0 0; font-size: 0.84rem; color: var(--info); }
 
 /* Bredere dialog for skjemaer med fakturalinjer (gjentakende fakturaer) */

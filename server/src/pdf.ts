@@ -39,6 +39,7 @@ export interface PdfFaktura {
   };
   linjer: Linje[];
   kommentar?: string | null; // notat til kunden
+  vedlegg?: string[]; // filnavnene på vedleggene
   logo?: { bytes: Uint8Array; type: "png" | "jpg" } | null;
 }
 
@@ -220,6 +221,13 @@ export async function lagPdf(f: PdfFaktura): Promise<Uint8Array> {
     side.drawRectangle({ x: MARG, y: y - h + 8, width: 2, height: h, color: aksent });
     kommentar.forEach((t, i) => tekst(t, MARG + 10, y - i * 11));
     y -= h + 14;
+  }
+  // Vedleggene som følger med fakturaen.
+  if (f.vedlegg?.length) {
+    const linjer = bryt(f.vedlegg.join(", "), font, 9, A4[0] - 2 * MARG - 50);
+    tekst("Vedlegg", MARG, y, { c: gra });
+    linjer.forEach((t, i) => tekst(t, MARG + 50, y - i * 11));
+    y -= linjer.length * 11 + 14;
   }
 
   // Linjer, med ny side når det ikke er plass.

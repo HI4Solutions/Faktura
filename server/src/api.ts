@@ -18,6 +18,7 @@ import { pushRuter } from "./push.js";
 import { ehfFilnavn, ehfHindring, lagEhf } from "./ehf.js";
 import { sjekkEhf } from "./peppol.js";
 import { kundenokler, kundeSjekk, planlegg, produktnokler } from "./importer.js";
+import { MAKS_ANTALL, skrivVedlegg, vedleggFiler, vedleggRuter } from "./vedlegg.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -161,6 +162,12 @@ const fakturaSkjema = z.object({
     .nullish(),
   linjer: z.array(linjeSkjema).max(500),
   gebyr: z.boolean().optional(), // legg til organisasjonens standard fakturagebyr som egen linje
+  // Alle vedleggene på fakturaen, i rekkefølge (lastet opp på forhånd). Uten: som før.
+  vedlegg: z
+    .array(uuid)
+    .transform((l) => [...new Set(l)])
+    .refine((l) => l.length <= MAKS_ANTALL, `Høyst ${MAKS_ANTALL} vedlegg på en faktura`)
+    .optional(),
 });
 
 async function skrivLinjer(db: Db, orgId: string, fakturaId: string, linjer: z.infer<typeof linjeSkjema>[], gebyr: boolean) {
@@ -292,6 +299,7 @@ export function lagApi() {
 
   org.route("/verifisering", verifiseringRuter());
   org.route("/", rapportRuter());
+  org.route("/", vedleggRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting
@@ -563,6 +571,7 @@ export function lagApi() {
                   f.sendt_at, f.kreditnota_for, f.planlagt_sending,
                   (f.status = 'utstedt' and f.type = 'faktura' and f.forfallsdato < faktura.i_dag()) as forfalt,
                   (select count(*) from faktura.purringer p where p.faktura_id = f.id) as antall_purringer,
+                  (select count(*)::int from faktura.vedlegg v where v.faktura_id = f.id) as antall_vedlegg,
                   (select e.status from faktura.eposter e where e.faktura_id = f.id order by e.opprettet desc limit 1) as epost_status
              from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id
             where ${vilkar.join(" and ")}
@@ -600,6 +609,7 @@ export function lagApi() {
          b.gjenta ? JSON.stringify(b.gjenta) : null],
       );
       await skrivLinjer(db, orgId(c), f.id, b.linjer, b.gebyr ?? false);
+      await skrivVedlegg(db, orgId(c), f.id, b.vedlegg);
       return hentFaktura(db, orgId(c), f.id);
     });
     return c.json(f, 201);
@@ -620,6 +630,7 @@ export function lagApi() {
       );
       if (!r.rowCount) throw new ApiFeil(409, "Bare utkast kan endres");
       await skrivLinjer(db, orgId(c), id, b.linjer, b.gebyr ?? false);
+      await skrivVedlegg(db, orgId(c), id, b.vedlegg);
       return hentFaktura(db, orgId(c), id);
     });
     return c.json(f);
@@ -708,7 +719,8 @@ export function lagApi() {
     return c.json(ny);
   });
 
-  // EHF-filen (UBL etter PEPPOL BIS Billing 3.0) for en utstedt faktura, med PDF-en vedlagt.
+  // EHF-filen (UBL etter PEPPOL BIS Billing 3.0) for en utstedt faktura, med PDF-en og
+  // vedleggene lagt ved.
   org.get("/fakturaer/:id/ehf", async (c) => {
     const id = uuid.parse(c.req.param("id"));
     const { xml, navn } = await bruk(c, async (db) => {
@@ -719,7 +731,8 @@ export function lagApi() {
       const kreditert = f.kreditnota_for
         ? await en(db, "select fakturanummer as nummer, fakturadato as dato from faktura.fakturaer where id = $1", [f.kreditnota_for])
         : null;
-      return { xml: lagEhf(f, { pdf: { filnavn: pdfFilnavn(f), data }, kreditertFaktura: kreditert ?? undefined }), navn: ehfFilnavn(f) };
+      const vedlegg = await vedleggFiler(db, f);
+      return { xml: lagEhf(f, { pdf: { filnavn: pdfFilnavn(f), data }, vedlegg, kreditertFaktura: kreditert ?? undefined }), navn: ehfFilnavn(f) };
     });
     return c.body(xml, 200, { "content-type": "application/xml; charset=utf-8", "content-disposition": `attachment; filename="${navn}"` });
   });

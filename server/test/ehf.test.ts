@@ -110,6 +110,22 @@ describe("EHF", () => {
     expect(xml).toMatch(/<cbc:InvoicedQuantity unitCode="C62">-1<\/cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="NOK">-500.00<\/cbc:LineExtensionAmount>/);
   });
 
+  it("vedlegg på fakturaen etter PDF-en, med filnavn og type", () => {
+    const f = faktura([linje("Konsulentbistand", 7.5, 1250, 25, "time")]);
+    const xml = lagEhf(f, {
+      pdf: { filnavn: "Faktura-1043.pdf", data: new TextEncoder().encode("%PDF-1.4 test") },
+      vedlegg: [
+        { filnavn: "Timeliste oktober – Ås.pdf", type: "application/pdf", data: new TextEncoder().encode("%PDF-1.4 timer") },
+        { filnavn: "Kvittering.jpg", type: "image/jpeg", data: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]) },
+        { filnavn: "Timer.xlsx", type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data: Uint8Array.from([0x50, 0x4b, 3, 4]) },
+      ],
+    });
+    gyldig(xml);
+    const referanser = [...xml.matchAll(/<cac:AdditionalDocumentReference><cbc:ID>([^<]+)<\/cbc:ID>/g)].map((m) => m[1]);
+    expect(referanser).toEqual(["1043", "Timeliste oktober – Ås.pdf", "Kvittering.jpg", "Timer.xlsx"]);
+    expect(xml).toContain('mimeCode="image/jpeg" filename="Kvittering.jpg">/9j/4A==</cbc:EmbeddedDocumentBinaryObject>');
+  });
+
   it("rabatt i prosent og kroner på linjene, og notat til kunden", () => {
     const f = faktura(
       [
