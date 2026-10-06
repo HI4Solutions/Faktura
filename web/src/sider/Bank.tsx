@@ -71,7 +71,7 @@ export function BankKobling() {
 
   async function koble(e: FormEvent) {
     e.preventDefault();
-    if (!skjema?.privat_nokkel) return h.settFeil("Last opp .pem-filen med den private nøkkelen.");
+    if (!skjema?.privat_nokkel.includes("PRIVATE KEY")) return h.settFeil("Last opp .pem-filen med den private nøkkelen, eller lim inn innholdet i den.");
     const { filnavn: _, ...kropp } = skjema;
     const r = await h.kjor(() => api<BankStatus & { url: string }>("PUT", `/org/${org!.id}/bank`, kropp));
     if (r?.url) {
@@ -210,23 +210,47 @@ export function BankKobling() {
             <li>Last opp .pem-filen her og lim inn applikasjonens ID (Application ID). Så logger du inn i banken med BankID en gang til.</li>
           </ol>
           <div className="rad">
-            <label className="hel">
-              Privat nøkkel (.pem-filen)
-              <input
-                type="file"
-                accept=".pem,application/x-pem-file,application/x-x509-ca-cert,text/plain"
-                onChange={async (e) => {
-                  const fil = e.target.files?.[0];
-                  if (!fil) return;
-                  const tekst = await fil.text();
-                  const navn = fil.name.replace(/\.pem$/i, "");
-                  settSkjema((s) => s && { ...s, privat_nokkel: tekst, filnavn: fil.name, app_id: s.app_id || (/^[0-9a-f-]{32,40}$/i.test(navn) ? navn : "") });
-                }}
-              />
-              <span className="felt-hjelp">
-                {skjema.filnavn ? `Valgt: ${skjema.filnavn}.` : ""} Nøkkelen lagres kryptert, vises ikke igjen og brukes bare til å lese kontoen.
-              </span>
-            </label>
+            <div className="hel">
+              <label style={{ marginBottom: 6 }}>
+                Privat nøkkel (.pem-filen)
+                {/* Uten accept: iPhone gråer ellers ut .pem-filer den ikke kjenner. Innholdet sjekkes her og av API-et. */}
+                <input
+                  type="file"
+                  onChange={async (e) => {
+                    const fil = e.target.files?.[0];
+                    if (!fil) return;
+                    const tekst = fil.size < 20_000 ? await fil.text() : "";
+                    if (!tekst.includes("PRIVATE KEY")) {
+                      h.settFeil(`«${fil.name}» inneholder ingen privat nøkkel. Velg .pem-filen du lastet ned fra Enable Banking.`);
+                      return;
+                    }
+                    h.settFeil(null);
+                    const id = fil.name.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0] ?? "";
+                    settSkjema((s) => s && { ...s, privat_nokkel: tekst, filnavn: fil.name, app_id: s.app_id || id });
+                  }}
+                />
+              </label>
+              <p className="felt-hjelp" style={{ margin: "0 0 14px" }}>
+                {skjema.filnavn ? `Valgt: ${skjema.filnavn}. ` : ""}Nøkkelen lagres kryptert, vises ikke igjen og brukes bare til å lese kontoen.{" "}
+                {!skjema.filnavn && skjema.privat_nokkel === "" && (
+                  <button type="button" className="lenke" onClick={() => settSkjema({ ...skjema, privat_nokkel: " " })}>
+                    Lim inn nøkkelen i stedet
+                  </button>
+                )}
+              </p>
+              {!skjema.filnavn && skjema.privat_nokkel !== "" && (
+                <textarea
+                  aria-label="Privat nøkkel (innholdet i .pem-filen)"
+                  rows={5}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  style={{ marginBottom: 14 }}
+                  placeholder={"-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----"}
+                  value={skjema.privat_nokkel.trim()}
+                  onChange={(e) => settSkjema({ ...skjema, privat_nokkel: e.target.value || " " })}
+                />
+              )}
+            </div>
             <label className="hel">
               Applikasjons-ID (Application ID)
               <input required autoComplete="off" autoCapitalize="off" spellCheck={false} value={skjema.app_id} onChange={(e) => settSkjema({ ...skjema, app_id: e.target.value.trim() })} />
