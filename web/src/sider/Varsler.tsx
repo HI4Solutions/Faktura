@@ -8,7 +8,7 @@ import { usePwa } from "../Pwa";
 import { erInstallert, erIos, hentAbonnement, installer, pushStotte, slaAvVarsler, slaPaVarsler } from "../pwa";
 import { useKonto } from "../konto";
 import { foreslattNavn, leggTilPasskey, passkeyFeil } from "../passkey";
-import { bekreftMedPasskey, biometriNavn, lagreLaas, lesLaas, lyttPaLaas, merkAktiv, stotterApplaas } from "../applaas";
+import { bekreftMedServer, biometriNavn, hentPasskeyIder, lagreLaas, lesLaas, lyttPaLaas, merkAktiv, stotterApplaas } from "../applaas";
 
 const LAASETIDER: [number, string][] = [
   [0, "Hver gang appen åpnes"],
@@ -20,7 +20,7 @@ const LAASETIDER: [number, string][] = [
 
 // Applås per enhet: Face ID / Touch ID (eller Windows Hello) når appen åpnes.
 function AppLaasValg() {
-  const { meg } = useKonto();
+  const { meg, bruker } = useKonto();
   const id = meg!.bruker.id;
   const [laas, settLaas] = useState(() => lesLaas(id));
   const [stotte, settStotte] = useState<boolean | null>(null);
@@ -34,13 +34,18 @@ function AppLaasValg() {
   }, []);
   useEffect(() => lyttPaLaas(() => settLaas(lesLaas(id))), [id]);
 
+  // Låsen låses opp med kontoens passkeys; den som nettopp ble brukt, er alltid med.
+  const aktiver = async (brukt: string) => {
+    const alle = await hentPasskeyIder().catch(() => [] as string[]);
+    merkAktiv(); // først, så appen ikke låses i det låsen slås på
+    lagreLaas({ bruker: id, uid: bruker?.uid, minutter, legitimasjon: alle.includes(brukt) ? alle : [brukt, ...alle] });
+    settTrengerPasskey(false);
+  };
+
   const slaPa = () =>
     h.kjor(async () => {
       try {
-        const legitimasjon = await bekreftMedPasskey(id);
-        lagreLaas({ bruker: id, minutter, legitimasjon: [legitimasjon] });
-        merkAktiv();
-        settTrengerPasskey(false);
+        await aktiver(await bekreftMedServer());
         return true;
       } catch (e) {
         if (e instanceof ApiFeil && e.status === 409) {
@@ -63,9 +68,7 @@ function AppLaasValg() {
       } catch (e) {
         throw new Error(passkeyFeil(e));
       }
-      lagreLaas({ bruker: id, minutter, legitimasjon: [p.id] });
-      merkAktiv();
-      settTrengerPasskey(false);
+      await aktiver(p.id);
       return true;
     });
 
@@ -87,7 +90,7 @@ function AppLaasValg() {
         <>
           <p className="dempet liten">
             Krev {navn} for å åpne HI4 Faktura på denne enheten, så ingen andre ser fakturaene om de får tak i telefonen eller PC-en din.
-            Låsen bruker passkeyen din på enheten.
+            {navn} starter av seg selv når appen åpnes. Låsen bruker passkeyen din på enheten.
           </p>
           <label>
             Lås

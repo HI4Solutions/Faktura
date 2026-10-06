@@ -5,7 +5,7 @@ import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
-import { lagreLaas } from "../applaas";
+import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
@@ -224,6 +224,7 @@ function Organisasjon() {
 }
 
 function Passkeys() {
+  const { meg } = useKonto();
   const { data, last } = useData(() => hent<any[]>("/passkeys"), []);
   const h = useHandling();
   const [lagt, settLagt] = useState(false);
@@ -235,7 +236,9 @@ function Passkeys() {
     h.settFeil(null);
     settVenter(true);
     try {
-      await leggTilPasskey(foreslattNavn());
+      const ny = await leggTilPasskey(foreslattNavn());
+      // Den nye passkeyen kan også låse opp appen.
+      if (meg) oppdaterLegitimasjon(meg.bruker.id, [...(data ?? []).map((q) => q.id), ny.id]);
       settLagt(true);
       last();
     } catch (e) {
@@ -271,8 +274,8 @@ function Passkeys() {
                       h
                         .kjor(async () => {
                           await api("DELETE", `/passkeys/${encodeURIComponent(p.id)}`);
-                          // Uten passkeys kan applåsen ikke låses opp: slå den av på denne enheten.
-                          if ((data ?? []).length <= 1) lagreLaas(null);
+                          // Fjernede passkeys skal ikke låse opp appen (uten passkeys slås låsen av).
+                          if (meg) oppdaterLegitimasjon(meg.bruker.id, (data ?? []).filter((q) => q.id !== p.id).map((q) => q.id));
                           return true;
                         })
                         .then(last)

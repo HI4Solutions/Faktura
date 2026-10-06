@@ -3,6 +3,7 @@ import { onIdTokenChanged, signOut, type User } from "firebase/auth";
 import { hentAuth } from "./firebase";
 import { hent } from "./api";
 import { slaAvVarsler, synkAbonnement } from "./pwa";
+import { huskInnlogget } from "./applaas";
 
 export interface MinOrg {
   id: string;
@@ -64,6 +65,7 @@ export function KontoProvider({ children }: { children: ReactNode }) {
       stopp = onIdTokenChanged(a, async (u) => {
         if (avbrutt) return;
         settBruker(u);
+        huskInnlogget(u?.uid ?? null);
         try {
           if (u?.emailVerified) settMeg(await hent<Meg>("/meg"));
           else settMeg(null);

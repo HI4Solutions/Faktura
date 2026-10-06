@@ -616,7 +616,8 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
    Låseskjerm (applås med Face ID / Touch ID)
    -------------------------------------------------------------------------- */
 .laas {
-  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; color: #fff;
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; color: #fff; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
   padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
   background:
     radial-gradient(900px 500px at -10% 110%, rgba(112, 72, 232, 0.5), transparent 60%),
@@ -629,6 +630,8 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
 .laas-hvem { color: #b7c3e6; margin: 0 0 18px; }
 .laas-knapp { width: 100%; justify-content: center; padding: 14px 18px; font-size: 1rem; border-radius: 14px; background: #fff !important; color: #0d1530 !important; border-color: #fff !important; }
 .laas-knapp:hover:not(:disabled) { background: #eef2ff !important; }
+.laas-trykk { color: #c5cfee; font-size: 0.9rem; margin: 4px 0 0; animation: laas-inn 0.3s ease; }
+@keyframes laas-inn { from { opacity: 0; transform: translateY(4px); } }
 .laas-feil { color: #ffb4b4; font-size: 0.9rem; margin: 4px 0 0; }
 .laas-hjelp { color: #c5cfee; font-size: 0.85rem; margin: 6px 0 0; }
 button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }

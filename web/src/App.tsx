@@ -295,7 +295,7 @@ function Ramme() {
   );
 }
 
-function Innhold() {
+function Sider() {
   const { laster, bruker, meg, loggUt } = useKonto();
   if (laster) return <div className="sentrert"><Laster /></div>;
   if (!bruker) return <Innlogging />;
@@ -303,11 +303,18 @@ function Innhold() {
   if (!meg) return <div className="sentrert"><Laster /></div>;
   if (!meg.bruker.navn || meg.bruker.navn.trim().length < 2) return <OppgiNavn />;
   return (
+    <Routes>
+      <Route path="/invitasjon/:token" element={<div className="innhold"><Invitasjon /></div>} />
+      <Route path="*" element={<Ramme />} />
+    </Routes>
+  );
+}
+
+// Applåsen ligger ytterst, så den kan vises (og Face ID starte) før innloggingen har lastet.
+function Innhold() {
+  return (
     <AppLaas>
-      <Routes>
-        <Route path="/invitasjon/:token" element={<div className="innhold"><Invitasjon /></div>} />
-        <Route path="*" element={<Ramme />} />
-      </Routes>
+      <Sider />
     </AppLaas>
   );
 }
