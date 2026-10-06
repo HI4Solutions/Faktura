@@ -38,6 +38,13 @@ describe.skipIf(!harDb)("API", () => {
     expect((await kall("GET", "/helse", "")).status).toBe(200);
   });
 
+  it("bruker kan sette navnet sitt", async () => {
+    expect((await kall("PATCH", "/api/meg", ola, { navn: "" })).status).toBe(400);
+    const r = await kall("PATCH", "/api/meg", ola, { navn: "Ola Nordmann" });
+    expect(r.data.navn).toBe("Ola Nordmann");
+    expect((await kall("GET", "/api/meg", ola)).data.bruker.navn).toBe("Ola Nordmann");
+  });
+
   it("oppretter organisasjon og setter opp selger", async () => {
     const o = await kall("POST", "/api/organisasjoner", ola, { navn: "Firma AS", orgnr: "923609016" });
     expect(o.status).toBe(201);

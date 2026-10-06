@@ -123,6 +123,8 @@ export function adminRuter() {
 
   r.get("/organisasjoner", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_organisasjoner()"))));
 
+  r.get("/brukere", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_brukere()"))));
+
   r.get("/organisasjoner/:id/brreg", async (c) => {
     const o = await somBetrodd(c.get("bruker").id, (db) => en(db, "select orgnr from faktura.admin_organisasjoner() where id = $1", [c.req.param("id")]));
     if (!o?.orgnr) throw new ApiFeil(404, "Mangler organisasjonsnummer");

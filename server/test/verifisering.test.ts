@@ -88,6 +88,9 @@ describe.skipIf(!harDb)("verifisering", () => {
     const liste = await kall("GET", "/api/admin/organisasjoner", admin);
     expect(liste.data.find((o: any) => o.id === org).venter_manuell).toBe(true);
     expect((await kall("GET", "/api/meg", admin)).data.plattformadmin).toBe(true);
+    const brukere = await kall("GET", "/api/admin/brukere", admin);
+    expect(brukere.data.find((b: any) => b.epost === "per@gmail.com").organisasjoner[0]).toMatchObject({ rolle: "eier" });
+    expect((await kall("GET", "/api/admin/brukere", t)).status).toBe(403);
 
     expect((await kall("POST", `/api/admin/organisasjoner/${org}/status`, admin, { status: "sperret" })).status).toBe(400);
     expect((await kall("POST", `/api/admin/organisasjoner/${org}/status`, admin, { status: "verifisert" })).data.verifisering).toBe("verifisert");

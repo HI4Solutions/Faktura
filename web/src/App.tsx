@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { updateProfile } from "firebase/auth";
+import { hentAuth } from "./firebase";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster } from "./felles";
@@ -30,6 +32,43 @@ function Invitasjon() {
       .catch((e) => settFeil(e.message));
   }, [token]);
   return feil ? <Feil melding={feil} /> : <Laster />;
+}
+
+// Brukere uten navn (registrert før navn ble påkrevd) må fylle det inn.
+function OppgiNavn() {
+  const { oppdater, loggUt } = useKonto();
+  const [navn, settNavn] = useState("");
+  const [feil, settFeil] = useState<string | null>(null);
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await api("PATCH", "/meg", { navn: navn.trim() });
+      const a = await hentAuth();
+      if (a.currentUser) await updateProfile(a.currentUser, { displayName: navn.trim() });
+      await oppdater();
+    } catch (err) {
+      settFeil((err as Error).message);
+    }
+  }
+  return (
+    <div className="sentrert">
+      <form className="kort" onSubmit={lagre}>
+        <h1>Hva heter du?</h1>
+        <p className="dempet">Navnet vises for andre i organisasjonen og i revisjonsloggen.</p>
+        <label>
+          Fullt navn
+          <input autoComplete="name" required minLength={2} autoFocus value={navn} onChange={(e) => settNavn(e.target.value)} />
+        </label>
+        <Feil melding={feil} />
+        <div className="knapper">
+          <button className="primar">Lagre</button>
+          <button type="button" className="lenke" onClick={loggUt}>
+            Logg ut
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function Ramme() {
@@ -118,6 +157,7 @@ function Innhold() {
   if (!bruker) return <Innlogging />;
   if (!bruker.emailVerified) return <BekreftEpost epost={bruker.email ?? ""} loggUt={loggUt} />;
   if (!meg) return <div className="sentrert"><Laster /></div>;
+  if (!meg.bruker.navn || meg.bruker.navn.trim().length < 2) return <OppgiNavn />;
   return (
     <Routes>
       <Route path="/invitasjon/:token" element={<div className="innhold"><Invitasjon /></div>} />

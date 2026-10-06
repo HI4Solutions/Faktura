@@ -13,7 +13,9 @@ export function Innstillinger() {
       <h1>Innstillinger</h1>
       <div className="kort">
         <h2 style={{ marginTop: 0 }}>Din konto</h2>
-        <p className="dempet">{meg?.bruker.epost}</p>
+        <p className="dempet">
+          {meg?.bruker.navn} · {meg?.bruker.epost}
+        </p>
         <Passkeys />
         <h2>Autentiseringsapp</h2>
         <Totrinn />

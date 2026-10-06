@@ -8,7 +8,7 @@ const statusTekst: Record<string, string> = { ny: "Ikke verifisert", verifisert:
 
 export function Admin() {
   const { data, feil, last } = useData(() => hent<any[]>("/admin/organisasjoner"), []);
-  const [filter, settFilter] = useState<"venter" | "alle" | "ny" | "sperret">("venter");
+  const [filter, settFilter] = useState<"venter" | "alle" | "ny" | "sperret" | "brukere">("venter");
   const [valgt, settValgt] = useState<any | null>(null);
 
   if (feil) return <Feil melding={feil} />;
@@ -27,7 +27,8 @@ export function Admin() {
             ["venter", `Venter på godkjenning (${data.filter((o) => o.venter_manuell).length})`],
             ["ny", "Ikke verifisert"],
             ["sperret", "Sperret"],
-            ["alle", `Alle (${data.length})`],
+            ["alle", `Alle organisasjoner (${data.length})`],
+            ["brukere", "Brukere"],
           ] as const
         ).map(([v, t]) => (
           <button key={v} className={filter === v ? "primar" : ""} onClick={() => settFilter(v)}>
@@ -35,6 +36,9 @@ export function Admin() {
           </button>
         ))}
       </div>
+      {filter === "brukere" ? (
+        <Brukere />
+      ) : (
       <div className="kort tabell">
         <table>
           <thead>
@@ -76,6 +80,7 @@ export function Admin() {
           </tbody>
         </table>
       </div>
+      )}
       <Dialog apen={!!valgt} lukk={() => settValgt(null)} tittel={valgt?.navn ?? ""}>
         {valgt && (
           <Behandle
@@ -155,6 +160,60 @@ function Behandle({ org, ferdig }: { org: any; ferdig: () => void }) {
             Sett til ikke verifisert
           </button>
         )}
+      </div>
+    </>
+  );
+}
+
+function Brukere() {
+  const { data, feil } = useData(() => hent<any[]>("/admin/brukere"), []);
+  const [sok, settSok] = useState("");
+  if (feil) return <Feil melding={feil} />;
+  if (!data) return <Laster />;
+  const s = sok.toLowerCase();
+  const rader = data.filter((b) => !s || `${b.navn ?? ""} ${b.epost}`.toLowerCase().includes(s));
+  const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les" };
+  return (
+    <>
+      <input placeholder="Søk etter navn eller e-post" value={sok} onChange={(e) => settSok(e.target.value)} style={{ maxWidth: 320, marginBottom: 12 }} />
+      <div className="kort tabell">
+        <table>
+          <thead>
+            <tr>
+              <th>Navn</th>
+              <th>E-post</th>
+              <th>Organisasjoner</th>
+              <th>Passkey</th>
+              <th>Registrert</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rader.map((b) => (
+              <tr key={b.id}>
+                <td>{b.navn ?? <span className="dempet">–</span>}</td>
+                <td>{b.epost}</td>
+                <td className="liten">
+                  {b.organisasjoner.length === 0 && <span className="dempet">Ingen</span>}
+                  {b.organisasjoner.map((o: any) => (
+                    <div key={o.id}>
+                      {o.navn} <span className="dempet">({rolleTekst[o.rolle]})</span>
+                      {o.verifisering !== "verifisert" && <span className={`merke ${statusMerke[o.verifisering]}`} style={{ marginLeft: 4 }}>{statusTekst[o.verifisering]}</span>}
+                    </div>
+                  ))}
+                </td>
+                <td>{b.antall_passkeys > 0 ? `${b.antall_passkeys}` : <span className="dempet">–</span>}</td>
+                <td>{dato(b.opprettet)}</td>
+              </tr>
+            ))}
+            {rader.length === 0 && (
+              <tr>
+                <td colSpan={5} className="dempet">
+                  Ingen treff.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </>
   );

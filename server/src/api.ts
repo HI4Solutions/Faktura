@@ -169,6 +169,11 @@ export function lagApi() {
     ),
   );
 
+  api.patch("/meg", async (c) => {
+    const b = await kropp(c, z.object({ navn: tekstS(120).min(2, "må ha minst to tegn") }));
+    return c.json(await bruk(c, (db) => en(db, "update faktura.brukere set navn = $1 where id = faktura.bruker_id() returning id, epost, navn", [b.navn])));
+  });
+
   api.post("/organisasjoner", async (c) => {
     const b = await kropp(c, z.object({ navn: tekstS(200).min(1), orgnr: z.string().regex(/^\d{9}$/).nullish(), type: z.enum(["foretak", "regnskapsbyraa"]).optional() }));
     const o = await bruk(c, (db) => en(db, "select * from faktura.opprett_organisasjon($1, $2, $3)", [b.navn, b.orgnr ?? null, b.type ?? "foretak"]));

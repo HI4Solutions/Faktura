@@ -4,6 +4,7 @@ import {
   getMultiFactorResolver,
   sendEmailVerification,
   sendPasswordResetEmail,
+  updateProfile,
   signInWithEmailAndPassword,
   TotpMultiFactorGenerator,
   type MultiFactorError,
@@ -30,6 +31,7 @@ const tekst = (e: unknown) => feiltekst[(e as { code?: string }).code ?? ""] ?? 
 
 export function Innlogging() {
   const [modus, settModus] = useState<"inn" | "ny" | "glemt">("inn");
+  const [navn, settNavn] = useState("");
   const [epost, settEpost] = useState("");
   const [passord, settPassord] = useState("");
   const [kode, settKode] = useState("");
@@ -65,7 +67,9 @@ export function Innlogging() {
         await signInWithEmailAndPassword(auth, epost, passord);
       } else if (modus === "ny") {
         if (passord.length < 8) throw Object.assign(new Error(), { code: "auth/weak-password" });
+        if (navn.trim().length < 2) throw new Error("Skriv inn fullt navn.");
         const { user } = await createUserWithEmailAndPassword(auth, epost, passord);
+        await updateProfile(user, { displayName: navn.trim() });
         await sendEmailVerification(user, { url: window.location.origin });
       } else {
         await sendPasswordResetEmail(auth, epost, { url: window.location.origin });
@@ -99,6 +103,12 @@ export function Innlogging() {
         ) : (
           <>
             <p className="dempet">{modus === "ny" ? "Lag en konto" : modus === "glemt" ? "Glemt passord" : "Logg inn"}</p>
+            {modus === "ny" && (
+              <label>
+                Fullt navn
+                <input autoComplete="name" required minLength={2} value={navn} onChange={(e) => settNavn(e.target.value)} />
+              </label>
+            )}
             <label>
               E-post
               <input type="email" autoComplete="email" required value={epost} onChange={(e) => settEpost(e.target.value)} />
