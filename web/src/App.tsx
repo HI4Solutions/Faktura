@@ -10,6 +10,7 @@ import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
 import { Kunder, Produkter } from "./sider/Register";
 import { FakturaSkjema, FakturaVisning, Fakturaliste } from "./sider/Fakturaer";
+import { FlereFakturaer } from "./sider/Flere";
 import { Innstillinger } from "./sider/Innstillinger";
 import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
@@ -277,6 +278,7 @@ function Ramme() {
             <Route path="/" element={<Oversikt />} />
             <Route path="/fakturaer" element={<Fakturaliste />} />
             <Route path="/fakturaer/ny" element={<FakturaSkjema key="ny" />} />
+            <Route path="/fakturaer/flere" element={<FlereFakturaer />} />
             <Route path="/fakturaer/:id/endre" element={<FakturaSkjema />} />
             <Route path="/fakturaer/:id" element={<FakturaVisning />} />
             <Route path="/gjentakende" element={<Gjentakende />} />

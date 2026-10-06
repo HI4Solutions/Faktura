@@ -7,6 +7,7 @@ import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from 
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto } from "./AvsenderKonto";
 import { IkonPluss } from "../ikoner";
+import { gebyrLinjer, LinjeTabell, medProdukt, tilTallLinjer, tomLinje, type LinjeUtkast } from "../linjer";
 
 // ---------------------------------------------------------------------------
 // Liste
@@ -19,16 +20,23 @@ export function Fakturaliste() {
   const [sok, settSok] = useSearchParams();
   const status = sok.get("status") ?? "";
   const settStatus = (s: string) => settSok(s ? { status: s } : {}, { replace: true });
-  const { data, feil, laster } = useData(() => hent(`/org/${org!.id}/fakturaer${status ? `?status=${status}` : ""}`), [org?.id, status]);
+  const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/fakturaer${status ? `?status=${status}` : ""}`), [org?.id, status]);
+  const [sendUtkast, settSendUtkast] = useState(false);
+  const utkast = status === "utkast" ? (data ?? []) : [];
 
   return (
     <>
       <div className="topp">
         <h1>Fakturaer</h1>
         {kanSkrive(org?.rolle) && (
-          <Link className="knapp primar" to="/fakturaer/ny">
-            <IkonPluss storrelse={16} /> Ny faktura
-          </Link>
+          <div className="knapper">
+            <Link className="knapp" to="/fakturaer/flere">
+              Flere på én gang
+            </Link>
+            <Link className="knapp primar" to="/fakturaer/ny">
+              <IkonPluss storrelse={16} /> Ny faktura
+            </Link>
+          </div>
         )}
       </div>
       <div className="faner" role="tablist">
@@ -44,9 +52,112 @@ export function Fakturaliste() {
           </button>
         ))}
       </div>
+      {utkast.length > 0 && kanSkrive(org?.rolle) && (
+        <div className="knapper" style={{ marginBottom: 14 }}>
+          <button type="button" onClick={() => settSendUtkast(true)}>
+            Send flere utkast …
+          </button>
+        </div>
+      )}
       <Feil melding={feil} />
       {laster && !data ? <Laster /> : <Fakturatabell rader={data ?? []} klikk={(id) => nav(`/fakturaer/${id}`)} />}
+      <Dialog apen={sendUtkast} lukk={() => settSendUtkast(false)} tittel="Send utkast">
+        <SendUtkast
+          utkast={utkast}
+          ferdig={() => {
+            settSendUtkast(false);
+            last();
+          }}
+        />
+      </Dialog>
     </>
+  );
+}
+
+// Send mange utkast samlet. Utkast uten linjer kan ikke sendes.
+function SendUtkast({ utkast, ferdig }: { utkast: any[]; ferdig: () => void }) {
+  const { org } = useKonto();
+  const klare = utkast.filter((u) => u.antall_linjer > 0);
+  const [valgt, settValgt] = useState<Set<string>>(() => new Set(klare.map((u) => u.id)));
+  const [resultat, settResultat] = useState<{ fakturaer: any[]; ikke_sendt: string[]; hoppet_over: string[] } | null>(null);
+  const h = useHandling();
+  const valgte = klare.filter((u) => valgt.has(u.id));
+  const total = valgte.reduce((s, u) => s + Number(u.sum_inkl_mva ?? 0), 0);
+  const utenEpost = valgte.filter((u) => !u.kunde_epost);
+  const alle = valgte.length === klare.length && klare.length > 0;
+  const n = (x: number) => `${x} ${x === 1 ? "faktura" : "fakturaer"}`;
+
+  async function send() {
+    if (!confirm(`Sende ${n(valgte.length)} på til sammen ${kr(total)} kr? De får fakturanummer og kan ikke endres etterpå.`)) return;
+    const r = await h.kjor(() => api("POST", `/org/${org!.id}/fakturaer/utsted-flere`, { ider: valgte.map((u) => u.id) }));
+    if (r) settResultat(r);
+  }
+
+  if (resultat)
+    return (
+      <>
+        <div className="melding ok">{n(resultat.fakturaer.length)} er utstedt og sendes på e-post nå.</div>
+        {resultat.hoppet_over.length > 0 && <p className="liten dempet">{n(resultat.hoppet_over.length)} var allerede sendt og ble hoppet over.</p>}
+        {resultat.ikke_sendt.length > 0 && (
+          <div className="melding feil">{n(resultat.ikke_sendt.length)} kom ikke i kø for sending. Åpne dem og trykk «Send på nytt».</div>
+        )}
+        <div className="knapper">
+          <button type="button" className="primar" onClick={ferdig}>
+            Ferdig
+          </button>
+        </div>
+      </>
+    );
+
+  return (
+    <div className="flervalg">
+      <label className="velg-alle">
+        <input type="checkbox" checked={alle} onChange={() => settValgt(alle ? new Set() : new Set(klare.map((u) => u.id)))} />
+        Velg alle ({klare.length})
+      </label>
+      <div className="flervalg-liste">
+        {utkast.map((u) => {
+          const ok = u.antall_linjer > 0;
+          return (
+            <label key={u.id} className={ok ? undefined : "av"}>
+              <input
+                type="checkbox"
+                disabled={!ok}
+                checked={valgt.has(u.id)}
+                onChange={() =>
+                  settValgt((v) => {
+                    const ny = new Set(v);
+                    if (ny.has(u.id)) ny.delete(u.id);
+                    else ny.add(u.id);
+                    return ny;
+                  })
+                }
+              />
+              <span>
+                <span className="linje">
+                  <span className="navn">{u.kunde_navn}</span>
+                  {ok && <span className="belop">{kr(u.sum_inkl_mva)}</span>}
+                </span>
+                <span className="dempet liten">
+                  {!ok ? "Ingen linjer – åpne utkastet og fyll det ut" : u.kunde_epost ?? "Mangler e-post: blir utstedt, men ikke sendt"}
+                </span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {utenEpost.length > 0 && (
+        <p className="liten dempet">
+          {utenEpost.length === 1 ? "Én kunde" : `${utenEpost.length} kunder`} mangler e-post og får ikke fakturaen på e-post.
+        </p>
+      )}
+      <Feil melding={h.feil} />
+      <div className="knapper">
+        <button type="button" className="primar" disabled={!valgte.length || h.opptatt} onClick={send}>
+          {h.opptatt ? "Sender …" : `Send ${n(valgte.length)} (${kr(total)})`}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -123,25 +234,6 @@ export function Fakturatabell({ rader, klikk }: { rader: any[]; klikk: (id: stri
 // Skjema for utkast
 // ---------------------------------------------------------------------------
 
-interface LinjeUtkast {
-  produkt_id: string | null;
-  beskrivelse: string;
-  antall: string;
-  enhet: string;
-  enhetspris: string;
-  mva_sats: string;
-}
-
-const tomLinje = (): LinjeUtkast => ({ produkt_id: null, beskrivelse: "", antall: "1", enhet: "stk", enhetspris: "", mva_sats: "25" });
-const erTom = (l: LinjeUtkast) => !l.produkt_id && !l.beskrivelse.trim() && l.enhetspris === "";
-const fraProdukt = (p: any): Partial<LinjeUtkast> => ({
-  produkt_id: p.id,
-  beskrivelse: p.beskrivelse ? `${p.navn} – ${p.beskrivelse}` : p.navn,
-  enhet: p.enhet,
-  enhetspris: String(p.enhetspris).replace(".", ","),
-  mva_sats: String(p.mva_sats),
-});
-
 export function FakturaSkjema() {
   const { id } = useParams();
   const { org } = useKonto();
@@ -195,31 +287,16 @@ export function FakturaSkjema() {
     }
   }, [orgData.data, id, f.fakturadato, f.forfallsdato]);
 
-  const tallLinjer = linjer
-    .filter((l) => l.beskrivelse.trim() && l.enhetspris !== "")
-    .map((l) => ({ ...l, antall: tall(l.antall), enhetspris: tall(l.enhetspris), mva_sats: orgData.data && !orgData.data.mva_registrert ? 0 : Number(l.mva_sats) }));
-  const gebyrLinje = gebyr && orgData.data?.standard_gebyr > 0 ? [{ antall: 1, enhetspris: orgData.data.standard_gebyr, mva_sats: orgData.data.mva_registrert ? 25 : 0 }] : [];
-  const sum = useMemo(() => summer([...tallLinjer, ...gebyrLinje]), [JSON.stringify(tallLinjer), gebyrLinje.length]);
+  const utenMva = Boolean(orgData.data && !orgData.data.mva_registrert);
+  const tallLinjer = tilTallLinjer(linjer, utenMva);
+  const sum = useMemo(() => summer([...tallLinjer, ...gebyrLinjer(gebyr, orgData.data)]), [JSON.stringify(tallLinjer), gebyr, orgData.data]);
   const kunde = kunder.data?.find((k: any) => k.id === f.kunde_id);
-  const utenMva = orgData.data && !orgData.data.mva_registrert;
-
-  const settLinje = (i: number, endring: Partial<LinjeUtkast>) => settLinjer(linjer.map((l, j) => (j === i ? { ...l, ...endring } : l)));
-
-  function velgProdukt(i: number, produktId: string) {
-    if (produktId === "__ny") return settNyttProdukt(i);
-    const p = produkter.data?.find((x: any) => x.id === produktId);
-    settLinje(i, p ? fraProdukt(p) : { produkt_id: null });
-  }
 
   // Et produkt laget fra skjemaet havner på linjen det ble laget fra, ellers på første
   // tomme linje (eller en ny linje).
   function brukNyttProdukt(p: any, hvor: number | "ny") {
     void produkter.last();
-    settLinjer((ls) => {
-      const i = hvor === "ny" ? ls.findIndex(erTom) : hvor;
-      if (i < 0 || i >= ls.length) return [...ls, { ...tomLinje(), ...fraProdukt(p) }];
-      return ls.map((l, j) => (j === i ? { ...l, ...fraProdukt(p) } : l));
-    });
+    settLinjer((ls) => medProdukt(ls, p, hvor));
   }
 
   async function lagre(utsted: boolean) {
@@ -238,7 +315,7 @@ export function FakturaSkjema() {
       avsender: f.avsender ?? null,
       kopi_til: tilEpostliste(kopi),
       gebyr,
-      linjer: tallLinjer.map((l) => ({ produkt_id: l.produkt_id, beskrivelse: l.beskrivelse, antall: l.antall, enhet: l.enhet, enhetspris: l.enhetspris, mva_sats: l.mva_sats })),
+      linjer: tallLinjer,
     };
     const r = await kjor(async () => {
       const u = id ? await api("PUT", `/org/${org!.id}/fakturaer/${id}`, kropp) : await api("POST", `/org/${org!.id}/fakturaer`, kropp);
@@ -255,6 +332,11 @@ export function FakturaSkjema() {
     <>
       <div className="topp">
         <h1>{id ? "Endre utkast" : "Ny faktura"}</h1>
+        {!id && (
+          <Link className="knapp" to="/fakturaer/flere">
+            Flere på én gang
+          </Link>
+        )}
       </div>
       {!orgData.data.kontonr && (
         <div className="melding info">
@@ -327,70 +409,7 @@ export function FakturaSkjema() {
       </div>
 
       <div className="kort tabell linjer">
-        <table className="stabel">
-          <thead>
-            <tr>
-              <th style={{ width: "16%" }}>Produkt</th>
-              <th>Beskrivelse</th>
-              <th style={{ width: 90 }}>Antall</th>
-              <th style={{ width: 80 }}>Enhet</th>
-              <th style={{ width: 120 }}>Pris eks. mva</th>
-              {!utenMva && <th style={{ width: 90 }}>Mva</th>}
-              <th className="hoyre" style={{ width: 110 }}>
-                Beløp
-              </th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {linjer.map((l, i) => {
-              const b = l.enhetspris !== "" ? summer([{ antall: tall(l.antall), enhetspris: tall(l.enhetspris), mva_sats: 0 }]).eks : null;
-              return (
-                <tr key={i}>
-                  <td className="hel" data-label="Produkt">
-                    <select value={l.produkt_id ?? ""} onChange={(e) => velgProdukt(i, e.target.value)}>
-                      <option value="">Fritekst</option>
-                      {(produkter.data ?? []).map((p: any) => (
-                        <option key={p.id} value={p.id}>
-                          {p.navn}
-                        </option>
-                      ))}
-                      <option value="__ny">+ Nytt produkt …</option>
-                    </select>
-                  </td>
-                  <td className="hel" data-label="Beskrivelse">
-                    <input value={l.beskrivelse} onChange={(e) => settLinje(i, { beskrivelse: e.target.value })} />
-                  </td>
-                  <td data-label="Antall">
-                    <input inputMode="decimal" value={l.antall} onChange={(e) => settLinje(i, { antall: e.target.value })} />
-                  </td>
-                  <td data-label="Enhet">
-                    <input value={l.enhet} onChange={(e) => settLinje(i, { enhet: e.target.value })} />
-                  </td>
-                  <td data-label="Pris eks. mva">
-                    <input inputMode="decimal" value={l.enhetspris} onChange={(e) => settLinje(i, { enhetspris: e.target.value })} />
-                  </td>
-                  {!utenMva && (
-                    <td data-label="Mva">
-                      <select value={l.mva_sats} onChange={(e) => settLinje(i, { mva_sats: e.target.value })}>
-                        <option value="25">25 %</option>
-                        <option value="15">15 %</option>
-                        <option value="12">12 %</option>
-                        <option value="0">0 %</option>
-                      </select>
-                    </td>
-                  )}
-                  <td className="tall sum">{b == null || Number.isNaN(b) ? "" : kr(b)}</td>
-                  <td className="fjern">
-                    <button type="button" className="lenke" aria-label="Fjern linje" onClick={() => settLinjer(linjer.filter((_, j) => j !== i))}>
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <LinjeTabell linjer={linjer} endre={settLinjer} produkter={produkter.data ?? []} utenMva={utenMva} nyttProdukt={(i) => settNyttProdukt(i)} />
         <div className="knapper" style={{ marginTop: 12 }}>
           <button type="button" onClick={() => settLinjer([...linjer, tomLinje()])}>
             + Linje

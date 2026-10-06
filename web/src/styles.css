@@ -650,3 +650,49 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
 .laas-feil { color: #ffb4b4; font-size: 0.9rem; margin: 4px 0 0; }
 .laas-hjelp { color: #c5cfee; font-size: 0.85rem; margin: 6px 0 0; }
 button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
+
+/* --------------------------------------------------------------------------
+   Flere fakturaer på én gang
+   -------------------------------------------------------------------------- */
+.flere-verktoy { margin: 4px 0 16px; }
+.flere-topp { display: flex; align-items: center; gap: 10px; }
+.flere-topp select { flex: 1; min-width: 0; font-weight: 600; }
+.flere-nr {
+  flex: none; width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center;
+  background: var(--aksent-lys); color: var(--aksent); font-weight: 700; font-size: 0.82rem;
+}
+.flere-topp button.lenke { flex: none; padding: 6px 8px; font-size: 1rem; }
+.flere-advarsel { margin: 8px 0 0; font-size: 0.84rem; color: var(--advarsel); }
+.flere-kort > .tabell { margin: 8px -24px 0; }
+.flere-kort > .tabell table th:first-child, .flere-kort > .tabell table td:first-child { padding-left: 24px; }
+.flere-kort > .tabell table th:last-child, .flere-kort > .tabell table td:last-child { padding-right: 24px; }
+.flere-bunn { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-top: 12px; }
+.flere-sum { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: auto; }
+.flere-mer { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--kant); }
+.flere-mer > summary { cursor: pointer; font-size: 0.86rem; font-weight: 600; color: var(--aksent); padding: 4px 0; }
+.flere-mer[open] > summary { margin-bottom: 10px; }
+.flere-oppsummering .flere-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.flere-oppsummering .flere-total strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+
+/* Flervalg i dialog (kunder, utkast) */
+.flervalg .sok { margin-bottom: 4px; }
+.flervalg .velg-alle { margin: 8px 0 0; }
+.flervalg-liste {
+  max-height: min(50vh, 440px); overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--kant); border-radius: var(--radius-s); margin: 8px 0 14px;
+}
+.flervalg .flervalg-liste > label { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--kant); cursor: pointer; }
+.flervalg-liste > label:last-child { border-bottom: 0; }
+.flervalg-liste > label input { margin: 2px 0 0; flex: none; }
+.flervalg-liste > label > span { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.flervalg-liste > label.av { opacity: 0.55; cursor: default; }
+.flervalg-liste .navn { font-weight: 600; }
+.flervalg-liste .linje { display: flex; justify-content: space-between; gap: 12px; }
+.flervalg-liste .belop { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.flervalg-liste > p { padding: 12px; margin: 0; }
+
+@media (max-width: 700px) {
+  .flere-kort > .tabell { margin: 8px -16px 0; }
+  .flere-kort > .tabell table.stabel > tbody > tr > td:nth-child(n) { padding: 0; }
+  .flere-verktoy > button { flex: 1 1 auto; justify-content: center; }
+}

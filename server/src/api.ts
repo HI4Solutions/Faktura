@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { krevBekreftetEpost, krevInnlogging, krevMfa } from "./auth.js";
 import { alle, en, somBruker, type Db } from "./db.js";
-import { ApiFeil, feilhandterer } from "./feil.js";
+import { ApiFeil, feilhandterer, tilHttp } from "./feil.js";
 import { hentFaktura, pdfData, pdfFilnavn, sikrePdf } from "./dokument.js";
 import { lagPdf } from "./pdf.js";
 import { erPng, normaliserLogo } from "./logo.js";
@@ -514,7 +514,11 @@ export function lagApi() {
         alle(
           db,
           `select f.id, f.fakturanummer, f.type, f.status, f.kunde_id, coalesce(f.kunde->>'navn', k.navn) as kunde_navn,
-                  f.fakturadato, f.forfallsdato, f.sum_inkl_mva, f.betalt_belop, f.kreditert_belop, f.refusjon_belop,
+                  f.fakturadato, f.forfallsdato, f.betalt_belop, f.kreditert_belop, f.refusjon_belop,
+                  coalesce(f.sum_inkl_mva, (select sum(round(l.antall * l.enhetspris, 2) + round(l.antall * l.enhetspris * l.mva_sats / 100, 2))
+                                              from faktura.faktura_linjer l where l.faktura_id = f.id)) as sum_inkl_mva,
+                  case when f.status = 'utkast' then (select count(*)::int from faktura.faktura_linjer l where l.faktura_id = f.id) end as antall_linjer,
+                  case when f.status = 'utkast' then k.epost end as kunde_epost,
                   f.sendt_at, f.kreditnota_for, f.planlagt_sending,
                   (f.status = 'utstedt' and f.type = 'faktura' and f.forfallsdato < faktura.i_dag()) as forfalt,
                   (select count(*) from faktura.purringer p where p.faktura_id = f.id) as antall_purringer,
@@ -576,6 +580,126 @@ export function lagApi() {
       return hentFaktura(db, orgId(c), id);
     });
     return c.json(f);
+  });
+
+  // --- Mange fakturaer på én gang ------------------------------------------
+  // Alt eller ingenting: stopper én faktura (kunde, linjer, grenser), lagres ingen, og
+  // feilmeldingen sier hvilken. Utsendingen legges i kø etter at alt er lagret.
+  const feilFor = (nr: number, navn: string | undefined, e: unknown): never => {
+    const h = tilHttp(e);
+    throw new ApiFeil(h.status, `Faktura ${nr}${navn ? ` (${navn})` : ""}: ${h.error}`);
+  };
+  const oppsummer = (db: Db, ider: string[]) =>
+    alle(
+      db,
+      `select f.id, f.fakturanummer, f.status, f.kunde_id, coalesce(f.kunde->>'navn', k.navn) as kunde_navn, k.epost as kunde_epost,
+              coalesce(f.sum_inkl_mva, (select sum(round(l.antall * l.enhetspris, 2) + round(l.antall * l.enhetspris * l.mva_sats / 100, 2))
+                                          from faktura.faktura_linjer l where l.faktura_id = f.id)) as sum_inkl_mva
+         from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id
+        where f.id = any($1::uuid[]) order by array_position($1::uuid[], f.id)`,
+      [ider],
+    );
+  // Ti om gangen; feiler køen for noen, kan de sendes på nytt fra fakturaen.
+  const leggUtsendingIKo = async (ider: string[]) => {
+    const feilet: string[] = [];
+    for (let i = 0; i < ider.length; i += 10) {
+      const del = ider.slice(i, i + 10);
+      const r = await Promise.allSettled(del.map((id) => leggIKo({ type: "send-faktura", faktura_id: id, send_epost: true })));
+      r.forEach((x, j) => x.status === "rejected" && feilet.push(del[j]!));
+    }
+    return feilet;
+  };
+
+  const flereSkjema = z.object({
+    fakturadato: datoS.nullish(),
+    forfallsdato: datoS.nullish(),
+    periode_fra: datoS.nullish(),
+    periode_til: datoS.nullish(),
+    var_referanse: valgfriTekst(100),
+    konto_id: uuid.nullish(),
+    avsender: z.enum(["firma", "innehaver"]).nullish(),
+    gebyr: z.boolean().optional(),
+    utsted: z.boolean().optional(), // utsted og send med en gang (ellers lagres utkast)
+    fakturaer: z
+      .array(
+        z.object({
+          kunde_id: uuid,
+          deres_referanse: valgfriTekst(100),
+          kopi_til: epostliste(10).optional(),
+          linjer: z.array(linjeSkjema).min(1, "Fakturaen trenger minst én linje").max(100),
+        }),
+      )
+      .min(1)
+      .max(200, "Høyst 200 fakturaer om gangen"),
+  });
+
+  org.post("/fakturaer/flere", async (c) => {
+    const b = await kropp(c, flereSkjema);
+    if (b.utsted) krevMfa(c);
+    const fakturaer = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, $2)", [orgId(c), b.utsted ? "utsted" : "skriv"]);
+      const kunder = new Map(
+        (await alle<{ id: string; navn: string }>(db, "select id, navn from faktura.kunder where org_id = $1 and id = any($2::uuid[])", [orgId(c), b.fakturaer.map((f) => f.kunde_id)])).map((k) => [k.id, k.navn]),
+      );
+      const ider: string[] = [];
+      for (const [i, x] of b.fakturaer.entries()) {
+        try {
+          if (!kunder.has(x.kunde_id)) throw new ApiFeil(404, "Fant ikke kunden");
+          const f = await en(
+            db,
+            `insert into faktura.fakturaer (org_id, kunde_id, fakturadato, forfallsdato, periode_fra, periode_til,
+                                            deres_referanse, var_referanse, konto_id, avsender, kopi_til, opprettet_av)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, faktura.bruker_id()) returning id`,
+            [orgId(c), x.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
+             x.deres_referanse, b.var_referanse, b.konto_id ?? null, b.avsender ?? null, x.kopi_til ?? []],
+          );
+          await skrivLinjer(db, orgId(c), f.id, x.linjer, b.gebyr ?? false);
+          if (b.utsted) await db.query("select faktura.utsted($1)", [f.id]);
+          ider.push(f.id);
+        } catch (e) {
+          feilFor(i + 1, kunder.get(x.kunde_id), e);
+        }
+      }
+      return oppsummer(db, ider);
+    });
+    const ikkeSendt = b.utsted ? await leggUtsendingIKo(fakturaer.map((f) => f.id)) : [];
+    return c.json({ fakturaer, ikke_sendt: ikkeSendt }, 201);
+  });
+
+  // Utsteder og sender valgte utkast. Fakturaer som allerede er sendt, hoppes over.
+  org.post("/fakturaer/utsted-flere", async (c) => {
+    krevMfa(c);
+    const b = await kropp(c, z.object({ ider: z.array(uuid).min(1).max(200, "Høyst 200 fakturaer om gangen"), send_epost: z.boolean().optional() }));
+    const ider = [...new Set(b.ider)];
+    const { fakturaer, hoppetOver } = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'utsted')", [orgId(c)]);
+      const rader = await alle<{ id: string; status: string; kunde_navn: string }>(
+        db,
+        `select f.id, f.status, coalesce(f.kunde->>'navn', k.navn) as kunde_navn
+           from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id where f.org_id = $1 and f.id = any($2::uuid[])`,
+        [orgId(c), ider],
+      );
+      const finnes = new Map(rader.map((r) => [r.id, r]));
+      const utstedt: string[] = [];
+      const hoppetOver: string[] = [];
+      for (const [i, id] of ider.entries()) {
+        const r = finnes.get(id);
+        try {
+          if (!r) throw new ApiFeil(404, "Fant ikke fakturaen");
+          if (r.status !== "utkast") {
+            hoppetOver.push(id);
+            continue;
+          }
+          await db.query("select faktura.utsted($1)", [id]);
+          utstedt.push(id);
+        } catch (e) {
+          feilFor(i + 1, r?.kunde_navn, e);
+        }
+      }
+      return { fakturaer: await oppsummer(db, utstedt), hoppetOver };
+    });
+    const ikkeSendt = b.send_epost === false ? [] : await leggUtsendingIKo(fakturaer.map((f) => f.id));
+    return c.json({ fakturaer, ikke_sendt: ikkeSendt, hoppet_over: hoppetOver });
   });
 
   org.delete("/fakturaer/:id", async (c) => {

@@ -138,22 +138,30 @@ export const resendEpost: Epost = {
     if (!config.resendNokkel || config.resendNokkel === "ikke-satt") throw new Error("RESEND_API_KEY er ikke satt");
     resend ??= new Resend(config.resendNokkel);
     const navn = m.fraNavn.replace(/["<>]/g, "");
-    const { data, error } = await resend.emails.send(
-      {
-        from: `${navn} <${config.epostAvsender}>`,
-        to: m.til,
-        replyTo: m.svarTil,
-        cc: m.kopi?.length ? m.kopi : undefined,
-        bcc: m.blindkopi?.length ? m.blindkopi : undefined,
-        subject: m.emne,
-        text: m.tekst,
-        html: m.html,
-        attachments: m.vedlegg?.map((v) => ({ filename: v.filnavn, content: Buffer.from(v.data) })),
-      },
-      m.idempotensnokkel ? { idempotencyKey: m.idempotensnokkel } : undefined,
-    );
-    if (error || !data) throw new Error(`Resend: ${error?.message ?? "ukjent feil"}`);
-    return { id: data.id };
+    // Resend tar bare imot noen få e-poster i sekundet. Når mange fakturaer sendes samtidig,
+    // venter vi litt og prøver igjen (idempotensnøkkelen hindrer dobbel sending).
+    for (let forsok = 1; ; forsok++) {
+      const { data, error } = await resend.emails.send(
+        {
+          from: `${navn} <${config.epostAvsender}>`,
+          to: m.til,
+          replyTo: m.svarTil,
+          cc: m.kopi?.length ? m.kopi : undefined,
+          bcc: m.blindkopi?.length ? m.blindkopi : undefined,
+          subject: m.emne,
+          text: m.tekst,
+          html: m.html,
+          attachments: m.vedlegg?.map((v) => ({ filename: v.filnavn, content: Buffer.from(v.data) })),
+        },
+        m.idempotensnokkel ? { idempotencyKey: m.idempotensnokkel } : undefined,
+      );
+      if (data && !error) return { id: data.id };
+      if (error?.name === "rate_limit_exceeded" && forsok < 8) {
+        await new Promise((ok) => setTimeout(ok, 600 * forsok + Math.random() * 600));
+        continue;
+      }
+      throw new Error(`Resend: ${error?.message ?? "ukjent feil"}`);
+    }
   },
 };
 
