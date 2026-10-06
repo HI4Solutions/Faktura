@@ -132,12 +132,13 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
   }, []);
 
   // Startes synkront fra trykket, så nettleseren regner forespørselen som brukerens egen.
-  // Hvert trykk starter en ny forespørsel (en eldre avbrytes ikke; svaret på den ignoreres).
+  // Hvert trykk starter en ny forespørsel uten å avbryte en eldre. Lykkes en av dem, låses
+  // appen opp; feil vises bare fra den siste.
   const lasOpp = (automatisk: boolean) => {
     const nr = ++teller.current;
     settFeil(null);
     lasOppMedPasskey(laasRef.current).then(
-      () => teller.current === nr && opplastRef.current(automatisk),
+      () => opplastRef.current(automatisk),
       (e: Error) => {
         if (teller.current !== nr) return;
         settTrykk(true);

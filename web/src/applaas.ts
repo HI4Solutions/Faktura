@@ -62,12 +62,13 @@ export function merkAktiv() {
   skriv(SIST_AKTIV, Date.now());
 }
 
-// Skal appen være låst nå? Lenger tid siden sist den var i bruk enn valgt grense.
+// Skal appen være låst nå? Lenger tid siden sist den var i bruk enn valgt grense, og
+// minst to sekunder, så appen ikke låses i det låsen slås på med «hver gang».
 export function skalLases(id: string | undefined): boolean {
   const l = lesLaas(id);
   if (!l) return false;
   const sist = les<number>(SIST_AKTIV) ?? 0;
-  return Date.now() - sist > Math.max(l.minutter, 0) * 60_000;
+  return Date.now() - sist > Math.max(l.minutter * 60_000, 2_000);
 }
 
 // Hvem som er logget inn på enheten (Firebase-id), så låsen kan vises i det appen
