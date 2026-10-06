@@ -30,6 +30,7 @@
   --meny-dempet: #7d89a8;
   --meny-aktiv: #ffffff;
   --meny-aktiv-bg: rgba(255, 255, 255, 0.09);
+  --laas-bunn: #1e2969;
   --skygge-1: 0 1px 2px rgba(15, 23, 42, 0.05);
   --skygge-2: 0 1px 3px rgba(15, 23, 42, 0.06), 0 6px 16px -6px rgba(15, 23, 42, 0.10);
   --skygge-3: 0 20px 50px -12px rgba(15, 23, 42, 0.30);
@@ -86,10 +87,15 @@ html, body { margin: 0; background: var(--bg); }
 :root { --under-bunn: 0px; }
 @media (display-mode: standalone) {
   :root { --under-bunn: calc(100dvh - 100lvh); }
+  /* Siden må også være minst like høy som skjermen. Er den kortere (som når låseskjermen er
+     alt som vises), tegner iOS ingenting under 100dvh, heller ikke faste elementer som går
+     dit, og det blir en stripe nederst. */
+  html { min-height: 100lvh; }
   dialog::backdrop { bottom: calc(100dvh - 100lvh); }
 }
-/* Låseskjermen dekker hele skjermen; bakgrunnen bak den får samme farge som bunnen av den. */
-html.laast { background: #2c2f7f; }
+/* Låseskjermen dekker hele skjermen, og bunnen av den har én farge. Det iOS viser utenfor
+   siden får fargen til body (body vinner over html), så begge får den samme fargen. */
+html.laast, html.laast body { background: var(--laas-bunn); }
 /* Installert app på iPhone: statuslinjen ligger over toppen av siden. Toppelementene
    (headeren, menyen, låseskjermen) går helt opp bak den med mørk bakgrunn og flytter
    innholdet ned, og en fast, mørk stripe (i index.html, så den er med fra første bilde)
@@ -646,8 +652,11 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
   position: fixed; inset: 0 0 var(--under-bunn) 0; z-index: 200; display: grid; place-items: center; color: #fff; cursor: pointer;
   -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
   padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+  /* Nederst går fargene over i én farge (--laas-bunn), så det ikke blir noen kant mot
+     bakgrunnen under, uansett hvor langt ned iOS tegner låseskjermen. */
   background:
-    radial-gradient(900px 500px at -10% 110%, rgba(112, 72, 232, 0.5), transparent 60%),
+    linear-gradient(to bottom, transparent calc(100% - 200px), var(--laas-bunn) calc(100% - 64px)),
+    radial-gradient(900px 520px at -10% 88%, rgba(112, 72, 232, 0.5), transparent 60%),
     radial-gradient(700px 420px at 110% -10%, rgba(59, 111, 224, 0.55), transparent 60%),
     linear-gradient(160deg, #0d1530 0%, #1a2a66 100%);
 }
