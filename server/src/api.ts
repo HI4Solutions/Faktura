@@ -19,6 +19,7 @@ import { ehfFilnavn, ehfHindring, lagEhf } from "./ehf.js";
 import { sjekkEhf } from "./peppol.js";
 import { kundenokler, kundeSjekk, planlegg, produktnokler } from "./importer.js";
 import { MAKS_ANTALL, skrivVedlegg, vedleggFiler, vedleggRuter } from "./vedlegg.js";
+import { ehfRuter } from "./ehfRuter.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -300,6 +301,7 @@ export function lagApi() {
   org.route("/verifisering", verifiseringRuter());
   org.route("/", rapportRuter());
   org.route("/", vedleggRuter());
+  org.route("/", ehfRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting
@@ -572,6 +574,7 @@ export function lagApi() {
                   (f.status = 'utstedt' and f.type = 'faktura' and f.forfallsdato < faktura.i_dag()) as forfalt,
                   (select count(*) from faktura.purringer p where p.faktura_id = f.id) as antall_purringer,
                   (select count(*)::int from faktura.vedlegg v where v.faktura_id = f.id) as antall_vedlegg,
+                  (select s.status from faktura.ehf_sendinger s where s.faktura_id = f.id order by s.opprettet desc limit 1) as ehf_status,
                   (select e.status from faktura.eposter e where e.faktura_id = f.id order by e.opprettet desc limit 1) as epost_status
              from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id
             where ${vilkar.join(" and ")}
@@ -591,7 +594,8 @@ export function lagApi() {
         const kreditnotaer = await alle(db, "select id, fakturanummer, sum_inkl_mva, fakturadato from faktura.fakturaer where kreditnota_for = $1 order by fakturanummer", [f.id]);
         const purringer = await alle(db, "select * from faktura.purringer where faktura_id = $1 order by nummer", [f.id]);
         const eposter = await alle(db, "select id, purring_id, til, kopi, emne, status, detaljer, siste_hendelse_at, opprettet from faktura.eposter where faktura_id = $1 order by opprettet", [f.id]);
-        return { ...f, betalinger, kreditnotaer, purringer, eposter };
+        const ehf = await alle(db, "select id, mottaker, status, feil_kategori, detaljer, opprettet, oppdatert from faktura.ehf_sendinger where faktura_id = $1 order by opprettet", [f.id]);
+        return { ...f, betalinger, kreditnotaer, purringer, eposter, ehf };
       }),
     ),
   );
@@ -895,17 +899,20 @@ export function lagApi() {
   });
 
   // Sender på nytt, eventuelt med endrede kopimottakere (de gjelder også purringer senere).
+  // Kom EHF-en fram (eller venter den på kvittering), sendes den nye på e-post.
   org.post("/fakturaer/:id/send", async (c) => {
     const b = await kropp(c, z.object({ kopi_til: epostliste(10).optional() }));
     const id = uuid.parse(c.req.param("id"));
-    await bruk(c, async (db) => {
+    const ehfLevert = await bruk(c, async (db) => {
       const f = await hentFaktura(db, orgId(c), id);
       if (f.status === "utkast") throw new ApiFeil(409, "Fakturaen er ikke utstedt");
       if (!(await en(db, "select faktura.kan($1, 'utsted') as k", [orgId(c)]))!.k) throw new ApiFeil(403, "Ingen tilgang");
       if (b.kopi_til) await db.query("select faktura.sett_kopi_til($1, $2)", [id, b.kopi_til]);
+      const siste = await en(db, "select status from faktura.ehf_sendinger where faktura_id = $1 order by opprettet desc limit 1", [id]);
+      return siste?.status === "levert" || siste?.status === "venter";
     });
-    await leggIKo({ type: "send-faktura", faktura_id: id, send_epost: true });
-    return c.json({ ok: true }, 202);
+    await leggIKo({ type: "send-faktura", faktura_id: id, send_epost: true, ehf: !ehfLevert });
+    return c.json({ ok: true, kanal: ehfLevert ? "epost" : "auto" }, 202);
   });
 
   org.post("/fakturaer/:id/krediter", async (c) => {

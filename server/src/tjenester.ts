@@ -62,7 +62,9 @@ export const lagring: Lagring = {
 // ---------------------------------------------------------------------------
 
 export type Oppgave =
-  | { type: "send-faktura"; faktura_id: string; send_epost: boolean }
+  // ehf: send som EHF når kunden kan ta imot det (standard); false: bare e-post
+  | { type: "send-faktura"; faktura_id: string; send_epost: boolean; ehf?: boolean }
+  | { type: "sjekk-ehf"; sending_id: string }
   | { type: "send-purring"; purring_id: string }
   | { type: "disk-synk"; bruker_id: string; org_id: string }
   | { type: "disk-slett"; org_id: string; faktura_ider: string[] }
@@ -79,7 +81,8 @@ export function settLokalOppgavekjorer(k: Oppgavekjorer | undefined) {
   lokalKjorer = k;
 }
 
-export async function leggIKo(o: Oppgave): Promise<void> {
+// forsinkelse: antall sekunder før oppgaven kjøres (lokalt og i tester kjøres den med en gang).
+export async function leggIKo(o: Oppgave, forsinkelse?: number): Promise<void> {
   const oppgave = { ...o, oppgave_id: randomUUID() };
   if (lokalKjorer) return lokalKjorer(oppgave);
   if (!config.tasksKo || !config.workerUrl || !config.tasksInvokerSa) {
@@ -90,6 +93,7 @@ export async function leggIKo(o: Oppgave): Promise<void> {
   await tasks.createTask({
     parent: config.tasksKo,
     task: {
+      ...(forsinkelse ? { scheduleTime: { seconds: Math.floor(Date.now() / 1000) + forsinkelse } } : {}),
       httpRequest: {
         httpMethod: "POST",
         url: `${config.workerUrl}/oppgaver/${o.type}`,

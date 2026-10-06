@@ -5,7 +5,7 @@ Google Cloud. Kjernen er portert fra fakturamodulen i MedSide og gjort flerbruke
 (`org_id` overalt).
 
 Funksjoner: produkter, kunder, fakturaer og kreditnotaer (hel eller delvis),
-vedlegg på fakturaer, betaling og refusjon, gjentakende fakturaer, regnskapsførertilgang på tvers av
+vedlegg på fakturaer, EHF (Peppol) gjennom egen Recommand-konto, betaling og refusjon, gjentakende fakturaer, regnskapsførertilgang på tvers av
 klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
 
 ## Status

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { api, apnePdf, hent, lastNed, type Vedlegg } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
-import { dato, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, summer } from "../format";
+import { dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, orgnr, summer } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 import { IkonBinders, IkonPluss } from "../ikoner";
@@ -260,6 +260,7 @@ export function FakturaSkjema() {
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const kunder = useData(() => hent(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
   const produkter = useData(() => hent(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
+  const ehf = useData(() => hent(`/org/${org!.id}/ehf`), [org?.id]);
   const [f, settF] = useState<any>({ kunde_id: (!id && sporring.get("kunde")) || "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "", kommentar: "" });
   const [linjer, settLinjer] = useState<LinjeUtkast[]>([tomLinje()]);
   const [lastet, settLastet] = useState(!id); // et utkast som endres, er hentet
@@ -426,7 +427,11 @@ export function FakturaSkjema() {
             <input type="date" value={f.forfallsdato} onChange={(e) => settF({ ...f, forfallsdato: e.target.value })} />
           </label>
         </div>
-        {kunde && !kunde.epost && <div className="melding info">Kunden har ingen e-postadresse. Fakturaen blir utstedt, men ikke sendt på e-post.</div>}
+        {kunde && ehf.data?.tilkoblet && kunde.ehf && kunde.orgnr ? (
+          <div className="melding info">Sendes som EHF til {kunde.navn} (org.nr. {orgnr(kunde.orgnr)}). Kopimottakerne får en kopi på e-post.</div>
+        ) : (
+          kunde && !kunde.epost && <div className="melding info">Kunden har ingen e-postadresse. Fakturaen blir utstedt, men ikke sendt på e-post.</div>
+        )}
         <div className="rad">
           <label>
             Periode fra
@@ -595,6 +600,8 @@ export function FakturaVisning() {
   if (!f) return <Laster />;
 
   const sisteEpost = f.eposter?.at(-1);
+  const sisteEhf = f.ehf?.at(-1);
+  const viaEhf = f.sendt_til?.startsWith("EHF");
   const m = fakturaMerke({ ...f, forfalt: f.status === "utstedt" && f.forfallsdato < iDag(), antall_purringer: f.purringer?.length ?? 0, epost_status: sisteEpost?.status });
   const forfalt = f.type === "faktura" && f.status === "utstedt" && f.forfallsdato < iDag();
   const sistePurring = f.purringer?.at(-1);
@@ -694,6 +701,20 @@ export function FakturaVisning() {
         </div>
       </div>
       <Feil melding={h.feil} />
+      {sisteEhf?.status === "feilet" && (
+        <div className={`melding ${viaEhf || !f.sendt_til ? "feil" : "info"}`}>
+          EHF-en kom ikke fram{sisteEhf.feil_kategori ? `: ${ehfFeil[sisteEhf.feil_kategori] ?? sisteEhf.feil_kategori}` : ""}
+          {sisteEhf.detaljer ? ` (${sisteEhf.detaljer})` : ""}.{" "}
+          {f.sendt_til && !viaEhf
+            ? `Fakturaen ble sendt på e-post til ${f.sendt_til} i stedet.`
+            : "Kunden har ingen e-postadresse, så fakturaen er ikke sendt. Legg inn e-postadressen under Kunder og send på nytt."}
+        </div>
+      )}
+      {sisteEhf?.status === "sender" && (
+        <div className="melding feil">
+          Vi fikk ikke svar fra Recommand, så vi vet ikke om EHF-en ble sendt. Sjekk under Documents hos Recommand før du sender på nytt.
+        </div>
+      )}
       {sisteEpost && ["sprett", "klage"].includes(sisteEpost.status) && (
         <div className="melding feil">
           E-posten til {sisteEpost.til}
@@ -725,11 +746,18 @@ export function FakturaVisning() {
               {f.kid}
             </div>
           )}
-          {f.sendt_til && (
+          {f.sendt_til && !viaEhf && (
             <div>
               <div className="dempet liten">Sendt til</div>
               {f.sendt_til}{" "}
               {sisteEpost && <span className={`merke ${epostStatus[sisteEpost.status]?.klasse}`}>{epostStatus[sisteEpost.status]?.tekst}</span>}
+            </div>
+          )}
+          {viaEhf && sisteEhf && (
+            <div>
+              <div className="dempet liten">Sendt som EHF</div>
+              org.nr. {orgnr(sisteEhf.mottaker.split(":")[1])}{" "}
+              <span className={`merke ${ehfStatus[sisteEhf.status]?.klasse}`}>{ehfStatus[sisteEhf.status]?.tekst}</span>
             </div>
           )}
           {f.kopi_til?.length > 0 && (
@@ -831,11 +859,22 @@ export function FakturaVisning() {
           {dato(sistePurring.ny_frist)}.
         </div>
       )}
-      {(f.betalinger?.length > 0 || f.kreditnotaer?.length > 0 || f.purringer?.length > 0) && (
+      {(f.betalinger?.length > 0 || f.kreditnotaer?.length > 0 || f.purringer?.length > 0 || f.ehf?.length > 0) && (
         <div className="kort">
           <h2 style={{ marginTop: 0 }}>Historikk</h2>
           <table>
             <tbody>
+              {f.ehf.map((s: any) => (
+                <tr key={s.id}>
+                  <td>{dato(s.opprettet)}</td>
+                  <td>
+                    EHF til org.nr. {orgnr(s.mottaker.split(":")[1])}{" "}
+                    <span className={`merke ${ehfStatus[s.status]?.klasse}`}>{ehfStatus[s.status]?.tekst}</span>
+                    {s.status === "feilet" && s.feil_kategori && <span className="dempet"> · {ehfFeil[s.feil_kategori] ?? s.feil_kategori}</span>}
+                  </td>
+                  <td />
+                </tr>
+              ))}
               {f.betalinger.map((b: any) => (
                 <tr key={b.id}>
                   <td>{dato(b.betalt_dato)}</td>
@@ -924,13 +963,17 @@ function SendPaNytt({ faktura, ferdig }: { faktura: any; ferdig: () => void }) {
   const { org } = useKonto();
   const kunde = useData(() => hent(`/org/${org!.id}/kunder/${faktura.kunde_id}`), [org?.id, faktura.kunde_id]);
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
+  const ehfOppsett = useData(() => hent(`/org/${org!.id}/ehf`), [org?.id]);
   const [kopi, settKopi] = useState((faktura.kopi_til ?? []).join(", "));
   const [sendt, settSendt] = useState(false);
   const h = useHandling();
 
-  if (!kunde.data || !orgData.data) return <Laster />;
+  if (!kunde.data || !orgData.data || !ehfOppsett.data) return <Laster />;
   const til = kunde.data.epost as string | null;
   const fast: string[] = orgData.data.kopi_til?.length ? orgData.data.kopi_til : orgData.data.epost ? [orgData.data.epost] : [];
+  const ehfLevert = ["levert", "venter"].includes(faktura.ehf?.at(-1)?.status);
+  // Kom ikke EHF-en fram (eller ble den aldri sendt), prøves EHF igjen for kunder som kan ta imot det.
+  const somEhf = !ehfLevert && ehfOppsett.data.tilkoblet && kunde.data.ehf && kunde.data.orgnr && faktura.selger?.orgnr;
 
   async function send(ev: FormEvent) {
     ev.preventDefault();
@@ -943,7 +986,7 @@ function SendPaNytt({ faktura, ferdig }: { faktura: any; ferdig: () => void }) {
     }
   }
 
-  if (!til)
+  if (!til && !somEhf)
     return (
       <p>
         {faktura.kunde?.navn ?? "Kunden"} har ingen e-postadresse. Legg den inn under <Link to="/kunder">Kunder</Link> først.
@@ -951,10 +994,18 @@ function SendPaNytt({ faktura, ferdig }: { faktura: any; ferdig: () => void }) {
     );
   return (
     <form onSubmit={send}>
-      <p>
-        Sendes til <strong>{til}</strong>
-        {faktura.sendt_til && faktura.sendt_til !== til && <span className="dempet"> (sist sendt til {faktura.sendt_til})</span>}.
-      </p>
+      {somEhf ? (
+        <p>
+          Sendes som EHF til org.nr. <strong>{orgnr(kunde.data.orgnr)}</strong>
+          {til ? <>, og på e-post til {til} hvis EHF-en ikke kommer fram</> : null}.
+        </p>
+      ) : (
+        <p>
+          {ehfLevert && "EHF-en er levert, så den sendes nå på e-post. "}
+          Sendes til <strong>{til}</strong>
+          {faktura.sendt_til && faktura.sendt_til !== til && !ehfLevert && <span className="dempet"> (sist sendt til {faktura.sendt_til})</span>}.
+        </p>
+      )}
       <EpostlisteFelt
         etikett="Kopi til (valgfritt)"
         verdi={kopi}
@@ -963,7 +1014,7 @@ function SendPaNytt({ faktura, ferdig }: { faktura: any; ferdig: () => void }) {
         hjelp={<>Kopimottakerne får også eventuelle purringer. Skill flere adresser med komma.{fast.length > 0 && <> En skjult kopi går til {fast.join(", ")}.</>}</>}
       />
       <Feil melding={h.feil} />
-      {sendt && <div className="melding ok">Sendt. E-posten går ut i løpet av noen sekunder.</div>}
+      {sendt && <div className="melding ok">Sendt. {somEhf ? "EHF-en" : "E-posten"} går ut i løpet av noen sekunder.</div>}
       <div className="knapper">
         <button className="primar" disabled={h.opptatt || sendt}>
           Send

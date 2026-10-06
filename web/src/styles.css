@@ -842,6 +842,10 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
 /* På fakturaen vises hele filnavnet, over flere linjer om nødvendig. */
 .faktura-vedlegg button.navn { flex: 0 1 auto; font-weight: 500; white-space: normal; overflow: visible; overflow-wrap: anywhere; line-height: 1.4; }
 .har-vedlegg { display: inline-flex; vertical-align: -2px; margin-left: 6px; color: var(--dempet); }
+
+/* EHF-sending i innstillingene */
+.ehf-kobling .merke { vertical-align: 1px; }
+.ehf-skjema { max-width: 560px; margin-top: 8px; }
 .flere-info { margin: 8px 0 0; font-size: 0.84rem; color: var(--info); }
 
 /* Bredere dialog for skjemaer med fakturalinjer (gjentakende fakturaer) */

@@ -47,7 +47,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `vedlegg`: filer på fakturaer (PDF, bilder, CSV og regneark, typene EHF godtar).
   Lastes opp før utkastet lagres, låses ved utstedelse, og workeren legger en kopi i
   `fakturaer`-bøtta når fakturaen sendes. Filer etter slettede vedlegg ryddes daglig
-- `integrasjoner`: Google Disk, regnskapssystemer, bank, Peppol. Tokens er KMS-kryptert
+- `integrasjoner`: Google Disk, regnskapssystemer, bank, Peppol. Tokens er KMS-kryptert.
+  EHF sendes gjennom organisasjonens egen konto hos Recommand (type `peppol`): API-et
+  sjekker nøkkelen og krypterer hemmeligheten, bare workeren dekrypterer og sender
+- `ehf_sendinger`: hver EHF-sending med status (levert, venter, feilet). Kommer den ikke
+  fram, sender workeren e-post i stedet
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 

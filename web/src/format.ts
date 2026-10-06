@@ -63,7 +63,10 @@ export const statusTekst: Record<string, string> = {
   kreditert: "Kreditert",
 };
 
-export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: string; refusjon_belop?: number; betalt_belop?: number; kreditert_belop?: number; antall_purringer?: number; epost_status?: string | null }) {
+export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: string; refusjon_belop?: number; betalt_belop?: number; kreditert_belop?: number; antall_purringer?: number; epost_status?: string | null; ehf_status?: string | null }) {
+  // EHF som ikke kom fram (uten e-post i stedet), eller der vi ikke vet om den ble sendt.
+  if (f.status === "utstedt" && f.ehf_status === "sender") return { tekst: "EHF usikker", klasse: "merke-advarsel" };
+  if (f.status === "utstedt" && f.ehf_status === "feilet" && !f.epost_status) return { tekst: "EHF feilet", klasse: "merke-fare" };
   if (f.type === "kreditnota") return { tekst: "Kreditnota", klasse: "merke-noytral" };
   if (f.status === "utstedt" && (f.epost_status === "sprett" || f.epost_status === "klage")) return { tekst: "E-post i retur", klasse: "merke-fare" };
   if (f.status === "utstedt" && (f.antall_purringer ?? 0) > 0) return { tekst: `Purret${(f.antall_purringer ?? 0) > 1 ? ` (${f.antall_purringer})` : ""}`, klasse: "merke-fare" };
@@ -74,6 +77,24 @@ export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: stri
   const klasse = { utkast: "merke-noytral", utstedt: "merke-info", betalt: "merke-ok", kreditert: "merke-noytral" }[f.status] ?? "merke-noytral";
   return { tekst: statusTekst[f.status] ?? f.status, klasse };
 }
+
+export const ehfStatus: Record<string, { tekst: string; klasse: string }> = {
+  sender: { tekst: "Usikker", klasse: "merke-advarsel" },
+  venter: { tekst: "Venter på kvittering", klasse: "merke-info" },
+  levert: { tekst: "Levert", klasse: "merke-ok" },
+  feilet: { tekst: "Kom ikke fram", klasse: "merke-fare" },
+};
+
+// Hvorfor en EHF ikke kom fram (kategoriene fra aksesspunktet).
+export const ehfFeil: Record<string, string> = {
+  recipient_not_found: "mottakeren er ikke registrert for EHF",
+  document_not_supported: "mottakeren tar ikke imot denne typen dokument",
+  validation: "fakturaen ble avvist av en regel",
+  transport: "den kunne ikke overføres",
+  recipient_rejected: "mottakeren avviste den",
+  duplicate: "den er sendt før",
+  other: "ukjent feil",
+};
 
 export const epostStatus: Record<string, { tekst: string; klasse: string }> = {
   sendt: { tekst: "Sendt", klasse: "merke-info" },

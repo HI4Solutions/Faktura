@@ -100,20 +100,25 @@ export async function sikrePdf(db: Db, f: any): Promise<{ sti: string; data: Uin
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
-export function fakturaEpost(f: any) {
+// ehf: kunden har fått fakturaen som EHF, og e-posten er en kopi til kopimottakerne og
+// organisasjonen selv.
+export function fakturaEpost(f: any, ehf = false) {
   const kreditnota = f.type === "kreditnota";
   const s = f.selger;
   const navn = f.kunde?.navn ?? "";
-  const emne = `${kreditnota ? "Kreditnota" : "Faktura"} ${f.fakturanummer} fra ${s.navn}`;
+  const dok = kreditnota ? "Kreditnota" : "Faktura";
+  const emne = `${ehf ? "Kopi: " : ""}${dok} ${f.fakturanummer} fra ${s.navn}`;
   // Notatet på fakturaen står også i e-posten, og navnene på vedleggene.
   const notat: string[] = f.kommentar?.trim() ? ["", ...f.kommentar.trim().split(/\r?\n/)] : [];
   if (f.vedlegg?.length) notat.push("", `Vedlegg: ${f.vedlegg.map((v: any) => v.filnavn).join(", ")}`);
+  const belop = kreditnota ? `på ${kr(-f.sum_inkl_mva)} kr` : `på ${kr(f.sum_inkl_mva)} kr med forfall ${dato(f.forfallsdato)}`;
+  const forste = ehf
+    ? [`Hei,`, "", `${dok} ${f.fakturanummer} ${belop} er sendt som EHF (elektronisk faktura) til ${navn}. Her er en kopi.`]
+    : [`Hei ${navn},`, "", `Vedlagt er ${dok.toLowerCase()} ${f.fakturanummer} ${belop}.`];
   const linjer = kreditnota
-    ? [`Hei ${navn},`, "", `Vedlagt er kreditnota ${f.fakturanummer} på ${kr(-f.sum_inkl_mva)} kr.`, ...notat]
+    ? [...forste, ...notat]
     : [
-        `Hei ${navn},`,
-        "",
-        `Vedlagt er faktura ${f.fakturanummer} på ${kr(f.sum_inkl_mva)} kr med forfall ${dato(f.forfallsdato)}.`,
+        ...forste,
         ...notat,
         "",
         `Kontonummer: ${kontonr(s.kontonr)}`,

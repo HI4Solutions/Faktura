@@ -5,6 +5,7 @@ import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
+import { EhfSending } from "./Ehf";
 import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
@@ -34,6 +35,7 @@ export function Innstillinger() {
       {org && erAdmin(org.rolle) && (
         <>
           <Organisasjon />
+          <EhfSending />
           <Kontoer />
           <Logo />
           <Medlemmer />

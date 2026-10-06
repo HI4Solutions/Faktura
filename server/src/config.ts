@@ -45,6 +45,8 @@ export const config = {
 
   // Oppslag i PEPPOL (DNS og SMP) om kunder kan motta EHF. Slås av i testene.
   ehfOppslag: valgfri("EHF_OPPSLAG") !== "av",
+  // Aksesspunktet EHF sendes gjennom. Hver organisasjon bruker sin egen konto der.
+  recommandUrl: valgfri("RECOMMAND_URL") ?? "https://app.recommand.eu",
 
   // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
   adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),

@@ -10,6 +10,7 @@ import { sendVarsel } from "./push.js";
 import { varsleForfalte, varsleGjentakende, varsleOmHendelse } from "./varsler.js";
 import { sjekkEhf } from "./peppol.js";
 import { ryddVedlegg, vedleggFiler } from "./vedlegg.js";
+import { oppdaterEhfKoblinger, sendSomEhf, sjekkEhfLevering } from "./ehfSending.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -43,10 +44,12 @@ export async function mottakere(db: SystemDb, f: any) {
   return { til, kopi, blindkopi: unike(fast) };
 }
 
-// Lager PDF, lagrer den og sender e-post til kunden med vedleggene. Trygg å kjøre flere
-// ganger: PDF-en og arkivkopiene av vedleggene gjenbrukes, og e-posten har
-// idempotensnøkkel per oppgave.
-export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; oppgave_id: string }) {
+// Lager PDF, lagrer den og sender fakturaen med vedleggene: som EHF når kunden kan ta imot
+// det og organisasjonen har koblet til EHF-sending, ellers (eller når EHF ikke kom fram) på
+// e-post. Ved EHF får kopimottakerne og organisasjonen en kopi på e-post. Trygg å kjøre
+// flere ganger: PDF-en og arkivkopiene av vedleggene gjenbrukes, EHF-en sendes én gang per
+// oppgave, og e-posten har idempotensnøkkel per oppgave.
+export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; ehf?: boolean; oppgave_id: string }) {
   await somSystem(async (db) => {
     const rad = await en(db, "select org_id from faktura.fakturaer where id = $1", [o.faktura_id]);
     if (!rad) return logg("WARNING", "Fant ikke fakturaen", o);
@@ -57,25 +60,32 @@ export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; 
     const vedlegg = await vedleggFiler(db, f, true);
     let sendtTil: string | null = null;
     const m = await mottakere(db, f);
-    if (o.send_epost && m.til) {
-      const e = fakturaEpost(f);
+    const pdf = { filnavn: pdfFilnavn(f), data };
+    const ehf = o.send_epost && o.ehf !== false ? await sendSomEhf(db, f, pdf, vedlegg, o.oppgave_id) : null;
+    // Kunden har fått EHF-en (eller vi vet ikke om den kom fram): ingen e-post til kunden.
+    const viaEhf = ehf !== null && ehf.status !== "feilet";
+    // Kopi på e-post: kopimottakerne på fakturaen, ellers organisasjonens faste kopiadresse.
+    const til = viaEhf ? (m.kopi.length ? m.kopi : m.blindkopi) : m.til ? [m.til] : [];
+    if (o.send_epost && til.length && !(viaEhf && ehf.status === "sender")) {
+      const e = fakturaEpost(f, viaEhf);
       const sendt = await epost().send({
         fraNavn: f.selger.navn,
-        til: [m.til],
+        til,
         svarTil: f.selger.epost ?? undefined,
-        kopi: m.kopi,
-        blindkopi: m.blindkopi,
+        kopi: viaEhf ? [] : m.kopi,
+        blindkopi: viaEhf && m.kopi.length ? m.blindkopi : viaEhf ? [] : m.blindkopi,
         emne: e.emne,
         tekst: e.tekst,
         html: e.html,
-        vedlegg: [{ filnavn: pdfFilnavn(f), data, type: "application/pdf" }, ...vedlegg],
+        vedlegg: [{ ...pdf, type: "application/pdf" }, ...vedlegg],
         idempotensnokkel: `faktura-${o.oppgave_id}`,
       });
-      await db.query("select faktura.logg_epost($1, $2, null, $3, $4, $5, $6)", [f.org_id, f.id, sendt.id, m.til, e.emne, m.kopi]);
-      sendtTil = m.til;
+      await db.query("select faktura.logg_epost($1, $2, null, $3, $4, $5, $6)", [f.org_id, f.id, sendt.id, til[0], e.emne, viaEhf ? til.slice(1) : m.kopi]);
+      if (!viaEhf) sendtTil = m.til!;
     }
+    if (viaEhf) sendtTil = `EHF (org.nr. ${ehf.mottaker.split(":")[1]})`;
     await db.query("select faktura.marker_sendt($1, $2, $3)", [f.id, sti, sendtTil]);
-    logg("INFO", "Faktura sendt", { faktura_id: f.id, fakturanummer: f.fakturanummer, epost: Boolean(sendtTil) });
+    logg("INFO", "Faktura sendt", { faktura_id: f.id, fakturanummer: f.fakturanummer, ehf: ehf?.status ?? null, epost: Boolean(sendtTil) && !viaEhf });
   });
 }
 
@@ -126,6 +136,7 @@ export async function sendPurring(o: { purring_id: string; oppgave_id: string })
 
 export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "send-faktura") return sendFaktura(o);
+  if (o.type === "sjekk-ehf") return sjekkEhfLevering(o);
   if (o.type === "send-purring") return sendPurring(o);
   if (o.type === "disk-synk") return synkOrganisasjon(o.bruker_id, o.org_id, sikrePdf, pdfFilnavn);
   if (o.type === "disk-slett") return slettFraDisk(o.org_id, o.faktura_ider, pdfFilnavn);
@@ -212,6 +223,13 @@ export async function gjenta() {
     await varsleForfalte();
   } catch (e) {
     logg("ERROR", "Push-varsler fra daglig jobb feilet", { feil: (e as Error).message });
+  }
+
+  // EHF-koblingene: selskapets status hos Recommand, og om nøkkelen virker.
+  try {
+    await oppdaterEhfKoblinger();
+  } catch (e) {
+    logg("ERROR", "Oppdatering av EHF-koblinger feilet", { feil: (e as Error).message });
   }
 
   // Vedlegg som aldri ble lagret på en faktura, og filene etter slettede vedlegg.
@@ -356,8 +374,14 @@ export function lagWorker() {
   app.get("/helse", (c) => c.json({ ok: true }));
 
   app.post("/oppgaver/send-faktura", async (c) => {
-    const o = z.object({ faktura_id: z.string().uuid(), send_epost: z.boolean(), oppgave_id: z.string() }).parse(await c.req.json());
+    const o = z.object({ faktura_id: z.string().uuid(), send_epost: z.boolean(), ehf: z.boolean().optional(), oppgave_id: z.string() }).parse(await c.req.json());
     await sendFaktura(o);
+    return c.json({ ok: true });
+  });
+
+  app.post("/oppgaver/sjekk-ehf", async (c) => {
+    const o = z.object({ sending_id: z.string().uuid(), oppgave_id: z.string() }).parse(await c.req.json());
+    await sjekkEhfLevering(o);
     return c.json({ ok: true });
   });
 
