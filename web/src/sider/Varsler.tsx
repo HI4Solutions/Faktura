@@ -9,6 +9,40 @@ import { erInstallert, erIos, hentAbonnement, installer, pushStotte, slaAvVarsle
 import { useKonto } from "../konto";
 import { foreslattNavn, leggTilPasskey, passkeyFeil } from "../passkey";
 import { bekreftMedServer, biometriNavn, hentPasskeyIder, lagreLaas, lesLaas, lyttPaLaas, merkAktiv, stotterApplaas } from "../applaas";
+import { lesTema, settTema, type Tema } from "../tema";
+
+// Lyst, mørkt eller som systemet, på denne enheten.
+function UtseendeValg() {
+  const [tema, settValgt] = useState<Tema>(lesTema);
+  const valg: [Tema, string][] = [
+    ["system", "System"],
+    ["lys", "Lys"],
+    ["mork", "Mørk"],
+  ];
+  return (
+    <>
+      <h3>Utseende</h3>
+      <div className="faner utseende" role="radiogroup" aria-label="Utseende">
+        {valg.map(([v, navn]) => (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={tema === v}
+            className={tema === v ? "valgt" : undefined}
+            onClick={() => {
+              settTema(v);
+              settValgt(v);
+            }}
+          >
+            {navn}
+          </button>
+        ))}
+      </div>
+      <p className="dempet liten">«System» følger innstillingen på enheten, også når den bytter mellom lyst og mørkt. Valget gjelder denne enheten.</p>
+    </>
+  );
+}
 
 const LAASETIDER: [number, string][] = [
   [0, "Hver gang appen åpnes"],
@@ -201,6 +235,7 @@ export function AppOgVarsler() {
           Du kan installere HI4 Faktura som en app fra nettleserens meny («Installer app» eller «Legg til på startskjermen»).
         </p>
       )}
+      <UtseendeValg />
       <AppLaasValg />
 
       <h2>Varsler</h2>

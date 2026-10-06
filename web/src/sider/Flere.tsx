@@ -11,7 +11,7 @@ import { IkonPluss } from "../ikoner";
 import { gebyrLinjer, harRabatt, LinjeTabell, linjefeil, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tomLinje, erTom, type LinjeUtkast } from "../linjer";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
-import { AvsenderKonto, fasteValg } from "./AvsenderKonto";
+import { AvsenderKonto, fastKontoId, fasteValg } from "./AvsenderKonto";
 
 interface Kort {
   nokkel: number;
@@ -113,7 +113,7 @@ export function FlereFakturaer() {
         deres_referanse: b.k.deres_referanse || null,
         kopi_til: tilEpostliste(b.k.kopi),
         ...(b.fast.avsender ? { avsender: b.fast.avsender } : {}),
-        ...(b.fast.konto_id ? { konto_id: b.fast.konto_id } : {}),
+        ...(b.fast.konto ? { konto_id: fastKontoId(b.fast.konto) } : {}),
         linjer: b.linjer,
       })),
     };
@@ -266,7 +266,7 @@ export function FlereFakturaer() {
               nyttProdukt={(i, navn) => settValg({ type: "nytt-produkt", kort: k.nokkel, linje: i, navn })}
             />
           </div>
-          {(fast.avsender || fast.konto_id) && (
+          {(fast.avsender || fast.konto) && (
             <p className="flere-info">
               {fast.ulike ? "Produktene har ulik fast avsender eller konto; det første produktets valg brukes." : "Fast avsender eller konto fra produktet brukes på denne fakturaen."}
             </p>

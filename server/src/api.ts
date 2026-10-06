@@ -106,9 +106,11 @@ const produktSkjema = z.object({
   enhetspris: z.number().nullish(), // null: variabel pris, fylles inn på fakturaen
   mva_sats: z.number().min(0).max(100).optional(),
   aktiv: z.boolean().optional(),
-  // Fast avsender og konto: velges på fakturaen når produktet brukes (null: ikke fast)
+  // Fast avsender og konto: velges på fakturaen når produktet brukes (null: ikke fast).
+  // standardkonto: fast på organisasjonens standardkonto (da er konto_id null).
   avsender: z.enum(["firma", "innehaver"]).nullish(),
   konto_id: uuid.nullish(),
+  standardkonto: z.boolean().optional(),
   // Indeksregulering (KPI)
   indeks_aktiv: z.boolean().optional(),
   indeks_maaned: z.number().int().min(1).max(12).nullish(),

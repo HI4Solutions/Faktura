@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
+    <script>
+      // Lyst eller mørkt før siden tegnes: valget på denne enheten, ellers systemets (se tema.ts).
+      try {
+        var t = localStorage.getItem("faktura.tema");
+        var mork = t === "mork" || (t !== "lys" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.setAttribute("data-tema", mork ? "mork" : "lys");
+        document.querySelector('meta[name="color-scheme"]').setAttribute("content", mork ? "dark" : "light");
+      } catch (e) {}
+    </script>
     <title>HI4 Faktura</title>
     <meta name="description" content="Fakturering for norske bedrifter: send fakturaer, følg opp betalinger og få varsler." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

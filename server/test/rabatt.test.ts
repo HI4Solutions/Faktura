@@ -163,6 +163,14 @@ describe.skipIf(!process.env.DATABASE_URL)("Rabatt, variabel pris, fast avsender
     expect([p.data.avsender, p.data.konto_id]).toEqual(["innehaver", konto.id]);
     expect((await kall("POST", `/api/org/${org}/produkter`, { navn: "Feil", enhetspris: 1, avsender: "naboen" })).status).toBe(400);
     expect((await kall("PATCH", `/api/org/${org}/produkter/${p.data.id}`, { avsender: null })).data.avsender).toBe(null);
+    // Standardkontoen kan også være fast, men ikke samtidig med en annen konto.
+    const std = await kall("PATCH", `/api/org/${org}/produkter/${p.data.id}`, { konto_id: null, standardkonto: true });
+    expect([std.data.konto_id, std.data.standardkonto]).toEqual([null, true]);
+    expect(await kall("PATCH", `/api/org/${org}/produkter/${p.data.id}`, { konto_id: konto.id })).toEqual({
+      status: 400,
+      data: { error: "Velg enten standardkontoen eller en annen konto som fast konto" },
+    });
+    expect((await kall("PATCH", `/api/org/${org}/produkter/${p.data.id}`, { konto_id: konto.id, standardkonto: false })).data.konto_id).toBe(konto.id);
     // Slettes kontoen, er produktet uten fast konto.
     expect((await kall("DELETE", `/api/org/${org}/kontoer/${konto.id}`)).status).toBe(204);
     expect((await kall("GET", `/api/org/${org}/produkter/${p.data.id}`)).data.konto_id).toBe(null);

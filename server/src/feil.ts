@@ -40,6 +40,7 @@ const pgMeldinger: Record<string, string> = {
 const begrensninger: Record<string, string> = {
   produkter_indeks_krever_pris: "Indeksregulering krever fast pris på produktet",
   faktura_linjer_en_rabatt: "Velg rabatt i prosent eller i kroner, ikke begge",
+  produkter_en_konto: "Velg enten standardkontoen eller en annen konto som fast konto",
 };
 
 export function tilHttp(e: unknown): { status: number; error: string } {
