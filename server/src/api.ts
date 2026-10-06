@@ -150,6 +150,15 @@ const fakturaSkjema = z.object({
   konto_id: uuid.nullish(),
   avsender: z.enum(["firma", "innehaver"]).nullish(),
   kopi_til: epostliste(10).optional(), // får fakturaen sammen med kunden
+  // Gjør fakturaen gjentakende: gjentakelsen opprettes når fakturaen sendes.
+  gjenta: z
+    .object({
+      intervall: z.enum(["maaned", "kvartal", "aar"]),
+      neste_forfall: datoS.nullish(),
+      send_dager_foer: z.number().int().min(0).max(60).nullish(),
+      slutt_dato: datoS.nullish(),
+    })
+    .nullish(),
   linjer: z.array(linjeSkjema).max(500),
   gebyr: z.boolean().optional(), // legg til organisasjonens standard fakturagebyr som egen linje
 });
@@ -584,10 +593,11 @@ export function lagApi() {
       const f = await en(
         db,
         `insert into faktura.fakturaer (org_id, kunde_id, fakturadato, forfallsdato, periode_fra, periode_til,
-                                        deres_referanse, var_referanse, notat, kommentar, planlagt_sending, konto_id, avsender, kopi_til, opprettet_av)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, faktura.bruker_id()) returning id`,
+                                        deres_referanse, var_referanse, notat, kommentar, planlagt_sending, konto_id, avsender, kopi_til, gjenta, opprettet_av)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, faktura.bruker_id()) returning id`,
         [orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
-         b.deres_referanse, b.var_referanse, b.notat, b.kommentar, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? []],
+         b.deres_referanse, b.var_referanse, b.notat, b.kommentar, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? [],
+         b.gjenta ? JSON.stringify(b.gjenta) : null],
       );
       await skrivLinjer(db, orgId(c), f.id, b.linjer, b.gebyr ?? false);
       return hentFaktura(db, orgId(c), f.id);
@@ -602,11 +612,11 @@ export function lagApi() {
       const r = await db.query(
         `update faktura.fakturaer set kunde_id = $3, fakturadato = $4, forfallsdato = $5, periode_fra = $6, periode_til = $7,
                 deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11, konto_id = $12, avsender = $13,
-                kopi_til = coalesce($14, kopi_til), kommentar = $15
+                kopi_til = coalesce($14, kopi_til), kommentar = $15, gjenta = $16
           where id = $1 and org_id = $2 and status = 'utkast'`,
         [id, orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
          b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? null,
-         b.kommentar],
+         b.kommentar, b.gjenta ? JSON.stringify(b.gjenta) : null],
       );
       if (!r.rowCount) throw new ApiFeil(409, "Bare utkast kan endres");
       await skrivLinjer(db, orgId(c), id, b.linjer, b.gebyr ?? false);

@@ -17,6 +17,17 @@ export const leggTilDager = (iso: string, dager: number) => {
   return d.toISOString().slice(0, 10);
 };
 
+// Samme dag n måneder senere; finnes ikke dagen (31. i april), blir det siste dag i måneden.
+export const leggTilMaaneder = (iso: string, n: number) => {
+  const [a, m, d] = iso.split("-").map(Number) as [number, number, number];
+  const ny = new Date(Date.UTC(a, m - 1 + n, 1));
+  const siste = new Date(Date.UTC(ny.getUTCFullYear(), ny.getUTCMonth() + 1, 0)).getUTCDate();
+  ny.setUTCDate(Math.min(d, siste));
+  return ny.toISOString().slice(0, 10);
+};
+
+export const intervallTekst: Record<string, string> = { maaned: "Hver måned", kvartal: "Hvert kvartal", aar: "Hvert år" };
+
 const rund = (n: number) => Math.sign(n) * Number(Math.round(Number(`${Math.abs(n)}e2`)) + "e-2");
 
 export interface Tallinje {

@@ -828,3 +828,9 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
   .sendt-melding .knapper { width: 100%; }
   .sendt-melding .knapper > .knapp { flex: 1 1 auto; justify-content: center; }
 }
+
+/* Gjør fakturaen gjentakende */
+.gjenta-kort { padding-top: 16px; padding-bottom: 16px; }
+.gjenta-kort .gjenta-bryter { margin: 0; font-size: 0.95rem; font-weight: 600; }
+.gjenta-kort .rad { margin-top: 14px; }
+.gjenta-forklaring { margin: 0; }

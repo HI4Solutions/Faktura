@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { api, apnePdf, hent, lastNed } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
-import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, linjebelop, summer } from "../format";
+import { dato, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, summer } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 import { IkonPluss } from "../ikoner";
@@ -250,6 +250,8 @@ export function FakturaSkjema() {
   const [lastet, settLastet] = useState(!id); // et utkast som endres, er hentet
   const [rabattValgt, settRabattValgt] = useState(false);
   const visRabatt = rabattValgt || harRabatt(linjer);
+  const [gjenta, settGjenta] = useState<Gjenta | null>(null); // gjør fakturaen gjentakende
+  const [nesteValgt, settNesteValgt] = useState(false); // neste forfall er valgt av brukeren
   const [gebyr, settGebyr] = useState(false);
   const [nyKunde, settNyKunde] = useState<{ navn: string } | null>(null);
   const [nyttProdukt, settNyttProdukt] = useState<{ linje: number | "ny"; navn?: string } | null>(null); // linjen produktet skal inn på
@@ -275,6 +277,15 @@ export function FakturaSkjema() {
       });
       settKopi((u.kopi_til ?? []).join(", "));
       settLinjer(u.linjer.map(tilUtkast));
+      if (u.gjenta) {
+        settGjenta({
+          intervall: u.gjenta.intervall,
+          neste_forfall: u.gjenta.neste_forfall ?? "",
+          send_dager_foer: u.gjenta.send_dager_foer == null ? "" : String(u.gjenta.send_dager_foer),
+          slutt_dato: u.gjenta.slutt_dato ?? "",
+        });
+        settNesteValgt(Boolean(u.gjenta.neste_forfall));
+      }
       settLastet(true);
     });
   }, [id, org]);
@@ -293,6 +304,10 @@ export function FakturaSkjema() {
   const kunde = kunder.data?.find((k: any) => k.id === f.kunde_id);
   const rabatt = Math.round((summer(tallLinjer.map((l) => ({ ...l, rabatt_prosent: null, rabatt_belop: null }))).eks - summer(tallLinjer).eks) * 100) / 100;
   const sjekkLinjer = useLinjefeil(linjer, settFeil);
+  // Gjentakelsen: neste forfall er ett intervall etter denne fakturaens forfall, om ikke
+  // brukeren har valgt en annen dato.
+  const forfall = f.forfallsdato || (f.fakturadato && orgData.data ? leggTilDager(f.fakturadato, orgData.data.standard_forfall_dager) : "");
+  const nesteForfall = gjenta ? (nesteValgt && gjenta.neste_forfall ? gjenta.neste_forfall : forfall ? leggTilMaaneder(forfall, MND[gjenta.intervall]) : "") : "";
   const vekslRabatt = () => {
     if (!visRabatt) return settRabattValgt(true);
     settRabattValgt(false);
@@ -312,6 +327,9 @@ export function FakturaSkjema() {
     const feilAdresser = ugyldigeEposter(kopi);
     if (feilAdresser.length) return settFeil(`Ugyldig e-postadresse for kopi: ${feilAdresser.join(", ")}`);
     if (sjekkLinjer()) return;
+    if (gjenta && nesteValgt && forfall && gjenta.neste_forfall <= forfall)
+      return settFeil(`Neste forfall for gjentakelsen må være etter forfallsdatoen på fakturaen (${dato(forfall)}).`);
+    if (gjenta?.slutt_dato && nesteForfall && gjenta.slutt_dato < nesteForfall) return settFeil("Sluttdatoen for gjentakelsen er før neste forfall.");
     const kropp = {
       kunde_id: f.kunde_id,
       fakturadato: f.fakturadato || null,
@@ -325,6 +343,14 @@ export function FakturaSkjema() {
       konto_id: f.konto_id ?? null,
       avsender: f.avsender ?? null,
       kopi_til: tilEpostliste(kopi),
+      gjenta: gjenta
+        ? {
+            intervall: gjenta.intervall,
+            neste_forfall: nesteValgt && gjenta.neste_forfall ? gjenta.neste_forfall : null, // ellers: ett intervall etter forfall
+            send_dager_foer: gjenta.send_dager_foer === "" ? null : Number(gjenta.send_dager_foer),
+            slutt_dato: gjenta.slutt_dato || null,
+          }
+        : null,
       gebyr,
       linjer: tallLinjer,
     };
@@ -469,6 +495,17 @@ export function FakturaSkjema() {
         </div>
       </div>
 
+      <GjentaValg
+        gjenta={gjenta}
+        endre={(g, nesteEndret) => {
+          settGjenta(g);
+          if (nesteEndret !== undefined) settNesteValgt(nesteEndret);
+          if (feil?.includes("gjentakelsen")) settFeil(null);
+        }}
+        nesteForfall={nesteForfall}
+        forfall={forfall}
+        standardDager={orgData.data.standard_dager_foer_forfall ?? 14}
+      />
       <NotatFelt verdi={f.kommentar} endre={(v) => settF({ ...f, kommentar: v })} />
       <label>
         Internt notat (vises ikke på fakturaen)
@@ -562,6 +599,7 @@ export function FakturaVisning() {
           <div className="melding ok sendt-melding" role="status">
             <span>
               {f.type === "kreditnota" ? "Kreditnota" : "Faktura"} {f.fakturanummer} er sendt{f.kunde?.epost ? ` til ${f.kunde.epost}` : ""}.
+              {f.gjentakelse_id && f.gjenta ? ` Den gjentas automatisk (${intervallTekst[f.gjenta.intervall].toLowerCase()}).` : ""}
             </span>
             {kanSkrive(rolle) && (
               <span className="knapper">
@@ -675,6 +713,16 @@ export function FakturaVisning() {
             <div>
               <div className="dempet liten">Kopi til</div>
               {f.kopi_til.join(", ")}
+            </div>
+          )}
+          {(f.gjentakelse_id || f.gjenta) && (
+            <div>
+              <div className="dempet liten">Gjentakende</div>
+              {f.gjentakelse_id ? (
+                <Link to="/gjentakende">{f.gjenta ? intervallTekst[f.gjenta.intervall] : "Laget fra en gjentakelse"}</Link>
+              ) : (
+                `${intervallTekst[f.gjenta.intervall]}, starter når fakturaen sendes`
+              )}
             </div>
           )}
         </div>
@@ -1029,3 +1077,68 @@ function Kreditering({ faktura, ferdig }: { faktura: any; ferdig: (kn: any) => v
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Gjør fakturaen gjentakende
+// ---------------------------------------------------------------------------
+
+type Gjenta = { intervall: "maaned" | "kvartal" | "aar"; neste_forfall: string; send_dager_foer: string; slutt_dato: string };
+const MND: Record<Gjenta["intervall"], number> = { maaned: 1, kvartal: 3, aar: 12 };
+
+function GjentaValg({ gjenta, endre, nesteForfall, forfall, standardDager }: {
+  gjenta: Gjenta | null;
+  endre: (g: Gjenta | null, nesteEndret?: boolean) => void;
+  nesteForfall: string;
+  forfall: string;
+  standardDager: number;
+}) {
+  const dager = gjenta?.send_dager_foer === "" || !gjenta ? standardDager : Number(gjenta.send_dager_foer);
+  return (
+    <div className="kort gjenta-kort">
+      <label className="gjenta-bryter">
+        <input
+          type="checkbox"
+          checked={gjenta !== null}
+          onChange={(e) => endre(e.target.checked ? { intervall: "maaned", neste_forfall: "", send_dager_foer: "", slutt_dato: "" } : null, false)}
+        />
+        Gjenta fakturaen automatisk
+      </label>
+      {gjenta && (
+        <>
+          <div className="rad">
+            <label>
+              Hvor ofte
+              <select value={gjenta.intervall} onChange={(e) => endre({ ...gjenta, intervall: e.target.value as Gjenta["intervall"] })}>
+                <option value="maaned">Hver måned</option>
+                <option value="kvartal">Hvert kvartal</option>
+                <option value="aar">Hvert år</option>
+              </select>
+            </label>
+            <label>
+              Neste forfall
+              <input
+                type="date"
+                value={nesteForfall}
+                min={forfall ? leggTilDager(forfall, 1) : undefined}
+                onChange={(e) => endre({ ...gjenta, neste_forfall: e.target.value }, Boolean(e.target.value))}
+              />
+            </label>
+            <label>
+              Send dager før forfall
+              <input type="number" min={0} max={60} placeholder={String(standardDager)} value={gjenta.send_dager_foer} onChange={(e) => endre({ ...gjenta, send_dager_foer: e.target.value })} />
+            </label>
+            <label>
+              Sluttdato (valgfri)
+              <input type="date" value={gjenta.slutt_dato} min={nesteForfall || undefined} onChange={(e) => endre({ ...gjenta, slutt_dato: e.target.value })} />
+            </label>
+          </div>
+          <p className="liten dempet gjenta-forklaring">
+            {nesteForfall ? `Neste faktura lages og sendes ${dato(leggTilDager(nesteForfall, -dager))} med forfall ${dato(nesteForfall)}, ` : "Neste faktura lages "}
+            med de samme linjene, notatet og mottakerne. Gjentakelsen starter når denne fakturaen sendes, og du finner den under{" "}
+            <Link to="/gjentakende">Gjentakende</Link>.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
