@@ -11,6 +11,7 @@ import {
 } from "firebase/auth";
 import { hentAuth } from "../firebase";
 import { Feil } from "../felles";
+import { erAvbrutt, loggInnMedPasskey, stotterPasskey } from "../passkey";
 
 const feiltekst: Record<string, string> = {
   "auth/invalid-credential": "Feil e-post eller passord.",
@@ -35,6 +36,18 @@ export function Innlogging() {
   const [feil, settFeil] = useState<string | null>(null);
   const [info, settInfo] = useState<string | null>(null);
   const [opptatt, settOpptatt] = useState(false);
+
+  async function passkey() {
+    settFeil(null);
+    settOpptatt(true);
+    try {
+      await loggInnMedPasskey();
+    } catch (e) {
+      if (!erAvbrutt(e)) settFeil((e as Error).message);
+    } finally {
+      settOpptatt(false);
+    }
+  }
 
   async function send(e: FormEvent) {
     e.preventDefault();
@@ -108,6 +121,13 @@ export function Innlogging() {
             {resolver ? "Bekreft" : modus === "ny" ? "Lag konto" : modus === "glemt" ? "Send lenke" : "Logg inn"}
           </button>
         </div>
+        {!resolver && modus === "inn" && stotterPasskey() && (
+          <div className="knapper" style={{ marginTop: 12 }}>
+            <button type="button" onClick={passkey} disabled={opptatt} style={{ width: "100%", justifyContent: "center" }}>
+              Logg inn med passkey
+            </button>
+          </div>
+        )}
         {!resolver && (
           <p className="liten" style={{ marginTop: 16 }}>
             {modus !== "inn" && (

@@ -28,14 +28,15 @@ async function verifiser(token: string) {
   if (config.testInnlogging && token.startsWith("test:")) {
     // test:<uid>:<epost>[:mfa]
     const [, uid, epost, mfa] = token.split(":");
-    return { uid, email: epost, email_verified: true, mfa: mfa === "mfa", navn: undefined as string | undefined };
+    return { uid, email: epost, email_verified: true, mfa: mfa === "mfa" || mfa === "passkey", navn: undefined as string | undefined };
   }
   const t = await firebase().verifyIdToken(token, true);
   return {
     uid: t.uid,
     email: t.email,
     email_verified: t.email_verified === true,
-    mfa: Boolean(t.firebase?.sign_in_second_factor),
+    // Totrinn: TOTP via Identity Platform, eller innlogging med passkey (custom token med kravet «passkey»).
+    mfa: Boolean(t.firebase?.sign_in_second_factor) || t.passkey === true,
     navn: t.name as string | undefined,
   };
 }

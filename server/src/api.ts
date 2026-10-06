@@ -8,6 +8,7 @@ import { lagPdf } from "./pdf.js";
 import { config } from "./config.js";
 import { lagring, leggIKo } from "./tjenester.js";
 import { orgnrGyldig } from "./regler.js";
+import { passkeyInnlogging, passkeyRuter } from "./passkey.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -159,8 +160,13 @@ export function lagApi() {
     });
   });
 
+  // Åpne ruter (uten innlogging) ligger under /api/offentlig.
+  app.route("/api/offentlig/passkey", passkeyInnlogging());
+
   const api = new Hono();
-  api.use("*", krevInnlogging, krevBekreftetEpost);
+  api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevInnlogging(c, next)));
+  api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevBekreftetEpost(c, next)));
+  api.route("/passkeys", passkeyRuter());
 
   api.get("/meg", async (c) =>
     c.json(

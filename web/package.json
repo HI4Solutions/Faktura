@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
     "firebase": "^12.19.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",

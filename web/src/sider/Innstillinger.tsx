@@ -4,6 +4,7 @@ import { Feil, Laster, tall, useData, useHandling } from "../felles";
 import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
+import { erAvbrutt, foreslattNavn, leggTilPasskey, stotterPasskey } from "../passkey";
 
 export function Innstillinger() {
   const { org, meg } = useKonto();
@@ -13,10 +14,13 @@ export function Innstillinger() {
       <div className="kort">
         <h2 style={{ marginTop: 0 }}>Din konto</h2>
         <p className="dempet">{meg?.bruker.epost}</p>
+        <Passkeys />
+        <h2>Autentiseringsapp</h2>
         <Totrinn />
         {!meg?.mfa && (
           <p className="liten dempet" style={{ marginTop: 8 }}>
-            Har du nettopp slått på totrinnsbekreftelse? Logg ut og inn igjen med koden for å kunne sende fakturaer.
+            For å sende fakturaer må du være logget inn med passkey eller med kode fra autentiseringsappen. Har du nettopp
+            lagt til en av dem, logger du ut og inn igjen.
           </p>
         )}
       </div>
@@ -159,6 +163,66 @@ function Organisasjon() {
         Lagre
       </button>
     </form>
+  );
+}
+
+function Passkeys() {
+  const { data, last } = useData(() => hent<any[]>("/passkeys"), []);
+  const h = useHandling();
+  const [lagt, settLagt] = useState(false);
+
+  async function leggTil() {
+    settLagt(false);
+    h.settFeil(null);
+    try {
+      await leggTilPasskey(foreslattNavn());
+      settLagt(true);
+      last();
+    } catch (e) {
+      if (!erAvbrutt(e)) h.settFeil((e as Error).message);
+    }
+  }
+
+  return (
+    <>
+      <h2>Passkeys</h2>
+      <p className="dempet liten">
+        Logg inn med Face ID, Touch ID, Windows Hello eller en sikkerhetsnøkkel, uten passord. En passkey teller som
+        totrinnsbekreftelse.
+      </p>
+      {(data ?? []).length > 0 && (
+        <table style={{ marginBottom: 12 }}>
+          <tbody>
+            {data!.map((p) => (
+              <tr key={p.id}>
+                <td>{p.navn}</td>
+                <td className="dempet liten">
+                  {p.sikkerhetskopiert ? "Synkronisert" : "Bare på denne enheten"} · lagt til {dato(p.opprettet)}
+                  {p.sist_brukt ? ` · sist brukt ${dato(p.sist_brukt)}` : ""}
+                </td>
+                <td className="hoyre">
+                  <button
+                    className="lenke"
+                    onClick={() => confirm(`Fjerne «${p.navn}»?`) && h.kjor(() => api("DELETE", `/passkeys/${encodeURIComponent(p.id)}`)).then(last)}
+                  >
+                    Fjern
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {stotterPasskey() ? (
+        <button className="primar" onClick={leggTil} disabled={h.opptatt}>
+          Legg til passkey
+        </button>
+      ) : (
+        <p className="dempet liten">Nettleseren din støtter ikke passkeys.</p>
+      )}
+      {lagt && <div className="melding ok" style={{ marginTop: 12 }}>Passkeyen er lagt til. Neste gang kan du logge inn med den.</div>}
+      <Feil melding={h.feil} />
+    </>
   );
 }
 

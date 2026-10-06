@@ -112,4 +112,4 @@ og hastighetsgrenser i API-et.
    adaptere for Fiken, Tripletex, PowerOffice Go og Visma, åpent API, webhooks, SAF-T
 7. **EHF/Peppol** via aksesspunkt, betalingslenker (Vipps/Stripe Connect) og
    abonnementer for plattformens egne kunder
-8. **Passkeys** (WebAuthn i API-et, credentials i Postgres)
+8. ~~**Passkeys**~~ Ferdig: WebAuthn i API-et, nøkler i Postgres, innlogging via Firebase custom token med kravet `passkey` (teller som totrinn)
