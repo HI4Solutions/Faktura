@@ -170,6 +170,32 @@ strong { font-weight: 650; }
 .meny .bunn button { background: transparent; border-color: rgba(255, 255, 255, 0.12); color: var(--meny-tekst); padding: 7px; }
 .meny .bunn button:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.3); color: #fff; }
 
+/* Utseende (som systemet, lyst eller mørkt): i toppfeltet på mobil og nederst i menyen på
+   PC, begge på mørk bunn. */
+.meny-tema {
+  margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 0 12px 10px; color: var(--meny-dempet); font-size: 0.8rem; font-weight: 600;
+}
+.meny-tema + .bunn { margin-top: 0; }
+.temabryter {
+  flex: none; display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.temabryter button {
+  width: 32px; height: 32px; min-height: 32px; padding: 0; justify-content: center; border: 0; border-radius: 9px;
+  background: transparent; color: rgba(255, 255, 255, 0.6); box-shadow: none; -webkit-tap-highlight-color: transparent;
+}
+.temabryter button:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.temabryter button.valgt, .temabryter button.valgt:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.temabryter button:focus-visible { box-shadow: 0 0 0 2px #7d9bff; }
+
+/* Logoen i toppfeltet åpner menyen. */
+.logo-knapp {
+  border: 0; background: none; box-shadow: none; color: inherit; padding: 4px 8px 4px 0; min-height: 0; min-width: 0;
+  border-radius: 10px; -webkit-tap-highlight-color: transparent;
+}
+.logo-knapp:active:not(:disabled) { transform: none; opacity: 0.7; }
+
 .innhold { padding: 32px 40px 64px; max-width: 1180px; width: 100%; animation: inn .25s ease-out; }
 @keyframes inn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .topp { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -197,6 +223,9 @@ strong { font-weight: 650; }
     background: var(--meny-bg);
   }
   .mobiltopp .logo-tekst { font-size: 1.05rem; }
+  .mobiltopp .topp-knapper { display: flex; align-items: center; gap: 8px; flex: none; }
+  .meny-tema { display: none; } /* ligger i toppfeltet */
+  .meny-tema + .bunn { margin-top: auto; }
   .mobiltopp button.ikon {
     background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.18); box-shadow: none;
     width: 40px; height: 40px; min-height: 40px; padding: 0; justify-content: center; border-radius: 11px;
@@ -237,6 +266,13 @@ strong { font-weight: 650; }
   .meny { overscroll-behavior: contain; }
   body.skriver .bunnmeny { display: none; }
   .meny-skygge.apen { display: block; position: fixed; inset: 0 0 var(--under-bunn) 0; background: rgba(5, 10, 25, 0.5); z-index: 39; }
+  @media (max-width: 359px) {
+    .mobiltopp { gap: 8px; }
+    .mobiltopp .logo-knapp { padding-right: 0; }
+    .mobiltopp .logo-tekst { font-size: 1rem; white-space: nowrap; }
+    .mobiltopp .temabryter button { width: 28px; }
+    .mobiltopp .topp-knapper { gap: 6px; }
+  }
   .innhold {
     padding: 18px max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
@@ -364,7 +400,8 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 .faner { display: inline-flex; gap: 2px; padding: 4px; margin-bottom: 16px; background: var(--flate); border: 1px solid var(--kant); border-radius: 12px; box-shadow: var(--skygge-1); flex-wrap: wrap; }
 .faner button { border: 0; box-shadow: none; background: transparent; color: var(--dempet); padding: 6px 14px; border-radius: 8px; }
 .faner button:hover:not(:disabled) { color: var(--tekst); background: var(--flate-2); }
-.faner button.valgt { background: var(--aksent-lys); color: var(--aksent); }
+/* Også når trykket henger igjen som «hover» på telefon */
+.faner button.valgt, .faner button.valgt:hover:not(:disabled) { background: var(--aksent-lys); color: var(--aksent); }
 .faner.utseende { margin-bottom: 6px; }
 
 /* Nøkkeltall */
@@ -590,6 +627,9 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
   .faner { display: flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; margin-bottom: 14px; }
   .faner::-webkit-scrollbar { display: none; }
   .faner button { flex: none; min-height: 36px; }
+  /* Innstillingene har mange faner: de brytes over to linjer, så alle synes. */
+  .faner.innstillinger-faner { flex-wrap: wrap; overflow: visible; }
+  .faner.innstillinger-faner button { flex: 1 1 auto; justify-content: center; }
 
   /* Handlinger på fakturasiden: to kolonner med like store knapper */
   .topp .handlinger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 8px; }

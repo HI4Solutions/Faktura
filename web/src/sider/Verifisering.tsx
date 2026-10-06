@@ -58,7 +58,7 @@ export function Verifisering() {
         </p>
         {!data.orgnr ? (
           <div className="melding info">
-            Legg inn organisasjonsnummer under <Link to="/innstillinger">Innstillinger</Link> først.
+            Legg inn organisasjonsnummer under <Link to="/innstillinger?fane=organisasjon">Innstillinger → Organisasjon</Link> først.
           </div>
         ) : venterManuell ? (
           <div className="melding info">Forespørselen din er sendt og blir behandlet manuelt. Du får beskjed når den er godkjent.</div>

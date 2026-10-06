@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, hent, lastOppLogo } from "../api";
 import { EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
 import { erAdmin, useKonto } from "../konto";
@@ -10,19 +11,65 @@ import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
+type Fane = "organisasjon" | "faktura" | "betaling" | "ehf" | "brukere" | "konto" | "app";
+type OrgDel = "organisasjon" | "faktura" | "betaling";
+
+// Innstillingene er delt i faner. Fanen står i adressen (?fane=), så lenker kan gå rett til
+// den. Organisasjonens innstillinger vises bare for administratorer; regnskapsbyråer
+// fakturerer ikke, og EHF krever organisasjonsnummer.
 export function Innstillinger() {
-  const { org, meg } = useKonto();
+  const { org } = useKonto();
+  const [sok, settSok] = useSearchParams();
+  const admin = Boolean(org && erAdmin(org.rolle));
+  const byraa = org?.type === "regnskapsbyraa";
+  const faner: [Fane, string][] = [];
+  if (admin) {
+    faner.push(["organisasjon", "Organisasjon"]);
+    if (!byraa) faner.push(["faktura", "Faktura"], ["betaling", "Betaling"]);
+    if (!byraa && org?.type !== "privatperson") faner.push(["ehf", "EHF"]);
+    faner.push(["brukere", "Brukere"]);
+  }
+  faner.push(["konto", "Min konto"], ["app", "App"]);
+  // Tilbake fra Google (Google Disk-koblingen): «Min konto».
+  const onsket = sok.get("fane") ?? (sok.has("disk") ? "konto" : null);
+  const fane = faner.find(([v]) => v === onsket)?.[0] ?? faner[0][0];
+  const orgDel = fane === "organisasjon" || fane === "faktura" || fane === "betaling" ? fane : null;
+
   return (
     <>
       <h1>Innstillinger</h1>
+      <div className="faner innstillinger-faner" role="tablist" aria-label="Innstillinger">
+        {faner.map(([v, navn]) => (
+          <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => settSok({ fane: v }, { replace: true })}>
+            {navn}
+          </button>
+        ))}
+      </div>
+      {/* Samme skjema for de tre fanene, så endringer som ikke er lagret, blir med mellom dem. */}
+      {orgDel && <Organisasjon del={orgDel} />}
+      {fane === "faktura" && <Logo />}
+      {fane === "betaling" && <Kontoer />}
+      {fane === "ehf" && <EhfSending />}
+      {fane === "brukere" && (
+        <>
+          <Medlemmer />
+          <Regnskapsforer />
+        </>
+      )}
+      {fane === "konto" && <MinKonto />}
+      {fane === "app" && <AppOgVarsler />}
+    </>
+  );
+}
+
+function MinKonto() {
+  const { meg } = useKonto();
+  return (
+    <>
       <div className="kort">
-        <h2 style={{ marginTop: 0 }}>Din konto</h2>
-        <p className="dempet">
-          {meg?.bruker.navn} · {meg?.bruker.epost}
-        </p>
+        <h2 style={{ marginTop: 0 }}>{meg?.bruker.navn}</h2>
+        <p className="dempet">{meg?.bruker.epost}</p>
         <Passkeys />
-        <AppOgVarsler />
-        <GoogleDisk />
         <h2>Autentiseringsapp</h2>
         <Totrinn />
         {!meg?.mfa && (
@@ -32,26 +79,23 @@ export function Innstillinger() {
           </p>
         )}
       </div>
-      {org && erAdmin(org.rolle) && (
-        <>
-          <Organisasjon />
-          <EhfSending />
-          <Kontoer />
-          <Logo />
-          <Medlemmer />
-          <Regnskapsforer />
-        </>
-      )}
+      <GoogleDisk />
     </>
   );
 }
 
-function Organisasjon() {
+function Organisasjon({ del }: { del: OrgDel }) {
   const { org, oppdater } = useKonto();
   const { data, last } = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const [o, settO] = useState<any>(null);
   const h = useHandling();
   const [lagret, settLagret] = useState(false);
+  // Ny fane: ikke vis «Lagret» eller feil fra den forrige.
+  useEffect(() => {
+    settLagret(false);
+    h.settFeil(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [del]);
 
   useEffect(() => {
     if (data)
@@ -125,128 +169,148 @@ function Organisasjon() {
 
   return (
     <form className="kort" onSubmit={lagre}>
-      <h2 style={{ marginTop: 0 }}>Organisasjon og faktura</h2>
-      <p className="dempet liten">
-        Status: {o.verifisering === "verifisert" ? "Verifisert" : o.verifisering === "sperret" ? "Sperret" : "Ikke verifisert"}
-      </p>
-      <div className="rad">
-        <label className="hel">
-          Navn
-          <input required {...felt("navn")} />
-        </label>
-        {o.type !== "privatperson" && (
+      {del === "organisasjon" && (
+        <>
+          <h2 style={{ marginTop: 0 }}>Organisasjon</h2>
+          <p className="dempet liten">
+            Status: {o.verifisering === "verifisert" ? "Verifisert" : o.verifisering === "sperret" ? "Sperret" : "Ikke verifisert"}
+          </p>
+          <div className="rad">
+            <label className="hel">
+              Navn
+              <input required {...felt("navn")} />
+            </label>
+            {o.type !== "privatperson" && (
+              <label>
+                Org.nr.
+                <input disabled={o.verifisering !== "ny"} {...felt("orgnr")} />
+              </label>
+            )}
+          </div>
+          {o.type === "privatperson" ? (
+            <p className="dempet liten">Du fakturerer som privatperson: uten organisasjonsnummer og mva.</p>
+          ) : (
+            <div className="rad">
+              <label>
+                Innehaver (for enkeltpersonforetak)
+                <input {...felt("innehaver")} placeholder="Ola Nordmann" />
+              </label>
+              <label className="hel">
+                Avsender på fakturaene
+                <select {...felt("standard_avsender")} disabled={!o.innehaver?.trim()}>
+                  <option value="firma">Firmanavnet ({o.navn})</option>
+                  <option value="innehaver">Innehaverens navn{o.innehaver?.trim() ? ` (${o.innehaver.trim()})` : ""}</option>
+                </select>
+              </label>
+            </div>
+          )}
           <label>
-            Org.nr.
-            <input disabled={o.verifisering !== "ny"} {...felt("orgnr")} />
+            Adresse
+            <input {...felt("adresse")} />
           </label>
-        )}
-      </div>
-      {o.type === "privatperson" ? (
-        <p className="dempet liten">Du fakturerer som privatperson: uten organisasjonsnummer og mva.</p>
-      ) : (
-        <div className="rad">
-          <label>
-            Innehaver (for enkeltpersonforetak)
-            <input {...felt("innehaver")} placeholder="Ola Nordmann" />
-          </label>
-          <label className="hel">
-            Avsender på fakturaene
-            <select {...felt("standard_avsender")} disabled={!o.innehaver?.trim()}>
-              <option value="firma">Firmanavnet ({o.navn})</option>
-              <option value="innehaver">Innehaverens navn{o.innehaver?.trim() ? ` (${o.innehaver.trim()})` : ""}</option>
-            </select>
-          </label>
-        </div>
+          <div className="rad">
+            <label>
+              Postnr.
+              <input {...felt("postnr")} />
+            </label>
+            <label>
+              Poststed
+              <input {...felt("poststed")} />
+            </label>
+            <label className="hel">
+              E-post (svar på fakturaer)
+              <input type="email" {...felt("epost")} />
+            </label>
+            <label>
+              Telefon
+              <input {...felt("telefon")} />
+            </label>
+          </div>
+          {o.type !== "privatperson" && (
+            <>
+              <label>
+                <input type="checkbox" {...avkryss("mva_registrert")} /> MVA-registrert
+                <span className="liten" style={{ display: "block", marginLeft: 24 }}>
+                  Slå av hvis foretaket ikke er mva-registrert eller er fritatt. Da blir alle produkter, utkast og nye fakturaer
+                  uten mva. Fakturaer som allerede er sendt, endres ikke.
+                </span>
+              </label>
+              <label>
+                <input type="checkbox" {...avkryss("foretaksregisteret")} /> Registrert i Foretaksregisteret
+              </label>
+            </>
+          )}
+        </>
       )}
-      <label>
-        Adresse
-        <input {...felt("adresse")} />
-      </label>
-      <div className="rad">
-        <label>
-          Postnr.
-          <input {...felt("postnr")} />
-        </label>
-        <label>
-          Poststed
-          <input {...felt("poststed")} />
-        </label>
-        <label className="hel">
-          E-post (svar på fakturaer)
-          <input type="email" {...felt("epost")} />
-        </label>
-        <label>
-          Telefon
-          <input {...felt("telefon")} />
-        </label>
-      </div>
-      <EpostlisteFelt
-        etikett="Send alltid kopi av fakturaer til"
-        verdi={o.kopi_tekst ?? ""}
-        endre={(v) => settO({ ...o, kopi_tekst: v })}
-        plassholder="f.eks. regnskap@firma.no"
-        hjelp={
-          <>
-            Fakturaer, kreditnotaer og purringer som sendes på e-post, går også som skjult kopi hit (kunden ser den ikke). Står feltet
-            tomt, går kopien til {o.epost ? <strong>{o.epost}</strong> : "e-posten over"}. Skill flere adresser med komma.
-          </>
-        }
-      />
-      {o.type !== "privatperson" && <>
-      <label>
-        <input type="checkbox" {...avkryss("mva_registrert")} /> MVA-registrert
-        <span className="liten" style={{ display: "block", marginLeft: 24 }}>
-          Slå av hvis foretaket ikke er mva-registrert eller er fritatt. Da blir alle produkter, utkast og nye fakturaer
-          uten mva. Fakturaer som allerede er sendt, endres ikke.
-        </span>
-      </label>
-      <label>
-        <input type="checkbox" {...avkryss("foretaksregisteret")} /> Registrert i Foretaksregisteret
-      </label>
-      </>}
-      <div className="rad">
-        <label>
-          Kontonummer (standard)
-          <input inputMode="numeric" {...felt("kontonr")} placeholder="1234.56.78901" />
-        </label>
-        <label>
-          Betalingsfrist (dager)
-          <input type="number" min={0} max={120} {...felt("standard_forfall_dager")} />
-        </label>
-        <label>
-          Fakturagebyr eks. mva
-          <input inputMode="decimal" {...felt("standard_gebyr")} />
-        </label>
-        <label>
-          Gjentakende sendes dager før forfall
-          <input type="number" min={0} max={60} {...felt("standard_dager_foer_forfall")} />
-        </label>
-      </div>
-      <label>
-        <input type="checkbox" {...avkryss("bruk_kid")} /> Bruk KID (krever KID-avtale med banken)
-      </label>
-      <h2>Purring</h2>
-      <label>
-        <input type="checkbox" {...avkryss("purring_auto")} /> Send betalingspåminnelse automatisk
-      </label>
-      <div className="rad">
-        <label>
-          Dager etter forfall
-          <input type="number" min={0} max={60} {...felt("purring_dager")} />
-        </label>
-        <label>
-          Purregebyr (kr)
-          <input inputMode="decimal" {...felt("purregebyr")} />
-        </label>
-      </div>
-      <p className="liten dempet">
-        Påminnelsen gir 14 dagers ny frist. Purregebyret kreves én gang per faktura og kan ikke være høyere enn grensen i
-        inkassoforskriften (en tidel av inkassosatsen). Inkassovarsel sendes manuelt fra fakturaen når fristen er ute.
-      </p>
-      <label style={{ maxWidth: 200 }}>
-        Farge på fakturaen
-        <input type="color" value={o.farge || "#1f3a73"} onChange={(e) => settO({ ...o, farge: e.target.value })} />
-      </label>
+
+      {del === "faktura" && (
+        <>
+          <h2 style={{ marginTop: 0 }}>Faktura</h2>
+          <div className="rad">
+            <label>
+              Betalingsfrist (dager)
+              <input type="number" min={0} max={120} {...felt("standard_forfall_dager")} />
+            </label>
+            <label>
+              Fakturagebyr eks. mva
+              <input inputMode="decimal" {...felt("standard_gebyr")} />
+            </label>
+            <label>
+              Gjentakende sendes dager før forfall
+              <input type="number" min={0} max={60} {...felt("standard_dager_foer_forfall")} />
+            </label>
+          </div>
+          <EpostlisteFelt
+            etikett="Send alltid kopi av fakturaer til"
+            verdi={o.kopi_tekst ?? ""}
+            endre={(v) => settO({ ...o, kopi_tekst: v })}
+            plassholder="f.eks. regnskap@firma.no"
+            hjelp={
+              <>
+                Fakturaer, kreditnotaer og purringer som sendes på e-post, går også som skjult kopi hit (kunden ser den ikke). Står feltet
+                tomt, går kopien til {o.epost ? <strong>{o.epost}</strong> : "organisasjonens e-post (under Organisasjon)"}. Skill flere
+                adresser med komma.
+              </>
+            }
+          />
+          <label style={{ maxWidth: 200 }}>
+            Farge på fakturaen
+            <input type="color" value={o.farge || "#1f3a73"} onChange={(e) => settO({ ...o, farge: e.target.value })} />
+          </label>
+        </>
+      )}
+
+      {del === "betaling" && (
+        <>
+          <h2 style={{ marginTop: 0 }}>Betaling</h2>
+          <label style={{ maxWidth: 320 }}>
+            Kontonummer (standard)
+            <input inputMode="numeric" {...felt("kontonr")} placeholder="1234.56.78901" />
+            <span className="felt-hjelp">Brukes på fakturaene om ikke en annen konto er valgt. Alle eiere får beskjed når det endres.</span>
+          </label>
+          <label>
+            <input type="checkbox" {...avkryss("bruk_kid")} /> Bruk KID (krever KID-avtale med banken)
+          </label>
+          <h2>Purring</h2>
+          <label>
+            <input type="checkbox" {...avkryss("purring_auto")} /> Send betalingspåminnelse automatisk
+          </label>
+          <div className="rad">
+            <label>
+              Dager etter forfall
+              <input type="number" min={0} max={60} {...felt("purring_dager")} />
+            </label>
+            <label>
+              Purregebyr (kr)
+              <input inputMode="decimal" {...felt("purregebyr")} />
+            </label>
+          </div>
+          <p className="liten dempet">
+            Påminnelsen gir 14 dagers ny frist. Purregebyret kreves én gang per faktura og kan ikke være høyere enn grensen i
+            inkassoforskriften (en tidel av inkassosatsen). Inkassovarsel sendes manuelt fra fakturaen når fristen er ute.
+          </p>
+        </>
+      )}
       <Feil melding={h.feil} />
       {lagret && <div className="melding ok">Lagret.</div>}
       <button className="primar" disabled={h.opptatt}>
@@ -369,8 +433,8 @@ function GoogleDisk() {
   const koble = () => h.kjor(async () => (window.location.href = (await api("POST", "/disk/start")).url));
 
   return (
-    <>
-      <h2>Google Disk</h2>
+    <div className="kort">
+      <h2 style={{ marginTop: 0 }}>Google Disk</h2>
       <p className="dempet liten">
         Få en kopi av fakturaer og kreditnotaer i din egen Google Disk, privat eller jobb. Velger du en egen mappe, legges fakturaene rett i
         den; ellers i «HI4 Faktura» med undermapper per organisasjon og år. Appen får bare tilgang til mappen du velger og filene den selv lager.
@@ -441,7 +505,7 @@ function GoogleDisk() {
         </>
       )}
       <Feil melding={h.feil} />
-    </>
+    </div>
   );
 }
 
@@ -674,8 +738,8 @@ function Kontoer() {
     <div className="kort">
       <h2 style={{ marginTop: 0 }}>Flere kontonumre</h2>
       <p className="dempet liten">
-        Standardkontoen står under «Organisasjon og faktura». Her kan du legge til flere, f.eks. en egen konto for husleie, og velge
-        konto på hver faktura og gjentakende faktura.
+        Standardkontoen står over. Her kan du legge til flere, f.eks. en egen konto for husleie, og velge konto på hver faktura og
+        gjentakende faktura.
       </p>
       {(data ?? []).length > 0 && (
         <table className="kompakt">

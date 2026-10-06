@@ -235,7 +235,7 @@ export function pushRuter() {
         bruker_id: b.id,
         tittel: "Varsler er slått på",
         tekst: "Slik ser et varsel fra HI4 Faktura ut. Trykk for å åpne innstillingene.",
-        url: "/innstillinger",
+        url: "/innstillinger?fane=app",
         tag: "test",
       },
     });

@@ -11,6 +11,9 @@ export const orgnr = (n: string | null | undefined) => (n ? n.replace(/^(\d{3})(
 
 export const iDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
 
+// Antall dager fra a til b (datoer som «åååå-mm-dd»).
+export const dagerMellom = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
+
 export const leggTilDager = (iso: string, dager: number) => {
   const d = new Date(`${iso}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + dager);

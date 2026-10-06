@@ -20,6 +20,7 @@ import { Rapporter } from "./sider/Rapporter";
 import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
+import { TemaBryter } from "./TemaBryter";
 import { installer } from "./pwa";
 import {
   IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
@@ -89,6 +90,12 @@ function OppgiNavn() {
   );
 }
 
+// Ny faktura: skjemaet starter på nytt når adressen endres, f.eks. fra en kopi til en tom faktura.
+function NyFaktura() {
+  const { search } = useLocation();
+  return <FakturaSkjema key={search} />;
+}
+
 function Ramme() {
   const { meg, org, velgOrg, loggUt } = useKonto();
   const [ny, settNy] = useState(false);
@@ -134,19 +141,24 @@ function Ramme() {
 
   return (
     <div className="ramme">
-      {/* Mobil: organisasjonen øverst (trykk for å bytte), meny nederst. */}
-      {/* Mobil: logo øverst og logg ut til høyre; menyen ligger i bunnmenyen («Mer»). */}
+      {/* Mobil: logo øverst (trykk for menyen), utseende og logg ut til høyre; menyen ligger
+          også i bunnmenyen («Mer»). */}
       <header className="mobiltopp">
-        <Logo storrelse={30} />
-        <button
-          type="button"
-          className="ikon"
-          aria-label="Logg ut"
-          title="Logg ut"
-          onClick={() => confirm("Logge ut av HI4 Faktura?") && void loggUt()}
-        >
-          <IkonLoggUt storrelse={20} />
+        <button type="button" className="logo-knapp" aria-label="Åpne menyen" aria-controls="hovedmeny" aria-expanded={menyApen} onClick={() => settMenyApen(true)}>
+          <Logo storrelse={30} />
         </button>
+        <div className="topp-knapper">
+          <TemaBryter />
+          <button
+            type="button"
+            className="ikon"
+            aria-label="Logg ut"
+            title="Logg ut"
+            onClick={() => confirm("Logge ut av HI4 Faktura?") && void loggUt()}
+          >
+            <IkonLoggUt storrelse={20} />
+          </button>
+        </div>
       </header>
       <nav className="bunnmeny" aria-label="Hovedmeny">
         <NavLink to="/" end>
@@ -184,8 +196,8 @@ function Ramme() {
         </button>
       </nav>
       <div className={`meny-skygge${menyApen ? " apen" : ""}`} onClick={() => settMenyApen(false)} />
-      <nav className={`meny${menyApen ? " apen" : ""}`}>
-        <div className="logo">
+      <nav id="hovedmeny" className={`meny${menyApen ? " apen" : ""}`}>
+        <div className="logo" onClick={() => settMenyApen(false)}>
           <Logo />
         </div>
         <div className="orgvelger">
@@ -262,6 +274,10 @@ function Ramme() {
             Installer appen
           </a>
         )}
+        <div className="meny-tema">
+          <span>Utseende</span>
+          <TemaBryter />
+        </div>
         <div className="bunn">
           <span className="avatar rund">{initialer(meg?.bruker.navn ?? meg?.bruker.epost ?? "?")}</span>
           <div className="hvem">
@@ -278,7 +294,7 @@ function Ramme() {
           <Routes>
             <Route path="/" element={<Oversikt />} />
             <Route path="/fakturaer" element={<Fakturaliste />} />
-            <Route path="/fakturaer/ny" element={<FakturaSkjema key="ny" />} />
+            <Route path="/fakturaer/ny" element={<NyFaktura />} />
             <Route path="/fakturaer/flere" element={<FlereFakturaer />} />
             <Route path="/fakturaer/:id/endre" element={<FakturaSkjema />} />
             <Route path="/fakturaer/:id" element={<FakturaVisning />} />

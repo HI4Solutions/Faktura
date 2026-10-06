@@ -152,3 +152,20 @@ export const IkonBinders = (p: P) => (
     <path d="M20.5 11.5l-8.2 8.2a5.2 5.2 0 0 1-7.4-7.4l8.6-8.6a3.5 3.5 0 0 1 5 5l-8.6 8.6a1.75 1.75 0 0 1-2.5-2.5l7.9-7.9" />
   </Ikon>
 );
+export const IkonSkjerm = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3" y="4" width="18" height="12" rx="2" />
+    <path d="M8.5 20h7M12 16v4" />
+  </Ikon>
+);
+export const IkonSol = (p: P) => (
+  <Ikon {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+  </Ikon>
+);
+export const IkonMaane = (p: P) => (
+  <Ikon {...p}>
+    <path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" />
+  </Ikon>
+);

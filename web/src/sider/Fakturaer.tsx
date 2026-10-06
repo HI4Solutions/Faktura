@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { api, apnePdf, hent, lastNed, type Vedlegg } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
-import { dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, orgnr, summer } from "../format";
+import { dagerMellom, dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, orgnr, summer } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 import { IkonBinders, IkonPluss } from "../ikoner";
@@ -261,9 +261,13 @@ export function FakturaSkjema() {
   const kunder = useData(() => hent(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
   const produkter = useData(() => hent(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
   const ehf = useData(() => hent(`/org/${org!.id}/ehf`), [org?.id]);
+  const kopiId = id ? null : sporring.get("kopi"); // ny faktura som kopi av en tidligere
   const [f, settF] = useState<any>({ kunde_id: (!id && sporring.get("kunde")) || "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "", kommentar: "" });
   const [linjer, settLinjer] = useState<LinjeUtkast[]>([tomLinje()]);
-  const [lastet, settLastet] = useState(!id); // et utkast som endres, er hentet
+  const [lastet, settLastet] = useState(!id && !kopiId); // utkastet som endres, eller fakturaen som kopieres, er hentet
+  const [kopiAv, settKopiAv] = useState<{ nummer: number | null; kunde: string | null; vedlegg: number } | null>(null);
+  const [kundeBorte, settKundeBorte] = useState(false);
+  const [lastFeil, settLastFeil] = useState<string | null>(null);
   const [rabattValgt, settRabattValgt] = useState(false);
   const visRabatt = rabattValgt || harRabatt(linjer);
   const [gjenta, settGjenta] = useState<Gjenta | null>(null); // gjør fakturaen gjentakende
@@ -276,14 +280,20 @@ export function FakturaSkjema() {
   const [lasterOpp, settLasterOpp] = useState(false); // vedlegg som lastes opp
   const { opptatt, feil, settFeil, kjor } = useHandling();
 
-  // Fyll inn eksisterende utkast.
+  // Fyll inn eksisterende utkast, eller fakturaen som kopieres. En kopi får dagens dato og
+  // samme betalingsfrist som originalen, og nytt fakturanummer når den sendes. Vedlegg og
+  // gjentakelse kopieres ikke, og fakturagebyret legges på som gebyr (med dagens sats).
   useEffect(() => {
-    if (!id) return;
-    hent(`/org/${org!.id}/fakturaer/${id}`).then((u) => {
+    const kilde = id ?? kopiId;
+    if (!kilde) return;
+    hent(`/org/${org!.id}/fakturaer/${kilde}`).then((u) => {
+      const kopi = !id;
+      const frist = u.fakturadato && u.forfallsdato ? dagerMellom(u.fakturadato, u.forfallsdato) : null;
+      const erGebyr = (l: any) => kopi && !l.produkt_id && l.beskrivelse === "Fakturagebyr";
       settF({
         kunde_id: u.kunde_id,
-        fakturadato: u.fakturadato ?? "",
-        forfallsdato: u.forfallsdato ?? "",
+        fakturadato: kopi ? iDag() : u.fakturadato ?? "",
+        forfallsdato: kopi ? (frist !== null && frist >= 0 ? leggTilDager(iDag(), frist) : "") : u.forfallsdato ?? "",
         periode_fra: u.periode_fra ?? "",
         periode_til: u.periode_til ?? "",
         deres_referanse: u.deres_referanse ?? "",
@@ -294,9 +304,13 @@ export function FakturaSkjema() {
         avsender: u.avsender ?? null,
       });
       settKopi((u.kopi_til ?? []).join(", "));
-      settLinjer(u.linjer.map(tilUtkast));
-      settVedlegg(u.vedlegg ?? []);
-      if (u.gjenta) {
+      const ls = u.linjer.filter((l: any) => !erGebyr(l));
+      settLinjer(ls.length ? ls.map(tilUtkast) : [tomLinje()]);
+      if (kopi) {
+        settGebyr(u.linjer.some(erGebyr));
+        settKopiAv({ nummer: u.fakturanummer ?? null, kunde: u.kunde?.navn ?? u.kunde_navn ?? null, vedlegg: u.vedlegg?.length ?? 0 });
+      } else settVedlegg(u.vedlegg ?? []);
+      if (!kopi && u.gjenta) {
         settGjenta({
           intervall: u.gjenta.intervall,
           neste_forfall: u.gjenta.neste_forfall ?? "",
@@ -306,16 +320,25 @@ export function FakturaSkjema() {
         settNesteValgt(Boolean(u.gjenta.neste_forfall));
       }
       settLastet(true);
-    });
-  }, [id, org]);
+    }, (e) => settLastFeil((e as Error).message));
+  }, [id, kopiId, org]);
 
-  // Standard forfall fra innstillingene.
+  // Kunden på fakturaen som kopieres, kan være gjort inaktiv: da må en annen velges.
+  useEffect(() => {
+    if (kopiAv && f.kunde_id && kunder.data && !kunder.data.some((k: any) => k.id === f.kunde_id)) {
+      settKundeBorte(true);
+      settF((x: any) => ({ ...x, kunde_id: "" }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kopiAv, kunder.data]);
+
+  // Standard forfall fra innstillingene (en kopi har med seg gebyret fra originalen).
   useEffect(() => {
     if (!id && orgData.data && f.fakturadato && !f.forfallsdato) {
       settF((x: any) => ({ ...x, forfallsdato: leggTilDager(x.fakturadato, orgData.data.standard_forfall_dager) }));
-      settGebyr(orgData.data.standard_gebyr > 0);
+      if (!kopiId) settGebyr(orgData.data.standard_gebyr > 0);
     }
-  }, [orgData.data, id, f.fakturadato, f.forfallsdato]);
+  }, [orgData.data, id, kopiId, f.fakturadato, f.forfallsdato]);
 
   const utenMva = Boolean(orgData.data && !orgData.data.mva_registrert);
   const tallLinjer = tilTallLinjer(linjer, utenMva);
@@ -382,22 +405,32 @@ export function FakturaSkjema() {
     if (r) nav(`/fakturaer/${r.id}`, { state: utsted ? { sendt: true } : undefined });
   }
 
-  if (!kunder.data || !orgData.data) return <Laster />;
+  if (lastFeil) return <Feil melding={lastFeil} />;
+  if (!kunder.data || !orgData.data || !lastet) return <Laster />;
   const fastKopi: string[] = orgData.data.kopi_til?.length ? orgData.data.kopi_til : orgData.data.epost ? [orgData.data.epost] : [];
 
   return (
     <>
       <div className="topp">
         <h1>{id ? "Endre utkast" : "Ny faktura"}</h1>
-        {!id && (
+        {!id && !kopiId && (
           <Link className="knapp" to="/fakturaer/flere">
             Flere på én gang
           </Link>
         )}
       </div>
+      {kopiAv && (
+        <div className="melding info">
+          Kopi av {kopiAv.nummer ? `faktura ${kopiAv.nummer}` : "et utkast"}
+          {kopiAv.kunde ? ` til ${kopiAv.kunde}` : ""}. Fakturadatoen er i dag, og fakturaen får nytt fakturanummer når den sendes. Sjekk
+          periode, referanser og linjer før du sender.
+          {kopiAv.vedlegg > 0 && " Vedleggene er ikke kopiert."}
+          {kundeBorte && " Kunden er ikke aktiv lenger, så velg kunde på nytt."}
+        </div>
+      )}
       {!orgData.data.kontonr && (
         <div className="melding info">
-          Legg inn kontonummer under <Link to="/innstillinger">Innstillinger</Link> før du sender fakturaer.
+          Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
         </div>
       )}
       <div className="kort">
@@ -665,9 +698,6 @@ export function FakturaVisning() {
               >
                 Send
               </button>
-              <button className="fare" onClick={() => confirm("Slette utkastet?") && handling(() => api("DELETE", `/org/${org!.id}/fakturaer/${f.id}`), "/fakturaer")}>
-                Slett
-              </button>
             </>
           )}
           {f.status !== "utkast" && kanSkrive(rolle) && <button onClick={() => settDialog("send")}>Send på nytt</button>}
@@ -688,6 +718,16 @@ export function FakturaVisning() {
             <button onClick={() => settDialog("betaling")}>Registrer betaling</button>
           )}
           {f.type === "faktura" && f.betalt_belop - f.refusjon_belop > 0 && kanBokfore(rolle) && <button onClick={() => settDialog("refusjon")}>Refusjon</button>}
+          {f.type === "faktura" && kanSkrive(rolle) && (
+            <button title="Lag en ny faktura med samme kunde og linjer" onClick={() => nav(`/fakturaer/ny?kopi=${f.id}`)}>
+              Kopier
+            </button>
+          )}
+          {f.status === "utkast" && kanSkrive(rolle) && (
+            <button className="fare" onClick={() => confirm("Slette utkastet?") && handling(() => api("DELETE", `/org/${org!.id}/fakturaer/${f.id}`), "/fakturaer")}>
+              Slett
+            </button>
+          )}
           {f.type === "faktura" && ["utstedt", "betalt"].includes(f.status) && kanSkrive(rolle) && (
             <button className="fare" onClick={() => settDialog("krediter")}>
               Krediter
@@ -864,7 +904,7 @@ export function FakturaVisning() {
           <h2 style={{ marginTop: 0 }}>Historikk</h2>
           <table>
             <tbody>
-              {f.ehf.map((s: any) => (
+              {(f.ehf ?? []).map((s: any) => (
                 <tr key={s.id}>
                   <td>{dato(s.opprettet)}</td>
                   <td>
