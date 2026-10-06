@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apnePdf, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
@@ -15,7 +15,10 @@ import { IkonPluss } from "../ikoner";
 export function Fakturaliste() {
   const { org } = useKonto();
   const nav = useNavigate();
-  const [status, settStatus] = useState("");
+  // Filteret står i adressen (?status=utstedt), så lenker fra oversikten og varsler treffer riktig fane.
+  const [sok, settSok] = useSearchParams();
+  const status = sok.get("status") ?? "";
+  const settStatus = (s: string) => settSok(s ? { status: s } : {}, { replace: true });
   const { data, feil, laster } = useData(() => hent(`/org/${org!.id}/fakturaer${status ? `?status=${status}` : ""}`), [org?.id, status]);
 
   return (

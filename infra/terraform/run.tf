@@ -306,7 +306,7 @@ resource "google_pubsub_subscription" "hendelser_dlq" {
 }
 
 locals {
-  integrasjoner = ["google-disk", "regnskap", "webhooks"]
+  integrasjoner = ["google-disk", "regnskap", "webhooks", "varsler"]
 }
 
 resource "google_pubsub_subscription" "integrasjon" {

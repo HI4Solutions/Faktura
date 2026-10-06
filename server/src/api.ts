@@ -14,6 +14,7 @@ import { hentEnhet } from "./brreg.js";
 import { rapportRuter } from "./rapporter.js";
 import { resendWebhook } from "./resendWebhook.js";
 import { diskRuter, googleCallback } from "./googleDisk.js";
+import { pushRuter } from "./push.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -171,6 +172,7 @@ export function lagApi() {
   api.route("/passkeys", passkeyRuter());
   api.route("/admin", adminRuter());
   api.route("/disk", diskRuter());
+  api.route("/push", pushRuter());
 
   // Konsumprisindeksen (SSB), siste tre år.
   api.get("/kpi", async (c) =>

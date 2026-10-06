@@ -5,6 +5,7 @@ import { PubSub } from "@google-cloud/pubsub";
 import { Resend } from "resend";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
+import type { Varsel } from "./push.js";
 
 // ---------------------------------------------------------------------------
 // Lagring
@@ -59,6 +60,7 @@ export type Oppgave =
   | { type: "send-purring"; purring_id: string }
   | { type: "disk-synk"; bruker_id: string; org_id: string }
   | { type: "disk-slett"; org_id: string; faktura_ider: string[] }
+  | { type: "varsel"; varsel: Varsel }
   | { type: "epost"; til: string[]; emne: string; tekst: string; fra_navn?: string; svar_til?: string };
 
 let tasks: CloudTasksClient | undefined;

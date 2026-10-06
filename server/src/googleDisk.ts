@@ -3,7 +3,7 @@
 // fakturaer rett i mappen brukeren har valgt, eller i «HI4 Faktura/<organisasjon>/<år>/».
 import { Hono, type Context } from "hono";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { KeyManagementServiceClient } from "@google-cloud/kms";
+import { dekrypter, krypter } from "./kryptering.js";
 import { z } from "zod";
 import { config } from "./config.js";
 import { alle, en, somBruker, somSystem, type Db } from "./db.js";
@@ -36,22 +36,8 @@ export function lesState(state: string, naa = Date.now()): { bruker: string } {
   return { bruker: d.bruker };
 }
 
-// --- Kryptering med Cloud KMS (byttes ut i tester) ---------------------------
-let kms: KeyManagementServiceClient | undefined;
-export let krypter = async (tekst: string): Promise<Buffer> => {
-  kms ??= new KeyManagementServiceClient();
-  const [r] = await kms.encrypt({ name: config.kmsNokkel, plaintext: Buffer.from(tekst) });
-  return Buffer.from(r.ciphertext as Uint8Array);
-};
-export let dekrypter = async (data: Buffer): Promise<string> => {
-  kms ??= new KeyManagementServiceClient();
-  const [r] = await kms.decrypt({ name: config.kmsNokkel, ciphertext: data });
-  return Buffer.from(r.plaintext as Uint8Array).toString();
-};
-export function settKryptering(k: typeof krypter, d: typeof dekrypter) {
-  krypter = k;
-  dekrypter = d;
-}
+// Kryptering med Cloud KMS ligger i kryptering.ts (felles med push-varsler).
+export { krypter, dekrypter, settKryptering } from "./kryptering.js";
 
 // --- Google-kall ------------------------------------------------------------
 export let googleFetch: typeof fetch = (...a) => fetch(...a);

@@ -4,6 +4,7 @@ import { alle, en, somSystem } from "./db.js";
 import { oppdaterKpi } from "./kpi.js";
 import { leggIKo } from "./tjenester.js";
 import { dato, kr } from "./regler.js";
+import { varsleIndeksregulering } from "./varsler.js";
 
 const logg = (severity: string, message: string, data?: unknown) => console.log(JSON.stringify({ severity, message, ...((data as object) ?? {}) }));
 
@@ -22,10 +23,16 @@ export async function kjorIndeksregulering() {
   const anvendt = await somSystem(async (db) => (await en(db, "select faktura.anvend_indeksreguleringer() as n"))!.n);
   const nye = await somSystem((db) => alle(db, "select * from faktura.planlegg_indeksreguleringer()"));
   for (const r of nye) {
+    let kunder = 0;
     try {
-      await varsle(r);
+      kunder = await varsle(r);
     } catch (e) {
       logg("ERROR", "Varsel om indeksregulering feilet", { regulering: r.id, feil: (e as Error).message });
+    }
+    try {
+      await varsleIndeksregulering(r, kunder);
+    } catch (e) {
+      logg("ERROR", "Push-varsel om indeksregulering feilet", { regulering: r.id, feil: (e as Error).message });
     }
   }
   if (anvendt || nye.length) logg("INFO", "Indeksregulering kjørt", { anvendt, planlagt: nye.length });
@@ -33,7 +40,7 @@ export async function kjorIndeksregulering() {
 }
 
 // Ett varsel per kunde med gjentakende faktura for produktet, med kundens egne beløp.
-async function varsle(r: any) {
+async function varsle(r: any): Promise<number> {
   const mottakere = await somSystem(async (db) => {
     const p = await en(db, "select navn, indeks_varsle, mva_sats from faktura.produkter where id = $1", [r.produkt_id]);
     if (!p?.indeks_varsle) return [];
@@ -89,4 +96,5 @@ async function varsle(r: any) {
     });
   }
   await somSystem((db) => db.query("select faktura.marker_regulering_varslet($1, $2)", [r.id, mottakere.length]));
+  return mottakere.length;
 }

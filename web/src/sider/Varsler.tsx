@@ -1,0 +1,162 @@
+// Innstillinger for appen (installering) og push-varsler på denne og andre enheter.
+import { useEffect, useState } from "react";
+import { api, hent } from "../api";
+import { Feil, useData, useHandling } from "../felles";
+import { dato } from "../format";
+import { IkonBjelle, IkonInstaller } from "../ikoner";
+import { usePwa } from "../Pwa";
+import { erInstallert, erIos, hentAbonnement, installer, pushStotte, slaAvVarsler, slaPaVarsler } from "../pwa";
+
+interface PushData {
+  nokkel: string | null;
+  typer: Record<string, string>;
+  valg: Record<string, boolean>;
+  abonnementer: { id: string; endpoint: string; enhet: string | null; opprettet: string; sist_sendt: string | null }[];
+}
+
+export function AppOgVarsler() {
+  const { data, last } = useData(() => hent<PushData>("/push"), []);
+  const { kanInstallere } = usePwa();
+  const [denne, settDenne] = useState<string | null>(null); // endepunktet til denne enheten
+  const [tillatelse, settTillatelse] = useState(typeof Notification === "undefined" ? "default" : Notification.permission);
+  const [testSendt, settTestSendt] = useState(false);
+  const h = useHandling();
+  const stotte = pushStotte();
+
+  useEffect(() => {
+    hentAbonnement().then((s) => settDenne(s?.endpoint ?? null));
+  }, []);
+
+  const paDenne = Boolean(denne && data?.abonnementer.some((a) => a.endpoint === denne));
+
+  const slaPa = () =>
+    h
+      .kjor(async () => {
+        const sub = await slaPaVarsler(data!.nokkel!);
+        settDenne(sub.endpoint);
+        return true;
+      })
+      .finally(() => {
+        settTillatelse(Notification.permission);
+        last();
+      });
+  const slaAv = () =>
+    h
+      .kjor(async () => {
+        await slaAvVarsler();
+        settDenne(null);
+        return true;
+      })
+      .then(last);
+  const test = () =>
+    h.kjor(async () => {
+      await api("POST", "/push/test");
+      settTestSendt(true);
+      setTimeout(() => settTestSendt(false), 6000);
+      return true;
+    });
+  const velg = (type: string, pa: boolean) => h.kjor(() => api("PUT", "/push/valg", { [type]: pa })).then(last);
+  const fjern = (id: string) => h.kjor(async () => (await api("DELETE", `/push/abonnement/${id}`), true)).then(last);
+
+  return (
+    <>
+      <h2>App</h2>
+      {erInstallert() ? (
+        <p className="dempet liten">HI4 Faktura er installert som app på denne enheten.</p>
+      ) : kanInstallere ? (
+        <>
+          <p className="dempet liten">Installer HI4 Faktura som en app på denne enheten, med eget ikon og vindu.</p>
+          <button onClick={() => void installer()}>
+            <IkonInstaller storrelse={16} /> Installer appen
+          </button>
+        </>
+      ) : erIos() ? (
+        <p className="dempet liten">
+          Trykk på Del-knappen <span aria-hidden="true">⎋</span> i Safari og velg <strong>«Legg til på Hjem-skjerm»</strong> for å
+          bruke HI4 Faktura som en app. Da kan du også få push-varsler.
+        </p>
+      ) : (
+        <p className="dempet liten">
+          Du kan installere HI4 Faktura som en app fra nettleserens meny («Installer app» eller «Legg til på startskjermen»).
+        </p>
+      )}
+
+      <h2>Varsler</h2>
+      <p className="dempet liten">Få beskjed på telefonen eller PC-en når noe skjer med fakturaene, også når appen er lukket.</p>
+
+      {stotte === "installer" ? (
+        <div className="melding info">
+          På iPhone og iPad må appen først legges til på Hjem-skjermen (se over). Åpne den derfra og slå på varsler.
+        </div>
+      ) : stotte === "nei" ? (
+        <div className="melding info">Denne nettleseren støtter ikke push-varsler.</div>
+      ) : !data ? null : !data.nokkel ? (
+        <div className="melding info">Push-varsler er ikke satt opp på plattformen ennå.</div>
+      ) : (
+        <>
+          {tillatelse === "denied" && !paDenne && (
+            <div className="melding feil">
+              Varsler er blokkert for denne siden. Tillat varsler i nettleserens innstillinger (ofte via hengelåsen ved adressefeltet), og
+              last siden på nytt.
+            </div>
+          )}
+          <div className="knapper">
+            {paDenne ? (
+              <>
+                <span className="merke merke-ok">På for denne enheten</span>
+                <button disabled={h.opptatt} onClick={test}>
+                  Send testvarsel
+                </button>
+                <button className="lenke" disabled={h.opptatt} onClick={slaAv}>
+                  Slå av her
+                </button>
+              </>
+            ) : (
+              <button className="primar" disabled={h.opptatt || tillatelse === "denied"} onClick={slaPa}>
+                <IkonBjelle storrelse={16} /> Slå på varsler på denne enheten
+              </button>
+            )}
+          </div>
+          {testSendt && <p className="liten dempet" style={{ marginTop: 8 }}>Testvarselet er sendt. Det kommer i løpet av noen sekunder.</p>}
+        </>
+      )}
+
+      {data && data.abonnementer.length > 0 && (
+        <>
+          <p className="liten" style={{ margin: "16px 0 0", fontWeight: 600 }}>
+            Varsle meg om
+          </p>
+          <div className="valgliste">
+            {Object.entries(data.typer).map(([type, navn]) => (
+              <label key={type}>
+                <input type="checkbox" checked={data.valg[type] !== false} disabled={h.opptatt} onChange={(e) => velg(type, e.target.checked)} />
+                {navn}
+              </label>
+            ))}
+          </div>
+          <p className="liten" style={{ margin: "8px 0 0", fontWeight: 600 }}>
+            Enheter med varsler
+          </p>
+          <ul className="enheter">
+            {data.abonnementer.map((a) => (
+              <li key={a.id}>
+                <span>
+                  {a.enhet ?? "Ukjent enhet"}
+                  {a.endpoint === denne && <span className="denne">denne</span>}
+                  <span className="dempet liten" style={{ display: "block" }}>
+                    Lagt til {dato(a.opprettet)}
+                    {a.sist_sendt ? ` · siste varsel ${dato(a.sist_sendt)}` : ""}
+                  </span>
+                </span>
+                <button className="lenke" disabled={h.opptatt} onClick={() => (a.endpoint === denne ? slaAv() : fjern(a.id))}>
+                  Fjern
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <Feil melding={h.feil} />
+    </>
+  );
+}

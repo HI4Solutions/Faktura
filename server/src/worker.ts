@@ -6,6 +6,8 @@ import { fakturaEpost, hentFaktura, pdfFilnavn, purringEpost, sikrePdf } from ".
 import { epost, leggIKo, publiser, type Oppgave } from "./tjenester.js";
 import { kjorIndeksregulering } from "./indeksregulering.js";
 import { kopierTilDisk, slettFraDisk, synkOrganisasjon } from "./googleDisk.js";
+import { sendVarsel } from "./push.js";
+import { varsleForfalte, varsleGjentakende, varsleOmHendelse } from "./varsler.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -95,6 +97,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "send-purring") return sendPurring(o);
   if (o.type === "disk-synk") return synkOrganisasjon(o.bruker_id, o.org_id, sikrePdf, pdfFilnavn);
   if (o.type === "disk-slett") return slettFraDisk(o.org_id, o.faktura_ider, pdfFilnavn);
+  if (o.type === "varsel") return void (await sendVarsel(o.varsel));
   return sendEpost(o);
 }
 
@@ -122,6 +125,7 @@ export async function gjenta() {
     }
   }
 
+  const sendteGjentakende: string[] = [];
   const gjentakelser = await somSystem((db) =>
     alle<{ id: string }>(db, "select id from faktura.gjentakelser where aktiv and neste_dato <= faktura.i_dag() order by neste_dato"),
   );
@@ -139,6 +143,7 @@ export async function gjenta() {
         if (!fakturaId) break;
         await leggIKo({ type: "send-faktura", faktura_id: fakturaId, send_epost: true });
         resultat.push({ id: fakturaId, ok: true });
+        sendteGjentakende.push(fakturaId);
       } catch (e) {
         resultat.push({ id, ok: false, feil: (e as Error).message });
         break;
@@ -167,6 +172,14 @@ export async function gjenta() {
     } catch (e) {
       resultat.push({ id, ok: false, feil: (e as Error).message });
     }
+  }
+
+  // Push-varsler: gjentakende fakturaer som ble sendt nå, og fakturaer som forfalt i går.
+  try {
+    await varsleGjentakende(sendteGjentakende);
+    await varsleForfalte();
+  } catch (e) {
+    logg("ERROR", "Push-varsler fra daglig jobb feilet", { feil: (e as Error).message });
   }
 
   logg(resultat.some((r) => !r.ok) ? "WARNING" : "INFO", "Gjentakelser kjørt", { antall: resultat.length, feil: resultat.filter((r) => !r.ok) });
@@ -250,6 +263,24 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
 
+  app.post("/oppgaver/varsel", async (c) => {
+    const o = z
+      .object({
+        varsel: z.object({
+          hendelse: z.string(),
+          org_id: z.string().uuid().optional(),
+          bruker_id: z.string().uuid().optional(),
+          unntatt: z.string().uuid().optional(),
+          tittel: z.string(),
+          tekst: z.string(),
+          url: z.string(),
+          tag: z.string().optional(),
+        }),
+      })
+      .parse(await c.req.json());
+    return c.json(await sendVarsel(o.varsel as any));
+  });
+
   app.post("/oppgaver/send-purring", async (c) => {
     const o = z.object({ purring_id: z.string().uuid(), oppgave_id: z.string() }).parse(await c.req.json());
     await sendPurring(o);
@@ -276,6 +307,15 @@ export function lagWorker() {
       const data = JSON.parse(Buffer.from(kropp.message.data ?? "", "base64").toString() || "{}");
       if (data.faktura_id) await kopierTilDisk(data.faktura_id, sikrePdf, pdfFilnavn);
     }
+    return c.body(null, 204);
+  });
+
+  // Push-varsler for hendelser fra utboksen (betalt, e-post som ikke kom fram).
+  app.post("/hendelser/varsler", async (c) => {
+    const kropp: any = await c.req.json().catch(() => ({}));
+    const m = kropp?.message;
+    const data = JSON.parse(Buffer.from(m?.data ?? "", "base64").toString() || "{}");
+    await varsleOmHendelse(m?.attributes?.hendelse, m?.attributes?.org_id, m?.attributes?.utboks_id, data);
     return c.body(null, 204);
   });
 

@@ -16,8 +16,10 @@ import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
 import { Rapporter } from "./sider/Rapporter";
 import { Logo } from "./Logo";
+import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
+import { installer } from "./pwa";
 import {
-  IkonFaktura, IkonGjenta, IkonInnstillinger, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
+  IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -88,6 +90,8 @@ function Ramme() {
   const { meg, org, velgOrg, loggUt } = useKonto();
   const [ny, settNy] = useState(false);
   const [menyApen, settMenyApen] = useState(false);
+  const { kanInstallere } = usePwa();
+  useVarselNavigering();
   const sted = useLocation();
   useEffect(() => settMenyApen(false), [sted.pathname]);
   const orgs = meg?.organisasjoner ?? [];
@@ -186,6 +190,12 @@ function Ramme() {
             Administrasjon
           </NavLink>
         )}
+        {kanInstallere && (
+          <a href="#" onClick={(e) => (e.preventDefault(), void installer())}>
+            <IkonInstaller />
+            Installer appen
+          </a>
+        )}
         <div className="bunn">
           <span className="avatar rund">{initialer(meg?.bruker.navn ?? meg?.bruker.epost ?? "?")}</span>
           <div className="hvem">
@@ -241,6 +251,7 @@ export function App() {
     <BrowserRouter>
       <KontoProvider>
         <Innhold />
+        <PwaBannere />
       </KontoProvider>
     </BrowserRouter>
   );

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { onIdTokenChanged, signOut, type User } from "firebase/auth";
 import { hentAuth } from "./firebase";
 import { hent } from "./api";
+import { slaAvVarsler, synkAbonnement } from "./pwa";
 
 export interface MinOrg {
   id: string;
@@ -88,10 +89,17 @@ export function KontoProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Varsler inneholder kundenavn og beløp: en enhet man logger ut av, skal ikke få flere.
   const loggUt = async () => {
+    await slaAvVarsler().catch(() => {});
     await signOut(await hentAuth());
     settMeg(null);
   };
+
+  const innlogget = meg?.bruker.id;
+  useEffect(() => {
+    if (innlogget) void synkAbonnement();
+  }, [innlogget]);
 
   const orgs = meg?.organisasjoner ?? [];
   const org = orgs.find((o) => o.id === orgId) ?? orgs.find((o) => o.direkte_medlem) ?? orgs[0] ?? null;

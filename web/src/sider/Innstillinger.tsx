@@ -4,6 +4,7 @@ import { Feil, Laster, tall, useData, useHandling } from "../felles";
 import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
+import { AppOgVarsler } from "./Varsler";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
@@ -18,6 +19,7 @@ export function Innstillinger() {
           {meg?.bruker.navn} · {meg?.bruker.epost}
         </p>
         <Passkeys />
+        <AppOgVarsler />
         <GoogleDisk />
         <h2>Autentiseringsapp</h2>
         <Totrinn />

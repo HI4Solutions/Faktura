@@ -129,3 +129,15 @@ export const IkonUtkast = (p: P) => (
     <path d="m13.5 6.5 4 4" />
   </Ikon>
 );
+export const IkonInstaller = (p: P) => (
+  <Ikon {...p}>
+    <rect x="5" y="2.5" width="14" height="19" rx="2.5" />
+    <path d="M12 7v7M9 11l3 3 3-3M10 18.5h4" />
+  </Ikon>
+);
+export const IkonBjelle = (p: P) => (
+  <Ikon {...p}>
+    <path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z" />
+    <path d="M10 20a2 2 0 0 0 4 0" />
+  </Ikon>
+);
