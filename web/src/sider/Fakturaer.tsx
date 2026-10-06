@@ -5,6 +5,7 @@ import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
 import { KundeSkjema } from "./Register";
+import { AvsenderKonto } from "./AvsenderKonto";
 
 // ---------------------------------------------------------------------------
 // Liste
@@ -129,6 +130,8 @@ export function FakturaSkjema() {
         deres_referanse: u.deres_referanse ?? "",
         var_referanse: u.var_referanse ?? "",
         notat: u.notat ?? "",
+        konto_id: u.konto_id ?? null,
+        avsender: u.avsender ?? null,
       });
       settLinjer(
         u.linjer.map((l: any) => ({
@@ -183,6 +186,8 @@ export function FakturaSkjema() {
       deres_referanse: f.deres_referanse || null,
       var_referanse: f.var_referanse || null,
       notat: f.notat || null,
+      konto_id: f.konto_id ?? null,
+      avsender: f.avsender ?? null,
       gebyr,
       linjer: tallLinjer.map((l) => ({ produkt_id: l.produkt_id, beskrivelse: l.beskrivelse, antall: l.antall, enhet: l.enhet, enhetspris: l.enhetspris, mva_sats: l.mva_sats })),
     };
@@ -248,6 +253,7 @@ export function FakturaSkjema() {
             <input value={f.var_referanse} onChange={(e) => settF({ ...f, var_referanse: e.target.value })} />
           </label>
         </div>
+        <AvsenderKonto org={orgData.data} verdi={f} endre={(v) => settF({ ...f, ...v })} />
       </div>
 
       <div className="kort tabell linjer">

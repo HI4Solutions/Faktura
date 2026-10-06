@@ -6,7 +6,9 @@ import { orgnr as visOrgnr } from "../format";
 
 export function NyOrganisasjon({ avbryt }: { avbryt?: () => void }) {
   const { oppdater, velgOrg } = useKonto();
-  const [type, settType] = useState<"foretak" | "regnskapsbyraa">("foretak");
+
+  const { meg } = useKonto();
+  const [type, settType] = useState<"foretak" | "regnskapsbyraa" | "privatperson">("foretak");
   const [orgnr, settOrgnr] = useState("");
   const [oppslag, settOppslag] = useState<any>(null);
   const [navn, settNavn] = useState("");
@@ -27,7 +29,7 @@ export function NyOrganisasjon({ avbryt }: { avbryt?: () => void }) {
 
   async function opprett(ev: FormEvent) {
     ev.preventDefault();
-    const nr = orgnr.replace(/\s/g, "") || null;
+    const nr = type === "privatperson" ? null : orgnr.replace(/\s/g, "") || null;
     const o = await kjor(async () => {
       const o = await api("POST", "/organisasjoner", { navn, orgnr: nr, type });
       if (oppslag) {
@@ -52,12 +54,26 @@ export function NyOrganisasjon({ avbryt }: { avbryt?: () => void }) {
       <h2 style={{ marginTop: 0 }}>Ny organisasjon</h2>
       <label>
         Type
-        <select value={type} onChange={(e) => settType(e.target.value as typeof type)}>
-          <option value="foretak">Foretak som skal fakturere</option>
+        <select
+          value={type}
+          onChange={(e) => {
+            const ny = e.target.value as typeof type;
+            settType(ny);
+            if (ny === "privatperson" && !navn) settNavn(meg?.bruker?.navn ?? "");
+          }}
+        >
+          <option value="foretak">Foretak som skal fakturere (AS, ENK o.l.)</option>
+          <option value="privatperson">Privatperson (uten organisasjonsnummer)</option>
           <option value="regnskapsbyraa">Regnskapsbyrå</option>
         </select>
       </label>
-      <label>
+      {type === "privatperson" && (
+        <p className="liten dempet">
+          Fakturaer sendes i ditt navn, uten organisasjonsnummer og mva, f.eks. for utleie av egen bolig eller enkeltoppdrag. Har du
+          enkeltpersonforetak, velg «Foretak» i stedet; der kan du velge å sende fakturaer med ditt eget navn.
+        </p>
+      )}
+      {type !== "privatperson" && <label>
         Organisasjonsnummer
         <div className="knapper">
           <input style={{ flex: 1 }} inputMode="numeric" value={orgnr} onChange={(e) => settOrgnr(e.target.value)} placeholder="123 456 789" />
@@ -65,7 +81,7 @@ export function NyOrganisasjon({ avbryt }: { avbryt?: () => void }) {
             Slå opp
           </button>
         </div>
-      </label>
+      </label>}
       {oppslag && (
         <div className="melding info">
           {oppslag.navn}, org.nr. {visOrgnr(oppslag.orgnr)}
@@ -75,7 +91,7 @@ export function NyOrganisasjon({ avbryt }: { avbryt?: () => void }) {
         </div>
       )}
       <label>
-        Navn
+        {type === "privatperson" ? "Ditt navn" : "Navn"}
         <input required value={navn} onChange={(e) => settNavn(e.target.value)} />
       </label>
       <p className="liten dempet">

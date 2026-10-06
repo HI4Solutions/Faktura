@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, hent } from "../api";
+import { AvsenderKonto } from "./AvsenderKonto";
 import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
 import { dato, iDag, kr, summer } from "../format";
@@ -119,6 +120,8 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
     slutt_dato: g.slutt_dato ?? "",
     deres_referanse: g.deres_referanse ?? "",
     aktiv: g.aktiv ?? true,
+    konto_id: g.konto_id ?? null,
+    avsender: g.avsender ?? null,
   });
   const [linjer, settLinjer] = useState<L[]>(
     g.linjer?.map((l: any) => ({
@@ -145,6 +148,8 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
       slutt_dato: f.slutt_dato || null,
       deres_referanse: f.deres_referanse || null,
       aktiv: f.aktiv,
+      konto_id: f.konto_id ?? null,
+      avsender: f.avsender ?? null,
       linjer: linjer
         .filter((l) => l.beskrivelse.trim() && l.enhetspris !== "")
         .map((l) => ({
@@ -260,6 +265,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
         Deres referanse
         <input value={f.deres_referanse} onChange={(e) => settF({ ...f, deres_referanse: e.target.value })} />
       </label>
+      <AvsenderKonto org={orgData.data} verdi={f} endre={(v) => settF({ ...f, ...v })} />
       {g.id && (
         <label>
           <input type="checkbox" checked={f.aktiv} onChange={(e) => settF({ ...f, aktiv: e.target.checked })} /> Aktiv

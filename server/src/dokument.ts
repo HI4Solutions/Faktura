@@ -33,7 +33,7 @@ export async function pdfData(db: Db, f: any): Promise<PdfFaktura> {
   let kunde = f.kunde;
   // Utkast har ikke kopier ennå; bruk organisasjonen og kunden slik de er nå.
   if (utkast) {
-    selger = await en(db, "select * from faktura.organisasjoner where id = $1", [f.org_id]);
+    selger = (await en(db, "select faktura.selger_for($1, $2, $3) as s", [f.org_id, f.konto_id ?? null, f.avsender ?? null]))?.s;
     kunde = await en(db, "select * from faktura.kunder where id = $1", [f.kunde_id]);
   }
   const kreditnotaFor = f.kreditnota_for

@@ -31,6 +31,7 @@ export function Innstillinger() {
       {org && erAdmin(org.rolle) && (
         <>
           <Organisasjon />
+          <Kontoer />
           <Logo />
           <Medlemmer />
           <Regnskapsforer />
@@ -75,9 +76,16 @@ function Organisasjon() {
       purring_auto: o.purring_auto,
       purring_dager: Number(o.purring_dager),
       purregebyr: tall(String(o.purregebyr ?? 0)),
+      innehaver: o.innehaver?.trim() || null,
+      standard_avsender: o.innehaver?.trim() ? o.standard_avsender : "firma",
     };
     if (data.mva_registrert && !o.mva_registrert && !confirm("Fakturere uten mva fremover? Alle produkter, utkast og gjentakende fakturaer settes til 0 % mva.")) return;
-    if (o.verifisering === "ny") kropp.orgnr = o.orgnr ? o.orgnr.replace(/\s/g, "") : null;
+    if (o.type === "privatperson") {
+      delete kropp.mva_registrert;
+      delete kropp.foretaksregisteret;
+      delete kropp.innehaver;
+      delete kropp.standard_avsender;
+    } else if (o.verifisering === "ny") kropp.orgnr = o.orgnr ? o.orgnr.replace(/\s/g, "") : null;
     const ktnr = (o.kontonr ?? "").replace(/[\s.]/g, "");
     if (ktnr !== (data.kontonr ?? "")) {
       if (!confirm(`Endre kontonummeret til ${ktnr}? Alle eiere får beskjed på e-post.`)) return;
@@ -102,11 +110,30 @@ function Organisasjon() {
           Navn
           <input required {...felt("navn")} />
         </label>
-        <label>
-          Org.nr.
-          <input disabled={o.verifisering !== "ny"} {...felt("orgnr")} />
-        </label>
+        {o.type !== "privatperson" && (
+          <label>
+            Org.nr.
+            <input disabled={o.verifisering !== "ny"} {...felt("orgnr")} />
+          </label>
+        )}
       </div>
+      {o.type === "privatperson" ? (
+        <p className="dempet liten">Du fakturerer som privatperson: uten organisasjonsnummer og mva.</p>
+      ) : (
+        <div className="rad">
+          <label>
+            Innehaver (for enkeltpersonforetak)
+            <input {...felt("innehaver")} placeholder="Ola Nordmann" />
+          </label>
+          <label>
+            Avsender på fakturaene
+            <select {...felt("standard_avsender")} disabled={!o.innehaver?.trim()}>
+              <option value="firma">Firmanavnet ({o.navn})</option>
+              <option value="innehaver">Innehaverens navn{o.innehaver?.trim() ? ` (${o.innehaver.trim()})` : ""}</option>
+            </select>
+          </label>
+        </div>
+      )}
       <label>
         Adresse
         <input {...felt("adresse")} />
@@ -129,6 +156,7 @@ function Organisasjon() {
           <input {...felt("telefon")} />
         </label>
       </div>
+      {o.type !== "privatperson" && <>
       <label>
         <input type="checkbox" {...avkryss("mva_registrert")} /> MVA-registrert
         <span className="liten" style={{ display: "block", marginLeft: 24 }}>
@@ -139,9 +167,10 @@ function Organisasjon() {
       <label>
         <input type="checkbox" {...avkryss("foretaksregisteret")} /> Registrert i Foretaksregisteret
       </label>
+      </>}
       <div className="rad">
         <label>
-          Kontonummer
+          Kontonummer (standard)
           <input inputMode="numeric" {...felt("kontonr")} placeholder="1234.56.78901" />
         </label>
         <label>
@@ -568,6 +597,75 @@ function Regnskapsforer() {
         <label>
           <button className="primar" disabled={h.opptatt}>
             {byraa ? "Be om tilgang" : "Inviter"}
+          </button>
+        </label>
+      </form>
+      <Feil melding={h.feil} />
+    </div>
+  );
+}
+
+// Flere kontonumre, f.eks. egen konto for husleie. Velges per faktura og gjentakelse.
+function Kontoer() {
+  const { org } = useKonto();
+  const { data, last } = useData(() => hent(`/org/${org!.id}/kontoer`), [org?.id]);
+  const [ny, settNy] = useState({ navn: "", kontonr: "" });
+  const h = useHandling();
+
+  async function leggTil(ev: FormEvent) {
+    ev.preventDefault();
+    const r = await h.kjor(() => api("POST", `/org/${org!.id}/kontoer`, ny));
+    if (r) {
+      settNy({ navn: "", kontonr: "" });
+      last();
+    }
+  }
+
+  return (
+    <div className="kort">
+      <h2 style={{ marginTop: 0 }}>Flere kontonumre</h2>
+      <p className="dempet liten">
+        Standardkontoen står under «Organisasjon og faktura». Her kan du legge til flere, f.eks. en egen konto for husleie, og velge
+        konto på hver faktura og gjentakende faktura.
+      </p>
+      {(data ?? []).length > 0 && (
+        <table>
+          <tbody>
+            {(data ?? []).map((k: any) => (
+              <tr key={k.id}>
+                <td>{k.navn}</td>
+                <td className="tall">{k.kontonr.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3")}</td>
+                <td className="hoyre">
+                  <button
+                    type="button"
+                    className="lenke"
+                    disabled={h.opptatt}
+                    onClick={() =>
+                      confirm(`Fjerne ${k.navn}? Utkast og gjentakende fakturaer som bruker den, går over til standardkontoen.`) &&
+                      h.kjor(async () => (await api("DELETE", `/org/${org!.id}/kontoer/${k.id}`), true)).then(last)
+                    }
+                  >
+                    Fjern
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <form onSubmit={leggTil} className="rad">
+        <label>
+          Navn
+          <input required value={ny.navn} onChange={(e) => settNy({ ...ny, navn: e.target.value })} placeholder="Husleiekonto" />
+        </label>
+        <label>
+          Kontonummer
+          <input required inputMode="numeric" value={ny.kontonr} onChange={(e) => settNy({ ...ny, kontonr: e.target.value })} placeholder="1234.56.78901" />
+        </label>
+        <label>
+          &nbsp;
+          <button className="primar" disabled={h.opptatt}>
+            Legg til
           </button>
         </label>
       </form>

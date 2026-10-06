@@ -66,6 +66,8 @@ const orgSkjema = z.object({
   purring_auto: z.boolean().optional(),
   purring_dager: z.number().int().min(0).max(60).optional(),
   purregebyr: z.number().min(0).max(200).optional(),
+  innehaver: valgfriTekst(200).optional(),
+  standard_avsender: z.enum(["firma", "innehaver"]).optional(),
 });
 
 const kundeSkjema = z.object({
@@ -120,6 +122,8 @@ const fakturaSkjema = z.object({
   var_referanse: valgfriTekst(100),
   notat: valgfriTekst(2000),
   planlagt_sending: datoS.nullish(),
+  konto_id: uuid.nullish(),
+  avsender: z.enum(["firma", "innehaver"]).nullish(),
   linjer: z.array(linjeSkjema).max(500),
   gebyr: z.boolean().optional(), // legg til organisasjonens standard fakturagebyr som egen linje
 });
@@ -190,7 +194,7 @@ export function lagApi() {
   });
 
   api.post("/organisasjoner", async (c) => {
-    const b = await kropp(c, z.object({ navn: tekstS(200).min(1), orgnr: z.string().regex(/^\d{9}$/).nullish(), type: z.enum(["foretak", "regnskapsbyraa"]).optional() }));
+    const b = await kropp(c, z.object({ navn: tekstS(200).min(1), orgnr: z.string().regex(/^\d{9}$/).nullish(), type: z.enum(["foretak", "regnskapsbyraa", "privatperson"]).optional() }));
     const o = await bruk(c, (db) => en(db, "select * from faktura.opprett_organisasjon($1, $2, $3)", [b.navn, b.orgnr ?? null, b.type ?? "foretak"]));
     return c.json(o, 201);
   });
@@ -425,6 +429,35 @@ export function lagApi() {
     });
   }
 
+  // --- Kontonumre -----------------------------------------------------------
+  const kontoSkjema = z.object({ navn: tekstS(100).min(1), kontonr: z.string().transform((v) => v.replace(/[\s.]/g, "")).pipe(z.string().regex(/^\d{11}$/, "Kontonummeret må ha 11 siffer")) });
+
+  org.get("/kontoer", async (c) =>
+    c.json(await bruk(c, (db) => alle(db, "select * from faktura.kontoer where org_id = $1 order by navn", [orgId(c)]))),
+  );
+
+  org.post("/kontoer", async (c) => {
+    const b = await kropp(c, kontoSkjema);
+    const r = await bruk(c, (db) => en(db, "insert into faktura.kontoer (org_id, navn, kontonr) values ($1, $2, $3) returning *", [orgId(c), b.navn, b.kontonr]));
+    return c.json(r, 201);
+  });
+
+  org.patch("/kontoer/:id", async (c) => {
+    const b = await kropp(c, kontoSkjema);
+    const r = await bruk(c, (db) =>
+      en(db, "update faktura.kontoer set navn = $3, kontonr = $4 where id = $1 and org_id = $2 returning *", [uuid.parse(c.req.param("id")), orgId(c), b.navn, b.kontonr]),
+    );
+    if (!r) throw new ApiFeil(404, "Finnes ikke");
+    return c.json(r);
+  });
+
+  // Utkast og gjentakelser som brukte kontoen, går tilbake til standardkontoen.
+  org.delete("/kontoer/:id", async (c) => {
+    const r = await bruk(c, (db) => db.query("delete from faktura.kontoer where id = $1 and org_id = $2", [uuid.parse(c.req.param("id")), orgId(c)]));
+    if (!r.rowCount) throw new ApiFeil(404, "Finnes ikke");
+    return c.body(null, 204);
+  });
+
   // --- Indeksregulering ----------------------------------------------------
   org.get("/produkter/:id/indeksregulering", async (c) => {
     const id = uuid.parse(c.req.param("id"));
@@ -505,10 +538,10 @@ export function lagApi() {
       const f = await en(
         db,
         `insert into faktura.fakturaer (org_id, kunde_id, fakturadato, forfallsdato, periode_fra, periode_til,
-                                        deres_referanse, var_referanse, notat, planlagt_sending, opprettet_av)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, faktura.bruker_id()) returning id`,
+                                        deres_referanse, var_referanse, notat, planlagt_sending, konto_id, avsender, opprettet_av)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, faktura.bruker_id()) returning id`,
         [orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
-         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null],
+         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null],
       );
       await skrivLinjer(db, orgId(c), f.id, b.linjer, b.gebyr ?? false);
       return hentFaktura(db, orgId(c), f.id);
@@ -522,10 +555,10 @@ export function lagApi() {
     const f = await bruk(c, async (db) => {
       const r = await db.query(
         `update faktura.fakturaer set kunde_id = $3, fakturadato = $4, forfallsdato = $5, periode_fra = $6, periode_til = $7,
-                deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11
+                deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11, konto_id = $12, avsender = $13
           where id = $1 and org_id = $2 and status = 'utkast'`,
         [id, orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
-         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null],
+         b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null],
       );
       if (!r.rowCount) throw new ApiFeil(409, "Bare utkast kan endres");
       await skrivLinjer(db, orgId(c), id, b.linjer, b.gebyr ?? false);
@@ -647,6 +680,8 @@ export function lagApi() {
     slutt_dato: datoS.nullish(),
     aktiv: z.boolean().optional(),
     deres_referanse: valgfriTekst(100),
+    konto_id: uuid.nullish(),
+    avsender: z.enum(["firma", "innehaver"]).nullish(),
   });
 
   org.get("/gjentakelser", async (c) =>
@@ -669,11 +704,11 @@ export function lagApi() {
         en(
           db,
           `insert into faktura.gjentakelser (org_id, kunde_id, linjer, intervall, forfall_dag, neste_forfall, send_dager_foer,
-                                            slutt_dato, aktiv, deres_referanse, opprettet_av)
+                                            slutt_dato, aktiv, deres_referanse, konto_id, avsender, opprettet_av)
            values ($1, $2, $3, $4, $5, $6, coalesce($7, (select standard_dager_foer_forfall from faktura.organisasjoner where id = $1)),
-                   $8, coalesce($9, true), $10, faktura.bruker_id()) returning *`,
+                   $8, coalesce($9, true), $10, $11, $12, faktura.bruker_id()) returning *`,
           [orgId(c), b.kunde_id, JSON.stringify(b.linjer), b.intervall, b.forfall_dag, b.neste_forfall, b.send_dager_foer ?? null,
-           b.slutt_dato ?? null, b.aktiv ?? null, b.deres_referanse],
+           b.slutt_dato ?? null, b.aktiv ?? null, b.deres_referanse, b.konto_id ?? null, b.avsender ?? null],
         ),
       ),
       201,
