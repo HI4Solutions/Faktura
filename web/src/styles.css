@@ -1,0 +1,136 @@
+:root {
+  --bg: #f6f7f9;
+  --flate: #ffffff;
+  --tekst: #1b2230;
+  --dempet: #5d6677;
+  --kant: #dfe3ea;
+  --aksent: #1f3a73;
+  --aksent-tekst: #ffffff;
+  --aksent-lys: #e8eefb;
+  --ok: #17703d;
+  --ok-lys: #e3f4ea;
+  --fare: #b42318;
+  --fare-lys: #fdecea;
+  --advarsel: #8a5a00;
+  --advarsel-lys: #fdf3dc;
+  --info: #1f5fbf;
+  --info-lys: #e6effc;
+  --skygge: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --radius: 10px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--tekst);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b;
+    --flate: #1b1f27;
+    --tekst: #e7eaf0;
+    --dempet: #9aa3b2;
+    --kant: #2c323d;
+    --aksent: #8fb0ff;
+    --aksent-tekst: #0e1420;
+    --aksent-lys: #1f2a44;
+    --ok: #6fd39a;
+    --ok-lys: #173323;
+    --fare: #ff8a80;
+    --fare-lys: #3a1b1b;
+    --advarsel: #f1c15c;
+    --advarsel-lys: #3a2f14;
+    --info: #8ab4ff;
+    --info-lys: #1b2a45;
+    --skygge: none;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+a { color: var(--aksent); }
+h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+h2 { font-size: 1.15rem; margin: 1.5rem 0 0.75rem; }
+p { margin: 0 0 0.75rem; }
+.dempet { color: var(--dempet); }
+.liten { font-size: 0.85rem; }
+.hoyre { text-align: right; }
+.tall { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+/* Oppsett */
+.ramme { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
+.meny { background: var(--flate); border-right: 1px solid var(--kant); padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; }
+.meny .logo { font-weight: 700; font-size: 1.1rem; margin: 0 8px 16px; }
+.meny a { display: block; padding: 8px 10px; border-radius: 8px; color: var(--tekst); text-decoration: none; }
+.meny a.active { background: var(--aksent-lys); color: var(--aksent); font-weight: 600; }
+.meny .bunn { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+.innhold { padding: 28px 32px; max-width: 1100px; width: 100%; }
+.topp { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.topp h1 { margin: 0; }
+
+@media (max-width: 760px) {
+  .ramme { grid-template-columns: 1fr; }
+  .meny { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--kant); padding: 10px 16px; }
+  .meny .logo { width: 100%; margin: 0 0 4px; }
+  .meny .bunn { margin-top: 0; flex-direction: row; width: 100%; }
+  .innhold { padding: 20px 16px; }
+}
+
+/* Komponenter */
+.kort { background: var(--flate); border: 1px solid var(--kant); border-radius: var(--radius); padding: 20px; box-shadow: var(--skygge); margin-bottom: 16px; }
+.sentrert { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.sentrert .kort { width: 100%; max-width: 420px; }
+
+button, .knapp {
+  font: inherit; border: 1px solid var(--kant); background: var(--flate); color: var(--tekst);
+  padding: 8px 14px; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+}
+button:hover:not(:disabled), .knapp:hover { border-color: var(--dempet); }
+button.primar { background: var(--aksent); color: var(--aksent-tekst); border-color: var(--aksent); }
+button.fare { color: var(--fare); }
+button:disabled { opacity: 0.55; cursor: default; }
+button.lenke { border: 0; background: none; color: var(--aksent); padding: 0; }
+.knapper { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+label { display: block; font-size: 0.85rem; color: var(--dempet); margin-bottom: 12px; }
+label > input, label > select, label > textarea { margin-top: 4px; }
+input, select, textarea {
+  font: inherit; width: 100%; padding: 8px 10px; border: 1px solid var(--kant); border-radius: 8px;
+  background: var(--flate); color: var(--tekst);
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--aksent); outline-offset: -1px; }
+input[type="checkbox"] { width: auto; margin-right: 6px; }
+.rad { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 12px; }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 600; font-size: 0.8rem; color: var(--dempet); text-transform: uppercase; letter-spacing: 0.03em; }
+th, td { padding: 9px 8px; border-bottom: 1px solid var(--kant); vertical-align: top; }
+tbody tr.klikkbar { cursor: pointer; }
+tbody tr.klikkbar:hover { background: var(--aksent-lys); }
+.tabell { overflow-x: auto; }
+
+.merke { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+.merke-ok { background: var(--ok-lys); color: var(--ok); }
+.merke-fare { background: var(--fare-lys); color: var(--fare); }
+.merke-advarsel { background: var(--advarsel-lys); color: var(--advarsel); }
+.merke-info { background: var(--info-lys); color: var(--info); }
+.merke-noytral { background: var(--kant); color: var(--tekst); }
+
+.melding { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
+.melding.feil { background: var(--fare-lys); color: var(--fare); }
+.melding.ok { background: var(--ok-lys); color: var(--ok); }
+.melding.info { background: var(--info-lys); color: var(--info); }
+
+.nokkeltall { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.nokkeltall .kort { margin: 0; }
+.nokkeltall .verdi { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.linjer td input { min-width: 70px; }
+.summer { margin-left: auto; max-width: 320px; }
+.summer div { display: flex; justify-content: space-between; padding: 4px 0; }
+.summer .total { font-weight: 700; border-top: 1px solid var(--kant); margin-top: 4px; padding-top: 8px; }
+
+dialog { border: 1px solid var(--kant); border-radius: var(--radius); padding: 24px; background: var(--flate); color: var(--tekst); width: min(520px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(10, 14, 22, 0.45); }
+.qr { display: block; margin: 12px auto; background: white; padding: 8px; border-radius: 8px; }
+code.hemmelig { word-break: break-all; font-size: 0.85rem; }

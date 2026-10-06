@@ -55,6 +55,16 @@ resource "google_firebase_hosting_site" "app" {
   depends_on = [google_firebase_project.this]
 }
 
+# Web-appen gjør at Firebase Hosting serverer konfigurasjonen på /__/firebase/init.json,
+# som nettappen leser ved oppstart. Ingen nøkler bygges inn i koden.
+resource "google_firebase_web_app" "app" {
+  provider        = google-beta
+  project         = var.project_id
+  display_name    = "HI4 Faktura"
+  deletion_policy = "DELETE"
+  depends_on      = [google_firebase_project.this]
+}
+
 # Eget domene. Terraform skriver ut DNS-oppføringene som må legges inn hos
 # domeneleverandøren (output «dns_for_app_domain»). Firebase utsteder sertifikat selv.
 resource "google_firebase_hosting_custom_domain" "app" {

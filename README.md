@@ -13,11 +13,11 @@ klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
 | Del | Status |
 |---|---|
 | Databaseskjema, regler, RLS og tester (`db/`) | Ferdig, testene er grønne |
-| Infrastruktur som kode (`infra/terraform`) | Ferdig, validert, ikke rullet ut |
+| Infrastruktur som kode (`infra/terraform`) | Ferdig |
 | CI (databasetester, Terraform) og utrulling med GitHub Actions | Ferdig |
 | Infrastruktur rullet ut i `hi4-faktura-prod` | Ferdig |
 | API og worker (`server/`, TypeScript på Cloud Run) | Ferdig, testet mot Postgres |
-| Nettapp (React) på `faktura.hi4.no` | Neste; i dag vises en startside |
+| Nettapp (`web/`, React + Vite) på `faktura.hi4.no` | Første versjon: innlogging med MFA, organisasjon, kunder, produkter, fakturaer, regnskapsfører |
 
 Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og veikart.
 
