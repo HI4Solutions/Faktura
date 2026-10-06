@@ -138,3 +138,55 @@ dialog { border: 1px solid var(--kant); border-radius: var(--radius); padding: 2
 dialog::backdrop { background: rgba(10, 14, 22, 0.45); }
 .qr { display: block; margin: 12px auto; background: white; padding: 8px; border-radius: 8px; }
 code.hemmelig { word-break: break-all; font-size: 0.85rem; }
+
+/* Logo */
+.logo-merkevare { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; }
+.logo-merkevare .logo-tekst { font-size: 1.1rem; }
+.logo-merkevare .logo-tekst span { color: var(--aksent); font-weight: 600; }
+.logo-ikon { display: block; flex: none; overflow: visible; }
+.logo-ikon .logo-linje { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.logo-ikon .logo-merke { transform-box: fill-box; transform-origin: center; }
+.logo-ikon .logo-hake { stroke-dasharray: 1; stroke-dashoffset: 0; }
+
+/* Én syklus på 6 s: linjene skrives, merket spretter, haken tegnes, glansen sveiper, så hvile. */
+.logo-ikon.animert .logo-linje { animation: logo-skriv 6s cubic-bezier(.4, 0, .2, 1) infinite; }
+.logo-ikon.animert .l1 { animation-delay: 0s; }
+.logo-ikon.animert .l2 { animation-delay: .25s; }
+.logo-ikon.animert .l3 { animation-delay: .5s; }
+.logo-ikon.animert .logo-merke { animation: logo-sprett 6s cubic-bezier(.34, 1.56, .64, 1) infinite; }
+.logo-ikon.animert .logo-hake { animation: logo-hake 6s ease-out infinite; }
+.logo-ikon.animert .logo-glans { animation: logo-glans 6s ease-in-out infinite; }
+.logo-ikon.animert .logo-ark { transform-box: fill-box; transform-origin: 50% 100%; animation: logo-ark 6s ease-in-out infinite; }
+
+@keyframes logo-skriv {
+  0% { stroke-dashoffset: 1; }
+  14%, 82% { stroke-dashoffset: 0; }
+  92%, 100% { stroke-dashoffset: 1; }
+}
+@keyframes logo-sprett {
+  0%, 22% { transform: scale(0); opacity: 0; }
+  30% { transform: scale(1.15); opacity: 1; }
+  36%, 84% { transform: scale(1); opacity: 1; }
+  92%, 100% { transform: scale(0); opacity: 0; }
+}
+@keyframes logo-hake {
+  0%, 30% { stroke-dashoffset: 1; }
+  40%, 100% { stroke-dashoffset: 0; }
+}
+@keyframes logo-glans {
+  0%, 40% { transform: rotate(20deg) translateX(0); }
+  60%, 100% { transform: rotate(20deg) translateX(90px); }
+}
+@keyframes logo-ark {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-1px); }
+  36% { transform: translateY(0); }
+}
+
+/* Større utgave på innloggingen */
+.logo-stor { display: flex; justify-content: center; margin-bottom: 8px; }
+.logo-stor .logo-tekst { font-size: 1.5rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-ikon.animert * { animation: none !important; }
+}

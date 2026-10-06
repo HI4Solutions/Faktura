@@ -13,6 +13,7 @@ import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
 import { Rapporter } from "./sider/Rapporter";
+import { Logo } from "./Logo";
 
 function Invitasjon() {
   const { token } = useParams();
@@ -52,7 +53,7 @@ function Ramme() {
   return (
     <div className="ramme">
       <nav className="meny">
-        <div className="logo">HI4 Faktura</div>
+        <div className="logo"><Logo /></div>
         <select
           value={org?.id}
           onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))}

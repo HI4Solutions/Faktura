@@ -11,6 +11,7 @@ import {
 } from "firebase/auth";
 import { hentAuth } from "../firebase";
 import { Feil } from "../felles";
+import { Logo } from "../Logo";
 import { erAvbrutt, loggInnMedPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
 const feiltekst: Record<string, string> = {
@@ -84,7 +85,9 @@ export function Innlogging() {
   return (
     <div className="sentrert">
       <form className="kort" onSubmit={send}>
-        <h1>HI4 Faktura</h1>
+        <h1 className="logo-stor">
+          <Logo storrelse={44} />
+        </h1>
         {resolver ? (
           <>
             <p>Skriv inn koden fra autentiseringsappen din.</p>
