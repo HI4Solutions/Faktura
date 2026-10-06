@@ -12,6 +12,7 @@ resource "google_identity_platform_config" "auth" {
     "localhost",
     "${var.project_id}.firebaseapp.com",
     "${var.project_id}.web.app",
+    var.app_domain,
   ], var.app_domains)
 
   sign_in {
@@ -52,6 +53,16 @@ resource "google_firebase_hosting_site" "app" {
   site_id  = var.project_id
 
   depends_on = [google_firebase_project.this]
+}
+
+# Eget domene. Terraform skriver ut DNS-oppføringene som må legges inn hos
+# domeneleverandøren (output «dns_for_app_domain»). Firebase utsteder sertifikat selv.
+resource "google_firebase_hosting_custom_domain" "app" {
+  provider              = google-beta
+  project               = var.project_id
+  site_id               = google_firebase_hosting_site.app.site_id
+  custom_domain         = var.app_domain
+  wait_dns_verification = false
 }
 
 # ---------------------------------------------------------------------------

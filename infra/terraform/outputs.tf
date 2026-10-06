@@ -7,7 +7,12 @@ output "worker_url" {
 }
 
 output "app_url" {
-  value = "https://${google_firebase_hosting_site.app.site_id}.web.app"
+  value = "https://${var.app_domain}"
+}
+
+output "dns_for_app_domain" {
+  description = "DNS-oppføringer som må legges inn hos domeneleverandøren for app_domain."
+  value       = google_firebase_hosting_custom_domain.app.required_dns_updates
 }
 
 output "db_connection_name" {

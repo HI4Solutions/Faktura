@@ -62,3 +62,15 @@ variable "jobs_region" {
   type        = string
   default     = "europe-west1"
 }
+
+variable "app_domain" {
+  description = "Domenet nettappen og API-et (/api/**) svarer på."
+  type        = string
+  default     = "faktura.hi4.no"
+}
+
+variable "epost_avsender" {
+  description = "Avsenderadressen for fakturaer. Domenet må være verifisert i Resend. Selgerens navn settes foran, og svar går til selgeren."
+  type        = string
+  default     = "faktura@hi4.no"
+}
