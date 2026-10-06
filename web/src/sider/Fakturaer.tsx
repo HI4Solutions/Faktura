@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, apnePdf, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
 import { kanBokfore, kanSkrive, useKonto } from "../konto";
-import { dato, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
+import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
 import { KundeSkjema } from "./Register";
 
 // ---------------------------------------------------------------------------
@@ -392,7 +392,8 @@ export function FakturaVisning() {
   if (feil) return <Feil melding={feil} />;
   if (!f) return <Laster />;
 
-  const m = fakturaMerke({ ...f, forfalt: f.status === "utstedt" && f.forfallsdato < iDag(), antall_purringer: f.purringer?.length ?? 0 });
+  const sisteEpost = f.eposter?.at(-1);
+  const m = fakturaMerke({ ...f, forfalt: f.status === "utstedt" && f.forfallsdato < iDag(), antall_purringer: f.purringer?.length ?? 0, epost_status: sisteEpost?.status });
   const forfalt = f.type === "faktura" && f.status === "utstedt" && f.forfallsdato < iDag();
   const sistePurring = f.purringer?.at(-1);
   const kanPurre = forfalt && (!sistePurring || sistePurring.ny_frist < iDag());
@@ -455,6 +456,12 @@ export function FakturaVisning() {
         </div>
       </div>
       <Feil melding={h.feil} />
+      {sisteEpost && ["sprett", "klage"].includes(sisteEpost.status) && (
+        <div className="melding feil">
+          E-posten til {sisteEpost.til} {sisteEpost.status === "sprett" ? "kom i retur" : "ble merket som søppelpost"}
+          {sisteEpost.detaljer ? ` (${sisteEpost.detaljer})` : ""}. Rett e-postadressen under Kunder og send på nytt, eller kontakt kunden.
+        </div>
+      )}
 
       <div className="kort">
         <div className="rad">
@@ -481,7 +488,8 @@ export function FakturaVisning() {
           {f.sendt_til && (
             <div>
               <div className="dempet liten">Sendt til</div>
-              {f.sendt_til}
+              {f.sendt_til}{" "}
+              {sisteEpost && <span className={`merke ${epostStatus[sisteEpost.status]?.klasse}`}>{epostStatus[sisteEpost.status]?.tekst}</span>}
             </div>
           )}
         </div>

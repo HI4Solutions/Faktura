@@ -11,6 +11,7 @@ import { passkeyInnlogging, passkeyRuter } from "./passkey.js";
 import { adminRuter, erPlattformadmin, verifiseringRuter } from "./verifisering.js";
 import { hentEnhet } from "./brreg.js";
 import { rapportRuter } from "./rapporter.js";
+import { resendWebhook } from "./resendWebhook.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -147,6 +148,7 @@ export function lagApi() {
 
   // Åpne ruter (uten innlogging) ligger under /api/offentlig.
   app.route("/api/offentlig/passkey", passkeyInnlogging());
+  app.route("/api/offentlig/resend", resendWebhook());
 
   const api = new Hono();
   api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevInnlogging(c, next)));
@@ -406,7 +408,8 @@ export function lagApi() {
                   f.fakturadato, f.forfallsdato, f.sum_inkl_mva, f.betalt_belop, f.kreditert_belop, f.refusjon_belop,
                   f.sendt_at, f.kreditnota_for, f.planlagt_sending,
                   (f.status = 'utstedt' and f.type = 'faktura' and f.forfallsdato < faktura.i_dag()) as forfalt,
-                  (select count(*) from faktura.purringer p where p.faktura_id = f.id) as antall_purringer
+                  (select count(*) from faktura.purringer p where p.faktura_id = f.id) as antall_purringer,
+                  (select e.status from faktura.eposter e where e.faktura_id = f.id order by e.opprettet desc limit 1) as epost_status
              from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id
             where ${vilkar.join(" and ")}
             order by f.fakturanummer desc nulls first, f.opprettet desc
@@ -424,7 +427,8 @@ export function lagApi() {
         const betalinger = await alle(db, "select * from faktura.betalinger where faktura_id = $1 order by betalt_dato, opprettet", [f.id]);
         const kreditnotaer = await alle(db, "select id, fakturanummer, sum_inkl_mva, fakturadato from faktura.fakturaer where kreditnota_for = $1 order by fakturanummer", [f.id]);
         const purringer = await alle(db, "select * from faktura.purringer where faktura_id = $1 order by nummer", [f.id]);
-        return { ...f, betalinger, kreditnotaer, purringer };
+        const eposter = await alle(db, "select id, purring_id, til, emne, status, detaljer, siste_hendelse_at, opprettet from faktura.eposter where faktura_id = $1 order by opprettet", [f.id]);
+        return { ...f, betalinger, kreditnotaer, purringer, eposter };
       }),
     ),
   );

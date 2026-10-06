@@ -179,6 +179,7 @@ locals {
   manuelle_hemmeligheter = {
     "resend-api-key"             = [google_service_account.worker.email]
     "google-oauth-client-secret" = [google_service_account.api.email, google_service_account.worker.email]
+    "resend-webhook-secret"      = [google_service_account.api.email]
   }
 }
 

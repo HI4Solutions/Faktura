@@ -36,8 +36,9 @@ export const statusTekst: Record<string, string> = {
   kreditert: "Kreditert",
 };
 
-export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: string; refusjon_belop?: number; betalt_belop?: number; kreditert_belop?: number; antall_purringer?: number }) {
+export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: string; refusjon_belop?: number; betalt_belop?: number; kreditert_belop?: number; antall_purringer?: number; epost_status?: string | null }) {
   if (f.type === "kreditnota") return { tekst: "Kreditnota", klasse: "merke-noytral" };
+  if (f.status === "utstedt" && (f.epost_status === "sprett" || f.epost_status === "klage")) return { tekst: "E-post i retur", klasse: "merke-fare" };
   if (f.status === "utstedt" && (f.antall_purringer ?? 0) > 0) return { tekst: `Purret${(f.antall_purringer ?? 0) > 1 ? ` (${f.antall_purringer})` : ""}`, klasse: "merke-fare" };
   if (f.status === "utstedt" && f.forfalt) return { tekst: "Forfalt", klasse: "merke-fare" };
   if (f.status === "utstedt" && (f.kreditert_belop ?? 0) > 0) return { tekst: "Delvis kreditert", klasse: "merke-noytral" };
@@ -46,3 +47,11 @@ export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: stri
   const klasse = { utkast: "merke-noytral", utstedt: "merke-info", betalt: "merke-ok", kreditert: "merke-noytral" }[f.status] ?? "merke-noytral";
   return { tekst: statusTekst[f.status] ?? f.status, klasse };
 }
+
+export const epostStatus: Record<string, { tekst: string; klasse: string }> = {
+  sendt: { tekst: "Sendt", klasse: "merke-info" },
+  levert: { tekst: "Levert", klasse: "merke-ok" },
+  forsinket: { tekst: "Forsinket", klasse: "merke-advarsel" },
+  sprett: { tekst: "I retur", klasse: "merke-fare" },
+  klage: { tekst: "Merket som søppelpost", klasse: "merke-fare" },
+};

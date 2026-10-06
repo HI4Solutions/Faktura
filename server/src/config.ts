@@ -35,6 +35,7 @@ export const config = {
   appUrl: valgfri("APP_URL") ?? "http://localhost:5173",
   epostAvsender: valgfri("EPOST_AVSENDER") ?? "faktura@hi4.no",
   resendNokkel: valgfri("RESEND_API_KEY"),
+  resendWebhookHemmelighet: valgfri("RESEND_WEBHOOK_SECRET"),
 
   // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
   adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),

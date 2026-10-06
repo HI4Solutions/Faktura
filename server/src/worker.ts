@@ -25,7 +25,7 @@ export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; 
     const til = f.kunde?.epost as string | undefined;
     if (o.send_epost && til) {
       const e = fakturaEpost(f);
-      await epost().send({
+      const sendt = await epost().send({
         fraNavn: f.selger.navn,
         til: [til],
         svarTil: f.selger.epost ?? undefined,
@@ -36,6 +36,7 @@ export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; 
         vedlegg: [{ filnavn: pdfFilnavn(f), data }],
         idempotensnokkel: `faktura-${o.oppgave_id}`,
       });
+      await db.query("select faktura.logg_epost($1, $2, null, $3, $4, $5)", [f.org_id, f.id, sendt.id, til, e.emne]);
       sendtTil = til;
     }
     await db.query("select faktura.marker_sendt($1, $2, $3)", [f.id, sti, sendtTil]);
@@ -70,7 +71,7 @@ export async function sendPurring(o: { purring_id: string; oppgave_id: string })
     if (!til) return logg("WARNING", "Kunden mangler e-post; purringen ble ikke sendt", { purring_id: p.id });
     const { data } = await sikrePdf(db, f);
     const e = purringEpost(f, p);
-    await epost().send({
+    const sendt = await epost().send({
       fraNavn: f.selger.navn,
       til: [til],
       svarTil: f.selger.epost ?? undefined,
@@ -81,6 +82,7 @@ export async function sendPurring(o: { purring_id: string; oppgave_id: string })
       vedlegg: [{ filnavn: pdfFilnavn(f), data }],
       idempotensnokkel: `purring-${p.id}`,
     });
+    await db.query("select faktura.logg_epost($1, $2, $3, $4, $5, $6)", [f.org_id, f.id, p.id, sendt.id, til, e.emne]);
     await db.query("select faktura.marker_purring_sendt($1, $2)", [p.id, til]);
     logg("INFO", "Purring sendt", { purring_id: p.id, type: p.type });
   });
