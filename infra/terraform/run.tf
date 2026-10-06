@@ -19,6 +19,8 @@ locals {
     TASKS_QUEUE      = google_cloud_tasks_queue.utsending.id
     TASKS_INVOKER_SA = google_service_account.invoker.email
     PUBSUB_TOPIC     = google_pubsub_topic.hendelser.id
+    APP_URL          = "https://${var.app_domain}"
+    EPOST_AVSENDER   = var.epost_avsender
     TZ               = "Europe/Oslo"
     NODE_ENV         = "production"
   }
