@@ -280,6 +280,17 @@ export function Fakturatabell({ rader, klikk, kopier }: { rader: any[]; klikk: (
   );
 }
 
+// Nummeret settes først når fakturaen sendes (ingen hull i serien om utkast slettes), men
+// vises på forhånd: neste ledige nummer i serien.
+function NesteNummer({ nummer }: { nummer?: number | null }) {
+  if (nummer == null) return null;
+  return (
+    <p className="undertittel">
+      Får fakturanummer <strong>{nummer}</strong> når den sendes (neste i serien).
+    </p>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Skjema for utkast
 // ---------------------------------------------------------------------------
@@ -451,11 +462,11 @@ export function FakturaSkjema() {
           </Link>
         )}
       </div>
+      <NesteNummer nummer={orgData.data.neste_fakturanummer} />
       {kopiAv && (
         <div className="melding info">
           Kopi av {kopiAv.nummer ? `faktura ${kopiAv.nummer}` : "et utkast"}
-          {kopiAv.kunde ? ` til ${kopiAv.kunde}` : ""}. Fakturadatoen er i dag, og fakturaen får nytt fakturanummer når den sendes. Sjekk
-          periode, referanser og linjer før du sender.
+          {kopiAv.kunde ? ` til ${kopiAv.kunde}` : ""}. Fakturadatoen er satt til i dag. Sjekk periode, referanser og linjer før du sender.
           {kopiAv.vedlegg > 0 && " Vedleggene er ikke kopiert."}
           {kundeBorte && " Kunden er ikke aktiv lenger, så velg kunde på nytt."}
         </div>
@@ -772,6 +783,7 @@ export function FakturaVisning() {
           )}
         </div>
       </div>
+      {f.status === "utkast" && <NesteNummer nummer={f.neste_fakturanummer} />}
       <Feil melding={h.feil} />
       {sisteEhf?.status === "feilet" && (
         <div className={`melding ${viaEhf || !f.sendt_til ? "feil" : "info"}`}>

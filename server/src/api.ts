@@ -272,7 +272,12 @@ export function lagApi() {
 
   org.get("/", async (c) => {
     const o = await bruk(c, async (db) => {
-      const o = await en(db, "select * from faktura.organisasjoner where id = $1", [orgId(c)]);
+      // Med neste nummer i fakturaserien: fakturaen får det når den sendes.
+      const o = await en(
+        db,
+        "select o.*, s.neste_fakturanummer from faktura.organisasjoner o left join faktura.nummerserier s on s.org_id = o.id where o.id = $1",
+        [orgId(c)],
+      );
       if (!o) throw new ApiFeil(404, "Fant ikke organisasjonen");
       const direkte = await en(db, "select 1 from faktura.medlemmer where org_id = $1 and bruker_id = faktura.bruker_id()", [orgId(c)]);
       if (!direkte) await db.query("select faktura.logg_oppslag($1, 'organisasjon')", [orgId(c)]);
@@ -597,7 +602,12 @@ export function lagApi() {
         const purringer = await alle(db, "select * from faktura.purringer where faktura_id = $1 order by nummer", [f.id]);
         const eposter = await alle(db, "select id, purring_id, til, kopi, emne, status, detaljer, siste_hendelse_at, opprettet from faktura.eposter where faktura_id = $1 order by opprettet", [f.id]);
         const ehf = await alle(db, "select id, mottaker, status, feil_kategori, detaljer, opprettet, oppdatert from faktura.ehf_sendinger where faktura_id = $1 order by opprettet", [f.id]);
-        return { ...f, betalinger, kreditnotaer, purringer, eposter, ehf };
+        // Et utkast får neste nummer i serien når det sendes.
+        const neste =
+          f.status === "utkast"
+            ? ((await en(db, "select neste_fakturanummer from faktura.nummerserier where org_id = $1", [orgId(c)]))?.neste_fakturanummer ?? null)
+            : null;
+        return { ...f, betalinger, kreditnotaer, purringer, eposter, ehf, neste_fakturanummer: neste };
       }),
     ),
   );

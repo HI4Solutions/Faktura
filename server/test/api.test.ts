@@ -77,6 +77,9 @@ describe.skipIf(!harDb)("API", () => {
     expect(f.status).toBe(201);
     expect(f.data.linjer).toHaveLength(2);
     const id = f.data.id;
+    // Neste nummer i serien vises før utsendelse; det settes først når fakturaen sendes.
+    expect((await kall("GET", `/api/org/${org}`, ola)).data.neste_fakturanummer).toBe(1);
+    expect((await kall("GET", `/api/org/${org}/fakturaer/${id}`, ola)).data).toMatchObject({ fakturanummer: null, neste_fakturanummer: 1 });
 
     const pdf = await kall("GET", `/api/org/${org}/fakturaer/${id}/pdf`, ola);
     expect(pdf.status).toBe(200);
@@ -110,6 +113,8 @@ describe.skipIf(!harDb)("API", () => {
 
     const liste = await kall("GET", `/api/org/${org}/fakturaer`, ola);
     expect(liste.data.map((x: any) => x.fakturanummer)).toEqual([2, 1]);
+    expect((await kall("GET", `/api/org/${org}`, ola)).data.neste_fakturanummer).toBe(3);
+    expect(detaljer.data.neste_fakturanummer).toBeNull();
   });
 
   it("gjentakende faktura: opprett, kjør nå, stopp", async () => {
