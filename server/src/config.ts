@@ -5,6 +5,12 @@ function valgfri(navn: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
+// I produksjon må APP_URL være satt: den bestemmer passkey-domenet og lenkene i e-post.
+// Mangler den, starter ikke tjenesten, og Cloud Run beholder forrige revisjon.
+if (process.env.NODE_ENV === "production" && !valgfri("APP_URL")) {
+  throw new Error("APP_URL må være satt i produksjon");
+}
+
 export const config = {
   rolle: (valgfri("ROLLE") ?? "api") as "api" | "worker",
   port: Number(valgfri("PORT") ?? 8080),
