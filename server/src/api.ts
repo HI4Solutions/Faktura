@@ -231,6 +231,43 @@ export function lagApi() {
     return c.body(null, 204);
   });
 
+  // --- Logo ----------------------------------------------------------------
+  // Lastes opp som rå PNG/JPG (maks 1,5 MB). Hver opplasting får nytt filnavn, så
+  // fakturaer som allerede viser til en eldre logo, beholder den.
+  org.put("/logo", async (c) => {
+    const data = new Uint8Array(await c.req.arrayBuffer());
+    if (data.length === 0) throw new ApiFeil(400, "Mangler bilde");
+    if (data.length > 1_500_000) throw new ApiFeil(400, "Logoen kan være høyst 1,5 MB");
+    const png = data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47;
+    const jpg = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+    if (!png && !jpg) throw new ApiFeil(400, "Logoen må være PNG eller JPG");
+    if (!config.filerBucket) throw new ApiFeil(503, "Lagring er ikke konfigurert");
+    const sti = `${orgId(c)}/logo/${Date.now()}.${png ? "png" : "jpg"}`;
+    const o = await bruk(c, async (db) => {
+      if (!(await en(db, "select faktura.kan($1, 'admin') as k", [orgId(c)]))!.k) throw new ApiFeil(403, "Ingen tilgang");
+      await lagring.lagre(config.filerBucket!, sti, data, png ? "image/png" : "image/jpeg");
+      return en(db, "update faktura.organisasjoner set logo_sti = $2 where id = $1 returning logo_sti", [orgId(c), sti]);
+    });
+    return c.json(o);
+  });
+
+  org.delete("/logo", async (c) => {
+    const r = await bruk(c, (db) => db.query("update faktura.organisasjoner set logo_sti = null where id = $1", [orgId(c)]));
+    if (!r.rowCount) throw new ApiFeil(403, "Ingen tilgang");
+    return c.body(null, 204);
+  });
+
+  org.get("/logo", async (c) => {
+    const sti = await bruk(c, async (db) => (await en(db, "select logo_sti from faktura.organisasjoner where id = $1", [orgId(c)]))?.logo_sti);
+    if (!sti || !config.filerBucket) throw new ApiFeil(404, "Ingen logo");
+    const data = await lagring.hent(config.filerBucket, sti);
+    if (!data) throw new ApiFeil(404, "Ingen logo");
+    return c.body(Buffer.from(data), 200, {
+      "content-type": sti.endsWith(".png") ? "image/png" : "image/jpeg",
+      "cache-control": "private, max-age=300",
+    });
+  });
+
   // --- Medlemmer og regnskapsfører ---------------------------------------
   org.get("/medlemmer", async (c) =>
     c.json(

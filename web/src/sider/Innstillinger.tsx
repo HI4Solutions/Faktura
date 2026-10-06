@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api, hent } from "../api";
+import { api, hent, lastOppLogo } from "../api";
 import { Feil, Laster, tall, useData, useHandling } from "../felles";
 import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
@@ -23,6 +23,7 @@ export function Innstillinger() {
       {org && erAdmin(org.rolle) && (
         <>
           <Organisasjon />
+          <Logo />
           <Medlemmer />
           <Regnskapsforer />
         </>
@@ -64,6 +65,7 @@ function Organisasjon() {
       standard_dager_foer_forfall: Number(o.standard_dager_foer_forfall),
       farge: o.farge || null,
     };
+    if (data.mva_registrert && !o.mva_registrert && !confirm("Fakturere uten mva fremover? Alle produkter, utkast og gjentakende fakturaer settes til 0 % mva.")) return;
     if (o.verifisering === "ny") kropp.orgnr = o.orgnr ? o.orgnr.replace(/\s/g, "") : null;
     const ktnr = (o.kontonr ?? "").replace(/[\s.]/g, "");
     if (ktnr !== (data.kontonr ?? "")) {
@@ -118,6 +120,10 @@ function Organisasjon() {
       </div>
       <label>
         <input type="checkbox" {...avkryss("mva_registrert")} /> MVA-registrert
+        <span className="liten" style={{ display: "block", marginLeft: 24 }}>
+          Slå av hvis foretaket ikke er mva-registrert eller er fritatt. Da blir alle produkter, utkast og nye fakturaer
+          uten mva. Fakturaer som allerede er sendt, endres ikke.
+        </span>
       </label>
       <label>
         <input type="checkbox" {...avkryss("foretaksregisteret")} /> Registrert i Foretaksregisteret
@@ -153,6 +159,62 @@ function Organisasjon() {
         Lagre
       </button>
     </form>
+  );
+}
+
+function Logo() {
+  const { org } = useKonto();
+  const [url, settUrl] = useState<string | null>(null);
+  const [versjon, settVersjon] = useState(0);
+  const h = useHandling();
+
+  useEffect(() => {
+    let lenke: string | null = null;
+    hent<Blob>(`/org/${org!.id}/logo`)
+      .then((b) => {
+        lenke = URL.createObjectURL(b);
+        settUrl(lenke);
+      })
+      .catch(() => settUrl(null));
+    return () => {
+      if (lenke) URL.revokeObjectURL(lenke);
+    };
+  }, [org?.id, versjon]);
+
+  async function velg(fil: File | undefined) {
+    if (!fil) return;
+    if (!["image/png", "image/jpeg"].includes(fil.type)) return h.settFeil("Logoen må være PNG eller JPG.");
+    if (fil.size > 1_500_000) return h.settFeil("Logoen kan være høyst 1,5 MB.");
+    const ok = await h.kjor(() => lastOppLogo(org!.id, fil).then(() => true));
+    if (ok) settVersjon((v) => v + 1);
+  }
+
+  return (
+    <div className="kort">
+      <h2 style={{ marginTop: 0 }}>Logo på fakturaen</h2>
+      <p className="dempet liten">PNG eller JPG, høyst 1,5 MB. Vises øverst til høyre på nye fakturaer. Bredformat med gjennomsiktig bakgrunn blir finest.</p>
+      {url ? (
+        <img src={url} alt="Logo" style={{ maxWidth: 220, maxHeight: 80, display: "block", marginBottom: 12, background: "#fff", padding: 6, borderRadius: 6 }} />
+      ) : (
+        <p className="dempet">Ingen logo lastet opp.</p>
+      )}
+      <div className="knapper">
+        <label className="knapp" style={{ margin: 0, color: "var(--tekst)" }}>
+          {url ? "Bytt logo" : "Last opp logo"}
+          <input type="file" accept="image/png,image/jpeg" hidden onChange={(e) => velg(e.target.files?.[0])} disabled={h.opptatt} />
+        </label>
+        {url && (
+          <button
+            className="fare"
+            disabled={h.opptatt}
+            onClick={() => h.kjor(() => api("DELETE", `/org/${org!.id}/logo`)).then(() => settVersjon((v) => v + 1))}
+          >
+            Fjern
+          </button>
+        )}
+      </div>
+      <Feil melding={h.feil} />
+    </div>
   );
 }
 

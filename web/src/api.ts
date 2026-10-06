@@ -24,7 +24,7 @@ export async function api<T = any>(metode: string, sti: string, kropp?: unknown)
     const data = type.includes("json") ? await r.json().catch(() => ({})) : {};
     throw new ApiFeil(r.status, data.error ?? `Feil ${r.status}`);
   }
-  if (type.includes("application/pdf")) return (await r.blob()) as T;
+  if (type.includes("application/pdf") || type.startsWith("image/")) return (await r.blob()) as T;
   return r.json();
 }
 
@@ -42,4 +42,13 @@ export async function apnePdf(orgId: string, fakturaId: string) {
     vindu?.close();
     throw e;
   }
+}
+
+export async function lastOppLogo(orgId: string, fil: File) {
+  const r = await fetch(`/api/org/${orgId}/logo`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${await token()}`, "content-type": fil.type || "application/octet-stream" },
+    body: fil,
+  });
+  if (!r.ok) throw new ApiFeil(r.status, (await r.json().catch(() => ({}))).error ?? `Feil ${r.status}`);
 }

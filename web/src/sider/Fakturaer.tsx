@@ -153,10 +153,11 @@ export function FakturaSkjema() {
 
   const tallLinjer = linjer
     .filter((l) => l.beskrivelse.trim() && l.enhetspris !== "")
-    .map((l) => ({ ...l, antall: tall(l.antall), enhetspris: tall(l.enhetspris), mva_sats: Number(l.mva_sats) }));
-  const gebyrLinje = gebyr && orgData.data?.standard_gebyr > 0 ? [{ antall: 1, enhetspris: orgData.data.standard_gebyr, mva_sats: 25 }] : [];
+    .map((l) => ({ ...l, antall: tall(l.antall), enhetspris: tall(l.enhetspris), mva_sats: orgData.data && !orgData.data.mva_registrert ? 0 : Number(l.mva_sats) }));
+  const gebyrLinje = gebyr && orgData.data?.standard_gebyr > 0 ? [{ antall: 1, enhetspris: orgData.data.standard_gebyr, mva_sats: orgData.data.mva_registrert ? 25 : 0 }] : [];
   const sum = useMemo(() => summer([...tallLinjer, ...gebyrLinje]), [JSON.stringify(tallLinjer), gebyrLinje.length]);
   const kunde = kunder.data?.find((k: any) => k.id === f.kunde_id);
+  const utenMva = orgData.data && !orgData.data.mva_registrert;
 
   const settLinje = (i: number, endring: Partial<LinjeUtkast>) => settLinjer(linjer.map((l, j) => (j === i ? { ...l, ...endring } : l)));
 
@@ -258,7 +259,7 @@ export function FakturaSkjema() {
               <th style={{ width: 90 }}>Antall</th>
               <th style={{ width: 80 }}>Enhet</th>
               <th style={{ width: 120 }}>Pris eks. mva</th>
-              <th style={{ width: 90 }}>Mva</th>
+              {!utenMva && <th style={{ width: 90 }}>Mva</th>}
               <th className="hoyre" style={{ width: 110 }}>
                 Beløp
               </th>
@@ -292,14 +293,16 @@ export function FakturaSkjema() {
                   <td>
                     <input inputMode="decimal" value={l.enhetspris} onChange={(e) => settLinje(i, { enhetspris: e.target.value })} />
                   </td>
-                  <td>
-                    <select value={l.mva_sats} onChange={(e) => settLinje(i, { mva_sats: e.target.value })}>
-                      <option value="25">25 %</option>
-                      <option value="15">15 %</option>
-                      <option value="12">12 %</option>
-                      <option value="0">0 %</option>
-                    </select>
-                  </td>
+                  {!utenMva && (
+                    <td>
+                      <select value={l.mva_sats} onChange={(e) => settLinje(i, { mva_sats: e.target.value })}>
+                        <option value="25">25 %</option>
+                        <option value="15">15 %</option>
+                        <option value="12">12 %</option>
+                        <option value="0">0 %</option>
+                      </select>
+                    </td>
+                  )}
                   <td className="tall">{b == null || Number.isNaN(b) ? "" : kr(b)}</td>
                   <td>
                     <button type="button" className="lenke" aria-label="Fjern linje" onClick={() => settLinjer(linjer.filter((_, j) => j !== i))}>
@@ -323,16 +326,20 @@ export function FakturaSkjema() {
           )}
         </div>
         <div className="summer">
-          <div>
-            <span>Sum eks. mva</span>
-            <span className="tall">{kr(sum.eks)}</span>
-          </div>
-          <div>
-            <span>Mva</span>
-            <span className="tall">{kr(sum.mva)}</span>
-          </div>
+          {!utenMva && (
+            <>
+              <div>
+                <span>Sum eks. mva</span>
+                <span className="tall">{kr(sum.eks)}</span>
+              </div>
+              <div>
+                <span>Mva</span>
+                <span className="tall">{kr(sum.mva)}</span>
+              </div>
+            </>
+          )}
           <div className="total">
-            <span>Å betale</span>
+            <span>Å betale{utenMva ? " (uten mva)" : ""}</span>
             <span className="tall">{kr(sum.inkl)}</span>
           </div>
         </div>

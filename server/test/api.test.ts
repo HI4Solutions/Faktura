@@ -111,6 +111,18 @@ describe.skipIf(!harDb)("API", () => {
     expect((await kall("POST", `/api/org/${org}/fakturaer`, ola, { kunde_id: "ikke-uuid", linjer: [] })).status).toBe(400);
   });
 
+  it("logo: bare PNG/JPG", async () => {
+    const r = await app.request(`/api/org/${org}/logo`, { method: "PUT", headers: { authorization: ola, "content-type": "image/gif" }, body: new Uint8Array([0x47, 0x49, 0x46]) });
+    expect(r.status).toBe(400);
+  });
+
+  it("uten mva: produkter får 0 %", async () => {
+    await kall("PATCH", `/api/org/${org}`, ola, { mva_registrert: false });
+    const p = await kall("POST", `/api/org/${org}/produkter`, ola, { navn: "Uten mva", enhetspris: 100, mva_sats: 25 });
+    expect(p.data.mva_sats).toBe(0);
+    await kall("PATCH", `/api/org/${org}`, ola, { mva_registrert: true });
+  });
+
   it("andre brukere ser ingenting", async () => {
     expect((await kall("GET", "/api/meg", per)).data.organisasjoner).toEqual([]);
     expect((await kall("GET", `/api/org/${org}/fakturaer`, per)).data).toEqual([]);

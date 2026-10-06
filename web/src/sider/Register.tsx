@@ -246,6 +246,8 @@ export function Produkter() {
 
 function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () => void; avbryt: () => void }) {
   const { org } = useKonto();
+  const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
+  const utenMva = orgData.data && !orgData.data.mva_registrert;
   const [p, settP] = useState<any>({ ...produkt, enhetspris: produkt?.enhetspris?.toString().replace(".", ",") ?? "" });
   const { opptatt, feil, kjor } = useHandling();
   const felt = (navn: string) => ({ value: p[navn] ?? "", onChange: (e: any) => settP({ ...p, [navn]: e.target.value }) });
@@ -258,7 +260,7 @@ function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () =
       beskrivelse: p.beskrivelse || null,
       enhet: p.enhet || "stk",
       enhetspris: tall(String(p.enhetspris)),
-      mva_sats: Number(p.mva_sats),
+      mva_sats: utenMva ? 0 : Number(p.mva_sats),
       aktiv: p.aktiv !== false,
     };
     const r = await kjor(() => (p.id ? api("PATCH", `/org/${org!.id}/produkter/${p.id}`, kropp) : api("POST", `/org/${org!.id}/produkter`, kropp)));
@@ -290,6 +292,12 @@ function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () =
           Pris eks. mva
           <input required inputMode="decimal" {...felt("enhetspris")} />
         </label>
+        {utenMva ? (
+          <label>
+            Mva
+            <input disabled value="Uten mva" />
+          </label>
+        ) : (
         <label>
           Mva-sats
           <select {...felt("mva_sats")}>
@@ -299,6 +307,7 @@ function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagret: () =
             <option value="0">0 % (fritatt/utenfor)</option>
           </select>
         </label>
+        )}
       </div>
       <label>
         <input type="checkbox" checked={p.aktiv !== false} onChange={(e) => settP({ ...p, aktiv: e.target.checked })} />

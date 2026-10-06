@@ -49,3 +49,25 @@ describe("PDF", () => {
     expect(doc.getTitle()).toBe("KREDITNOTAUTKAST tildeles ved sending");
   });
 });
+
+describe("PDF med logo og uten mva", () => {
+  // 1x1 piksel PNG.
+  const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+
+  it("tar med logoen", async () => {
+    const doc = await PDFDocument.load(await lagPdf({ ...grunn, logo: { bytes: png, type: "png" } }));
+    expect(doc.getPageCount()).toBe(1);
+  });
+
+  it("et ødelagt bilde gir PDF uten logo, ikke feil", async () => {
+    const doc = await PDFDocument.load(await lagPdf({ ...grunn, logo: { bytes: new Uint8Array([1, 2, 3]), type: "png" } }));
+    expect(doc.getPageCount()).toBe(1);
+  });
+
+  it("lager faktura uten mva", async () => {
+    const doc = await PDFDocument.load(
+      await lagPdf({ ...grunn, selger: { ...grunn.selger, mva_registrert: false }, linjer: [{ beskrivelse: "Tjeneste", antall: 1, enhetspris: 500, mva_sats: 0 }] }),
+    );
+    expect(doc.getPageCount()).toBe(1);
+  });
+});

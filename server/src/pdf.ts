@@ -101,13 +101,15 @@ export async function lagPdf(f: PdfFaktura): Promise<Uint8Array> {
   };
 
   const kol = { beskr: MARG, antall: 330, pris: 410, mva: 455, belop: A4[0] - MARG };
+  // Selgere uten mva får ingen mva-kolonne (med mindre en linje faktisk har mva, f.eks. på en kreditnota).
+  const visMva = f.selger.mva_registrert !== false || f.linjer.some((l) => l.mva_sats !== 0);
 
   const linjeHode = () => {
     side.drawRectangle({ x: MARG - 4, y: y - 4, width: A4[0] - 2 * MARG + 8, height: 16, color: rgb(0.95, 0.95, 0.95) });
     tekst("Beskrivelse", kol.beskr, y, { f: fet });
     hoyre("Antall", kol.antall + 30, y, { f: fet });
     hoyre("Pris", kol.pris + 30, y, { f: fet });
-    hoyre("Mva", kol.mva + 25, y, { f: fet });
+    if (visMva) hoyre("Mva", kol.mva + 25, y, { f: fet });
     hoyre("Beløp", kol.belop, y, { f: fet });
     y -= 20;
   };
@@ -193,7 +195,7 @@ export async function lagPdf(f: PdfFaktura): Promise<Uint8Array> {
     const antall = Number.isInteger(l.antall) ? String(l.antall) : kr(l.antall);
     hoyre(`${antall}${l.enhet && l.enhet !== "stk" ? " " + l.enhet : ""}`, kol.antall + 30, y);
     hoyre(kr(l.enhetspris), kol.pris + 30, y);
-    hoyre(`${l.mva_sats.toString().replace(".", ",")} %`, kol.mva + 25, y);
+    if (visMva) hoyre(`${l.mva_sats.toString().replace(".", ",")} %`, kol.mva + 25, y);
     hoyre(kr(b.eks), kol.belop, y);
     y -= hoyde;
   }
@@ -208,9 +210,18 @@ export async function lagPdf(f: PdfFaktura): Promise<Uint8Array> {
     hoyre(verdi, kol.belop, y, { f: uthev ? fet : font, str: uthev ? 11 : 9 });
     y -= uthev ? 18 : 13;
   };
-  sumLinje("Sum eks. mva", kr(sum.eks));
-  sumLinje("Merverdiavgift", kr(sum.mva));
+  const utenMva = !visMva;
+  if (utenMva) {
+    sumLinje("Sum", kr(sum.eks));
+  } else {
+    sumLinje("Sum eks. mva", kr(sum.eks));
+    sumLinje("Merverdiavgift", kr(sum.mva));
+  }
   sumLinje(kreditnota ? "Til gode (NOK)" : "Å betale (NOK)", kr(kreditnota ? -sum.inkl : sum.inkl), true);
+  if (utenMva) {
+    tekst("Selger er ikke merverdiavgiftspliktig.", 330, y, { str: 8, c: gra });
+    y -= 12;
+  }
 
   if (!kreditnota && s.kontonr) {
     y -= 10;
