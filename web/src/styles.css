@@ -817,3 +817,14 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
 
 /* Bredere dialog for skjemaer med fakturalinjer (gjentakende fakturaer) */
 @media (min-width: 701px) { dialog.bred { width: min(900px, calc(100vw - 48px)); } }
+
+/* Bekreftelse etter sending, med snarvei til neste faktura */
+.sendt-melding { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+/* I toppen: under tittel og knapper på PC, rett under tittelen på mobil */
+.topp > .sendt-melding { flex-basis: 100%; order: 1; margin: 0; }
+.sendt-melding .knapper { flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .topp > .sendt-melding { order: 0; }
+  .sendt-melding .knapper { width: 100%; }
+  .sendt-melding .knapper > .knapp { flex: 1 1 auto; justify-content: center; }
+}

@@ -525,7 +525,10 @@ export function lagApi() {
     const status = c.req.query("status");
     const kunde = c.req.query("kunde_id");
     const type = c.req.query("type");
-    if (status) {
+    if (status === "kreditert" && c.req.query("kreditnotaer")) {
+      // Krediterte fakturaer sammen med kreditnotaene (som ikke skal betales).
+      vilkar.push(`(f.status = 'kreditert' or (f.type = 'kreditnota' and f.status <> 'utkast'))`);
+    } else if (status) {
       verdier.push(status);
       vilkar.push(`f.status = $${verdier.length}`);
     }

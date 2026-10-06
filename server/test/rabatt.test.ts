@@ -123,12 +123,20 @@ describe.skipIf(!process.env.DATABASE_URL)("Rabatt, variabel pris, fast avsender
     expect(rabatter).toEqual([-33.33, -33.33, -33.34]);
     expect([k1, k2, k3].map((k) => Number(k.sum_eks_mva))).toEqual([-66.67, -66.67, -66.66]);
 
+    // Kreditnotaer skal ikke betales: de står ikke blant ubetalte, men under «Kreditert».
+    const ider = async (sporring: string) => (await kall("GET", `/api/org/${org}/fakturaer?${sporring}`)).data.map((x: any) => x.id);
+    expect(await ider("status=utstedt&type=faktura")).not.toContain(k1.id);
+    expect(await ider("status=utstedt&type=faktura")).toContain(f.data.id);
+    expect(await ider("status=kreditert&kreditnotaer=1")).toEqual(expect.arrayContaining([k1.id, k2.id, k3.id]));
+    expect(await ider("status=kreditert&kreditnotaer=1")).not.toContain(f.data.id);
+
     const k4 = await krediter(null); // resten: husleien
     const linje = (await hentF(k4.id)).linjer[0];
     expect([Number(linje.antall), linje.rabatt_prosent, Number(linje.belop_eks)]).toEqual([-2, 10, -1800]);
     // Beløpet eks. mva går opp i øret; mvaen rundes per kreditnota og kan avvike med et øre.
     const etter = await hentF(f.data.id);
     expect(etter.status).toBe("kreditert");
+    expect(await ider("status=kreditert&kreditnotaer=1")).toEqual(expect.arrayContaining([f.data.id, k4.id]));
     expect(Math.abs(Number(etter.kreditert_belop) - 2500)).toBeLessThanOrEqual(0.02);
     expect(husleie.rabatt_prosent).toBe(10);
   });

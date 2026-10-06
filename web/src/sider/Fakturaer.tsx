@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apnePdf, hent, lastNed } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
@@ -21,7 +21,9 @@ export function Fakturaliste() {
   const [sok, settSok] = useSearchParams();
   const status = sok.get("status") ?? "";
   const settStatus = (s: string) => settSok(s ? { status: s } : {}, { replace: true });
-  const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/fakturaer${status ? `?status=${status}` : ""}`), [org?.id, status]);
+  // «Ubetalt» er bare fakturaer; kreditnotaer skal ikke betales og står under «Kreditert».
+  const filter = status === "utstedt" ? "?status=utstedt&type=faktura" : status === "kreditert" ? "?status=kreditert&kreditnotaer=1" : status ? `?status=${status}` : "";
+  const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/fakturaer${filter}`), [org?.id, status]);
   const [sendUtkast, settSendUtkast] = useState(false);
   const utkast = status === "utkast" ? (data ?? []) : [];
 
@@ -239,10 +241,11 @@ export function FakturaSkjema() {
   const { id } = useParams();
   const { org } = useKonto();
   const nav = useNavigate();
+  const [sporring] = useSearchParams();
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const kunder = useData(() => hent(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
   const produkter = useData(() => hent(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
-  const [f, settF] = useState<any>({ kunde_id: "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "", kommentar: "" });
+  const [f, settF] = useState<any>({ kunde_id: (!id && sporring.get("kunde")) || "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "", kommentar: "" });
   const [linjer, settLinjer] = useState<LinjeUtkast[]>([tomLinje()]);
   const [lastet, settLastet] = useState(!id); // et utkast som endres, er hentet
   const [rabattValgt, settRabattValgt] = useState(false);
@@ -330,7 +333,7 @@ export function FakturaSkjema() {
       if (utsted) await api("POST", `/org/${org!.id}/fakturaer/${u.id}/utsted`, { send_epost: true });
       return u;
     });
-    if (r) nav(`/fakturaer/${r.id}`);
+    if (r) nav(`/fakturaer/${r.id}`, { state: utsted ? { sendt: true } : undefined });
   }
 
   if (!kunder.data || !orgData.data) return <Laster />;
@@ -518,6 +521,13 @@ export function FakturaVisning() {
   const { org } = useKonto();
   const nav = useNavigate();
   const { data: f, feil, last } = useData(() => hent(`/org/${org!.id}/fakturaer/${id}`), [org?.id, id]);
+  const sted = useLocation();
+  // Rett etter sending: bekreftelse med snarvei til neste faktura (vises bare én gang).
+  const [nettoppSendt, settNettoppSendt] = useState(Boolean((sted.state as any)?.sendt));
+  useEffect(() => {
+    if ((sted.state as any)?.sendt) nav(sted.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const h = useHandling();
   const [dialog, settDialog] = useState<"betaling" | "refusjon" | "krediter" | "slett" | "send" | null>(null);
 
@@ -548,6 +558,23 @@ export function FakturaVisning() {
         <h1>
           {f.type === "kreditnota" ? "Kreditnota" : "Faktura"} {f.fakturanummer ?? "(utkast)"} <span className={`merke ${m.klasse}`}>{m.tekst}</span>
         </h1>
+        {nettoppSendt && f.status !== "utkast" && (
+          <div className="melding ok sendt-melding" role="status">
+            <span>
+              {f.type === "kreditnota" ? "Kreditnota" : "Faktura"} {f.fakturanummer} er sendt{f.kunde?.epost ? ` til ${f.kunde.epost}` : ""}.
+            </span>
+            {kanSkrive(rolle) && (
+              <span className="knapper">
+                <Link className="knapp primar" to="/fakturaer/ny">
+                  <IkonPluss storrelse={16} /> Ny faktura
+                </Link>
+                <Link className="knapp" to={`/fakturaer/ny?kunde=${f.kunde_id}`}>
+                  Ny til samme kunde
+                </Link>
+              </span>
+            )}
+          </div>
+        )}
         <div className="knapper handlinger">
           <button onClick={() => h.kjor(() => apnePdf(org!.id, f.id))}>{f.status === "utkast" ? "Forhåndsvis PDF" : "PDF"}</button>
           {f.status !== "utkast" && f.selger?.orgnr && f.kunde?.orgnr && (
@@ -558,7 +585,16 @@ export function FakturaVisning() {
           {f.status === "utkast" && kanSkrive(rolle) && (
             <>
               <button onClick={() => nav(`/fakturaer/${f.id}/endre`)}>Endre</button>
-              <button className="primar" onClick={() => handling(() => api("POST", `/org/${org!.id}/fakturaer/${f.id}/utsted`, { send_epost: true }))}>
+              <button
+                className="primar"
+                onClick={async () => {
+                  const r = await h.kjor(() => api("POST", `/org/${org!.id}/fakturaer/${f.id}/utsted`, { send_epost: true }));
+                  if (r !== undefined) {
+                    settNettoppSendt(true);
+                    last();
+                  }
+                }}
+              >
                 Send
               </button>
               <button className="fare" onClick={() => confirm("Slette utkastet?") && handling(() => api("DELETE", `/org/${org!.id}/fakturaer/${f.id}`), "/fakturaer")}>
