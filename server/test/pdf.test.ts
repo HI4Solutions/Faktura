@@ -3,6 +3,8 @@ import { PDFDocument } from "pdf-lib";
 import { lagPdf, type PdfFaktura } from "../src/pdf.js";
 import { kr, summer, dato, orgnrGyldig } from "../src/regler.js";
 import { csv, termin } from "../src/rapporter.js";
+import sharp from "sharp";
+import { normaliserLogo, erPng } from "../src/logo.js";
 
 const grunn: PdfFaktura = {
   type: "faktura",
@@ -63,6 +65,24 @@ describe("PDF med logo og uten mva", () => {
   it("et ødelagt bilde gir PDF uten logo, ikke feil", async () => {
     const doc = await PDFDocument.load(await lagPdf({ ...grunn, logo: { bytes: new Uint8Array([1, 2, 3]), type: "png" } }));
     expect(doc.getPageCount()).toBe(1);
+  });
+
+  it("skalerer ned en stor logo, og PDF-en bruker klassisk xref-tabell", async () => {
+    // 4000 × 1500 px med støy og gjennomsiktighet: tungt å komprimere.
+    const piksler = Buffer.alloc(4000 * 1500 * 4);
+    for (let i = 0; i < piksler.length; i++) piksler[i] = (i * 2654435761) >>> 24;
+    const stor = new Uint8Array(await sharp(piksler, { raw: { width: 4000, height: 1500, channels: 4 } }).png().toBuffer());
+    const liten = await normaliserLogo(stor);
+    expect(erPng(liten)).toBe(true);
+    const meta = await sharp(liten).metadata();
+    expect(meta.width).toBeLessThanOrEqual(600);
+    expect(meta.height).toBeLessThanOrEqual(200);
+
+    const pdf = await lagPdf({ ...grunn, logo: { bytes: liten, type: "png" } });
+    expect(pdf.length).toBeLessThan(500_000);
+    const tekst = Buffer.from(pdf).toString("latin1");
+    expect(tekst).toContain("\nxref\n");
+    expect(tekst).not.toContain("/ObjStm");
   });
 
   it("lager faktura uten mva", async () => {

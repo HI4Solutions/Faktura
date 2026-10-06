@@ -4,7 +4,7 @@ import { alle, en, somSystem } from "./db.js";
 import { feilhandterer } from "./feil.js";
 import { fakturaEpost, hentFaktura, pdfFilnavn, purringEpost, sikrePdf } from "./dokument.js";
 import { epost, leggIKo, publiser, type Oppgave } from "./tjenester.js";
-import { kopierTilDisk, synkOrganisasjon } from "./googleDisk.js";
+import { kopierTilDisk, slettFraDisk, synkOrganisasjon } from "./googleDisk.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -93,6 +93,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "send-faktura") return sendFaktura(o);
   if (o.type === "send-purring") return sendPurring(o);
   if (o.type === "disk-synk") return synkOrganisasjon(o.bruker_id, o.org_id, sikrePdf, pdfFilnavn);
+  if (o.type === "disk-slett") return slettFraDisk(o.org_id, o.faktura_ider, pdfFilnavn);
   return sendEpost(o);
 }
 
@@ -232,6 +233,12 @@ export function lagWorker() {
   app.post("/oppgaver/disk-synk", async (c) => {
     const o = z.object({ bruker_id: z.string().uuid(), org_id: z.string().uuid() }).parse(await c.req.json());
     await synkOrganisasjon(o.bruker_id, o.org_id, sikrePdf, pdfFilnavn);
+    return c.json({ ok: true });
+  });
+
+  app.post("/oppgaver/disk-slett", async (c) => {
+    const o = z.object({ org_id: z.string().uuid(), faktura_ider: z.array(z.string().uuid()) }).parse(await c.req.json());
+    await slettFraDisk(o.org_id, o.faktura_ider, pdfFilnavn);
     return c.json({ ok: true });
   });
 

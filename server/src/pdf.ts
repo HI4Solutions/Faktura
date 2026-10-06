@@ -254,5 +254,7 @@ export async function lagPdf(f: PdfFaktura): Promise<Uint8Array> {
   doc.setTitle(`${tittel} ${nummer}`);
   doc.setAuthor(s.navn);
   doc.setCreator("HI4 Faktura");
-  return doc.save();
+  // Klassisk xref-tabell i stedet for objektstrømmer: leses av alle PDF-lesere og
+  // forhåndsvisere, også eldre.
+  return doc.save({ useObjectStreams: false });
 }

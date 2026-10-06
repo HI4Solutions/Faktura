@@ -5,6 +5,7 @@ import { lagPdf, type PdfFaktura } from "./pdf.js";
 import { dato, kontonr, kr } from "./regler.js";
 import { lagring } from "./tjenester.js";
 import { ApiFeil } from "./feil.js";
+import { erPng, normaliserLogo } from "./logo.js";
 
 export async function hentFaktura(db: Db, orgId: string, id: string) {
   const f = await en(db, "select * from faktura.fakturaer where id = $1 and org_id = $2", [id, orgId]);
@@ -18,7 +19,9 @@ async function hentLogo(sti: string | null | undefined) {
   try {
     const bytes = await lagring.hent(config.filerBucket, sti);
     if (!bytes) return null;
-    return { bytes, type: (sti.toLowerCase().endsWith(".png") ? "png" : "jpg") as "png" | "jpg" };
+    // Eldre logoer ble lagret i full størrelse; skaler dem ned her også.
+    const liten = await normaliserLogo(bytes);
+    return { bytes: liten, type: (erPng(liten) ? "png" : "jpg") as "png" | "jpg" };
   } catch {
     return null;
   }
@@ -61,8 +64,10 @@ export async function pdfData(db: Db, f: any): Promise<PdfFaktura> {
   };
 }
 
+// Id-en er med fordi et fakturanummer kan brukes på nytt når testfakturaer slettes,
+// og PDF-en til den slettede fakturaen blir liggende (bøtta har oppbevaringsregel).
 export function pdfSti(f: any): string {
-  return `${f.org_id}/${String(f.fakturadato).slice(0, 4)}/${f.type}-${f.fakturanummer}.pdf`;
+  return `${f.org_id}/${String(f.fakturadato).slice(0, 4)}/${f.type}-${f.fakturanummer}-${f.id}.pdf`;
 }
 
 export function pdfFilnavn(f: any): string {

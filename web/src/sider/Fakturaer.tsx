@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, apnePdf, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
-import { kanBokfore, kanSkrive, useKonto } from "../konto";
+import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
 import { KundeSkjema } from "./Register";
 
@@ -387,7 +387,7 @@ export function FakturaVisning() {
   const nav = useNavigate();
   const { data: f, feil, last } = useData(() => hent(`/org/${org!.id}/fakturaer/${id}`), [org?.id, id]);
   const h = useHandling();
-  const [dialog, settDialog] = useState<"betaling" | "refusjon" | "krediter" | null>(null);
+  const [dialog, settDialog] = useState<"betaling" | "refusjon" | "krediter" | "slett" | null>(null);
 
   if (feil) return <Feil melding={feil} />;
   if (!f) return <Laster />;
@@ -451,6 +451,11 @@ export function FakturaVisning() {
           {f.type === "faktura" && ["utstedt", "betalt"].includes(f.status) && kanSkrive(rolle) && (
             <button className="fare" onClick={() => settDialog("krediter")}>
               Krediter
+            </button>
+          )}
+          {f.status !== "utkast" && f.type === "faktura" && erAdmin(rolle) && (
+            <button className="fare" onClick={() => settDialog("slett")}>
+              Slett
             </button>
           )}
         </div>
@@ -625,6 +630,9 @@ export function FakturaVisning() {
           }}
         />
       </Dialog>
+      <Dialog apen={dialog === "slett"} lukk={() => settDialog(null)} tittel="Slett faktura">
+        <SlettFaktura faktura={f} ferdig={() => nav("/fakturaer")} />
+      </Dialog>
       <Dialog apen={dialog === "krediter"} lukk={() => settDialog(null)} tittel="Krediter faktura">
         <Kreditering
           faktura={f}
@@ -635,6 +643,45 @@ export function FakturaVisning() {
         />
       </Dialog>
     </>
+  );
+}
+
+function SlettFaktura({ faktura, ferdig }: { faktura: any; ferdig: () => void }) {
+  const { org } = useKonto();
+  const [grunn, settGrunn] = useState("Testfaktura");
+  const [bekreft, settBekreft] = useState("");
+  const h = useHandling();
+  const kreditnotaer = faktura.kreditnotaer?.length ?? 0;
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        h.kjor(() => api("POST", `/org/${org!.id}/fakturaer/${faktura.id}/slett`, { grunn })).then((r) => r !== undefined && ferdig());
+      }}
+    >
+      <p>
+        Sletting er ment for <strong>testfakturaer</strong> og fakturaer som aldri skulle vært sendt. En ekte faktura som er feil, skal
+        krediteres, ikke slettes (bokføringsloven).
+      </p>
+      <p className="dempet liten">
+        Faktura {faktura.fakturanummer}
+        {kreditnotaer > 0 && ` og ${kreditnotaer} kreditnota${kreditnotaer > 1 ? "er" : ""}`} slettes sammen med betalinger og purringer, og
+        kopier i Google Disk legges i papirkurven. Hvis dette er de siste fakturaene, fortsetter nummerserien fra der den var før. Slettingen
+        logges med grunnen.
+      </p>
+      <label>
+        Grunn
+        <input value={grunn} onChange={(e) => settGrunn(e.target.value)} maxLength={500} required minLength={3} />
+      </label>
+      <label>
+        Skriv fakturanummeret ({faktura.fakturanummer}) for å bekrefte
+        <input inputMode="numeric" value={bekreft} onChange={(e) => settBekreft(e.target.value)} />
+      </label>
+      <Feil melding={h.feil} />
+      <button className="fare" disabled={h.opptatt || bekreft.trim() !== String(faktura.fakturanummer) || grunn.trim().length < 3}>
+        Slett for godt
+      </button>
+    </form>
   );
 }
 

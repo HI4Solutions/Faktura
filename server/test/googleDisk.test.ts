@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { config } from "../src/config.js";
 import { lagApi } from "../src/api.js";
-import { lesState, settGoogleFetch, settKryptering, signerState, synkOrganisasjon } from "../src/googleDisk.js";
+import { lesState, settGoogleFetch, settKryptering, signerState, slettFraDisk, synkOrganisasjon } from "../src/googleDisk.js";
 import { pdfFilnavn } from "../src/dokument.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 
@@ -98,6 +98,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Google Disk – kobling per bruker",
   it("legger fakturaene rett i mappen brukeren valgte", async () => {
     const t = "Bearer test:uid-disk3:disk3@server.test:mfa";
     const opplastet: any[] = [];
+    const lagtIPapirkurv: string[] = [];
     let funnet = false;
     settGoogleFetch((async (url: string | URL | Request, init?: RequestInit) => {
       const u = String(url);
@@ -105,6 +106,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Google Disk – kobling per bruker",
       if (u.includes("/upload/drive/v3/files")) {
         const kropp = Buffer.from(init!.body as Uint8Array).toString("latin1");
         opplastet.push(JSON.parse(kropp.split("\r\n")[3]));
+        return Response.json({ id: "fil" });
+      }
+      if (init?.method === "PATCH") {
+        lagtIPapirkurv.push(u.split("/files/")[1].split("?")[0]);
         return Response.json({ id: "fil" });
       }
       if (u.includes("/drive/v3/files?") && (init?.method ?? "GET") === "GET") return Response.json({ files: funnet ? [{ id: "fil" }] : [] });
@@ -133,6 +138,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Google Disk – kobling per bruker",
     funnet = true;
     await synkOrganisasjon(brukerId, org, async () => ({ data: new Uint8Array([1]) }), pdfFilnavn);
     expect(opplastet).toHaveLength(1);
+
+    // Slettet testfaktura: kopien legges i papirkurven.
+    const s = await kall("POST", `/api/org/${org}/fakturaer/${f.data.id}/slett`, t, { grunn: "Testfaktura" });
+    expect(s.status).toBe(200);
+    await slettFraDisk(org, s.data.slettet, pdfFilnavn);
+    expect(lagtIPapirkurv).toEqual(["fil"]);
   });
 
   it("forfalsket state avvises", async () => {

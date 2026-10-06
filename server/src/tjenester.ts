@@ -58,6 +58,7 @@ export type Oppgave =
   | { type: "send-faktura"; faktura_id: string; send_epost: boolean }
   | { type: "send-purring"; purring_id: string }
   | { type: "disk-synk"; bruker_id: string; org_id: string }
+  | { type: "disk-slett"; org_id: string; faktura_ider: string[] }
   | { type: "epost"; til: string[]; emne: string; tekst: string; fra_navn?: string; svar_til?: string };
 
 let tasks: CloudTasksClient | undefined;

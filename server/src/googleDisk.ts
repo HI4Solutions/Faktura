@@ -390,3 +390,57 @@ export async function synkOrganisasjon(brukerId: string, orgId: string, hentPdf:
     }
   });
 }
+
+// Slettede (test)fakturaer: legg kopiene i papirkurven hos alle brukere som har
+// organisasjonen koblet. Kopier merket med faktura-id finnes overalt; eldre kopier
+// uten merke finnes på filnavn i mappene appen selv har laget eller fått valgt.
+export async function slettFraDisk(orgId: string, fakturaIder: string[], filnavn: Filnavn) {
+  if (!diskKonfigurert() || !fakturaIder.length) return;
+  const midlertidige: unknown[] = [];
+  await somSystem(async (db) => {
+    const slettede = await alle(
+      db,
+      `select rad_id as id, endring ->> 'type' as type, (endring ->> 'fakturanummer')::bigint as fakturanummer
+         from faktura.revisjonslogg where org_id = $1 and handling = 'SLETTET' and rad_id = any($2)`,
+      [orgId, fakturaIder],
+    );
+    const org = await en(db, "select navn from faktura.organisasjoner where id = $1", [orgId]);
+    const brukere = await alle(
+      db,
+      `select d.*, k.rotmappe from faktura.disk_organisasjoner d join faktura.disk_koblinger k on k.bruker_id = d.bruker_id
+        where d.org_id = $1 and k.status = 'aktiv'`,
+      [orgId],
+    );
+    for (const d of brukere) {
+      try {
+        const tilgang = await tokenFor(db, d.bruker_id);
+        if (!tilgang) continue;
+        const mapper = [tilgang.rotmappe, d.mappe, ...Object.values(d.aarsmapper ?? {})].filter(Boolean) as string[];
+        const filer = new Set<string>();
+        for (const f of slettede) {
+          const sok = `appProperties has { key='faktura_id' and value='${q(f.id)}' } and trashed=false`;
+          const merket = await drive(tilgang.token, `/drive/v3/files?fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&q=${encodeURIComponent(sok)}`);
+          for (const x of merket.files ?? []) filer.add(x.id);
+          const navn = filnavn(f);
+          const navnene = [navn, navn.replace(/\.pdf$/, ` - ${mappenavn(org?.navn ?? "")}.pdf`)];
+          for (const mappe of mapper) {
+            const sokNavn = `(${navnene.map((n) => `name='${q(n)}'`).join(" or ")}) and '${mappe}' in parents and trashed=false`;
+            const funnet = await drive(tilgang.token, `/drive/v3/files?fields=files(id,appProperties)&supportsAllDrives=true&includeItemsFromAllDrives=true&q=${encodeURIComponent(sokNavn)}`);
+            for (const x of funnet.files ?? []) if (!x.appProperties?.faktura_id) filer.add(x.id);
+          }
+        }
+        for (const id of filer) {
+          await drive(tilgang.token, `/drive/v3/files/${id}?supportsAllDrives=true&fields=id`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ trashed: true }),
+          });
+        }
+      } catch (e) {
+        if (erPermanent(e)) console.error(JSON.stringify({ severity: "WARNING", message: "Kunne ikke fjerne slettet faktura fra Disk", feil: (e as Error).message }));
+        else midlertidige.push(e);
+      }
+    }
+  });
+  if (midlertidige.length) throw midlertidige[0];
+}

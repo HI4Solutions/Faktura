@@ -5,6 +5,7 @@ import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil, feilhandterer } from "./feil.js";
 import { hentFaktura, pdfData, pdfFilnavn, sikrePdf } from "./dokument.js";
 import { lagPdf } from "./pdf.js";
+import { erPng, normaliserLogo } from "./logo.js";
 import { config } from "./config.js";
 import { lagring, leggIKo } from "./tjenester.js";
 import { passkeyInnlogging, passkeyRuter } from "./passkey.js";
@@ -238,15 +239,21 @@ export function lagApi() {
   org.route("/", rapportRuter());
 
   // --- Logo ----------------------------------------------------------------
-  // Lastes opp som rå PNG/JPG (maks 1,5 MB). Hver opplasting får nytt filnavn, så
-  // fakturaer som allerede viser til en eldre logo, beholder den.
+  // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting
+  // får nytt filnavn, så fakturaer som allerede viser til en eldre logo, beholder den.
   org.put("/logo", async (c) => {
-    const data = new Uint8Array(await c.req.arrayBuffer());
-    if (data.length === 0) throw new ApiFeil(400, "Mangler bilde");
-    if (data.length > 1_500_000) throw new ApiFeil(400, "Logoen kan være høyst 1,5 MB");
-    const png = data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47;
-    const jpg = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
-    if (!png && !jpg) throw new ApiFeil(400, "Logoen må være PNG eller JPG");
+    const raa = new Uint8Array(await c.req.arrayBuffer());
+    if (raa.length === 0) throw new ApiFeil(400, "Mangler bilde");
+    if (raa.length > 5_000_000) throw new ApiFeil(400, "Logoen kan være høyst 5 MB");
+    const erJpg = raa[0] === 0xff && raa[1] === 0xd8 && raa[2] === 0xff;
+    if (!erPng(raa) && !erJpg) throw new ApiFeil(400, "Logoen må være PNG eller JPG");
+    let data: Uint8Array;
+    try {
+      data = await normaliserLogo(raa);
+    } catch {
+      throw new ApiFeil(400, "Kunne ikke lese bildet");
+    }
+    const png = erPng(data);
     if (!config.filerBucket) throw new ApiFeil(503, "Lagring er ikke konfigurert");
     const sti = `${orgId(c)}/logo/${Date.now()}.${png ? "png" : "jpg"}`;
     const o = await bruk(c, async (db) => {
@@ -480,6 +487,17 @@ export function lagApi() {
     const r = await bruk(c, (db) => db.query("delete from faktura.fakturaer where id = $1 and org_id = $2 and status = 'utkast'", [uuid.parse(c.req.param("id")), orgId(c)]));
     if (!r.rowCount) throw new ApiFeil(409, "Bare utkast kan slettes");
     return c.body(null, 204);
+  });
+
+  // Sletter en utstedt faktura (ment for testfakturaer) sammen med kreditnotaer,
+  // betalinger og purringer. Kopier i brukernes Google Disk fjernes også.
+  org.post("/fakturaer/:id/slett", async (c) => {
+    krevMfa(c);
+    const { grunn } = await kropp(c, z.object({ grunn: z.string().trim().min(3).max(500) }));
+    const id = uuid.parse(c.req.param("id"));
+    const ider = await bruk(c, async (db) => (await en(db, "select faktura.slett_faktura($1, $2, $3) as ider", [orgId(c), id, grunn]))!.ider as string[]);
+    await leggIKo({ type: "disk-slett", org_id: orgId(c), faktura_ider: ider });
+    return c.json({ slettet: ider });
   });
 
   // Utsteder og legger utsendingen (PDF + e-post) i kø.

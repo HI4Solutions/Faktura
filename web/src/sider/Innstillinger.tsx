@@ -389,7 +389,7 @@ function Logo() {
   async function velg(fil: File | undefined) {
     if (!fil) return;
     if (!["image/png", "image/jpeg"].includes(fil.type)) return h.settFeil("Logoen må være PNG eller JPG.");
-    if (fil.size > 1_500_000) return h.settFeil("Logoen kan være høyst 1,5 MB.");
+    if (fil.size > 5_000_000) return h.settFeil("Logoen kan være høyst 5 MB.");
     const ok = await h.kjor(() => lastOppLogo(org!.id, fil).then(() => true));
     if (ok) settVersjon((v) => v + 1);
   }
@@ -397,7 +397,7 @@ function Logo() {
   return (
     <div className="kort">
       <h2 style={{ marginTop: 0 }}>Logo på fakturaen</h2>
-      <p className="dempet liten">PNG eller JPG, høyst 1,5 MB. Vises øverst til høyre på nye fakturaer. Bredformat med gjennomsiktig bakgrunn blir finest.</p>
+      <p className="dempet liten">PNG eller JPG, høyst 5 MB. Vises øverst til høyre på nye fakturaer. Bredformat med gjennomsiktig bakgrunn blir finest.</p>
       {url ? (
         <img src={url} alt="Logo" style={{ maxWidth: 220, maxHeight: 80, display: "block", marginBottom: 12, background: "#fff", padding: 6, borderRadius: 6 }} />
       ) : (
