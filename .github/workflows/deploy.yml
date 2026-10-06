@@ -1,0 +1,107 @@
+name: Utrulling
+
+# Tester, bygger bildene, kjører databasemigreringene og ruller ut API, worker og
+# nettappen. Kjører på main når server/, db/ eller web/ endres.
+
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", "db/**", "web/**", "scripts/migrer.sh", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: utrulling
+  cancel-in-progress: false
+
+env:
+  REGION: ${{ vars.GCP_REGION }}
+  PROSJEKT: ${{ vars.GCP_PROJECT_ID }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - run: npm ci
+        working-directory: server
+      - run: npm run typecheck
+        working-directory: server
+      - name: Database- og servertester
+        env:
+          DATABASE_URL: postgresql://postgres@localhost:5432/postgres
+          TEST_URL_MAL: postgresql://%s@localhost:5432/faktura
+          SERVER_TESTER: "1"
+        run: scripts/test-db.sh
+
+  backend:
+    needs: test
+    if: vars.GCP_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Bygg og last opp bildene
+        run: |
+          REG="$REGION-docker.pkg.dev/$PROSJEKT/faktura"
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -f server/Dockerfile -t "$REG/server:$GITHUB_SHA" .
+          docker build -f db/Dockerfile -t "$REG/migrate:$GITHUB_SHA" .
+          docker push "$REG/server:$GITHUB_SHA"
+          docker push "$REG/migrate:$GITHUB_SHA"
+          echo "REG=$REG" >> "$GITHUB_ENV"
+
+      - name: Databasemigreringer
+        run: |
+          gcloud run jobs update faktura-migrate --region "$REGION" --image "$REG/migrate:$GITHUB_SHA" --quiet
+          gcloud run jobs execute faktura-migrate --region "$REGION" --wait
+
+      - name: Rull ut worker og API
+        run: |
+          gcloud run deploy faktura-worker --region "$REGION" --image "$REG/server:$GITHUB_SHA" --update-env-vars ROLLE=worker --quiet
+          gcloud run deploy faktura-api --region "$REGION" --image "$REG/server:$GITHUB_SHA" --update-env-vars ROLLE=api --quiet
+
+      - name: Røyktest
+        run: |
+          URL=$(gcloud run services describe faktura-api --region "$REGION" --format='value(status.url)')
+          curl -fsS "$URL/helse"
+
+  web:
+    needs: backend
+    if: vars.GCP_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Firebase Hosting
+        working-directory: web
+        run: npx --yes firebase-tools@latest deploy --only hosting --project "$PROSJEKT" --non-interactive

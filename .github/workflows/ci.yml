@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   database:
-    name: Databasetester
+    name: Database- og servertester
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -23,12 +23,22 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
       - name: Installer psql
         run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
-      - name: Kjør migreringer og tester
+      - run: npm ci
+        working-directory: server
+      - run: npm run typecheck
+        working-directory: server
+      - name: Kjør migreringer, database- og servertester
         env:
           DATABASE_URL: postgresql://postgres@localhost:5432/postgres
           TEST_URL_MAL: postgresql://%s@localhost:5432/faktura
+          SERVER_TESTER: "1"
         run: scripts/test-db.sh
 
   terraform:

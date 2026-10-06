@@ -50,3 +50,9 @@ for t in "$rot"/db/tests/*.sql; do
 done
 
 if [[ $feil == 0 ]]; then echo "Alle databasetester er grønne."; else echo "Databasetester feilet."; exit 1; fi
+
+# Servertestene (API mot samme database) når SERVER_TESTER=1.
+if [[ "${SERVER_TESTER:-}" == "1" ]]; then
+  echo "Servertester"
+  (cd "$rot/server" && DATABASE_URL="$(printf "$base" test_api)" AUTH_TEST=1 npx vitest run)
+fi

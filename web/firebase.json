@@ -1,0 +1,22 @@
+{
+  "hosting": {
+    "site": "hi4-faktura-prod",
+    "public": "public",
+    "cleanUrls": true,
+    "rewrites": [
+      { "source": "/api/**", "run": { "serviceId": "faktura-api", "region": "europe-north1" } },
+      { "source": "**", "destination": "/index.html" }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+          { "key": "X-Frame-Options", "value": "DENY" }
+        ]
+      }
+    ]
+  }
+}

@@ -154,10 +154,13 @@ resource "google_storage_bucket_iam_member" "fakturaer_worker" {
   member = "serviceAccount:${google_service_account.worker.email}"
 }
 
-resource "google_storage_bucket_iam_member" "fakturaer_api_read" {
-  bucket = google_storage_bucket.fakturaer.name
-  role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.api.email}"
+# API-et lager PDF-en ved første nedlasting hvis workeren ikke har rukket det.
+# objectCreator kan ikke overskrive eller slette; oppbevaringsregelen hindrer det uansett.
+resource "google_storage_bucket_iam_member" "fakturaer_api" {
+  for_each = toset(["roles/storage.objectViewer", "roles/storage.objectCreator"])
+  bucket   = google_storage_bucket.fakturaer.name
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.api.email}"
 }
 
 resource "google_storage_bucket_iam_member" "filer" {

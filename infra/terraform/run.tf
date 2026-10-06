@@ -51,6 +51,7 @@ resource "google_cloud_run_v2_service" "api" {
 
       dynamic "env" {
         for_each = merge(local.db_env, {
+          ROLLE      = "api"
           DB_USER    = google_sql_user.api.name
           WORKER_URL = google_cloud_run_v2_service.worker.uri
         })
@@ -122,7 +123,7 @@ resource "google_cloud_run_v2_service" "worker" {
       image = var.placeholder_image
 
       dynamic "env" {
-        for_each = merge(local.db_env, { DB_USER = google_sql_user.worker.name })
+        for_each = merge(local.db_env, { ROLLE = "worker", DB_USER = google_sql_user.worker.name })
         content {
           name  = env.key
           value = env.value

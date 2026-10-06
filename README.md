@@ -15,9 +15,9 @@ klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
 | Databaseskjema, regler, RLS og tester (`db/`) | Ferdig, testene er grønne |
 | Infrastruktur som kode (`infra/terraform`) | Ferdig, validert, ikke rullet ut |
 | CI (databasetester, Terraform) og utrulling med GitHub Actions | Ferdig |
-| API (Cloud Run, TypeScript) | Neste |
-| Worker: PDF, e-post, gjentakelser, utboks | Neste |
-| Nettapp (React) på Firebase Hosting | Etter API |
+| Infrastruktur rullet ut i `hi4-faktura-prod` | Ferdig |
+| API og worker (`server/`, TypeScript på Cloud Run) | Ferdig, testet mot Postgres |
+| Nettapp (React) på `faktura.hi4.no` | Neste; i dag vises en startside |
 
 Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og veikart.
 
@@ -47,8 +47,14 @@ Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og ve
 ## Utvikling lokalt
 
 ```bash
-scripts/test-db.sh      # starter en midlertidig Postgres 16, migrerer og kjører testene
+scripts/test-db.sh                         # midlertidig Postgres 16, migreringer og databasetester
+SERVER_TESTER=1 scripts/test-db.sh         # ... og API-testene i server/
+cd server && npm ci && npm run typecheck
 ```
+
+`server/` er ett Node-bilde med to roller: `ROLLE=api` (REST-API under `/api`) og
+`ROLLE=worker` (PDF, e-post via Resend, gjentakelser, utboks → Pub/Sub). Utrulling skjer
+med workflowen *Utrulling* ved push til `main`.
 
 Migreringer ligger i `db/migrations` og kjøres i rekkefølge av `scripts/migrer.sh`.
 I skyen gjør Cloud Run-jobben `faktura-migrate` det ved hver utrulling.
