@@ -1,11 +1,129 @@
 // Innstillinger for appen (installering) og push-varsler på denne og andre enheter.
 import { useEffect, useState } from "react";
-import { api, hent } from "../api";
+import { api, ApiFeil, hent } from "../api";
 import { Feil, useData, useHandling } from "../felles";
 import { dato } from "../format";
 import { IkonBjelle, IkonInstaller } from "../ikoner";
 import { usePwa } from "../Pwa";
 import { erInstallert, erIos, hentAbonnement, installer, pushStotte, slaAvVarsler, slaPaVarsler } from "../pwa";
+import { useKonto } from "../konto";
+import { foreslattNavn, leggTilPasskey, passkeyFeil } from "../passkey";
+import { bekreftMedPasskey, biometriNavn, lagreLaas, lesLaas, lyttPaLaas, merkAktiv, stotterApplaas } from "../applaas";
+
+const LAASETIDER: [number, string][] = [
+  [0, "Hver gang appen åpnes"],
+  [1, "Etter 1 minutt i bakgrunnen"],
+  [5, "Etter 5 minutter i bakgrunnen"],
+  [15, "Etter 15 minutter i bakgrunnen"],
+  [60, "Etter 1 time i bakgrunnen"],
+];
+
+// Applås per enhet: Face ID / Touch ID (eller Windows Hello) når appen åpnes.
+function AppLaasValg() {
+  const { meg } = useKonto();
+  const id = meg!.bruker.id;
+  const [laas, settLaas] = useState(() => lesLaas(id));
+  const [stotte, settStotte] = useState<boolean | null>(null);
+  const [trengerPasskey, settTrengerPasskey] = useState(false);
+  const [minutter, settMinutter] = useState(laas?.minutter ?? 5);
+  const h = useHandling();
+  const navn = biometriNavn();
+
+  useEffect(() => {
+    stotterApplaas().then(settStotte);
+  }, []);
+  useEffect(() => lyttPaLaas(() => settLaas(lesLaas(id))), [id]);
+
+  const slaPa = () =>
+    h.kjor(async () => {
+      try {
+        const legitimasjon = await bekreftMedPasskey(id);
+        lagreLaas({ bruker: id, minutter, legitimasjon: [legitimasjon] });
+        merkAktiv();
+        settTrengerPasskey(false);
+        return true;
+      } catch (e) {
+        if (e instanceof ApiFeil && e.status === 409) {
+          settTrengerPasskey(true);
+          throw new Error("Du har ingen passkey ennå. Lag en på denne enheten, så kan du bruke " + navn + " til å låse opp appen.");
+        }
+        if ((e as Error).name === "NotAllowedError") {
+          settTrengerPasskey(true);
+          throw new Error(`Det ble avbrutt, eller det finnes ingen passkey for kontoen din på denne enheten. Lag en her om nødvendig.`);
+        }
+        throw e;
+      }
+    });
+
+  const lagPasskey = () =>
+    h.kjor(async () => {
+      let p: { id: string };
+      try {
+        p = await leggTilPasskey(foreslattNavn());
+      } catch (e) {
+        throw new Error(passkeyFeil(e));
+      }
+      lagreLaas({ bruker: id, minutter, legitimasjon: [p.id] });
+      merkAktiv();
+      settTrengerPasskey(false);
+      return true;
+    });
+
+  const endreTid = (m: number) => {
+    settMinutter(m);
+    if (laas) lagreLaas({ ...laas, minutter: m });
+  };
+
+  if (stotte === null) return null;
+
+  return (
+    <>
+      <h3>Applås</h3>
+      {!stotte ? (
+        <p className="dempet liten">
+          Denne enheten har ikke Face ID, Touch ID, Windows Hello eller annen skjermlås som nettleseren kan bruke til å låse appen.
+        </p>
+      ) : (
+        <>
+          <p className="dempet liten">
+            Krev {navn} for å åpne HI4 Faktura på denne enheten, så ingen andre ser fakturaene om de får tak i telefonen eller PC-en din.
+            Låsen bruker passkeyen din på enheten.
+          </p>
+          <label>
+            Lås
+            <select value={minutter} onChange={(e) => endreTid(Number(e.target.value))}>
+              {LAASETIDER.map(([m, tekst]) => (
+                <option key={m} value={m}>
+                  {tekst}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="knapper">
+            {laas ? (
+              <>
+                <span className="merke merke-ok">På for denne enheten</span>
+                <button className="lenke" disabled={h.opptatt} onClick={() => lagreLaas(null)}>
+                  Slå av
+                </button>
+              </>
+            ) : (
+              <button className="primar" disabled={h.opptatt} onClick={slaPa}>
+                Slå på applås med {navn}
+              </button>
+            )}
+            {trengerPasskey && !laas && (
+              <button disabled={h.opptatt} onClick={lagPasskey}>
+                Lag passkey på denne enheten
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      <Feil melding={h.feil} />
+    </>
+  );
+}
 
 interface PushData {
   nokkel: string | null;
@@ -80,6 +198,7 @@ export function AppOgVarsler() {
           Du kan installere HI4 Faktura som en app fra nettleserens meny («Installer app» eller «Legg til på startskjermen»).
         </p>
       )}
+      <AppLaasValg />
 
       <h2>Varsler</h2>
       <p className="dempet liten">Få beskjed på telefonen eller PC-en når noe skjer med fakturaene, også når appen er lukket.</p>

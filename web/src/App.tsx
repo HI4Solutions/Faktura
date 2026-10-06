@@ -17,6 +17,7 @@ import { Gjentakende } from "./sider/Gjentakende";
 import { Rapporter } from "./sider/Rapporter";
 import { Logo, LogoIkon } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
+import { AppLaas } from "./Applaas";
 import { installer } from "./pwa";
 import {
   IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
@@ -306,10 +307,12 @@ function Innhold() {
   if (!meg) return <div className="sentrert"><Laster /></div>;
   if (!meg.bruker.navn || meg.bruker.navn.trim().length < 2) return <OppgiNavn />;
   return (
-    <Routes>
-      <Route path="/invitasjon/:token" element={<div className="innhold"><Invitasjon /></div>} />
-      <Route path="*" element={<Ramme />} />
-    </Routes>
+    <AppLaas>
+      <Routes>
+        <Route path="/invitasjon/:token" element={<div className="innhold"><Invitasjon /></div>} />
+        <Route path="*" element={<Ramme />} />
+      </Routes>
+    </AppLaas>
   );
 }
 

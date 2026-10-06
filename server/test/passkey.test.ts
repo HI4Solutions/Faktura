@@ -137,6 +137,37 @@ describe.skipIf(!harDb)("passkeys", () => {
     expect((await kall("POST", "/api/offentlig/passkey/fullfor", null, { utfordring_id: start2.data.utfordring_id, svar: ukjent })).status).toBe(401);
   });
 
+  it("bekrefter applåsen med egen passkey (Face ID / Touch ID)", async () => {
+    const start = await kall("POST", "/api/passkeys/bekreft/start", bruker);
+    expect(start.status).toBe(200);
+    expect(start.data.valg.userVerification).toBe("required");
+    expect(start.data.valg.allowCredentials.map((c: any) => c.id)).toEqual([b64u(nokkel.id)]);
+    const ok = await kall("POST", "/api/passkeys/bekreft/fullfor", bruker, { utfordring_id: start.data.utfordring_id, svar: nokkel.loggInn(start.data.valg) });
+    expect(ok).toEqual({ status: 200, data: { ok: true } });
+    // Utfordringen kan bare brukes én gang.
+    expect((await kall("POST", "/api/passkeys/bekreft/fullfor", bruker, { utfordring_id: start.data.utfordring_id, svar: nokkel.loggInn(start.data.valg) })).status).toBe(400);
+
+    // En passkey som ikke hører til kontoen, låser ikke opp.
+    const start2 = await kall("POST", "/api/passkeys/bekreft/start", bruker);
+    const fremmed = new Autentikator().loggInn(start2.data.valg);
+    expect((await kall("POST", "/api/passkeys/bekreft/fullfor", bruker, { utfordring_id: start2.data.utfordring_id, svar: fremmed })).status).toBe(401);
+
+    // Feil signatur avvises.
+    const start3 = await kall("POST", "/api/passkeys/bekreft/start", bruker);
+    const feil = nokkel.loggInn(start3.data.valg);
+    feil.response.signature = b64u(randomBytes(70));
+    expect((await kall("POST", "/api/passkeys/bekreft/fullfor", bruker, { utfordring_id: start3.data.utfordring_id, svar: feil })).status).toBe(401);
+
+    // Uten passkeys: tydelig beskjed.
+    const annen = await kall("POST", "/api/passkeys/bekreft/start", "Bearer test:uid-annen:annen@server.test");
+    expect(annen.status).toBe(409);
+    expect(annen.data.error).toContain("Legg til en passkey");
+
+    // Andres utfordring kan ikke brukes.
+    const start4 = await kall("POST", "/api/passkeys/bekreft/start", bruker);
+    expect((await kall("POST", "/api/passkeys/bekreft/fullfor", "Bearer test:uid-annen:annen@server.test", { utfordring_id: start4.data.utfordring_id, svar: nokkel.loggInn(start4.data.valg) })).status).toBe(400);
+  });
+
   it("sletter passkeyen", async () => {
     const liste = await kall("GET", "/api/passkeys", bruker);
     expect((await kall("DELETE", `/api/passkeys/${encodeURIComponent(liste.data[0].id)}`, "Bearer test:uid-annen:annen@server.test")).status).toBe(404);

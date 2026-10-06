@@ -5,6 +5,7 @@ import { erAdmin, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
+import { lagreLaas } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
@@ -265,7 +266,17 @@ function Passkeys() {
                 <td className="hoyre">
                   <button
                     className="lenke"
-                    onClick={() => confirm(`Fjerne «${p.navn}»?`) && h.kjor(() => api("DELETE", `/passkeys/${encodeURIComponent(p.id)}`)).then(last)}
+                    onClick={() =>
+                      confirm(`Fjerne «${p.navn}»?`) &&
+                      h
+                        .kjor(async () => {
+                          await api("DELETE", `/passkeys/${encodeURIComponent(p.id)}`);
+                          // Uten passkeys kan applåsen ikke låses opp: slå den av på denne enheten.
+                          if ((data ?? []).length <= 1) lagreLaas(null);
+                          return true;
+                        })
+                        .then(last)
+                    }
                   >
                     Fjern
                   </button>

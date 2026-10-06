@@ -106,6 +106,54 @@ export function passkeyRuter() {
     return c.json(p, 201);
   });
 
+  // Applås: bekreft med en av brukerens egne passkeys (Face ID / Touch ID) uten å logge inn på nytt.
+  r.post("/bekreft/start", async (c) => {
+    const b = c.get("bruker");
+    return c.json(
+      await somBruker(b.id, async (db) => {
+        const egne = await alle<{ id: string; transporter: string[] }>(db, "select id, transporter from faktura.passkeys");
+        if (!egne.length) throw new ApiFeil(409, "Du har ingen passkey ennå. Legg til en passkey på denne enheten først.");
+        const valg = await generateAuthenticationOptions({
+          rpID: rp().id,
+          userVerification: "required",
+          allowCredentials: egne.map((p) => ({ id: p.id, transports: p.transporter as any })),
+        });
+        const u = await en(db, "insert into faktura.passkey_utfordringer (bruker_id, type, utfordring) values ($1, 'bekreft', $2) returning id", [
+          b.id,
+          valg.challenge,
+        ]);
+        return { utfordring_id: u!.id, valg };
+      }),
+    );
+  });
+
+  r.post("/bekreft/fullfor", async (c) => {
+    const b = c.get("bruker");
+    const k = z.object({ utfordring_id: z.string().uuid(), svar: z.object({ id: z.string() }).passthrough() }).parse(await c.req.json());
+    await somBruker(b.id, async (db) => {
+      const u = await en(db, "select * from faktura.bruk_passkey_utfordring($1, 'bekreft')", [k.utfordring_id]);
+      if (u.bruker_id !== b.id) throw new ApiFeil(400, "Utfordringen tilhører en annen bruker");
+      const p = await en(db, "select * from faktura.passkey_for_innlogging($1)", [k.svar.id]);
+      if (!p || p.bruker_id !== b.id) throw new ApiFeil(401, "Passkeyen hører ikke til kontoen din");
+      let v;
+      try {
+        v = await verifyAuthenticationResponse({
+          response: k.svar as any,
+          expectedChallenge: u.utfordring,
+          expectedOrigin: rp().origin,
+          expectedRPID: rp().id,
+          credential: { id: p.id, publicKey: new Uint8Array(p.offentlig_nokkel), counter: Number(p.teller), transports: p.transporter },
+          requireUserVerification: true,
+        });
+      } catch {
+        throw new ApiFeil(401, "Kunne ikke bekrefte passkeyen");
+      }
+      if (!v.verified) throw new ApiFeil(401, "Kunne ikke bekrefte passkeyen");
+      await db.query("select faktura.passkey_brukt($1, $2)", [p.id, v.authenticationInfo.newCounter]);
+    });
+    return c.json({ ok: true });
+  });
+
   r.patch("/:id", async (c) => {
     const k = z.object({ navn: z.string().trim().min(1).max(60) }).parse(await c.req.json());
     const p = await somBruker(c.get("bruker").id, (db) => en(db, "update faktura.passkeys set navn = $2 where id = $1 returning id, navn", [c.req.param("id"), k.navn]));
