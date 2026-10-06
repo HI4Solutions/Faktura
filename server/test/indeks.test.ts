@@ -2,31 +2,62 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { lagApi } from "../src/api.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
-import { lesJsonStat, settSsbFetch } from "../src/kpi.js";
+import { lesJsonStat, settSsbFetch, sjekkBasis } from "../src/kpi.js";
 import { kjorIndeksregulering } from "../src/indeksregulering.js";
 
-// Slik SSB svarer (JSON-stat 2), forkortet.
+// Slik SSB svarer fra tabell 14709 (JSON-stat 2, 2025=100), forkortet: indeksen og
+// tolvmånedersendringen for hver måned.
+const maaneder = ["2025M01", "2025M02", "2025M03", "2025M04", "2025M05", "2025M06", "2025M07", "2025M08", "2025M09", "2025M10", "2025M11", "2025M12", "2026M08", "2026M09"];
+const indeks = [98.1, 99.5, 98.8, 99.4, 99.9, 100.1, 100.8, 100.0, 100.6, 100.7, 100.9, 101.0, 103.5, 103.0];
 const ssbSvar = {
   version: "2.0",
   class: "dataset",
-  id: ["Konsumgrp", "ContentsCode", "Tid"],
-  size: [1, 1, 3],
+  id: ["ContentsCode", "Tid"],
+  size: [2, maaneder.length],
   dimension: {
-    Konsumgrp: { category: { index: { TOTAL: 0 } } },
-    ContentsCode: { category: { index: { KpiIndMnd: 0 } } },
-    Tid: { category: { index: { "2025M08": 0, "2026M08": 1, "2026M09": 2 } } },
+    ContentsCode: {
+      category: {
+        index: { KpiIndMnd: 0, Tolvmanedersendring: 1 },
+        label: { KpiIndMnd: "Konsumprisindeks (2025=100)", Tolvmanedersendring: "12-måneders endring (prosent)" },
+      },
+    },
+    Tid: { category: { index: Object.fromEntries(maaneder.map((m, i) => [m, i])) } },
   },
-  value: [100.0, 103.5, 103.0],
+  value: [...indeks, ...indeks.map(() => 3.1)],
 };
 
 describe("KPI fra SSB", () => {
-  it("leser JSON-stat", () => {
-    expect(lesJsonStat(ssbSvar)).toEqual([
-      { maaned: "2025-08-01", verdi: 100 },
+  it("leser indeksen (ikke endringen) fra JSON-stat", () => {
+    const v = lesJsonStat(ssbSvar);
+    expect(v).toHaveLength(14);
+    expect(v.slice(-3)).toEqual([
+      { maaned: "2025-12-01", verdi: 101 },
       { maaned: "2026-08-01", verdi: 103.5 },
       { maaned: "2026-09-01", verdi: 103 },
     ]);
     expect(() => lesJsonStat({ feil: true })).toThrow();
+  });
+
+  it("tåler andre koder, tid først og verdier som objekt", () => {
+    const svar = {
+      id: ["Tid", "Maal"],
+      size: [2, 2],
+      dimension: {
+        Tid: { category: { index: ["2026M01", "2026M02"] } },
+        Maal: { category: { index: { Endring: 0, Indeks: 1 }, label: { Endring: "Månedsendring (prosent)", Indeks: "Konsumprisindeks (2025=100)" } } },
+      },
+      value: { 0: 0.4, 1: 101.2, 2: 0.2, 3: 101.4 },
+    };
+    expect(lesJsonStat(svar)).toEqual([
+      { maaned: "2026-01-01", verdi: 101.2 },
+      { maaned: "2026-02-01", verdi: 101.4 },
+    ]);
+  });
+
+  it("blander ikke basisår: 2025 skal ha snitt 100", () => {
+    expect(() => sjekkBasis(lesJsonStat(ssbSvar))).not.toThrow();
+    const gammel = { ...ssbSvar, value: [...indeks.map((x) => x * 1.35), ...indeks.map(() => 3.1)] };
+    expect(() => sjekkBasis(lesJsonStat(gammel))).toThrow(/uventet basis/);
   });
 });
 
