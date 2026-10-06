@@ -245,7 +245,8 @@ export async function lagPdf(f: PdfFaktura): Promise<Uint8Array> {
   const rabatt = f.linjer.reduce((s, l) => s + linjerabatt(l), 0);
   if (y - (harRabatt ? 176 : 150) < BUNN) nySide(false);
   y -= 8;
-  side.drawLine({ start: { x: 330, y: y + 13 }, end: { x: A4[0] - MARG, y: y + 13 }, thickness: 0.5, color: gra });
+  // Streken står midt mellom siste linje og første sum, ikke oppi teksten.
+  side.drawLine({ start: { x: 330, y: y + 15 }, end: { x: A4[0] - MARG, y: y + 15 }, thickness: 0.5, color: gra });
   const sumLinje = (navn: string, verdi: string, uthev = false) => {
     tekst(navn, 330, y, { f: uthev ? fet : font, str: uthev ? 11 : 9 });
     hoyre(verdi, kol.belop, y, { f: uthev ? fet : font, str: uthev ? 11 : 9 });
