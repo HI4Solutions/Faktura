@@ -10,6 +10,7 @@ import { lagring, leggIKo } from "./tjenester.js";
 import { passkeyInnlogging, passkeyRuter } from "./passkey.js";
 import { adminRuter, erPlattformadmin, verifiseringRuter } from "./verifisering.js";
 import { hentEnhet } from "./brreg.js";
+import { rapportRuter } from "./rapporter.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -224,6 +225,7 @@ export function lagApi() {
   });
 
   org.route("/verifisering", verifiseringRuter());
+  org.route("/", rapportRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som rå PNG/JPG (maks 1,5 MB). Hver opplasting får nytt filnavn, så

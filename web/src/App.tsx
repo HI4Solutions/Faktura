@@ -12,6 +12,7 @@ import { Innstillinger } from "./sider/Innstillinger";
 import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
+import { Rapporter } from "./sider/Rapporter";
 
 function Invitasjon() {
   const { token } = useParams();
@@ -75,6 +76,7 @@ function Ramme() {
             <NavLink to="/gjentakende">Gjentakende</NavLink>
             <NavLink to="/kunder">Kunder</NavLink>
             <NavLink to="/produkter">Produkter</NavLink>
+            <NavLink to="/rapporter">Rapporter</NavLink>
           </>
         )}
         <NavLink to="/innstillinger">Innstillinger</NavLink>
@@ -95,6 +97,7 @@ function Ramme() {
             <Route path="/fakturaer/:id" element={<FakturaVisning />} />
             <Route path="/gjentakende" element={<Gjentakende />} />
             <Route path="/kunder" element={<Kunder />} />
+            <Route path="/rapporter" element={<Rapporter />} />
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />

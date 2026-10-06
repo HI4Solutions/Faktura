@@ -142,6 +142,30 @@ describe.skipIf(!harDb)("API", () => {
     expect(d.data.purringer).toHaveLength(1);
   });
 
+  it("rapporter og CSV-eksport", async () => {
+    const res = await kall("GET", `/api/org/${org}/rapporter/reskontro`, ola);
+    expect(res.status).toBe(200);
+    expect(res.data[0].navn).toBe("Kunde AS");
+    expect(res.data[0].utestaende).toBeGreaterThan(0);
+
+    const aar = new Date().getFullYear();
+    const mva = await kall("GET", `/api/org/${org}/rapporter/mva?fra=2000-01-01&til=${aar + 1}-12-31`, ola);
+    const m25 = mva.data.satser.find((s: any) => s.mva_sats === 25);
+    expect(m25.kreditert_mva).toBeLessThan(0);
+    expect(m25.mva).toBeCloseTo(m25.grunnlag * 0.25, 1);
+
+    const salg = await kall("GET", `/api/org/${org}/rapporter/salg?aar=${aar}`, ola);
+    expect(salg.data).toHaveLength(12);
+
+    const r = await app.request(`/api/org/${org}/eksport/fakturaer.csv?fra=2000-01-01&til=${aar + 1}-12-31`, { headers: { authorization: ola } });
+    expect(r.headers.get("content-type")).toContain("text/csv");
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]); // BOM, så Excel leser UTF-8
+    const tekst = new TextDecoder().decode(bytes);
+    expect(tekst.startsWith("Nummer;Type;")).toBe(true);
+    expect(tekst).toContain(";Kreditnota;");
+  });
+
   it("feil fra databasen blir riktige HTTP-statuser", async () => {
     const f = await kall("POST", `/api/org/${org}/fakturaer`, ola, { kunde_id: kunde, linjer: [] });
     expect((await kall("POST", `/api/org/${org}/fakturaer/${f.data.id}/utsted`, ola, {})).status).toBe(400);

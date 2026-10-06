@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import { lagPdf, type PdfFaktura } from "../src/pdf.js";
 import { kr, summer, dato, orgnrGyldig } from "../src/regler.js";
+import { csv, termin } from "../src/rapporter.js";
 
 const grunn: PdfFaktura = {
   type: "faktura",
@@ -69,5 +70,16 @@ describe("PDF med logo og uten mva", () => {
       await lagPdf({ ...grunn, selger: { ...grunn.selger, mva_registrert: false }, linjer: [{ beskrivelse: "Tjeneste", antall: 1, enhetspris: 500, mva_sats: 0 }] }),
     );
     expect(doc.getPageCount()).toBe(1);
+  });
+});
+
+describe("rapporthjelpere", () => {
+  it("mva-terminer", () => {
+    expect(termin(2026, 1)).toEqual({ fra: "2026-01-01", til: "2026-02-28" });
+    expect(termin(2028, 1)).toEqual({ fra: "2028-01-01", til: "2028-02-29" });
+    expect(termin(2026, 6)).toEqual({ fra: "2026-11-01", til: "2026-12-31" });
+  });
+  it("CSV for norsk Excel", () => {
+    expect(csv([{ a: 1.5, b: 'Si "hei"; nå' }], [["a", "A"], ["b", "B"]])).toBe('\ufeffA;B\r\n1,5;"Si ""hei""; nå"\r\n');
   });
 });

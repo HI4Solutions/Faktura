@@ -24,7 +24,7 @@ export async function api<T = any>(metode: string, sti: string, kropp?: unknown)
     const data = type.includes("json") ? await r.json().catch(() => ({})) : {};
     throw new ApiFeil(r.status, data.error ?? `Feil ${r.status}`);
   }
-  if (type.includes("application/pdf") || type.startsWith("image/")) return (await r.blob()) as T;
+  if (type.includes("application/pdf") || type.startsWith("image/") || type.startsWith("text/csv")) return (await r.blob()) as T;
   return r.json();
 }
 
@@ -51,4 +51,14 @@ export async function lastOppLogo(orgId: string, fil: File) {
     body: fil,
   });
   if (!r.ok) throw new ApiFeil(r.status, (await r.json().catch(() => ({}))).error ?? `Feil ${r.status}`);
+}
+
+export async function lastNed(sti: string, filnavn: string) {
+  const blob = await api<Blob>("GET", sti);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filnavn;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
