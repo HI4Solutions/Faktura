@@ -1,5 +1,6 @@
 // Kunder og produkter: liste og skjema i dialog.
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
@@ -17,9 +18,14 @@ export function Kunder() {
       <div className="topp">
         <h1>Kunder</h1>
         {kanSkrive(org?.rolle) && (
-          <button className="primar" onClick={() => settRedigerer({ type: "firma", aktiv: true })}>
-            Ny kunde
-          </button>
+          <div className="knapper">
+            <Link className="knapp" to="/kunder/importer">
+              Importer
+            </Link>
+            <button className="primar" onClick={() => settRedigerer({ type: "firma", aktiv: true })}>
+              Ny kunde
+            </button>
+          </div>
         )}
       </div>
       <input type="search" className="sok" placeholder="Søk etter navn" value={sok} onChange={(e) => settSok(e.target.value)} />
@@ -43,7 +49,7 @@ export function Kunder() {
               </span>
             </button>
           ))}
-          {data?.length === 0 && <p className="dempet" style={{ padding: 16 }}>Ingen kunder ennå.</p>}
+          {data?.length === 0 && <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org?.rolle)} sok={sok} />}
         </div>
       ) : (
         <div className="kort tabell">
@@ -72,8 +78,8 @@ export function Kunder() {
               ))}
               {data?.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="dempet">
-                    Ingen kunder ennå.
+                  <td colSpan={5}>
+                    <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org?.rolle)} sok={sok} />
                   </td>
                 </tr>
               )}
@@ -96,6 +102,22 @@ export function Kunder() {
         />
       </Dialog>
     </>
+  );
+}
+
+// Tom liste: si fra, og vis veien til importen.
+function IngenEnna({ hva, sti, kanImportere, sok }: { hva: string; sti: string; kanImportere: boolean; sok?: string }) {
+  if (sok) return <p className="dempet ingen-enna">Ingen {hva} passer søket.</p>;
+  return (
+    <p className="dempet ingen-enna">
+      Ingen {hva} ennå.
+      {kanImportere && (
+        <>
+          {" "}
+          Har du {hva} i et annet system? <Link to={sti}>Importer dem</Link>.
+        </>
+      )}
+    </p>
   );
 }
 
@@ -261,9 +283,14 @@ export function Produkter() {
       <div className="topp">
         <h1>Produkter og tjenester</h1>
         {kanSkrive(org?.rolle) && (
-          <button className="primar" onClick={() => settRedigerer({ enhet: "stk", mva_sats: 25, aktiv: true })}>
-            Nytt produkt
-          </button>
+          <div className="knapper">
+            <Link className="knapp" to="/produkter/importer">
+              Importer
+            </Link>
+            <button className="primar" onClick={() => settRedigerer({ enhet: "stk", mva_sats: 25, aktiv: true })}>
+              Nytt produkt
+            </button>
+          </div>
         )}
       </div>
       <Feil melding={feil} />
@@ -288,7 +315,7 @@ export function Produkter() {
               </span>
             </button>
           ))}
-          {data?.length === 0 && <p className="dempet" style={{ padding: 16 }}>Ingen produkter ennå.</p>}
+          {data?.length === 0 && <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org?.rolle)} />}
         </div>
       ) : (
         <div className="kort tabell">
@@ -319,8 +346,8 @@ export function Produkter() {
               ))}
               {data?.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="dempet">
-                    Ingen produkter ennå.
+                  <td colSpan={6}>
+                    <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org?.rolle)} />
                   </td>
                 </tr>
               )}

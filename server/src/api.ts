@@ -17,6 +17,7 @@ import { diskRuter, googleCallback } from "./googleDisk.js";
 import { pushRuter } from "./push.js";
 import { ehfFilnavn, ehfHindring, lagEhf } from "./ehf.js";
 import { sjekkEhf } from "./peppol.js";
+import { kundenokler, kundeSjekk, planlegg, produktnokler } from "./importer.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -394,7 +395,7 @@ export function lagApi() {
         verdier.push(aktiv !== "false");
         vilkar.push(`aktiv = $${verdier.length}`);
       }
-      return c.json(await bruk(c, (db) => alle(db, `select * from faktura.${tabell} where ${vilkar.join(" and ")} order by ${sorter} limit 500`, verdier)));
+      return c.json(await bruk(c, (db) => alle(db, `select * from faktura.${tabell} where ${vilkar.join(" and ")} order by ${sorter} limit 10000`, verdier)));
     });
 
     org.get(`/${sti}/:id`, async (c) => {
@@ -592,6 +593,76 @@ export function lagApi() {
     });
     return c.json(f);
   });
+
+  // --- Import fra andre systemer ------------------------------------------
+  // Radene er allerede lest og koblet i nettleseren. «proving» gir bare planen (hva som
+  // blir nytt, oppdatert, hoppet over eller har feil); ellers lagres de gyldige radene
+  // samlet. Rader med feil hoppes over.
+  const importSkjema = z.object({
+    rader: z.array(z.record(z.string(), z.unknown())).min(1).max(5000, "Høyst 5000 rader om gangen"),
+    duplikater: z.enum(["hopp", "oppdater"]).optional(),
+    proving: z.boolean().optional(),
+  });
+  for (const sti of ["kunder", "produkter"] as const) {
+    org.post(`/${sti}/importer`, async (c) => {
+      const b = await kropp(c, importSkjema);
+      const svar = await bruk(c, async (db) => {
+        await db.query("select faktura.krev($1, 'skriv')", [orgId(c)]);
+        const finnes = new Map<string, string>();
+        const nokkel = (k: string | false | null | undefined, id: string) => k && !finnes.has(k) && finnes.set(k, id);
+        if (sti === "kunder") {
+          for (const r of await alle(db, "select id, orgnr, epost, navn from faktura.kunder where org_id = $1 order by kundenummer", [orgId(c)])) {
+            nokkel(r.orgnr && `orgnr:${r.orgnr}`, r.id);
+            nokkel(r.epost && `epost:${r.epost.toLowerCase()}`, r.id);
+            nokkel(`navn:${r.navn.trim().toLowerCase()}`, r.id);
+          }
+        } else {
+          for (const r of await alle(db, "select id, varenummer, navn from faktura.produkter where org_id = $1 order by opprettet", [orgId(c)])) {
+            nokkel(r.varenummer && `varenr:${r.varenummer.trim().toLowerCase()}`, r.id);
+            nokkel(`navn:${r.navn.trim().toLowerCase()}`, r.id);
+          }
+        }
+        const plan =
+          sti === "kunder"
+            ? planlegg(b.rader, kundeSkjema, kundenokler, finnes, b.duplikater ?? "hopp", kundeSjekk)
+            : planlegg(b.rader, produktSkjema, produktnokler, finnes, b.duplikater ?? "hopp");
+        if (!b.proving) {
+          for (const p of plan) {
+            if (p.status !== "ny" && p.status !== "oppdater") continue;
+            const d = p.data as Record<string, unknown>;
+            try {
+              if (p.status === "ny") {
+                const felter = Object.keys(d).filter((k) => d[k] !== undefined);
+                await db.query(`insert into faktura.${sti} (org_id, ${felter.join(", ")}) values ($1, ${felter.map((_, i) => `$${i + 2}`).join(", ")})`, [
+                  orgId(c),
+                  ...felter.map((k) => d[k]),
+                ]);
+              } else {
+                // Tomme felt i fila sletter ikke det som står fra før, og et notat legges til
+                // det som står der (med mindre det står der allerede).
+                const { notat, ...felter } = Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+                const s = settFelter(felter, 3);
+                const sett = s.tom ? [] : [s.sql];
+                const verdier = [...s.verdier];
+                if (notat !== undefined) {
+                  verdier.push(notat);
+                  const n = `$${verdier.length + 2}::text`;
+                  sett.push(`notat = case when coalesce(notat, '') = '' then ${n} when strpos(notat, ${n}) > 0 then notat else notat || E'\\n' || ${n} end`);
+                }
+                if (sett.length) await db.query(`update faktura.${sti} set ${sett.join(", ")} where id = $1 and org_id = $2`, [p.id, orgId(c), ...verdier]);
+              }
+            } catch (e) {
+              throw new ApiFeil(tilHttp(e).status, `Rad ${p.nr}: ${tilHttp(e).error}`);
+            }
+          }
+        }
+        const antall = { ny: 0, oppdater: 0, hopp: 0, feil: 0 };
+        for (const p of plan) antall[p.status]++;
+        return { antall, rader: plan.map(({ nr, status, grunn }) => ({ nr, status, grunn })) };
+      });
+      return c.json(svar);
+    });
+  }
 
   // Sjekk på nytt om kunden kan motta EHF.
   org.post("/kunder/:id/ehf", async (c) => {

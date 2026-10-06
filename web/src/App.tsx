@@ -9,6 +9,7 @@ import { BekreftEpost, Innlogging } from "./sider/Innlogging";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
 import { Kunder, Produkter } from "./sider/Register";
+import { Importer } from "./sider/Importer";
 import { FakturaSkjema, FakturaVisning, Fakturaliste } from "./sider/Fakturaer";
 import { FlereFakturaer } from "./sider/Flere";
 import { Innstillinger } from "./sider/Innstillinger";
@@ -283,8 +284,10 @@ function Ramme() {
             <Route path="/fakturaer/:id" element={<FakturaVisning />} />
             <Route path="/gjentakende" element={<Gjentakende />} />
             <Route path="/kunder" element={<Kunder />} />
+            <Route path="/kunder/importer" element={<Importer key="kunder" type="kunder" />} />
             <Route path="/rapporter" element={<Rapporter />} />
             <Route path="/produkter" element={<Produkter />} />
+            <Route path="/produkter/importer" element={<Importer key="produkter" type="produkter" />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}

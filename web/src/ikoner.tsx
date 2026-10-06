@@ -98,6 +98,12 @@ export const IkonVelg = (p: P) => (
     <path d="m8 9 4-4 4 4M8 15l4 4 4-4" />
   </Ikon>
 );
+export const IkonOpplasting = (p: P) => (
+  <Ikon {...p}>
+    <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5" />
+    <path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+  </Ikon>
+);
 export const IkonHake = (p: P) => (
   <Ikon {...p}>
     <circle cx="12" cy="12" r="9" />
