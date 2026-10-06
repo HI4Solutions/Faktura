@@ -702,3 +702,37 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
 .ehf-status.ja::before { content: "✓ "; color: var(--ok); font-weight: 700; }
 .ehf-status button.lenke { font-size: inherit; padding: 0; min-height: 0; }
 .ehf-status .felt-feil { margin-top: 4px; }
+
+/* --------------------------------------------------------------------------
+   Søkefelt (søkbart valg av produkt og kunde)
+   -------------------------------------------------------------------------- */
+.sokefelt { position: relative; min-width: 0; }
+.sokefelt > input {
+  width: 100%; padding-right: 32px; text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+}
+.sokefelt-liste {
+  position: absolute; z-index: 14; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content;
+  max-width: min(440px, calc(100vw - 32px)); max-height: 290px; overflow-y: auto; overscroll-behavior: contain;
+  margin: 0; padding: 4px; list-style: none; background: var(--flate);
+  border: 1px solid var(--kant-sterk); border-radius: var(--radius-s); box-shadow: var(--skygge-3);
+}
+.sokefelt-liste > li {
+  display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  font-size: 0.9rem; font-weight: 500; color: var(--tekst); text-transform: none; letter-spacing: 0;
+}
+.sokefelt-liste > li[aria-selected="true"] { background: var(--aksent-lys); }
+.sokefelt-liste > li.valgt .tittel { font-weight: 650; }
+.sokefelt-liste > li .under { font-size: 0.78rem; color: var(--dempet); }
+.sokefelt-liste > li.tom { color: var(--dempet); }
+.sokefelt-liste > li.ny { color: var(--aksent); font-weight: 600; }
+.sokefelt-liste > li.ingen { cursor: default; color: var(--dempet); font-style: italic; }
+.med-knapp > .sokefelt { flex: 1; min-width: 0; }
+.flere-topp .sokefelt { flex: 1; }
+.flere-topp .sokefelt > input { font-weight: 600; }
+@media (max-width: 700px) {
+  .sokefelt-liste { width: 100%; max-width: none; max-height: 250px; }
+  /* Linjene stables på mobil og trenger ikke rulle sidelengs; da klippes ikke søkelista. */
+  .kort.tabell.linjer, .flere-kort > .tabell { overflow: visible; }
+}

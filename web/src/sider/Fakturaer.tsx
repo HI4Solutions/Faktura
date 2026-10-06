@@ -8,6 +8,7 @@ import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto } from "./AvsenderKonto";
 import { IkonPluss } from "../ikoner";
 import { gebyrLinjer, LinjeTabell, medProdukt, tilTallLinjer, tomLinje, type LinjeUtkast } from "../linjer";
+import { kundeValg, Sokefelt } from "../sokefelt";
 
 // ---------------------------------------------------------------------------
 // Liste
@@ -244,8 +245,8 @@ export function FakturaSkjema() {
   const [f, settF] = useState<any>({ kunde_id: "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "" });
   const [linjer, settLinjer] = useState<LinjeUtkast[]>([tomLinje()]);
   const [gebyr, settGebyr] = useState(false);
-  const [nyKunde, settNyKunde] = useState(false);
-  const [nyttProdukt, settNyttProdukt] = useState<number | "ny" | null>(null); // linjen produktet skal inn på
+  const [nyKunde, settNyKunde] = useState<{ navn: string } | null>(null);
+  const [nyttProdukt, settNyttProdukt] = useState<{ linje: number | "ny"; navn?: string } | null>(null); // linjen produktet skal inn på
   const [kopi, settKopi] = useState("");
   const { opptatt, feil, settFeil, kjor } = useHandling();
 
@@ -348,16 +349,15 @@ export function FakturaSkjema() {
           <label className="hel">
             Kunde
             <div className="med-knapp">
-              <select aria-label="Kunde" value={f.kunde_id} onChange={(e) => (e.target.value === "__ny" ? settNyKunde(true) : settF({ ...f, kunde_id: e.target.value }))}>
-                <option value="">Velg kunde</option>
-                {kunder.data.map((k: any) => (
-                  <option key={k.id} value={k.id}>
-                    {k.navn} ({k.kundenummer})
-                  </option>
-                ))}
-                <option value="__ny">+ Ny kunde …</option>
-              </select>
-              <button type="button" onClick={() => settNyKunde(true)}>
+              <Sokefelt
+                etikett="Kunde"
+                valg={kundeValg(kunder.data)}
+                verdi={f.kunde_id || null}
+                velg={(id) => settF({ ...f, kunde_id: id ?? "" })}
+                plassholder="Søk kunde"
+                ny={{ tekst: "+ Ny kunde", handling: (navn) => settNyKunde({ navn }) }}
+              />
+              <button type="button" onClick={() => settNyKunde({ navn: "" })}>
                 <IkonPluss storrelse={16} /> Ny kunde
               </button>
             </div>
@@ -409,12 +409,12 @@ export function FakturaSkjema() {
       </div>
 
       <div className="kort tabell linjer">
-        <LinjeTabell linjer={linjer} endre={settLinjer} produkter={produkter.data ?? []} utenMva={utenMva} nyttProdukt={(i) => settNyttProdukt(i)} />
+        <LinjeTabell linjer={linjer} endre={settLinjer} produkter={produkter.data ?? []} utenMva={utenMva} nyttProdukt={(linje, navn) => settNyttProdukt({ linje, navn })} />
         <div className="knapper" style={{ marginTop: 12 }}>
           <button type="button" onClick={() => settLinjer([...linjer, tomLinje()])}>
             + Linje
           </button>
-          <button type="button" onClick={() => settNyttProdukt("ny")}>
+          <button type="button" onClick={() => settNyttProdukt({ linje: "ny" })}>
             + Nytt produkt
           </button>
           {orgData.data.standard_gebyr > 0 && (
@@ -461,22 +461,22 @@ export function FakturaSkjema() {
         </button>
       </div>
 
-      <Dialog apen={nyKunde} lukk={() => settNyKunde(false)} tittel="Ny kunde">
+      <Dialog apen={nyKunde !== null} lukk={() => settNyKunde(null)} tittel="Ny kunde">
         <KundeSkjema
-          kunde={{ type: "firma", aktiv: true }}
+          kunde={{ type: "firma", aktiv: true, navn: nyKunde?.navn ?? "" }}
           lagret={async (k) => {
-            settNyKunde(false);
+            settNyKunde(null);
             await kunder.last();
             settF((x: any) => ({ ...x, kunde_id: k.id }));
           }}
-          avbryt={() => settNyKunde(false)}
+          avbryt={() => settNyKunde(null)}
         />
       </Dialog>
       <Dialog apen={nyttProdukt !== null} lukk={() => settNyttProdukt(null)} tittel="Nytt produkt">
         <ProduktSkjema
-          produkt={{ enhet: "stk", mva_sats: utenMva ? 0 : 25, aktiv: true }}
+          produkt={{ enhet: "stk", mva_sats: utenMva ? 0 : 25, aktiv: true, navn: nyttProdukt?.navn ?? "" }}
           lagret={(p) => {
-            if (p && nyttProdukt !== null) brukNyttProdukt(p, nyttProdukt);
+            if (p && nyttProdukt !== null) brukNyttProdukt(p, nyttProdukt.linje);
             settNyttProdukt(null);
           }}
           avbryt={() => settNyttProdukt(null)}

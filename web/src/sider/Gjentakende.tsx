@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, hent } from "../api";
 import { AvsenderKonto } from "./AvsenderKonto";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
+import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { kanSkrive, useKonto } from "../konto";
 import { dato, iDag, kr, summer } from "../format";
 
@@ -183,6 +184,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
 
   async function lagre(e: FormEvent) {
     e.preventDefault();
+    if (!f.kunde_id) return h.settFeil("Velg kunde.");
     const ugyldige = ugyldigeEposter(kopi);
     if (ugyldige.length) return h.settFeil(`Ugyldig e-postadresse for kopi: ${ugyldige.join(", ")}`);
     const neste = f.neste_forfall;
@@ -218,14 +220,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
     <form onSubmit={lagre}>
       <label>
         Kunde
-        <select required value={f.kunde_id} onChange={(e) => settF({ ...f, kunde_id: e.target.value })}>
-          <option value="">Velg kunde</option>
-          {kunder.data.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.navn}
-            </option>
-          ))}
-        </select>
+        <Sokefelt etikett="Kunde" valg={kundeValg(kunder.data)} verdi={f.kunde_id || null} velg={(id) => settF({ ...f, kunde_id: id ?? "" })} plassholder="Søk kunde" />
       </label>
       <div className="rad">
         <label>
@@ -263,20 +258,17 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
           {linjer.map((l, i) => (
             <tr key={i}>
               <td className="hel" data-label="Produkt" style={{ width: "28%" }}>
-                <select
-                  value={l.produkt_id ?? ""}
-                  onChange={(e) => {
-                    const p = produkter.data!.find((x) => x.id === e.target.value);
+                <Sokefelt
+                  etikett={`Produkt på linje ${i + 1}`}
+                  valg={produktValg(produkter.data!)}
+                  verdi={l.produkt_id}
+                  velg={(id) => {
+                    const p = id ? produkter.data!.find((x) => x.id === id) : null;
                     settL(i, p ? { produkt_id: p.id, beskrivelse: p.navn, enhetspris: String(p.enhetspris).replace(".", ","), mva_sats: String(p.mva_sats) } : { produkt_id: null });
                   }}
-                >
-                  <option value="">Fritekst</option>
-                  {produkter.data!.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.navn}
-                    </option>
-                  ))}
-                </select>
+                  tom="Fritekst"
+                  plassholder="Søk produkt"
+                />
               </td>
               <td className="hel" data-label="Beskrivelse">
                 <input placeholder="Beskrivelse" value={l.beskrivelse} onChange={(e) => settL(i, { beskrivelse: e.target.value })} />

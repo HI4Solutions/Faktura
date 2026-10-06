@@ -10,6 +10,7 @@ import { iDag, kr, leggTilDager, summer } from "../format";
 import { IkonPluss } from "../ikoner";
 import { gebyrLinjer, LinjeTabell, medProdukt, tilTallLinjer, tomLinje, erTom, type LinjeUtkast } from "../linjer";
 import { KundeSkjema, ProduktSkjema } from "./Register";
+import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { AvsenderKonto } from "./AvsenderKonto";
 
 interface Kort {
@@ -26,9 +27,9 @@ const erTomtKort = (k: Kort) => !k.kunde_id && k.linjer.every(erTom);
 
 type Valg =
   | { type: "kunder" }
-  | { type: "ny-kunde"; kort: number }
+  | { type: "ny-kunde"; kort: number; navn?: string }
   | { type: "produkt-alle" }
-  | { type: "nytt-produkt"; kort: number | "alle"; linje: number | "ny"; antall?: string }
+  | { type: "nytt-produkt"; kort: number | "alle"; linje: number | "ny"; antall?: string; navn?: string }
   | null;
 
 const flertall = (n: number, en: string, flere: string) => `${n} ${n === 1 ? en : flere}`;
@@ -56,6 +57,7 @@ export function FlereFakturaer() {
 
   const utenMva = Boolean(orgData.data && !orgData.data.mva_registrert);
   const kundeMap = useMemo(() => new Map((kunder.data ?? []).map((k) => [k.id, k])), [kunder.data]);
+  const kundevalg = useMemo(() => kundeValg(kunder.data ?? []), [kunder.data]);
 
   const endreKort = (nokkel: number, e: Partial<Kort>) => settKort((ks) => ks.map((k) => (k.nokkel === nokkel ? { ...k, ...e } : k)));
   const fjernKort = (nokkel: number) => settKort((ks) => ks.filter((k) => k.nokkel !== nokkel));
@@ -226,19 +228,14 @@ export function FlereFakturaer() {
             <span className="flere-nr" aria-hidden="true">
               {nr}
             </span>
-            <select
-              aria-label={`Kunde for faktura ${nr}`}
-              value={k.kunde_id}
-              onChange={(e) => (e.target.value === "__ny" ? settValg({ type: "ny-kunde", kort: k.nokkel }) : endreKort(k.nokkel, { kunde_id: e.target.value }))}
-            >
-              <option value="">Velg kunde</option>
-              {kunder.data!.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.navn} ({x.kundenummer})
-                </option>
-              ))}
-              <option value="__ny">+ Ny kunde …</option>
-            </select>
+            <Sokefelt
+              etikett={`Kunde for faktura ${nr}`}
+              valg={kundevalg}
+              verdi={k.kunde_id || null}
+              velg={(id) => endreKort(k.nokkel, { kunde_id: id ?? "" })}
+              plassholder="Søk kunde"
+              ny={{ tekst: "+ Ny kunde", handling: (navn) => settValg({ type: "ny-kunde", kort: k.nokkel, navn }) }}
+            />
             <button type="button" className="lenke" aria-label={`Fjern faktura ${nr}`} title="Fjern" onClick={() => fjernKort(k.nokkel)}>
               ✕
             </button>
@@ -250,7 +247,7 @@ export function FlereFakturaer() {
               endre={(l) => endreKort(k.nokkel, { linjer: l })}
               produkter={produkter.data!}
               utenMva={utenMva}
-              nyttProdukt={(i) => settValg({ type: "nytt-produkt", kort: k.nokkel, linje: i })}
+              nyttProdukt={(i, navn) => settValg({ type: "nytt-produkt", kort: k.nokkel, linje: i, navn })}
             />
           </div>
           <div className="flere-bunn">
@@ -320,12 +317,12 @@ export function FlereFakturaer() {
             produktPaAlle(p, antall);
             settValg(null);
           }}
-          nytt={(antall) => settValg({ type: "nytt-produkt", kort: "alle", linje: "ny", antall })}
+          nytt={(antall, navn) => settValg({ type: "nytt-produkt", kort: "alle", linje: "ny", antall, navn })}
         />
       </Dialog>
       <Dialog apen={valg?.type === "ny-kunde"} lukk={() => settValg(null)} tittel="Ny kunde">
         <KundeSkjema
-          kunde={{ type: "firma", aktiv: true }}
+          kunde={{ type: "firma", aktiv: true, navn: valg?.type === "ny-kunde" ? (valg.navn ?? "") : "" }}
           lagret={async (ny) => {
             const v = valg;
             settValg(null);
@@ -337,7 +334,7 @@ export function FlereFakturaer() {
       </Dialog>
       <Dialog apen={valg?.type === "nytt-produkt"} lukk={() => settValg(null)} tittel="Nytt produkt">
         <ProduktSkjema
-          produkt={{ enhet: "stk", mva_sats: utenMva ? 0 : 25, aktiv: true }}
+          produkt={{ enhet: "stk", mva_sats: utenMva ? 0 : 25, aktiv: true, navn: valg?.type === "nytt-produkt" ? (valg.navn ?? "") : "" }}
           lagret={(p) => {
             const v = valg;
             settValg(null);
@@ -413,23 +410,16 @@ function VelgKunder({ kunder, brukte, legg }: { kunder: any[]; brukte: Set<strin
 }
 
 // Legg samme produkt på alle fakturaene (prisen kan endres på hver etterpå).
-function ProduktPaAlle({ produkter, antallKort, bruk, nytt }: { produkter: any[]; antallKort: number; bruk: (p: any, antall: string) => void; nytt: (antall: string) => void }) {
-  const [id, settId] = useState("");
+function ProduktPaAlle({ produkter, antallKort, bruk, nytt }: { produkter: any[]; antallKort: number; bruk: (p: any, antall: string) => void; nytt: (antall: string, navn: string) => void }) {
+  const [id, settId] = useState<string | null>(null);
   const [antall, settAntall] = useState("1");
+  const valg = useMemo(() => produktValg(produkter), [produkter]);
   return (
     <>
       <div className="rad">
         <label className="hel">
           Produkt
-          <select value={id} onChange={(e) => (e.target.value === "__ny" ? nytt(antall) : settId(e.target.value))}>
-            <option value="">Velg produkt</option>
-            {produkter.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.navn} ({kr(p.enhetspris)})
-              </option>
-            ))}
-            <option value="__ny">+ Nytt produkt …</option>
-          </select>
+          <Sokefelt etikett="Produkt" valg={valg} verdi={id} velg={settId} plassholder="Søk produkt" ny={{ tekst: "+ Nytt produkt", handling: (navn) => nytt(antall, navn) }} />
         </label>
         <label>
           Antall

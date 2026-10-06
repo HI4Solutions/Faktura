@@ -1,6 +1,8 @@
 // Fakturalinjer i skjemaene: én faktura og mange fakturaer på én gang.
+import { useMemo } from "react";
 import { tall } from "./felles";
 import { kr, summer } from "./format";
+import { produktValg, Sokefelt } from "./sokefelt";
 
 export interface LinjeUtkast {
   produkt_id: string | null;
@@ -51,12 +53,12 @@ export function LinjeTabell({ linjer, endre, produkter, utenMva, nyttProdukt }: 
   endre: (linjer: LinjeUtkast[]) => void;
   produkter: any[];
   utenMva: boolean;
-  nyttProdukt?: (linje: number) => void;
+  nyttProdukt?: (linje: number, navn: string) => void;
 }) {
   const settLinje = (i: number, endring: Partial<LinjeUtkast>) => endre(linjer.map((l, j) => (j === i ? { ...l, ...endring } : l)));
-  const velgProdukt = (i: number, id: string) => {
-    if (id === "__ny") return nyttProdukt?.(i);
-    const p = produkter.find((x) => x.id === id);
+  const valg = useMemo(() => produktValg(produkter), [produkter]);
+  const velgProdukt = (i: number, id: string | null) => {
+    const p = id ? produkter.find((x) => x.id === id) : null;
     settLinje(i, p ? fraProdukt(p) : { produkt_id: null });
   };
 
@@ -64,7 +66,7 @@ export function LinjeTabell({ linjer, endre, produkter, utenMva, nyttProdukt }: 
     <table className="stabel">
       <thead>
         <tr>
-          <th style={{ width: "16%" }}>Produkt</th>
+          <th style={{ width: "20%" }}>Produkt</th>
           <th>Beskrivelse</th>
           <th style={{ width: 90 }}>Antall</th>
           <th style={{ width: 80 }}>Enhet</th>
@@ -82,15 +84,15 @@ export function LinjeTabell({ linjer, endre, produkter, utenMva, nyttProdukt }: 
           return (
             <tr key={i}>
               <td className="hel" data-label="Produkt">
-                <select value={l.produkt_id ?? ""} onChange={(e) => velgProdukt(i, e.target.value)}>
-                  <option value="">Fritekst</option>
-                  {produkter.map((p: any) => (
-                    <option key={p.id} value={p.id}>
-                      {p.navn}
-                    </option>
-                  ))}
-                  {nyttProdukt && <option value="__ny">+ Nytt produkt …</option>}
-                </select>
+                <Sokefelt
+                  etikett={`Produkt på linje ${i + 1}`}
+                  valg={valg}
+                  verdi={l.produkt_id}
+                  velg={(id) => velgProdukt(i, id)}
+                  tom="Fritekst"
+                  plassholder="Søk produkt"
+                  ny={nyttProdukt ? { tekst: "+ Nytt produkt", handling: (navn) => nyttProdukt(i, navn) } : undefined}
+                />
               </td>
               <td className="hel" data-label="Beskrivelse">
                 <input value={l.beskrivelse} onChange={(e) => settLinje(i, { beskrivelse: e.target.value })} />
