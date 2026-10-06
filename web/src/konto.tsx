@@ -5,7 +5,7 @@ import { hent } from "./api";
 
 export interface MinOrg {
   id: string;
-  type: "foretak" | "regnskapsbyraa";
+  type: "foretak" | "regnskapsbyraa" | "privatperson";
   navn: string;
   orgnr: string | null;
   verifisering: string;

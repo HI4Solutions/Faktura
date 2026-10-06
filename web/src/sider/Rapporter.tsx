@@ -16,7 +16,7 @@ export function Rapporter() {
   return (
     <>
       <h1>Rapporter</h1>
-      <div className="knapper" style={{ marginBottom: 16 }}>
+      <div className="faner" role="tablist">
         {(
           [
             ["reskontro", "Kundereskontro"],
@@ -25,7 +25,7 @@ export function Rapporter() {
             ["eksport", "Eksport"],
           ] as const
         ).map(([v, t]) => (
-          <button key={v} className={fane === v ? "primar" : ""} onClick={() => settFane(v)}>
+          <button key={v} className={fane === v ? "valgt" : ""} onClick={() => settFane(v)}>
             {t}
           </button>
         ))}

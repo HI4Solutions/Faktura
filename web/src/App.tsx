@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { updateProfile } from "firebase/auth";
 import { hentAuth } from "./firebase";
-import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster } from "./felles";
 import { KontoProvider, useKonto } from "./konto";
@@ -16,6 +16,19 @@ import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
 import { Rapporter } from "./sider/Rapporter";
 import { Logo } from "./Logo";
+import {
+  IkonFaktura, IkonGjenta, IkonInnstillinger, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
+} from "./ikoner";
+
+const initialer = (navn: string) =>
+  navn
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((d) => d[0]!.toUpperCase())
+    .join("");
+
+const orgType: Record<string, string> = { foretak: "Foretak", regnskapsbyraa: "Regnskapsbyrå", privatperson: "Privatperson" };
 
 function Invitasjon() {
   const { token } = useParams();
@@ -74,6 +87,9 @@ function OppgiNavn() {
 function Ramme() {
   const { meg, org, velgOrg, loggUt } = useKonto();
   const [ny, settNy] = useState(false);
+  const [menyApen, settMenyApen] = useState(false);
+  const sted = useLocation();
+  useEffect(() => settMenyApen(false), [sted.pathname]);
   const orgs = meg?.organisasjoner ?? [];
 
   if (ny || orgs.length === 0) {
@@ -91,40 +107,94 @@ function Ramme() {
 
   return (
     <div className="ramme">
-      <nav className="meny">
-        <div className="logo"><Logo /></div>
-        <select
-          value={org?.id}
-          onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))}
-          style={{ marginBottom: 12 }}
-          aria-label="Organisasjon"
-        >
-          {orgs.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.navn}
-              {o.direkte_medlem ? "" : " (klient)"}
-            </option>
-          ))}
-          <option value="__ny">+ Ny organisasjon</option>
-        </select>
+      <header className="mobiltopp">
+        <Logo storrelse={28} />
+        <button className="ikon" aria-label="Meny" onClick={() => settMenyApen(true)}>
+          <IkonMeny />
+        </button>
+      </header>
+      <div className={`meny-skygge${menyApen ? " apen" : ""}`} onClick={() => settMenyApen(false)} />
+      <nav className={`meny${menyApen ? " apen" : ""}`}>
+        <div className="logo">
+          <Logo />
+        </div>
+        <div className="orgvelger">
+          <span className="avatar">{initialer(org?.navn ?? "?")}</span>
+          <div style={{ minWidth: 0 }}>
+            <div className="navn">{org?.navn}</div>
+            <div className="type">
+              {org ? orgType[org.type] ?? org.type : ""}
+              {org && !org.direkte_medlem ? " · klient" : ""}
+            </div>
+          </div>
+          <span className="pil">
+            <IkonVelg storrelse={16} />
+          </span>
+          <select value={org?.id} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.navn}
+                {o.direkte_medlem ? "" : " (klient)"}
+              </option>
+            ))}
+            <option value="__ny">+ Ny organisasjon</option>
+          </select>
+        </div>
+        <div className="meny-seksjon">Meny</div>
         <NavLink to="/" end>
+          <IkonOversikt />
           {org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}
         </NavLink>
         {org?.type !== "regnskapsbyraa" && (
           <>
-            <NavLink to="/fakturaer">Fakturaer</NavLink>
-            <NavLink to="/gjentakende">Gjentakende</NavLink>
-            <NavLink to="/kunder">Kunder</NavLink>
-            <NavLink to="/produkter">Produkter</NavLink>
-            <NavLink to="/rapporter">Rapporter</NavLink>
+            <NavLink to="/fakturaer">
+              <IkonFaktura />
+              Fakturaer
+            </NavLink>
+            <NavLink to="/gjentakende">
+              <IkonGjenta />
+              Gjentakende
+            </NavLink>
+            <NavLink to="/kunder">
+              <IkonKunder />
+              Kunder
+            </NavLink>
+            <NavLink to="/produkter">
+              <IkonProdukter />
+              Produkter
+            </NavLink>
+            <NavLink to="/rapporter">
+              <IkonRapport />
+              Rapporter
+            </NavLink>
           </>
         )}
-        <NavLink to="/innstillinger">Innstillinger</NavLink>
-        {org?.verifisering === "ny" && org.direkte_medlem && <NavLink to="/verifisering">Verifiser organisasjon</NavLink>}
-        {meg?.plattformadmin && <NavLink to="/admin">Administrasjon</NavLink>}
+        <div className="meny-seksjon">Konto</div>
+        <NavLink to="/innstillinger">
+          <IkonInnstillinger />
+          Innstillinger
+        </NavLink>
+        {org?.verifisering === "ny" && org.direkte_medlem && (
+          <NavLink to="/verifisering">
+            <IkonSkjold />
+            Verifiser organisasjon
+          </NavLink>
+        )}
+        {meg?.plattformadmin && (
+          <NavLink to="/admin">
+            <IkonNokkel />
+            Administrasjon
+          </NavLink>
+        )}
         <div className="bunn">
-          <span className="liten dempet">{meg?.bruker.epost}</span>
-          <button onClick={loggUt}>Logg ut</button>
+          <span className="avatar rund">{initialer(meg?.bruker.navn ?? meg?.bruker.epost ?? "?")}</span>
+          <div className="hvem">
+            <div>{meg?.bruker.navn}</div>
+            <span>{meg?.bruker.epost}</span>
+          </div>
+          <button className="ikon" onClick={loggUt} title="Logg ut" aria-label="Logg ut">
+            <IkonLoggUt />
+          </button>
         </div>
       </nav>
       <main className="innhold">

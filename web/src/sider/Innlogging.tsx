@@ -13,6 +13,35 @@ import {
 import { hentAuth } from "../firebase";
 import { Feil } from "../felles";
 import { Logo } from "../Logo";
+import { IkonHake } from "../ikoner";
+
+// Venstre side av innloggingen: hva tjenesten gjør.
+function Merkevarepanel() {
+  return (
+    <aside className="inngang-merke">
+      <Logo storrelse={40} />
+      <div>
+        <h2>Fakturering som bare fungerer.</h2>
+        <p>Send fakturaer, følg opp betalinger og gi regnskapsføreren tilgang, alt på ett sted.</p>
+        <ul className="fordeler">
+          <li>
+            <IkonHake /> PDF-faktura med KID og logo, sendt på e-post med sporing
+          </li>
+          <li>
+            <IkonHake /> Gjentakende fakturaer, purring og indeksregulering etter KPI
+          </li>
+          <li>
+            <IkonHake /> Kreditnota, delbetaling og refusjon med full revisjonslogg
+          </li>
+          <li>
+            <IkonHake /> Passkey og totrinnsinnlogging, data lagret i EU
+          </li>
+        </ul>
+      </div>
+      <div className="bunntekst">© {new Date().getFullYear()} HI4 Solutions</div>
+    </aside>
+  );
+}
 import { erAvbrutt, loggInnMedPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
 const feiltekst: Record<string, string> = {
@@ -86,15 +115,27 @@ export function Innlogging() {
     }
   }
 
+  const tittel = resolver ? "Bekreft innloggingen" : modus === "ny" ? "Lag en konto" : modus === "glemt" ? "Glemt passord" : "Velkommen tilbake";
+  const undertekst = resolver
+    ? "Skriv inn koden fra autentiseringsappen din."
+    : modus === "ny"
+      ? "Kom i gang på et par minutter."
+      : modus === "glemt"
+        ? "Vi sender deg en lenke for å lage nytt passord."
+        : "Logg inn for å fortsette.";
+
   return (
-    <div className="sentrert">
-      <form className="kort" onSubmit={send}>
-        <h1 className="logo-stor">
-          <Logo storrelse={44} />
-        </h1>
+    <div className="inngang">
+      <Merkevarepanel />
+      <div className="inngang-skjema">
+      <form onSubmit={send}>
+        <div className="kun-mobil">
+          <Logo storrelse={40} />
+        </div>
+        <h1>{tittel}</h1>
+        <p className="dempet" style={{ marginBottom: 22 }}>{undertekst}</p>
         {resolver ? (
           <>
-            <p>Skriv inn koden fra autentiseringsappen din.</p>
             <label>
               Kode
               <input inputMode="numeric" autoComplete="one-time-code" autoFocus value={kode} onChange={(e) => settKode(e.target.value)} />
@@ -102,7 +143,6 @@ export function Innlogging() {
           </>
         ) : (
           <>
-            <p className="dempet">{modus === "ny" ? "Lag en konto" : modus === "glemt" ? "Glemt passord" : "Logg inn"}</p>
             {modus === "ny" && (
               <label>
                 Fullt navn
@@ -136,14 +176,21 @@ export function Innlogging() {
           </button>
         </div>
         {!resolver && modus === "inn" && stotterPasskey() && (
-          <div className="knapper" style={{ marginTop: 12 }}>
-            <button type="button" onClick={passkey} disabled={opptatt} style={{ width: "100%", justifyContent: "center" }}>
+          <>
+            <div className="skille">eller</div>
+            <button type="button" onClick={passkey} disabled={opptatt} style={{ width: "100%", justifyContent: "center", padding: "10px 16px" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="9" cy="8" r="4" />
+                <path d="M2.5 20a6.5 6.5 0 0 1 10.6-5" />
+                <circle cx="18" cy="15" r="2.5" />
+                <path d="M18 17.5V22M18 20h2" />
+              </svg>
               Logg inn med passkey
             </button>
-          </div>
+          </>
         )}
         {!resolver && (
-          <p className="liten" style={{ marginTop: 16 }}>
+          <p className="liten" style={{ marginTop: 20, textAlign: "center" }}>
             {modus !== "inn" && (
               <button type="button" className="lenke" onClick={() => settModus("inn")}>
                 Har du konto? Logg inn
@@ -163,6 +210,7 @@ export function Innlogging() {
           </p>
         )}
       </form>
+      </div>
     </div>
   );
 }

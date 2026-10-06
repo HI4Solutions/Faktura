@@ -21,7 +21,7 @@ export function Admin() {
   return (
     <>
       <h1>Administrasjon</h1>
-      <div className="knapper" style={{ marginBottom: 12 }}>
+      <div className="faner" role="tablist">
         {(
           [
             ["venter", `Venter på godkjenning (${data.filter((o) => o.venter_manuell).length})`],
@@ -31,7 +31,7 @@ export function Admin() {
             ["brukere", "Brukere"],
           ] as const
         ).map(([v, t]) => (
-          <button key={v} className={filter === v ? "primar" : ""} onClick={() => settFilter(v)}>
+          <button key={v} className={filter === v ? "valgt" : ""} onClick={() => settFilter(v)}>
             {t}
           </button>
         ))}

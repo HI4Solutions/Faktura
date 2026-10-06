@@ -6,6 +6,7 @@ import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
 import { KundeSkjema } from "./Register";
 import { AvsenderKonto } from "./AvsenderKonto";
+import { IkonPluss } from "../ikoner";
 
 // ---------------------------------------------------------------------------
 // Liste
@@ -22,12 +23,12 @@ export function Fakturaliste() {
       <div className="topp">
         <h1>Fakturaer</h1>
         {kanSkrive(org?.rolle) && (
-          <Link className="knapp" to="/fakturaer/ny" style={{ background: "var(--aksent)", color: "var(--aksent-tekst)", borderColor: "var(--aksent)" }}>
-            Ny faktura
+          <Link className="knapp primar" to="/fakturaer/ny">
+            <IkonPluss storrelse={16} /> Ny faktura
           </Link>
         )}
       </div>
-      <div className="knapper" style={{ marginBottom: 12 }}>
+      <div className="faner" role="tablist">
         {[
           ["", "Alle"],
           ["utkast", "Utkast"],
@@ -35,7 +36,7 @@ export function Fakturaliste() {
           ["betalt", "Betalt"],
           ["kreditert", "Kreditert"],
         ].map(([v, t]) => (
-          <button key={v} className={status === v ? "primar" : ""} onClick={() => settStatus(v)}>
+          <button key={v} role="tab" aria-selected={status === v} className={status === v ? "valgt" : ""} onClick={() => settStatus(v)}>
             {t}
           </button>
         ))}
