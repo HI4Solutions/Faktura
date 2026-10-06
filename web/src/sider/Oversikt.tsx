@@ -201,7 +201,11 @@ export function Oversikt() {
         </Link>
       </div>
       {data.length ? (
-        <Fakturatabell rader={data.slice(0, 8)} klikk={(id) => nav(`/fakturaer/${id}`)} />
+        <Fakturatabell
+          rader={data.slice(0, 8)}
+          klikk={(id) => nav(`/fakturaer/${id}`)}
+          kopier={kanSkrive(org?.rolle) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined}
+        />
       ) : (
         <div className="kort">
           <Tom ikon={<IkonFaktura />} tittel="Ingen fakturaer ennå">

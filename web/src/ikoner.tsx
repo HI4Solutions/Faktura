@@ -169,3 +169,9 @@ export const IkonMaane = (p: P) => (
     <path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" />
   </Ikon>
 );
+export const IkonKopier = (p: P) => (
+  <Ikon {...p}>
+    <rect x="8.5" y="8.5" width="12" height="12" rx="2.2" />
+    <path d="M15.5 8.5V5.7a2.2 2.2 0 0 0-2.2-2.2H5.7a2.2 2.2 0 0 0-2.2 2.2v7.6a2.2 2.2 0 0 0 2.2 2.2h2.8" />
+  </Ikon>
+);

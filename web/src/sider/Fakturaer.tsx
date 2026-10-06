@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apnePdf, hent, lastNed, type Vedlegg } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
@@ -6,7 +6,7 @@ import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dagerMellom, dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, orgnr, summer } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
-import { IkonBinders, IkonPluss } from "../ikoner";
+import { IkonBinders, IkonKopier, IkonPluss } from "../ikoner";
 import { gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { kundeValg, Sokefelt } from "../sokefelt";
 import { VedleggFelt, VedleggListe } from "../vedlegg";
@@ -72,7 +72,11 @@ export function Fakturaliste() {
         </div>
       )}
       <Feil melding={feil} />
-      {laster && !data ? <Laster /> : <Fakturatabell rader={data ?? []} klikk={(id) => nav(`/fakturaer/${id}`)} />}
+      {laster && !data ? (
+        <Laster />
+      ) : (
+        <Fakturatabell rader={data ?? []} klikk={(id) => nav(`/fakturaer/${id}`)} kopier={kanSkrive(org?.rolle) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined} />
+      )}
       <Dialog apen={sendUtkast} lukk={() => settSendUtkast(false)} tittel="Send utkast">
         <SendUtkast
           utkast={utkast}
@@ -173,15 +177,32 @@ function SendUtkast({ utkast, ferdig }: { utkast: any[]; ferdig: () => void }) {
   );
 }
 
-export function Fakturatabell({ rader, klikk }: { rader: any[]; klikk: (id: string) => void }) {
+// Med `kopier` får hver faktura (ikke kreditnotaer) en knapp som lager en ny faktura med samme
+// innhold, med ett trykk.
+export function Fakturatabell({ rader, klikk, kopier }: { rader: any[]; klikk: (id: string) => void; kopier?: (id: string) => void }) {
   const smal = useSmal();
+  const kopiKnapp = (f: any) =>
+    kopier && f.type === "faktura" ? (
+      <button
+        type="button"
+        className="kopier"
+        title="Kopier til ny faktura"
+        aria-label={`Kopier ${f.fakturanummer ? `faktura ${f.fakturanummer}` : "utkastet"} til ny faktura`}
+        onClick={(e) => {
+          e.stopPropagation();
+          kopier(f.id);
+        }}
+      >
+        <IkonKopier storrelse={18} />
+      </button>
+    ) : null;
   if (smal) {
     return (
       <div className="kort liste">
         {rader.map((f) => {
           const m = fakturaMerke(f);
-          return (
-            <button key={f.id} type="button" className="liste-rad" onClick={() => klikk(f.id)}>
+          const rad = (
+            <button type="button" className="liste-rad" onClick={() => klikk(f.id)}>
               <span className="linje">
                 <span className="tittel">
                   {f.kunde_navn}
@@ -197,6 +218,15 @@ export function Fakturatabell({ rader, klikk }: { rader: any[]; klikk: (id: stri
                 <span className={`merke ${m.klasse}`}>{m.tekst}</span>
               </span>
             </button>
+          );
+          // Knappen ligger ved siden av raden (ikke inni), og kreditnotaer får en tom plass så beløpene står likt.
+          return kopier ? (
+            <div key={f.id} className="liste-rad-ramme">
+              {rad}
+              {kopiKnapp(f) ?? <span className="kopier" aria-hidden="true" />}
+            </div>
+          ) : (
+            <Fragment key={f.id}>{rad}</Fragment>
           );
         })}
         {rader.length === 0 && <p className="dempet" style={{ padding: "16px" }}>Ingen fakturaer her.</p>}
@@ -214,6 +244,7 @@ export function Fakturatabell({ rader, klikk }: { rader: any[]; klikk: (id: stri
             <th>Forfall</th>
             <th className="hoyre">Beløp</th>
             <th>Status</th>
+            {kopier && <th className="kopier-celle" aria-label="Kopier" />}
           </tr>
         </thead>
         <tbody>
@@ -232,12 +263,13 @@ export function Fakturatabell({ rader, klikk }: { rader: any[]; klikk: (id: stri
                 <td>
                   <span className={`merke ${m.klasse}`}>{m.tekst}</span>
                 </td>
+                {kopier && <td className="kopier-celle">{kopiKnapp(f)}</td>}
               </tr>
             );
           })}
           {rader.length === 0 && (
             <tr>
-              <td colSpan={6} className="dempet">
+              <td colSpan={kopier ? 7 : 6} className="dempet">
                 Ingen fakturaer her.
               </td>
             </tr>
