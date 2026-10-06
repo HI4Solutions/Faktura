@@ -15,6 +15,8 @@ import { rapportRuter } from "./rapporter.js";
 import { resendWebhook } from "./resendWebhook.js";
 import { diskRuter, googleCallback } from "./googleDisk.js";
 import { pushRuter } from "./push.js";
+import { ehfFilnavn, ehfHindring, lagEhf } from "./ehf.js";
+import { sjekkEhf } from "./peppol.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -366,6 +368,15 @@ export function lagApi() {
   });
 
   // --- Kunder og produkter -----------------------------------------------
+  // Kan kunden motta EHF? Sjekkes i PEPPOL når kunden lagres med org.nr. Feiler oppslaget,
+  // står svaret som før (workeren prøver igjen).
+  const medEhf = async (c: Context, k: any) => {
+    if (!k?.orgnr || (k.land && k.land !== "NO")) return k;
+    const ja = await sjekkEhf(k.orgnr);
+    if (ja === null) return k;
+    return (await bruk(c, (db) => en(db, "update faktura.kunder set ehf = $2, ehf_sjekket = now() where id = $1 returning *", [k.id, ja]))) ?? k;
+  };
+
   for (const [sti, tabell, skjema, sorter] of [
     ["kunder", "kunder", kundeSkjema, "navn"],
     ["produkter", "produkter", produktSkjema, "navn"],
@@ -402,7 +413,7 @@ export function lagApi() {
           [orgId(c), ...felter.map((k) => b[k])],
         ),
       );
-      return c.json(r, 201);
+      return c.json(tabell === "kunder" ? await medEhf(c, r) : r, 201);
     });
 
     org.patch(`/${sti}/:id`, async (c) => {
@@ -413,7 +424,7 @@ export function lagApi() {
         en(db, `update faktura.${tabell} set ${s.sql} where id = $1 and org_id = $2 returning *`, [uuid.parse(c.req.param("id")), orgId(c), ...s.verdier]),
       );
       if (!r) throw new ApiFeil(404, "Finnes ikke");
-      return c.json(r);
+      return c.json(tabell === "kunder" && b.orgnr !== undefined ? await medEhf(c, r) : r);
     });
 
     // Bare kunder og produkter som ikke er brukt, kan slettes; ellers settes de inaktive.
@@ -580,6 +591,35 @@ export function lagApi() {
       return hentFaktura(db, orgId(c), id);
     });
     return c.json(f);
+  });
+
+  // Sjekk på nytt om kunden kan motta EHF.
+  org.post("/kunder/:id/ehf", async (c) => {
+    const k = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'skriv')", [orgId(c)]);
+      return en(db, "select * from faktura.kunder where id = $1 and org_id = $2", [uuid.parse(c.req.param("id")), orgId(c)]);
+    });
+    if (!k) throw new ApiFeil(404, "Finnes ikke");
+    if (!k.orgnr) throw new ApiFeil(400, "Kunden har ikke organisasjonsnummer. EHF krever org.nr.");
+    const ny = await medEhf(c, k);
+    if (ny === k) throw new ApiFeil(503, "Fikk ikke svar fra EHF-registeret. Prøv igjen om litt.");
+    return c.json(ny);
+  });
+
+  // EHF-filen (UBL etter PEPPOL BIS Billing 3.0) for en utstedt faktura, med PDF-en vedlagt.
+  org.get("/fakturaer/:id/ehf", async (c) => {
+    const id = uuid.parse(c.req.param("id"));
+    const { xml, navn } = await bruk(c, async (db) => {
+      const f = await hentFaktura(db, orgId(c), id);
+      const hindring = ehfHindring(f);
+      if (hindring) throw new ApiFeil(409, hindring);
+      const { data } = await sikrePdf(db, f);
+      const kreditert = f.kreditnota_for
+        ? await en(db, "select fakturanummer as nummer, fakturadato as dato from faktura.fakturaer where id = $1", [f.kreditnota_for])
+        : null;
+      return { xml: lagEhf(f, { pdf: { filnavn: pdfFilnavn(f), data }, kreditertFaktura: kreditert ?? undefined }), navn: ehfFilnavn(f) };
+    });
+    return c.body(xml, 200, { "content-type": "application/xml; charset=utf-8", "content-disposition": `attachment; filename="${navn}"` });
   });
 
   // --- Mange fakturaer på én gang ------------------------------------------

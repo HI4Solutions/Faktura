@@ -8,6 +8,7 @@ import { kjorIndeksregulering } from "./indeksregulering.js";
 import { kopierTilDisk, slettFraDisk, synkOrganisasjon } from "./googleDisk.js";
 import { sendVarsel } from "./push.js";
 import { varsleForfalte, varsleGjentakende, varsleOmHendelse } from "./varsler.js";
+import { sjekkEhf } from "./peppol.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -208,8 +209,44 @@ export async function gjenta() {
     logg("ERROR", "Push-varsler fra daglig jobb feilet", { feil: (e as Error).message });
   }
 
+  // EHF: hvilke kunder som kan motta EHF, endres sjelden, men kan endres når som helst.
+  try {
+    await oppdaterEhf();
+  } catch (e) {
+    logg("ERROR", "EHF-oppslag feilet", { feil: (e as Error).message });
+  }
+
   logg(resultat.some((r) => !r.ok) ? "WARNING" : "INFO", "Gjentakelser kjørt", { antall: resultat.length, feil: resultat.filter((r) => !r.ok) });
   return resultat;
+}
+
+// Sjekker kunder med org.nr. som ikke er sjekket på 30 dager (de eldste først), fem om gangen.
+// Samme org.nr. hos flere organisasjoner slås opp én gang.
+export async function oppdaterEhf(maks = 300) {
+  const kunder = await somSystem((db) =>
+    alle<{ id: string; orgnr: string }>(
+      db,
+      `select id, orgnr from faktura.kunder
+        where orgnr is not null and land = 'NO' and aktiv
+          and (ehf_sjekket is null or ehf_sjekket < now() - interval '30 days')
+        order by ehf_sjekket nulls first limit $1`,
+      [maks],
+    ),
+  );
+  const svar = new Map<string, Promise<boolean | null>>();
+  let oppdatert = 0;
+  for (let i = 0; i < kunder.length; i += 5) {
+    await Promise.all(
+      kunder.slice(i, i + 5).map(async (k) => {
+        if (!svar.has(k.orgnr)) svar.set(k.orgnr, sjekkEhf(k.orgnr));
+        const ja = await svar.get(k.orgnr)!;
+        if (ja === null) return;
+        await somSystem((db) => db.query("update faktura.kunder set ehf = $2, ehf_sjekket = now() where id = $1", [k.id, ja]));
+        oppdatert++;
+      }),
+    );
+  }
+  return { sjekket: kunder.length, oppdatert };
 }
 
 // Hvert minutt: publiser utboksen til Pub/Sub. «skip locked» gjør at to samtidige

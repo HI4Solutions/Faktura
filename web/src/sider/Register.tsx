@@ -36,7 +36,10 @@ export function Kunder() {
               </span>
               <span className="linje">
                 <span className="under">{k.epost ?? k.telefon ?? (k.orgnr ? `Org.nr. ${orgnr(k.orgnr)}` : "")}</span>
-                {!k.epost ? <span className="merke merke-advarsel">Mangler e-post</span> : !k.aktiv && <span className="merke merke-noytral">Inaktiv</span>}
+                <span>
+                  {k.ehf && <span className="merke merke-info">EHF</span>}
+                  {!k.epost ? <span className="merke merke-advarsel">Mangler e-post</span> : !k.aktiv && <span className="merke merke-noytral">Inaktiv</span>}
+                </span>
               </span>
             </button>
           ))}
@@ -61,7 +64,10 @@ export function Kunder() {
                   <td>{k.navn}</td>
                   <td>{orgnr(k.orgnr)}</td>
                   <td>{k.epost ?? <span className="merke merke-advarsel">Mangler e-post</span>}</td>
-                  <td>{!k.aktiv && <span className="merke merke-noytral">Inaktiv</span>}</td>
+                  <td>
+                    {k.ehf && <span className="merke merke-info" title="Kan motta EHF (elektronisk faktura)">EHF</span>}{" "}
+                    {!k.aktiv && <span className="merke merke-noytral">Inaktiv</span>}
+                  </td>
                 </tr>
               ))}
               {data?.length === 0 && (
@@ -134,10 +140,10 @@ export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; la
           </select>
         </label>
         {k.type === "firma" && (
-          <label>
+          <label className="hel">
             Org.nr.
-            <div className="knapper">
-              <input style={{ flex: 1 }} inputMode="numeric" {...felt("orgnr")} />
+            <div className="med-knapp">
+              <input inputMode="numeric" {...felt("orgnr")} />
               <button type="button" onClick={slaOpp} disabled={(k.orgnr ?? "").replace(/\s/g, "").length !== 9}>
                 Hent
               </button>
@@ -145,6 +151,7 @@ export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; la
           </label>
         )}
       </div>
+      {k.type === "firma" && <EhfStatus kunde={k} lagretOrgnr={kunde?.orgnr} oppdatert={(ny) => settK({ ...k, ehf: ny.ehf, ehf_sjekket: ny.ehf_sjekket })} />}
       <label>
         Navn
         <input required {...felt("navn")} />
@@ -210,6 +217,36 @@ export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; la
         )}
       </div>
     </form>
+  );
+}
+
+// Kan kunden motta EHF (elektronisk faktura)? Sjekkes i PEPPOL-registeret (ELMA) når
+// kunden lagres med org.nr., jevnlig, og når man ber om det her.
+function EhfStatus({ kunde: k, lagretOrgnr, oppdatert }: { kunde: any; lagretOrgnr?: string | null; oppdatert: (k: any) => void }) {
+  const { org } = useKonto();
+  const h = useHandling();
+  const nr = (k.orgnr ?? "").replace(/\s/g, "");
+  if (!/^\d{9}$/.test(nr)) return null;
+  if (!k.id || nr !== lagretOrgnr) return <p className="liten dempet ehf-status">Om kunden kan motta EHF (elektronisk faktura), sjekkes når kunden lagres.</p>;
+  const tekst =
+    k.ehf === true ? "Kan motta EHF (elektronisk faktura)." : k.ehf === false ? "Er ikke registrert for å motta EHF." : "Ikke sjekket om kunden kan motta EHF ennå.";
+  return (
+    <p className={`liten ehf-status${k.ehf ? " ja" : ""}`}>
+      {tekst}
+      {k.ehf_sjekket && <span className="dempet"> Sjekket {dato(k.ehf_sjekket)}.</span>}{" "}
+      <button
+        type="button"
+        className="lenke"
+        disabled={h.opptatt}
+        onClick={async () => {
+          const r = await h.kjor(() => api("POST", `/org/${org!.id}/kunder/${k.id}/ehf`));
+          if (r) oppdatert(r);
+        }}
+      >
+        {h.opptatt ? "Sjekker …" : "Sjekk nå"}
+      </button>
+      {h.feil && <span className="felt-feil">{h.feil}</span>}
+    </p>
   );
 }
 

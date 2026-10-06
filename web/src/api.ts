@@ -24,7 +24,7 @@ export async function api<T = any>(metode: string, sti: string, kropp?: unknown)
     const data = type.includes("json") ? await r.json().catch(() => ({})) : {};
     throw new ApiFeil(r.status, data.error ?? `Feil ${r.status}`);
   }
-  if (type.includes("application/pdf") || type.startsWith("image/") || type.startsWith("text/csv")) return (await r.blob()) as T;
+  if (type.includes("application/pdf") || type.includes("application/xml") || type.startsWith("image/") || type.startsWith("text/csv")) return (await r.blob()) as T;
   return r.json();
 }
 

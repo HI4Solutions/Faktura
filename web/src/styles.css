@@ -696,3 +696,9 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
   .flere-kort > .tabell table.stabel > tbody > tr > td:nth-child(n) { padding: 0; }
   .flere-verktoy > button { flex: 1 1 auto; justify-content: center; }
 }
+
+/* EHF-status på kunden */
+.ehf-status { margin: -6px 0 14px; color: var(--tekst-2); }
+.ehf-status.ja::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+.ehf-status button.lenke { font-size: inherit; padding: 0; min-height: 0; }
+.ehf-status .felt-feil { margin-top: 4px; }

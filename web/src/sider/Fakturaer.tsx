@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, apnePdf, hent } from "../api";
+import { api, apnePdf, hent, lastNed } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, epostStatus, fakturaMerke, iDag, kr, leggTilDager, summer } from "../format";
@@ -526,6 +526,11 @@ export function FakturaVisning() {
         </h1>
         <div className="knapper handlinger">
           <button onClick={() => h.kjor(() => apnePdf(org!.id, f.id))}>{f.status === "utkast" ? "Forhåndsvis PDF" : "PDF"}</button>
+          {f.status !== "utkast" && f.selger?.orgnr && f.kunde?.orgnr && (
+            <button title="Last ned fakturaen som EHF (elektronisk faktura)" onClick={() => h.kjor(() => lastNed(`/org/${org!.id}/fakturaer/${f.id}/ehf`, `${f.type === "kreditnota" ? "Kreditnota" : "Faktura"}-${f.fakturanummer}.xml`))}>
+              EHF
+            </button>
+          )}
           {f.status === "utkast" && kanSkrive(rolle) && (
             <>
               <button onClick={() => nav(`/fakturaer/${f.id}/endre`)}>Endre</button>

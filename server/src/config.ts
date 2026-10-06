@@ -43,6 +43,9 @@ export const config = {
   googlePickerNokkel: valgfri("GOOGLE_PICKER_NOKKEL"),
   googleProsjektnummer: valgfri("GOOGLE_PROSJEKTNUMMER"),
 
+  // Oppslag i PEPPOL (DNS og SMP) om kunder kan motta EHF. Slås av i testene.
+  ehfOppslag: valgfri("EHF_OPPSLAG") !== "av",
+
   // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
   adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
 
