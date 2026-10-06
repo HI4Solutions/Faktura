@@ -139,11 +139,13 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
   let org: string;
   let dnbId: string;
   let sbId: string;
+  let husleie: string;
   const fakturaer: Record<number, string> = {};
   const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
   const dnb = { name: "DNB", country: "NO", psu_types: ["business", "personal"], maximum_consent_validity: 15552000 };
   const storebrand = { name: "Storebrand Bank", country: "NO", psu_types: ["business", "personal"], maximum_consent_validity: 7776000 };
-  const dag = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
+  const dagerSiden = (n: number) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date(Date.now() - n * 86400_000));
+  const dag = dagerSiden(0);
 
   const api = async (m: string, sti: string, k?: unknown, hvem = eier) => {
     const r = await app.request(sti, { method: m, headers: { authorization: hvem, "content-type": "application/json", "user-agent": "Testleser/1.0", "x-forwarded-for": "203.0.113.9" }, body: k === undefined ? undefined : JSON.stringify(k) });
@@ -234,7 +236,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect((await kobling(dnbId))!.state).toBe(auth.kropp.state);
   });
 
-  it("fullfører etter BankID: velger kontoen med organisasjonens kontonummer", async () => {
+  it("fullfører etter BankID: viser bare kontoen som er lagt inn i HI4 Faktura", async () => {
     expect((await api("POST", `/api/org/${org}/bank/fullfor`, { code: "kode-1", state: `${org}.feil-tilstand` })).status).toBe(400);
     const state = (await kobling(dnbId))!.state;
     const r = await api("POST", `/api/org/${org}/bank/fullfor`, { code: "kode-1", state });
@@ -258,10 +260,10 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(s.tilkoblet).toBe(true);
     expect(s.koblinger[0]).toMatchObject({ id: dnbId, bank: "DNB", tilkoblet: true, status: "aktiv", gyldig_til: "2027-04-04T10:00:00.000Z", siste_feil: null, auth_url: null });
     expect(s.koblinger[0].fullfort).toBeTruthy();
-    expect(s.koblinger[0].kontoer).toEqual([
-      { uid: "k-drift", kontonr: "86011117947", navn: "Driftskonto", valgt: true },
-      { uid: "k-spare", kontonr: "15035656262", navn: "Sparekonto", valgt: false },
-    ]);
+    // Organisasjonens kontonummer er lagt inn; sparekontoen er ikke det, og vises ikke.
+    expect(s.koblinger[0].kontoer).toEqual([{ kontonr: "86011117947", navn: "Driftskonto" }]);
+    expect(s.koblinger[0].andre_kontoer).toBe(1);
+    expect(JSON.stringify(s)).not.toContain("15035656262");
     expect(ko.at(-1)).toMatchObject({ type: "bank-hent", org_id: org, kobling_id: dnbId });
   });
 
@@ -283,7 +285,9 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
             });
 
     expect(await hentInnbetalinger(org)).toEqual({ nye: 4, koblet: 1, forslag: 2 });
+    // Bare driftskontoen leses, de siste 60 dagene første gang.
     expect(kall.filter((k) => k.sti.startsWith("/accounts/")).every((k) => k.sti.startsWith("/accounts/k-drift/") && k.psu === null)).toBe(true);
+    expect(kall.find((k) => k.sti.startsWith("/accounts/k-drift/"))!.sti).toBe(`/accounts/k-drift/transactions?date_from=${dagerSiden(60)}`);
     const t = await transaksjoner();
     expect(t.map((x: any) => [x.ekstern_id, x.konto, x.status, x.faktura_id && Object.entries(fakturaer).find(([, id]) => id === x.faktura_id)![0], x.grunn])).toEqual([
       ["t4", "86011117947", "uavklart", null, null],
@@ -297,8 +301,12 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
 
     // Neste henting: ingenting nytt, og ingenting registreres to ganger.
     expect(await hentInnbetalinger(org)).toEqual({ nye: 0, koblet: 0, forslag: 0 });
+    // Neste henting fra kontoen starter fem dager tilbake: banker kan bokføre noen dager etter.
     const k = (await kobling(dnbId))!;
-    expect(k.hent_fra <= dag).toBe(true);
+    expect(k.kontoer.map((x: any) => [x.kontonr, x.hent_fra ?? null])).toEqual([
+      ["86011117947", dagerSiden(5)],
+      ["15035656262", null],
+    ]);
     expect(k.sist_hentet).toBeTruthy();
   });
 
@@ -356,25 +364,31 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     const state = (await kobling(sbId))!.state;
     expect((await api("POST", `/api/org/${org}/bank/fullfor`, { code: "kode-sb", state })).data).toEqual({ ok: true, kobling_id: sbId, forrige: null });
     svar["POST /sessions"] = () =>
-      json(200, { session_id: "s-sb", access: { valid_until: "2027-01-04T10:00:00Z" }, accounts: [{ uid: "k-husleie", account_id: { iban: "NO2895300000000" }, name: "Husleiekonto" }] });
+      json(200, { session_id: "s-sb", access: { valid_until: "2027-01-04T10:00:00Z" }, accounts: [{ uid: "k-husleie", account_id: { iban: "NO2895300000003" }, name: "Brukskonto" }] });
     await fullforBankOkt(org, sbId, "kode-sb");
     const s = await bankStatus();
     expect(s.koblinger.map((k: any) => [k.bank, k.status, k.tilkoblet])).toEqual([
       ["DNB", "aktiv", true],
       ["Storebrand Bank", "aktiv", true],
     ]);
-    // Ingen av kontoene har organisasjonens kontonummer: alle velges.
-    expect(s.koblinger[1].kontoer).toEqual([{ uid: "k-husleie", kontonr: "95300000000", navn: "Husleiekonto", valgt: true }]);
     expect(ko.at(-1)).toMatchObject({ type: "bank-hent", org_id: org, kobling_id: sbId });
-
-    // Husleien til Storebrand-kontoen betaler faktura 3.
+    // Husleiekontoen er ikke lagt inn i HI4 Faktura ennå: den vises ikke, og ingenting hentes.
+    expect(s.koblinger[1]).toMatchObject({ kontoer: [], andre_kontoer: 1 });
     svar["GET /accounts/:uid/transactions"] = (k) =>
       k.sti.startsWith("/accounts/k-husleie/") ? json(200, { transactions: [inn("sb1", 1000, "KARI HANSEN", "Husleie faktura 3")] }) : json(200, { transactions: [] });
+    const for0 = kall.length;
+    expect(await hentInnbetalinger(org, { koblingId: sbId })).toEqual({ nye: 0, koblet: 0, forslag: 0 });
+    expect(kall.length).toBe(for0);
+
+    // Lagt inn under Flere kontonumre: vises med navnet derfra og leses uten ny BankID, de
+    // siste 60 dagene. Husleien betaler faktura 3.
+    husleie = (await api("POST", `/api/org/${org}/kontoer`, { navn: "Husleiekonto", kontonr: "9530.00.00003" })).data.id;
+    expect(await banken(sbId)).toMatchObject({ kontoer: [{ kontonr: "95300000003", navn: "Husleiekonto" }], andre_kontoer: 0 });
     const for_ = kall.length;
     expect(await hentInnbetalinger(org, { koblingId: sbId })).toEqual({ nye: 1, koblet: 1, forslag: 0 });
-    expect(kall.slice(for_).map((k) => k.sti.split("?")[0])).toEqual(["/accounts/k-husleie/transactions"]);
+    expect(kall.slice(for_).map((k) => k.sti)).toEqual([`/accounts/k-husleie/transactions?date_from=${dagerSiden(60)}`]);
     expect(await status(3)).toBe("betalt");
-    expect((await transaksjoner()).find((x: any) => x.ekstern_id === "sb1")).toMatchObject({ konto: "95300000000", status: "koblet" });
+    expect((await transaksjoner()).find((x: any) => x.ekstern_id === "sb1")).toMatchObject({ konto: "95300000003", status: "koblet" });
 
     // Uten kobling_id hentes fra begge bankene.
     const for2 = kall.length;
@@ -401,15 +415,38 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     const o = ko.at(-1) as any;
     expect(o).toMatchObject({ type: "bank-hent", org_id: org, psu: { ip: "203.0.113.9", agent: "Testleser/1.0" } });
     expect(o.kobling_id).toBeUndefined();
+    // Kontoer fra før appen leste kontoene som er lagt inn (valgt, med koblingens dato)
+    // hentes fra koblingens dato.
+    await somSystem((db) =>
+      db.query(
+        `update faktura.bankkoblinger set hent_fra = '2026-09-20',
+                kontoer = '[{"uid": "k-drift", "kontonr": "86011117947", "navn": "Driftskonto", "valgt": true},
+                            {"uid": "k-spare", "kontonr": "15035656262", "navn": "Sparekonto", "valgt": false}]'
+          where id = $1`,
+        [dnbId],
+      ),
+    );
     const for_ = kall.length;
     await hentInnbetalinger(org, { psu: o.psu });
-    expect(kall.slice(for_).map((k) => k.psu)).toEqual(["203.0.113.9", "203.0.113.9"]);
+    expect(kall.slice(for_).map((k) => [k.sti, k.psu])).toEqual([
+      ["/accounts/k-drift/transactions?date_from=2026-09-20", "203.0.113.9"],
+      [`/accounts/k-husleie/transactions?date_from=${dagerSiden(5)}`, "203.0.113.9"],
+    ]);
+    expect((await kobling(dnbId))!.kontoer[0]).toMatchObject({ kontonr: "86011117947", hent_fra: dagerSiden(5) });
   });
 
   it("planlegger henting høyst hver sjette time per bank, og bare på dagtid", async () => {
-    await somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = '2026-01-01T00:00:00Z' where org_id = $1", [org]));
     const natt = new Date("2026-10-06T01:00:00Z"); // 03:00 i Oslo
     const middag = new Date("2026-10-06T10:00:00Z"); // 12:00 i Oslo
+    // En bank uten noen konto som er lagt inn i HI4 Faktura, har ingenting å hente.
+    expect((await api("DELETE", `/api/org/${org}/kontoer/${husleie}`)).status).toBe(204);
+    await somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = '2026-01-01T00:00:00Z' where org_id = $1", [org]));
+    const forst = ko.length;
+    await planleggBankhenting(middag);
+    expect(ko.slice(forst).filter((o: any) => o.type === "bank-hent" && o.org_id === org).map((o: any) => o.kobling_id)).toEqual([dnbId]);
+    husleie = (await api("POST", `/api/org/${org}/kontoer`, { navn: "Husleiekonto", kontonr: "95300000003" })).data.id;
+
+    await somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = '2026-01-01T00:00:00Z' where org_id = $1", [org]));
     const start = ko.length;
     expect(await planleggBankhenting(natt)).toBe(0);
     expect(await planleggBankhenting(middag)).toBeGreaterThanOrEqual(2);
@@ -468,15 +505,9 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(d.fullfort).not.toBe(forrige);
     // Uten utløpsdato fra banken: den som ble bedt om.
     expect(d.gyldig_til).toBe(new Date((await kobling(dnbId))!.auth_gyldig_til).toISOString());
-    expect(d.kontoer).toEqual([{ uid: "k-drift-2", kontonr: "86011117947", navn: "Driftskonto", valgt: true }]);
-  });
-
-  it("velger kontoer per bank", async () => {
-    expect((await api("PUT", `/api/org/${org}/bank/koblinger/${sbId}/kontoer`, { valgte: [] })).data.error).toBe("Velg minst én konto");
-    expect((await api("PUT", `/api/org/${org}/bank/koblinger/${sbId}/kontoer`, { valgte: ["k-husleie"] }, fremmed)).status).toBe(403);
-    const r = await api("PUT", `/api/org/${org}/bank/koblinger/${sbId}/kontoer`, { valgte: ["k-husleie"] });
-    expect(r.status).toBe(200);
-    expect(r.data.koblinger.find((k: any) => k.id === sbId).kontoer).toEqual([{ uid: "k-husleie", kontonr: "95300000000", navn: "Husleiekonto", valgt: true }]);
+    expect(d).toMatchObject({ kontoer: [{ kontonr: "86011117947", navn: "Driftskonto" }], andre_kontoer: 0 });
+    // Hvor langt kontoen er hentet, følger kontonummeret over i den nye økten.
+    expect((await kobling(dnbId))!.kontoer).toEqual([{ uid: "k-drift-2", kontonr: "86011117947", navn: "Driftskonto", hent_fra: dagerSiden(5) }]);
   });
 
   it("fjerner én bank: økten avsluttes, og den andre banken blir", async () => {

@@ -7,7 +7,7 @@ import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
 import { EhfSending } from "./Ehf";
-import { BankKobling } from "./Bank";
+import { BankKobling, kontoerEndret } from "./Bank";
 import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
@@ -170,6 +170,7 @@ function Organisasjon({ del }: { del: OrgDel }) {
       settLagret(true);
       last();
       oppdater();
+      if ("kontonr" in kropp) kontoerEndret();
     }
   }
 
@@ -737,6 +738,7 @@ function Kontoer() {
     if (r) {
       settNy({ navn: "", kontonr: "" });
       last();
+      kontoerEndret();
     }
   }
 
@@ -761,7 +763,7 @@ function Kontoer() {
                     disabled={h.opptatt}
                     onClick={() =>
                       confirm(`Fjerne ${k.navn}? Utkast og gjentakende fakturaer som bruker den, går over til standardkontoen.`) &&
-                      h.kjor(async () => (await api("DELETE", `/org/${org!.id}/kontoer/${k.id}`), true)).then(last)
+                      h.kjor(async () => (await api("DELETE", `/org/${org!.id}/kontoer/${k.id}`), true)).then(() => (last(), kontoerEndret()))
                     }
                   >
                     Fjern

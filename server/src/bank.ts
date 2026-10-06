@@ -1,5 +1,6 @@
-// Innbetalinger fra organisasjonens bankkontoer (Enable Banking). Workeren henter nye
-// transaksjoner noen ganger om dagen, lagrer innbetalingene og kobler dem til fakturaene:
+// Innbetalinger fra organisasjonens bankkontoer (Enable Banking): bare kontoene som er lagt
+// inn i HI4 Faktura. Workeren henter nye transaksjoner noen ganger om dagen, lagrer
+// innbetalingene og kobler dem til fakturaene:
 //
 //   KID, eller fakturanummeret i meldingen sammen med riktig beløp, riktig betaler eller
 //   ordet «faktura»/«nr»: registreres som betaling med en gang.
@@ -35,7 +36,9 @@ import { leggIKo } from "./tjenester.js";
 
 const logg = (severity: string, message: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ severity, message, ...data }));
 
-export type BankKontoValg = { uid: string; kontonr: string; navn: string | null; valgt: boolean };
+// En konto i banken. hent_fra: neste henting starter her. valgt: kontoen ble lest før appen
+// begynte å lese kontoene som er lagt inn i HI4 Faktura (da gjaldt koblingens hent_fra).
+export type BankKonto = { uid: string; kontonr: string; navn: string | null; hent_fra?: string; valgt?: boolean };
 export type Bankkobling = {
   id: string;
   org_id: string;
@@ -51,7 +54,7 @@ export type Bankkobling = {
   okt_id: string | null;
   gyldig_til: string | null;
   fullfort: string | null;
-  kontoer: BankKontoValg[];
+  kontoer: BankKonto[];
   hent_fra: string | null;
   sist_hentet: string | null;
   varslet_utlop: string | null;
@@ -75,6 +78,25 @@ export async function bankApp(db: Db, orgId: string): Promise<{ appId: string; n
   if (!k?.hemmelighet_kryptert || k.status === "frakoblet" || k.konfig?.leverandor !== "enablebanking" || !k.konfig.app_id) return null;
   return { appId: k.konfig.app_id, nokkel: { appId: k.konfig.app_id, privatNokkel: await dekrypter(k.hemmelighet_kryptert) } };
 }
+
+// Kontonumrene som er lagt inn i HI4 Faktura (organisasjonens kontonummer og Flere
+// kontonumre), med navnet brukeren har gitt kontoen. Bare disse kontoene i bankene leses.
+export async function egneKontoer(db: Db, orgId: string): Promise<Map<string, string | null>> {
+  const rader = await alle<{ kontonr: string; navn: string | null }>(
+    db,
+    `select kontonr, null::text as navn from faktura.organisasjoner where id = $1 and kontonr is not null
+     union all
+     select kontonr, navn from faktura.kontoer where org_id = $1`,
+    [orgId],
+  );
+  const egne = new Map<string, string | null>();
+  for (const r of rader) if (!egne.get(r.kontonr)) egne.set(r.kontonr, r.navn);
+  return egne;
+}
+
+// Hvor neste henting fra kontoen starter, eller null for de siste 60 dagene (en konto som
+// ikke er lest før).
+const hentesFra = (k: Bankkobling, x: BankKonto) => x.hent_fra ?? (x.valgt && k.hent_fra ? somDato(k.hent_fra)!.slice(0, 10) : null);
 
 const hentKobling = (db: Db, orgId: string, id: string) =>
   en<Bankkobling>(db, "select * from faktura.bankkoblinger where id = $1 and org_id = $2", [id, orgId]);
@@ -116,24 +138,21 @@ export async function lagBankAdresse(orgId: string, koblingId: string) {
   }
 }
 
-// Koden fra banken (etter BankID) byttes mot en økt med lesetilgang til kontoene.
-// Kontoene med organisasjonens kontonumre velges; finnes ingen av dem, velges alle.
+// Koden fra banken (etter BankID) byttes mot en økt med lesetilgang til kontoene. Alle
+// kontoene i økten lagres, men bare de som er lagt inn i HI4 Faktura leses (også de som
+// legges inn senere). Hvor langt hver konto er hentet, følger kontonummeret fra forrige økt.
 export async function fullforBankOkt(orgId: string, koblingId: string, kode: string) {
   const [app, k] = await somSystem(async (db) => [await bankApp(db, orgId), await hentKobling(db, orgId, koblingId)] as const);
   if (!app || !k) return;
   try {
     const okt = await opprettOkt(app.nokkel, kode);
-    const egne = await somSystem(async (db) => {
-      const o = await en(db, "select kontonr from faktura.organisasjoner where id = $1", [orgId]);
-      const ekstra = await alle<{ kontonr: string }>(db, "select kontonr from faktura.kontoer where org_id = $1", [orgId]);
-      return new Set([o?.kontonr, ...ekstra.map((x) => x.kontonr)].filter(Boolean) as string[]);
-    });
-    const tidligere = new Map((k.kontoer ?? []).map((x) => [x.kontonr, x.valgt]));
-    const kontoer: BankKontoValg[] = okt.accounts.map((a) => {
+    const tidligere = new Map((k.kontoer ?? []).map((x) => [x.kontonr, x]));
+    const kontoer: BankKonto[] = okt.accounts.map((a) => {
       const nr = kontonr(a);
-      return { uid: a.uid, kontonr: nr, navn: a.name ?? a.product ?? a.details ?? null, valgt: tidligere.get(nr) ?? egne.has(nr) };
+      const f = tidligere.get(nr);
+      const fra = f ? hentesFra(k, f) : null;
+      return { uid: a.uid, kontonr: nr, navn: a.name ?? a.product ?? a.details ?? null, ...(fra ? { hent_fra: fra } : {}) };
     });
-    if (!kontoer.some((x) => x.valgt)) kontoer.forEach((x) => (x.valgt = true));
     await oppdater(k.id, {
       status: "aktiv",
       okt_id: okt.session_id,
@@ -312,11 +331,26 @@ async function lagreOgKoble(orgId: string, kontonummer: string, t: Innbetaling, 
   );
 }
 
-// Henter nye innbetalinger fra de valgte kontoene i én eller alle bankene, og kobler dem
-// til fakturaene.
+// Neste henting fra kontoene starter her, uten å røre resten av koblingen: en fornyelse
+// kan ha byttet ut kontoene i mellomtiden.
+const merkHentet = (id: string, kontonr: string[], fra: string) =>
+  somSystem((db) =>
+    db.query(
+      `update faktura.bankkoblinger
+          set kontoer = (select coalesce(jsonb_agg(case when x ->> 'kontonr' = any($2::text[]) then x || jsonb_build_object('hent_fra', $3::text) else x end
+                                                   order by n), '[]')
+                           from jsonb_array_elements(kontoer) with ordinality as e(x, n)),
+              sist_hentet = now(), siste_feil = null
+        where id = $1`,
+      [id, kontonr, fra],
+    ),
+  );
+
+// Henter nye innbetalinger fra kontoene som er lagt inn i HI4 Faktura, i én eller alle
+// bankene, og kobler dem til fakturaene.
 export async function hentInnbetalinger(orgId: string, valg: { koblingId?: string; psu?: Psu } = {}): Promise<Resultat> {
   const resultat: Resultat = { nye: 0, koblet: 0, forslag: 0 };
-  const [app, koblinger] = await somSystem(
+  const [app, koblinger, egne] = await somSystem(
     async (db) =>
       [
         await bankApp(db, orgId),
@@ -325,18 +359,21 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
           "select * from faktura.bankkoblinger where org_id = $1 and status = 'aktiv' and okt_id is not null and ($2::uuid is null or id = $2) order by opprettet",
           [orgId, valg.koblingId ?? null],
         ),
+        await egneKontoer(db, orgId),
       ] as const,
   );
   if (!app) return resultat;
 
   for (const k of koblinger) {
-    const fra = k.hent_fra ? somDato(k.hent_fra)!.slice(0, 10) : iDag(-60);
+    const kontoer = (k.kontoer ?? []).filter((x) => egne.has(x.kontonr));
+    if (!kontoer.length) continue;
     try {
-      for (const konto of (k.kontoer ?? []).filter((x) => x.valgt)) {
+      for (const konto of kontoer) {
+        const fra = hentesFra(k, konto) ?? iDag(-60);
         for (const t of tilInnbetalinger(await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu))) await lagreOgKoble(orgId, konto.kontonr, t, resultat);
       }
       // Neste gang hentes de siste dagene på nytt: banker kan bokføre noen dager etter.
-      await oppdater(k.id, { hent_fra: iDag(-5) < fra ? fra : iDag(-5), sist_hentet: new Date().toISOString(), siste_feil: null });
+      await merkHentet(k.id, kontoer.map((x) => x.kontonr), iDag(-5));
     } catch (e) {
       const f = e instanceof BankFeil ? e : new BankFeil((e as Error).message, 500);
       const utlopt = utloptFeil(f);
@@ -376,9 +413,13 @@ export async function planleggBankhenting(naa = new Date()): Promise<number> {
   const timeOslo = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Oslo", hour: "2-digit", hourCycle: "h23" }).format(naa));
   if (timeOslo < 6 || timeOslo > 21) return 0;
   const rader = await somSystem((db) =>
-    alle<Bankkobling>(
+    alle<Bankkobling & { har_egne: boolean }>(
       db,
-      `select k.* from faktura.bankkoblinger k
+      `select k.*,
+              exists (select 1 from jsonb_array_elements(k.kontoer) x
+                       where x ->> 'kontonr' in (select o.kontonr from faktura.organisasjoner o where o.id = k.org_id
+                                                 union select e.kontonr from faktura.kontoer e where e.org_id = k.org_id)) as har_egne
+         from faktura.bankkoblinger k
          join faktura.integrasjoner i on i.org_id = k.org_id and i.type = 'bank' and i.status <> 'frakoblet'
         where k.status = 'aktiv' and k.okt_id is not null`,
     ),
@@ -386,7 +427,8 @@ export async function planleggBankhenting(naa = new Date()): Promise<number> {
   let antall = 0;
   for (const k of rader) {
     const sist = k.sist_hentet ? Date.parse(somDato(k.sist_hentet)!) : 0;
-    if (naa.getTime() - sist >= 5 * 3600_000 + 50 * 60_000) {
+    // Banker uten noen konto som er lagt inn i HI4 Faktura, har ingenting å hente.
+    if (k.har_egne && naa.getTime() - sist >= 5 * 3600_000 + 50 * 60_000) {
       // Merkes med en gang, så neste kjøring ikke legger den i kø igjen.
       await oppdater(k.id, { sist_hentet: naa.toISOString() });
       await leggIKo({ type: "bank-hent", org_id: k.org_id, kobling_id: k.id });

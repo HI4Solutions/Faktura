@@ -10,11 +10,10 @@ import { erAdmin, kanBokfore, useKonto } from "../konto";
 import { Sokefelt } from "../sokefelt";
 import { IkonKroner } from "../ikoner";
 
+// En konto i banken som er lagt inn i HI4 Faktura (bare de leses), med navnet derfra.
 export interface BankKonto {
-  uid: string;
   kontonr: string;
   navn: string | null;
-  valgt: boolean;
 }
 
 // Én bank (DNB, Storebrand …) med egen BankID-innlogging, eget samtykke og egne kontoer.
@@ -25,6 +24,7 @@ export interface Bankkobling {
   status: "venter" | "aktiv" | "feil";
   tilkoblet: boolean;
   kontoer: BankKonto[];
+  andre_kontoer: number; // kontoer i banken som ikke er lagt inn i HI4 Faktura
   gyldig_til: string | null;
   fullfort: string | null;
   sist_hentet: string | null;
@@ -49,6 +49,8 @@ const tid = (iso: string | null) => (iso ? new Date(iso).toLocaleString("nb-NO",
 export const dagerTil = (iso: string | null) => (iso ? Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000) : null);
 // «DNB», «DNB og Storebrand Bank», «DNB, Nordea og Storebrand Bank».
 export const navnListe = (navn: string[]) => (navn.length <= 1 ? navn.join("") : `${navn.slice(0, -1).join(", ")} og ${navn.at(-1)}`);
+// Kontonumrene er endret (kontonummeret eller Flere kontonumre): bankene viser kontoene på nytt.
+export const kontoerEndret = () => window.dispatchEvent(new Event("faktura-kontoer"));
 
 // BankID-adressen workeren lager for banken: spør til den er klar.
 async function ventPaBankId(orgId: string, koblingId: string): Promise<string> {
@@ -88,6 +90,12 @@ export function BankKobling() {
   const [venter, settVenter] = useState<string | null>(null);
   const h = useHandling();
   const admin = erAdmin(org?.rolle);
+
+  // Hvilke kontoer som leses, følger kontonumrene som er lagt inn.
+  useEffect(() => {
+    window.addEventListener("faktura-kontoer", last);
+    return () => window.removeEventListener("faktura-kontoer", last);
+  }, [last]);
 
   async function koble(e: FormEvent) {
     e.preventDefault();
@@ -132,12 +140,6 @@ export function BankKobling() {
     if (await h.kjor(async () => (await api("DELETE", `/org/${org!.id}/bank/koblinger/${k.id}`), true))) last();
   }
 
-  async function velgKonto(k: Bankkobling, uid: string, valgt: boolean) {
-    const valgte = k.kontoer.filter((x) => (x.uid === uid ? valgt : x.valgt)).map((x) => x.uid);
-    const r = await h.kjor(() => api<BankStatus>("PUT", `/org/${org!.id}/bank/koblinger/${k.id}/kontoer`, { valgte }));
-    if (r) settData(r);
-  }
-
   async function hentNa() {
     settVenter("Henter innbetalinger …");
     await h.kjor(async () => {
@@ -162,9 +164,10 @@ export function BankKobling() {
     <div className="kort">
       <h2 style={{ marginTop: 0 }}>Innbetalinger fra banken</h2>
       <p className="dempet liten">
-        Appen leser innbetalingene på kontoene dine og registrerer betalinger på fakturaene av seg selv, uten KID-avtale med banken. Står
-        fakturanummeret i meldingen, eller stemmer beløpet med det kunden skylder, kobles betalingen til fakturaen. Det du må se over, får du
-        under Innbetalinger. Appen kan bare lese kontoene, ikke flytte penger.
+        Appen leser innbetalingene på kontoene du har lagt inn i HI4 Faktura (kontonummeret og Flere kontonumre over), og registrerer
+        betalinger på fakturaene av seg selv, uten KID-avtale med banken. Står fakturanummeret i meldingen, eller stemmer beløpet med det
+        kunden skylder, kobles betalingen til fakturaen. Det du må se over, får du under Innbetalinger. Appen kan bare lese kontoene, ikke
+        flytte penger.
       </p>
       {sok.get("bank") === "ok" && (ny ? ny.tilkoblet : data.tilkoblet) && (
         <div className="melding ok">{ny ? ny.bank : "Banken"} er koblet til. Innbetalingene hentes nå.</div>
@@ -176,7 +179,7 @@ export function BankKobling() {
           {data.koblinger.length > 0 ? (
             <div className="banker">
               {data.koblinger.map((k) => (
-                <BankRad key={k.id} k={k} admin={admin} opptatt={h.opptatt || Boolean(venter)} forny={forny} fjern={fjern} velgKonto={velgKonto} />
+                <BankRad key={k.id} k={k} admin={admin} opptatt={h.opptatt || Boolean(venter)} forny={forny} fjern={fjern} />
               ))}
             </div>
           ) : (
@@ -370,14 +373,12 @@ function BankRad({
   opptatt,
   forny,
   fjern,
-  velgKonto,
 }: {
   k: Bankkobling;
   admin: boolean;
   opptatt: boolean;
   forny: (k: Bankkobling) => void;
   fjern: (k: Bankkobling) => void;
-  velgKonto: (k: Bankkobling, uid: string, valgt: boolean) => void;
 }) {
   const igjen = dagerTil(k.gyldig_til);
   const snart = igjen !== null && igjen < 14;
@@ -400,18 +401,23 @@ function BankRad({
         <p className={`liten ${snart ? "advarsel-tekst" : "dempet"}`}>
           Lesetilgang til {dato(k.gyldig_til)}
           {snart ? ` (${igjen! <= 0 ? "går ut i dag" : `${igjen} ${igjen === 1 ? "dag" : "dager"} igjen`}). Forny med BankID.` : "."}
-          {k.sist_hentet && ` Sist hentet ${tid(k.sist_hentet)}.`}
+          {k.kontoer.length > 0 && k.sist_hentet && ` Sist hentet ${tid(k.sist_hentet)}.`}
         </p>
       )}
       {k.tilkoblet && k.kontoer.length > 0 && (
-        <div className="valgliste">
+        <ul className="bank-kontoer">
           {k.kontoer.map((x) => (
-            <label key={x.uid}>
-              <input type="checkbox" checked={x.valgt} disabled={opptatt || !admin} onChange={(e) => velgKonto(k, x.uid, e.target.checked)} />
+            <li key={x.kontonr}>
               {x.navn ?? "Konto"} <span className="dempet">{kontonrTekst(x.kontonr)}</span>
-            </label>
+            </li>
           ))}
-        </div>
+        </ul>
+      )}
+      {k.tilkoblet && k.kontoer.length === 0 && k.andre_kontoer > 0 && (
+        <p className="liten advarsel-tekst">
+          Ingen av kontoene i {k.bank} er lagt inn i HI4 Faktura ennå. Legg inn kontonummeret under Kontonummer eller Flere kontonumre, så
+          hentes innbetalingene derfra.
+        </p>
       )}
       {admin && (
         <div className="knapper">

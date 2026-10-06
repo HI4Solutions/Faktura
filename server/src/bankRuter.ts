@@ -14,7 +14,7 @@ import { ApiFeil } from "./feil.js";
 import { krevMfa } from "./auth.js";
 import { krypter } from "./kryptering.js";
 import { BankFeil, gyldigTil, hentApplikasjon, hentBanker, nokkelFeil, startAutorisering, velgBank, type BankNokkel } from "./enableBanking.js";
-import { nyState, tilbakeUrl, type BankAppKonfig, type Bankkobling } from "./bank.js";
+import { egneKontoer, nyState, tilbakeUrl, type BankAppKonfig, type Bankkobling } from "./bank.js";
 import { leggIKo } from "./tjenester.js";
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
@@ -28,17 +28,21 @@ const hentKoblinger = (db: Db, org: string) =>
   alle<Bankkobling>(db, "select * from faktura.bankkoblinger where org_id = $1 order by opprettet", [org]);
 const tekst = (d: unknown) => (d instanceof Date ? d.toISOString() : d == null ? null : String(d));
 
-// Det appen viser om en bank (aldri nøkkelen).
-function koblingStatus(k: Bankkobling) {
+// Det appen viser om en bank (aldri nøkkelen). Bare kontoene som er lagt inn i HI4 Faktura
+// vises (og leses), med navnet brukeren har gitt dem.
+function koblingStatus(k: Bankkobling, egne: Map<string, string | null>) {
   // Adressen workeren lagde til BankID, så lenge den er fersk.
   const fersk = k.auth_url && k.auth_tid && Date.now() - Date.parse(tekst(k.auth_tid)!) < 10 * 60_000;
+  const kontoer = k.kontoer ?? [];
+  const leses = kontoer.filter((x) => egne.has(x.kontonr));
   return {
     id: k.id,
     bank: k.bank,
     psu_type: k.psu_type,
     status: k.status, // venter (BankID ikke fullført), aktiv, feil (må kobles til på nytt)
     tilkoblet: k.status === "aktiv" && Boolean(k.okt_id),
-    kontoer: (k.kontoer ?? []).map(({ uid, kontonr, navn, valgt }) => ({ uid, kontonr, navn, valgt })),
+    kontoer: leses.map((x) => ({ kontonr: x.kontonr, navn: egne.get(x.kontonr) ?? x.navn })),
+    andre_kontoer: kontoer.length - leses.length, // i banken, men ikke lagt inn i HI4 Faktura
     gyldig_til: tekst(k.gyldig_til),
     fullfort: tekst(k.fullfort), // når BankID sist ble fullført
     sist_hentet: tekst(k.sist_hentet),
@@ -50,7 +54,8 @@ function koblingStatus(k: Bankkobling) {
 
 async function status(db: Db, org: string) {
   const app = await hentApp(db, org);
-  const koblinger = app ? (await hentKoblinger(db, org)).map(koblingStatus) : [];
+  const egne = app ? await egneKontoer(db, org) : new Map<string, string | null>();
+  const koblinger = app ? (await hentKoblinger(db, org)).map((k) => koblingStatus(k, egne)) : [];
   return {
     app: app ? { app_id: (app.konfig as BankAppKonfig).app_id, app_navn: (app.konfig as BankAppKonfig).app_navn ?? null } : null,
     koblinger,
@@ -224,22 +229,6 @@ export function bankRuter() {
     await leggIKo({ type: "bank-okt", org_id: orgId(c), kobling_id: k.id, kode: b.code });
     // Appen venter til fullfort er endret (eller det kommer en feil).
     return c.json({ ok: true, kobling_id: k.id, forrige: tekst(k.fullfort) }, 202);
-  });
-
-  // Hvilke kontoer i banken innbetalingene hentes fra.
-  r.put("/bank/koblinger/:id/kontoer", async (c) => {
-    const b = z.object({ valgte: z.array(z.string().max(200)).max(50) }).parse(await c.req.json().catch(() => ({})));
-    return c.json(
-      await bruk(c, async (db) => {
-        await krev(c, db, "admin");
-        const k = await en<Bankkobling>(db, "select * from faktura.bankkoblinger where id = $1 and org_id = $2", [koblingId(c), orgId(c)]);
-        if (!k) throw new ApiFeil(404, "Fant ikke banken");
-        const kontoer = (k.kontoer ?? []).map((x) => ({ ...x, valgt: b.valgte.includes(x.uid) }));
-        if (!kontoer.some((x) => x.valgt)) throw new ApiFeil(400, "Velg minst én konto");
-        await db.query("update faktura.bankkoblinger set kontoer = $2 where id = $1", [k.id, JSON.stringify(kontoer)]);
-        return status(db, orgId(c));
-      }),
-    );
   });
 
   // Hent nå fra alle bankene. Brukeren er til stede, så det teller ikke mot bankenes grense.

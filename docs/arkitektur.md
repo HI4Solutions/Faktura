@@ -59,9 +59,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   registreres med en gang (`koble_banktransaksjon`), samme beløp og betaler blir forslag,
   resten uavklart. Uten KID-avtale med banken
 - `bankkoblinger`: én rad per bank (f.eks. DNB og Storebrand) på samme applikasjon, med egen
-  BankID-innlogging, eget samtykke (økt og utløpsdato), valgte kontoer og egen henting.
-  Appen legger til og fjerner banker; workeren lager BankID-adressen, fullfører økten og
-  henter, og appen venter på svaret ved å spørre etter statusen
+  BankID-innlogging, eget samtykke (økt og utløpsdato) og egen henting. Alle kontoene i økten
+  lagres, men bare de som er lagt inn i HI4 Faktura (organisasjonens kontonummer og
+  `kontoer`) vises og leses, hver fra sin egen dato. Appen legger til og fjerner banker;
+  workeren lager BankID-adressen, fullfører økten og henter, og appen venter på svaret ved
+  å spørre etter statusen
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
