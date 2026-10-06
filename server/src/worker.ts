@@ -3,7 +3,7 @@ import { z } from "zod";
 import { alle, en, somSystem } from "./db.js";
 import { feilhandterer } from "./feil.js";
 import { fakturaEpost, hentFaktura, pdfFilnavn, sikrePdf } from "./dokument.js";
-import { epost, leggIKo, publiser } from "./tjenester.js";
+import { epost, leggIKo, publiser, type Oppgave } from "./tjenester.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -41,6 +41,25 @@ export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; 
     await db.query("select faktura.marker_sendt($1, $2, $3)", [f.id, sti, sendtTil]);
     logg("INFO", "Faktura sendt", { faktura_id: f.id, fakturanummer: f.fakturanummer, epost: Boolean(sendtTil) });
   });
+}
+
+// Enkel e-post fra plattformen (verifiseringskoder, varsler til administratorer).
+export async function sendEpost(o: { til: string[]; emne: string; tekst: string; fra_navn?: string; svar_til?: string; oppgave_id: string }) {
+  const esc = o.tekst.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+  await epost().send({
+    fraNavn: o.fra_navn ?? "HI4 Faktura",
+    til: o.til,
+    svarTil: o.svar_til,
+    emne: o.emne,
+    tekst: o.tekst,
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">${esc}</div>`,
+    idempotensnokkel: `epost-${o.oppgave_id}`,
+  });
+}
+
+export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
+  if (o.type === "send-faktura") return sendFaktura(o);
+  return sendEpost(o);
 }
 
 // Daglig: planlagte utkast og gjentakende fakturaer. En feil på én stopper ikke de andre.
@@ -150,6 +169,14 @@ export function lagWorker() {
   app.post("/oppgaver/send-faktura", async (c) => {
     const o = z.object({ faktura_id: z.string().uuid(), send_epost: z.boolean(), oppgave_id: z.string() }).parse(await c.req.json());
     await sendFaktura(o);
+    return c.json({ ok: true });
+  });
+
+  app.post("/oppgaver/epost", async (c) => {
+    const o = z
+      .object({ til: z.array(z.string().email()).min(1), emne: z.string(), tekst: z.string(), fra_navn: z.string().optional(), svar_til: z.string().optional(), oppgave_id: z.string() })
+      .parse(await c.req.json());
+    await sendEpost(o);
     return c.json({ ok: true });
   });
 

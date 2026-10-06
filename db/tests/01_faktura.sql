@@ -184,7 +184,7 @@ select faktura.sett_verifisering(:'byraa', 'verifisert', 'manuell');
 
 \c :api
 select set_config('app.bruker_id', :'u1', false);
-select test.feiler($$select faktura.sett_verifisering(gen_random_uuid(), 'verifisert')$$, '42501');
+select test.feiler($$select faktura.sett_verifisering(gen_random_uuid(), 'verifisert')$$, 'FA403');
 select id as t1, status as t1_status from faktura.opprett_tilgang(:'org1', '974760673', 'bokfor') \gset
 select test.er(:'t1_status', 'invitert', 'klienten inviterer');
 select test.feiler(format($$select faktura.svar_tilgang(%L, true)$$, :'t1'), 'FA403');

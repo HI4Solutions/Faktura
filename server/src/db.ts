@@ -35,6 +35,14 @@ export async function somBruker<T>(brukerId: string, fn: (db: Db) => Promise<T>)
   return transaksjon(fn, brukerId);
 }
 
+// API-et har selv sjekket noe databasen ikke kan (e-postdomene, plattformadmin).
+export async function somBetrodd<T>(brukerId: string, fn: (db: Db) => Promise<T>): Promise<T> {
+  return transaksjon(async (db) => {
+    await db.query("select set_config('app.betrodd', 'on', true)");
+    return fn(db);
+  }, brukerId);
+}
+
 // Workeren: ingen bruker; tilgangen kommer fra rollen faktura_system.
 export async function somSystem<T>(fn: (db: Db) => Promise<T>): Promise<T> {
   return transaksjon(fn);

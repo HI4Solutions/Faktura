@@ -9,6 +9,8 @@ import { Oversikt } from "./sider/Oversikt";
 import { Kunder, Produkter } from "./sider/Register";
 import { FakturaSkjema, FakturaVisning, Fakturaliste } from "./sider/Fakturaer";
 import { Innstillinger } from "./sider/Innstillinger";
+import { Verifisering } from "./sider/Verifisering";
+import { Admin } from "./sider/Admin";
 
 function Invitasjon() {
   const { token } = useParams();
@@ -74,6 +76,8 @@ function Ramme() {
           </>
         )}
         <NavLink to="/innstillinger">Innstillinger</NavLink>
+        {org?.verifisering === "ny" && org.direkte_medlem && <NavLink to="/verifisering">Verifiser organisasjon</NavLink>}
+        {meg?.plattformadmin && <NavLink to="/admin">Administrasjon</NavLink>}
         <div className="bunn">
           <span className="liten dempet">{meg?.bruker.epost}</span>
           <button onClick={loggUt}>Logg ut</button>
@@ -90,6 +94,8 @@ function Ramme() {
             <Route path="/kunder" element={<Kunder />} />
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
+            <Route path="/verifisering" element={<Verifisering />} />
+            {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

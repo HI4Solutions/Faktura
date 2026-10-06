@@ -30,6 +30,7 @@ jobs:
       TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
       TF_VAR_region: ${{ vars.GCP_REGION }}
       TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+      TF_VAR_admin_eposter: ${{ vars.ADMIN_EPOSTER }}
     steps:
       - uses: actions/checkout@v4
 

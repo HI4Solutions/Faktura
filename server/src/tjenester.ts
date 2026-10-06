@@ -54,11 +54,9 @@ export const lagring: Lagring = {
 // Oppgaver til workeren (Cloud Tasks)
 // ---------------------------------------------------------------------------
 
-export interface Oppgave {
-  type: "send-faktura";
-  faktura_id: string;
-  send_epost: boolean;
-}
+export type Oppgave =
+  | { type: "send-faktura"; faktura_id: string; send_epost: boolean }
+  | { type: "epost"; til: string[]; emne: string; tekst: string; fra_navn?: string; svar_til?: string };
 
 let tasks: CloudTasksClient | undefined;
 

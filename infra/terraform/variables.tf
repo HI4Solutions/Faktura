@@ -74,3 +74,9 @@ variable "epost_avsender" {
   type        = string
   default     = "faktura@hi4.no"
 }
+
+variable "admin_eposter" {
+  description = "Plattformadministratorer, kommaseparerte e-postadresser. Settes med GitHub-variabelen ADMIN_EPOSTER. Tom = ingen."
+  type        = string
+  default     = ""
+}

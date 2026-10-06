@@ -16,6 +16,7 @@ export interface MinOrg {
 interface Meg {
   bruker: { id: string; epost: string; navn: string | null };
   mfa: boolean;
+  plattformadmin: boolean;
   organisasjoner: MinOrg[];
 }
 

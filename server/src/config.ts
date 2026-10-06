@@ -36,6 +36,9 @@ export const config = {
   epostAvsender: valgfri("EPOST_AVSENDER") ?? "faktura@hi4.no",
   resendNokkel: valgfri("RESEND_API_KEY"),
 
+  // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
+  adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+
   // Kun for lokal utvikling og tester: godta «x-test-bruker» i stedet for et ekte token.
   testInnlogging: process.env.AUTH_TEST === "1" && process.env.NODE_ENV !== "production",
 };

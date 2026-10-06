@@ -7,8 +7,9 @@ import { hentFaktura, pdfData, pdfFilnavn, sikrePdf } from "./dokument.js";
 import { lagPdf } from "./pdf.js";
 import { config } from "./config.js";
 import { lagring, leggIKo } from "./tjenester.js";
-import { orgnrGyldig } from "./regler.js";
 import { passkeyInnlogging, passkeyRuter } from "./passkey.js";
+import { adminRuter, erPlattformadmin, verifiseringRuter } from "./verifisering.js";
+import { hentEnhet } from "./brreg.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -138,27 +139,7 @@ export function lagApi() {
   app.get("/api/helse", (c) => c.json({ ok: true }));
 
   // Oppslag i Enhetsregisteret (åpent API) for skjemaer.
-  app.get("/api/brreg/:orgnr", async (c) => {
-    const nr = c.req.param("orgnr");
-    if (!orgnrGyldig(nr)) throw new ApiFeil(400, "Ugyldig organisasjonsnummer");
-    const r = await fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${nr}`, { headers: { accept: "application/json" } });
-    if (r.status === 404 || r.status === 410) throw new ApiFeil(404, "Fant ikke organisasjonsnummeret");
-    if (!r.ok) throw new ApiFeil(502, "Enhetsregisteret svarer ikke");
-    const e: any = await r.json();
-    const a = e.forretningsadresse ?? e.postadresse ?? {};
-    return c.json({
-      orgnr: e.organisasjonsnummer,
-      navn: e.navn,
-      adresse: (a.adresse ?? []).join(", ") || null,
-      postnr: a.postnummer ?? null,
-      poststed: a.poststed ?? null,
-      mva_registrert: Boolean(e.registrertIMvaregisteret),
-      foretaksregisteret: Boolean(e.registrertIForetaksregisteret),
-      konkurs: Boolean(e.konkurs),
-      under_avvikling: Boolean(e.underAvvikling),
-      slettet: Boolean(e.slettedato),
-    });
-  });
+  app.get("/api/brreg/:orgnr", async (c) => c.json(await hentEnhet(c.req.param("orgnr"))));
 
   // Åpne ruter (uten innlogging) ligger under /api/offentlig.
   app.route("/api/offentlig/passkey", passkeyInnlogging());
@@ -167,12 +148,14 @@ export function lagApi() {
   api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevInnlogging(c, next)));
   api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevBekreftetEpost(c, next)));
   api.route("/passkeys", passkeyRuter());
+  api.route("/admin", adminRuter());
 
   api.get("/meg", async (c) =>
     c.json(
       await bruk(c, async (db) => ({
         bruker: await en(db, "select id, epost, navn from faktura.brukere where id = faktura.bruker_id()"),
         mfa: c.get("bruker").mfa,
+        plattformadmin: erPlattformadmin(c.get("bruker").epost),
         organisasjoner: await alle(db, "select * from faktura.mine_organisasjoner order by direkte_medlem desc, navn"),
       })),
     ),
@@ -236,6 +219,8 @@ export function lagApi() {
     await bruk(c, (db) => db.query("select faktura.sett_startnummer($1, $2)", [orgId(c), b.neste_fakturanummer]));
     return c.body(null, 204);
   });
+
+  org.route("/verifisering", verifiseringRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som rå PNG/JPG (maks 1,5 MB). Hver opplasting får nytt filnavn, så

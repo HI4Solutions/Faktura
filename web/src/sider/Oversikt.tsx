@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { hent } from "../api";
 import { Feil, Laster, useData } from "../felles";
 import { useKonto } from "../konto";
@@ -16,6 +16,11 @@ export function Oversikt() {
     return (
       <>
         <h1>Klienter</h1>
+        {org.verifisering === "ny" && (
+          <div className="melding info">
+            Byrået må være verifisert før klienter kan gi tilgang. <Link to="/verifisering">Verifiser nå</Link>
+          </div>
+        )}
         <p className="dempet">Klienter som har gitt {org.navn} tilgang. Velg en klient for å se fakturaene.</p>
         <div className="kort tabell">
           <table>
@@ -72,9 +77,11 @@ export function Oversikt() {
       <h1>Oversikt</h1>
       {org?.verifisering === "ny" && (
         <div className="melding info">
-          Organisasjonen er ikke verifisert ennå. Til den er det, kan dere sende opptil 20 fakturaer og 50 000 kr per måned.
+          Organisasjonen er ikke verifisert ennå. Til den er det, kan dere sende opptil 20 fakturaer og 50 000 kr per måned.{" "}
+          <Link to="/verifisering">Verifiser nå</Link>
         </div>
       )}
+      {org?.verifisering === "sperret" && <div className="melding feil">Organisasjonen er sperret og kan ikke sende fakturaer.</div>}
       <div className="nokkeltall">
         <div className="kort">
           <div className="dempet liten">Utestående</div>
