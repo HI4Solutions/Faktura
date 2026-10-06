@@ -962,7 +962,11 @@ export function FakturaVisning() {
               {f.betalinger.map((b: any) => (
                 <tr key={b.id}>
                   <td>{dato(b.betalt_dato)}</td>
-                  <td>{b.type === "refusjon" ? "Refusjon" : "Betaling"}{b.notat ? ` – ${b.notat}` : ""}</td>
+                  <td>
+                    {b.type === "refusjon" ? "Refusjon" : "Betaling"}
+                    {b.kilde === "bank" ? " fra banken" : ""}
+                    {b.notat ? ` – ${b.notat}` : ""}
+                  </td>
                   <td className="tall">{kr(b.belop)}</td>
                 </tr>
               ))}

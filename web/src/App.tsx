@@ -17,13 +17,14 @@ import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
 import { Rapporter } from "./sider/Rapporter";
+import { BankTilbake, Innbetalinger } from "./sider/Bank";
 import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
 import { TemaBryter } from "./TemaBryter";
 import { installer } from "./pwa";
 import {
-  IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
+  IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -233,6 +234,10 @@ function Ramme() {
               <IkonFaktura />
               Fakturaer
             </NavLink>
+            <NavLink to="/innbetalinger">
+              <IkonKroner />
+              Innbetalinger
+            </NavLink>
             <NavLink to="/gjentakende">
               <IkonGjenta />
               Gjentakende
@@ -299,6 +304,8 @@ function Ramme() {
             <Route path="/fakturaer/:id/endre" element={<FakturaSkjema />} />
             <Route path="/fakturaer/:id" element={<FakturaVisning />} />
             <Route path="/gjentakende" element={<Gjentakende />} />
+            <Route path="/innbetalinger" element={<Innbetalinger />} />
+            <Route path="/bank/tilbake" element={<BankTilbake />} />
             <Route path="/kunder" element={<Kunder />} />
             <Route path="/kunder/importer" element={<Importer key="kunder" type="kunder" />} />
             <Route path="/rapporter" element={<Rapporter />} />

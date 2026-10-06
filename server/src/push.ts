@@ -19,6 +19,7 @@ export const VARSELTYPER = {
   epostfeil: "E-post kom ikke fram",
   gjentakende: "Gjentakende fakturaer sendt",
   indeksregulering: "Indeksregulering planlagt",
+  bank: "Innbetalinger fra banken",
 } as const;
 export type Varseltype = keyof typeof VARSELTYPER;
 

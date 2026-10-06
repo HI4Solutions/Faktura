@@ -52,6 +52,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   sjekker nøkkelen og krypterer hemmeligheten, bare workeren dekrypterer og sender
 - `ehf_sendinger`: hver EHF-sending med status (levert, venter, feilet). Kommer den ikke
   fram, sender workeren e-post i stedet
+- `banktransaksjoner`: innbetalinger lest fra organisasjonens egen bankkonto gjennom open
+  banking (Enable Banking, type `bank` i `integrasjoner`: egen applikasjon per organisasjon,
+  privat nøkkel KMS-kryptert, bare workeren bruker den). Workeren henter høyst hver sjette
+  time på dagtid og kobler innbetalingene til fakturaer: KID eller fakturanummer i meldingen
+  registreres med en gang (`koble_banktransaksjon`), samme beløp og betaler blir forslag,
+  resten uavklart. Uten KID-avtale med banken
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 

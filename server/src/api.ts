@@ -20,6 +20,7 @@ import { sjekkEhf } from "./peppol.js";
 import { kundenokler, kundeSjekk, planlegg, produktnokler } from "./importer.js";
 import { MAKS_ANTALL, skrivVedlegg, vedleggFiler, vedleggRuter } from "./vedlegg.js";
 import { ehfRuter } from "./ehfRuter.js";
+import { bankRuter } from "./bankRuter.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -309,6 +310,7 @@ export function lagApi() {
   org.route("/", rapportRuter());
   org.route("/", vedleggRuter());
   org.route("/", ehfRuter());
+  org.route("/", bankRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting

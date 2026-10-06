@@ -11,6 +11,7 @@ import { varsleForfalte, varsleGjentakende, varsleOmHendelse } from "./varsler.j
 import { sjekkEhf } from "./peppol.js";
 import { ryddVedlegg, vedleggFiler } from "./vedlegg.js";
 import { oppdaterEhfKoblinger, sendSomEhf, sjekkEhfLevering } from "./ehfSending.js";
+import { fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, slettBankKobling } from "./bank.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -141,6 +142,10 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "disk-synk") return synkOrganisasjon(o.bruker_id, o.org_id, sikrePdf, pdfFilnavn);
   if (o.type === "disk-slett") return slettFraDisk(o.org_id, o.faktura_ider, pdfFilnavn);
   if (o.type === "varsel") return void (await sendVarsel(o.varsel));
+  if (o.type === "bank-auth") return lagBankAdresse(o.org_id);
+  if (o.type === "bank-okt") return fullforBankOkt(o.org_id, o.kode);
+  if (o.type === "bank-hent") return void (await hentInnbetalinger(o.org_id, o.psu));
+  if (o.type === "bank-slett") return slettBankKobling(o.org_id);
   return sendEpost(o);
 }
 
@@ -429,9 +434,40 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
 
+  // Bank (Enable Banking): BankID-adresse ved fornyelse, fullføring av koblingen, henting
+  // av innbetalinger og frakobling.
+  const bankOppgave = z.object({ org_id: z.string().uuid(), oppgave_id: z.string() });
+  app.post("/oppgaver/bank-auth", async (c) => {
+    await lagBankAdresse(bankOppgave.parse(await c.req.json()).org_id);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/bank-okt", async (c) => {
+    const o = bankOppgave.extend({ kode: z.string().min(1).max(4000) }).parse(await c.req.json());
+    await fullforBankOkt(o.org_id, o.kode);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/bank-hent", async (c) => {
+    const o = bankOppgave.extend({ psu: z.object({ ip: z.string().max(100), agent: z.string().max(500) }).optional() }).parse(await c.req.json());
+    return c.json(await hentInnbetalinger(o.org_id, o.psu));
+  });
+  app.post("/oppgaver/bank-slett", async (c) => {
+    await slettBankKobling(bankOppgave.parse(await c.req.json()).org_id);
+    return c.json({ ok: true });
+  });
+
   app.post("/jobber/gjenta", async (c) => c.json(await gjenta()));
-  app.post("/jobber/utboks", async (c) => c.json(await publiserUtboks()));
-  app.post("/jobber/bank", (c) => c.json({ ok: true, melding: "Bankintegrasjon er ikke konfigurert ennå" }));
+  // Hvert minutt: utboksen. Samme hjerteslag planlegger henting fra banken (høyst hvert kvarter
+  // per instans; planleggingen selv sørger for seks timer mellom hver henting).
+  let bankPlanlagt = 0;
+  app.post("/jobber/utboks", async (c) => {
+    const r = await publiserUtboks();
+    if (Date.now() - bankPlanlagt > 15 * 60_000) {
+      bankPlanlagt = Date.now();
+      await planleggBankhenting().catch((e) => logg("ERROR", "Planlegging av bankhenting feilet", { feil: (e as Error).message }));
+    }
+    return c.json(r);
+  });
+  app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));
 
   // Google Disk: kopi av PDF når en faktura eller kreditnota er utstedt. Feil gir 500, så Pub/Sub prøver igjen.
   app.post("/hendelser/google-disk", async (c) => {

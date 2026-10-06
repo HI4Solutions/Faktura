@@ -582,6 +582,26 @@ code.hemmelig { word-break: break-all; font-size: 0.85rem; }
 .liste-rad .merke + .merke { margin-left: 4px; }
 .liste-rad button.lenke { flex: none; font-size: 0.86rem; }
 
+/* Innbetalinger fra banken */
+.innbetaling { padding: 13px 16px; border-bottom: 1px solid var(--kant); display: flex; flex-direction: column; gap: 4px; }
+.innbetaling:last-child { border-bottom: 0; }
+.innbetaling .linje { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.innbetaling .tittel { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.innbetaling .belop { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.innbetaling .under { color: var(--dempet); font-size: 0.84rem; overflow-wrap: anywhere; }
+.innbetaling .forslag {
+  margin-top: 6px; padding: 9px 12px; border-radius: 10px; background: var(--aksent-lys);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 0.9rem;
+}
+.innbetaling .forslag.uavklart { background: var(--flate-2); }
+.innbetaling .forslag.koblet, .innbetaling .forslag.ignorert { background: none; padding: 0; margin-top: 2px; }
+.innbetaling .forslag .knapper { gap: 6px; }
+.advarsel-tekst { color: var(--advarsel); }
+ol.steg { padding-left: 20px; margin: 4px 0 16px; }
+ol.steg li { margin-bottom: 8px; line-height: 1.5; }
+.kopier-felt { display: flex; align-items: center; gap: 10px; margin: 6px 0; flex-wrap: wrap; }
+.kopier-felt code { background: var(--flate-2); border: 1px solid var(--kant); padding: 3px 8px; border-radius: 6px; font-size: 0.85rem; overflow-wrap: anywhere; }
+
 /* Kopier med ett trykk i fakturalistene: knappen står ved siden av raden. */
 .liste-rad-ramme { display: flex; align-items: center; border-bottom: 1px solid var(--kant); }
 .liste-rad-ramme:last-child { border-bottom: 0; }

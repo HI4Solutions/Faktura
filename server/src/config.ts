@@ -47,6 +47,9 @@ export const config = {
   ehfOppslag: valgfri("EHF_OPPSLAG") !== "av",
   // Aksesspunktet EHF sendes gjennom. Hver organisasjon bruker sin egen konto der.
   recommandUrl: valgfri("RECOMMAND_URL") ?? "https://app.recommand.eu",
+  // Open banking: innbetalinger leses fra organisasjonens egen bankkonto gjennom Enable
+  // Banking. Hver organisasjon bruker sin egen applikasjon der.
+  enableBankingUrl: valgfri("ENABLE_BANKING_URL") ?? "https://api.enablebanking.com",
 
   // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
   adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),

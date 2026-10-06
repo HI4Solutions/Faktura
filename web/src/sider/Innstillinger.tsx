@@ -7,6 +7,7 @@ import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
 import { EhfSending } from "./Ehf";
+import { BankKobling } from "./Bank";
 import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
@@ -48,7 +49,12 @@ export function Innstillinger() {
       {/* Samme skjema for de tre fanene, så endringer som ikke er lagret, blir med mellom dem. */}
       {orgDel && <Organisasjon del={orgDel} />}
       {fane === "faktura" && <Logo />}
-      {fane === "betaling" && <Kontoer />}
+      {fane === "betaling" && (
+        <>
+          <Kontoer />
+          <BankKobling />
+        </>
+      )}
       {fane === "ehf" && <EhfSending />}
       {fane === "brukere" && (
         <>
