@@ -59,7 +59,11 @@ p { margin: 0 0 0.75rem; }
 
 /* Oppsett */
 .ramme { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
-.meny { background: var(--flate); border-right: 1px solid var(--kant); padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; }
+.meny {
+  background: var(--flate); border-right: 1px solid var(--kant); padding: 20px 14px; display: flex; flex-direction: column; gap: 4px;
+  /* Står fast i skjermhøyde mens innholdet skroller. */
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
 .meny .logo { font-weight: 700; font-size: 1.1rem; margin: 0 8px 16px; }
 .meny a { display: block; padding: 8px 10px; border-radius: 8px; color: var(--tekst); text-decoration: none; }
 .meny a.active { background: var(--aksent-lys); color: var(--aksent); font-weight: 600; }
@@ -70,7 +74,7 @@ p { margin: 0 0 0.75rem; }
 
 @media (max-width: 760px) {
   .ramme { grid-template-columns: 1fr; }
-  .meny { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--kant); padding: 10px 16px; }
+  .meny { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--kant); padding: 10px 16px; position: static; height: auto; overflow: visible; }
   .meny .logo { width: 100%; margin: 0 0 4px; }
   .meny .bunn { margin-top: 0; flex-direction: row; width: 100%; }
   .innhold { padding: 20px 16px; }
