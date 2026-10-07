@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { config } from "../src/config.js";
 import { lagApi } from "../src/api.js";
-import { ehfOppslag, kanMottaEhf, settEhfNett, smlNavn, type Naptr } from "../src/peppol.js";
+import { ehfOppslag, kanMottaEhf, lesNaptr, settEhfNett, smlNavn, type Naptr } from "../src/peppol.js";
 
 const NR = "974760673";
 const SMP = "https://smp.elma-smp.no";
@@ -51,7 +51,7 @@ describe("PEPPOL-oppslag", () => {
     const r = await ehfOppslag(NR, { naptr: elma, hent: n.hent });
     expect(r).toMatchObject({ svar: true, smp: SMP });
     expect(n.kall).toEqual([DIREKTE]);
-    expect(r.steg).toEqual(["DNS: https://smp.elma-smp.no", "SMP, EHF-faktura (kodet): HTTP 200"]);
+    expect(r.steg).toEqual([`Navn i SML: ${smlNavn(NR)}`, "DNS: https://smp.elma-smp.no", "SMP, EHF-faktura (kodet): HTTP 200"]);
   });
 
   it("prøver identifikatorene med :: når den kodede formen ikke finnes", async () => {
@@ -79,10 +79,18 @@ describe("PEPPOL-oppslag", () => {
     expect(r.steg.at(-1)).toBe("1 dokumenttype: Order-2::Order##urn:fdc:peppol.eu:poacc:trns:order:3::2.1");
     // SMP-en kjenner ikke mottakeren.
     expect(await kanMottaEhf(NR, { naptr: elma, hent: nett({}).hent })).toBe(false);
-    // Ikke i PEPPOL: DNS-en finner ingenting, og Google bekrefter det.
-    const n = nett({ [GOOGLE]: { status: 200, json: { Status: 3 } } });
-    expect(await ehfOppslag(NR, { naptr: dnsFeil("ENOTFOUND"), hent: n.hent })).toMatchObject({ svar: false, steg: ["DNS: ingen post", "DNS hos Google: ingen post"] });
-    expect(n.kall).toHaveLength(1);
+    // Ikke i PEPPOL: ingen DNS finner noe, og ELMA kjenner ikke mottakeren.
+    const ingen = { status: 200, json: { Status: 3 } };
+    const n = nett({ [GOOGLE]: ingen, [CLOUDFLARE]: ingen });
+    const ikke = await ehfOppslag(NR, { naptr: dnsFeil("ENOTFOUND"), hent: n.hent });
+    expect(ikke.svar).toBe(false);
+    expect(ikke.steg.slice(1, 4)).toEqual(["DNS: finnes ikke (ENOTFOUND)", "DNS hos Google: finnes ikke (NXDOMAIN)", "DNS hos Cloudflare: finnes ikke (NXDOMAIN)"]);
+    expect(ikke.steg.slice(4)).toEqual([
+      "ELMA direkte, EHF-faktura (kodet): HTTP 404",
+      "ELMA direkte, EHF-faktura (med ::): HTTP 404",
+      "ELMA direkte, tjenesteliste (kodet): HTTP 404",
+      "ELMA direkte, tjenesteliste (med ::): HTTP 404",
+    ]);
     expect(await kanMottaEhf("12345", { naptr: elma, hent: nett({}).hent })).toBe(false);
   });
 
@@ -90,19 +98,46 @@ describe("PEPPOL-oppslag", () => {
     const n = nett({ [GOOGLE]: dohElma, [DIREKTE]: { status: 200, tekst: METADATA } });
     const r = await ehfOppslag(NR, { naptr: dnsFeil("ENODATA"), hent: n.hent });
     expect(r).toMatchObject({ svar: true, smp: SMP });
-    expect(r.steg.slice(0, 2)).toEqual(["DNS: ingen post", "DNS hos Google: !.*!https://smp.elma-smp.no/!"]);
-    expect(n.kall[0]).toBe(`https://dns.google/resolve?name=${smlNavn(NR)}&type=NAPTR`);
+    expect(r.steg.slice(1, 3)).toEqual(["DNS: ingen post (ENODATA)", "DNS hos Google: !.*!https://smp.elma-smp.no/!"]);
+    expect(n.kall[0]).toBe(`https://dns.google/resolve?name=${smlNavn(NR)}&type=35`);
     // Google svarer ikke: Cloudflare.
     const m = nett({ [GOOGLE]: new TypeError("fetch failed"), [CLOUDFLARE]: dohElma, [DIREKTE]: { status: 200, tekst: METADATA } });
     expect(await kanMottaEhf(NR, { naptr: dnsFeil("ETIMEOUT"), hent: m.hent })).toBe(true);
-    expect(m.kall[1]).toBe(`https://cloudflare-dns.com/dns-query?name=${smlNavn(NR)}&type=NAPTR`);
+    expect(m.kall[1]).toBe(`https://cloudflare-dns.com/dns-query?name=${smlNavn(NR)}&type=35`);
+    // Google sier nei, Cloudflare finner den.
+    const k = nett({ [GOOGLE]: { status: 200, json: { Status: 0 } }, [CLOUDFLARE]: dohElma, [DIREKTE]: { status: 200, tekst: METADATA } });
+    const c = await ehfOppslag(NR, { naptr: dnsFeil("ENOTFOUND"), hent: k.hent });
+    expect(c.svar).toBe(true);
+    expect(c.steg.slice(2, 4)).toEqual(["DNS hos Google: ingen post (NOERROR uten svar)", "DNS hos Cloudflare: !.*!https://smp.elma-smp.no/!"]);
+  });
+
+  it("leser NAPTR-svaret med og uten anførselstegn, og sier fra om det ikke kan leses", async () => {
+    const elmaPost = { order: 100, preference: 10, flags: "U", service: "Meta:SMP", regexp: "!.*!https://smp.elma-smp.no/!" };
+    expect(lesNaptr('100 10 "U" "Meta:SMP" "!.*!https://smp.elma-smp.no/!" .')).toEqual(elmaPost);
+    expect(lesNaptr("100 10 U Meta:SMP !.*!https://smp.elma-smp.no/! .")).toEqual(elmaPost);
+    expect(lesNaptr('10 0 "s" "SIPS+D2T" "" _sips._tcp.example.com.')).toMatchObject({ flags: "s", regexp: "" });
+    expect(lesNaptr("ikke en post")).toBeNull();
+    const rart = { status: 200, json: { Status: 0, Answer: [{ type: 35, data: "?" }] } };
+    const r = await ehfOppslag(NR, { naptr: dnsFeil("ENOTFOUND"), hent: nett({ [GOOGLE]: rart, [CLOUDFLARE]: rart }).hent });
+    expect(r.steg[2]).toBe("DNS hos Google: kunne ikke lese «?»");
+  });
+
+  it("ingen DNS finner SMP-en: spør ELMA direkte", async () => {
+    const ingen = { status: 200, json: { Status: 3 } };
+    const n = nett({ [GOOGLE]: ingen, [CLOUDFLARE]: ingen, [DIREKTE]: { status: 200, tekst: METADATA } });
+    const r = await ehfOppslag(NR, { naptr: dnsFeil("ENOTFOUND"), hent: n.hent });
+    expect(r).toMatchObject({ svar: true, smp: SMP });
+    expect(r.steg.at(-1)).toBe("ELMA direkte, EHF-faktura (kodet): HTTP 200");
+    // ELMA svarer ikke: ukjent, ikke nei.
+    expect(await kanMottaEhf(NR, { naptr: dnsFeil("ENOTFOUND"), hent: nett({ [GOOGLE]: ingen, [CLOUDFLARE]: ingen, [`${SMP}/*`]: { status: 503 } }).hent })).toBe(null);
   });
 
   it("ukjent når oppslaget feiler", async () => {
     // Ingen DNS svarer.
     const ingen = nett({ [GOOGLE]: { status: 502 }, [CLOUDFLARE]: new TypeError("fetch failed") });
     expect(await kanMottaEhf(NR, { naptr: dnsFeil("ETIMEOUT"), hent: ingen.hent })).toBe(null);
-    // DNS-en sier nei, men det kan ikke bekreftes: nei, som før.
+    // DNS-en i miljøet sier nei, Google og Cloudflare svarer ikke, og ELMA kjenner ikke
+    // mottakeren: nei.
     expect(await kanMottaEhf(NR, { naptr: dnsFeil("ENOTFOUND"), hent: ingen.hent })).toBe(false);
     // SMP-en feiler eller avviser oss.
     expect(await kanMottaEhf(NR, { naptr: elma, hent: nett({ [`${SMP}/*`]: { status: 500 } }).hent })).toBe(null);
@@ -128,7 +163,7 @@ describe.skipIf(!process.env.DATABASE_URL)("EHF-test i Admin", () => {
     settEhfNett({ naptr: elma, hent: nett({ [DIREKTE]: { status: 200, tekst: METADATA } }).hent });
     const r = await kall("/api/admin/ehf-test", { orgnr: "974 760 673" }, admin);
     expect(r.status).toBe(200);
-    expect(r.data).toMatchObject({ orgnr: NR, svar: true, smp: SMP, steg: ["DNS: https://smp.elma-smp.no", "SMP, EHF-faktura (kodet): HTTP 200"] });
+    expect(r.data).toMatchObject({ orgnr: NR, svar: true, smp: SMP, steg: [`Navn i SML: ${smlNavn(NR)}`, "DNS: https://smp.elma-smp.no", "SMP, EHF-faktura (kodet): HTTP 200"] });
     expect(typeof r.data.ms).toBe("number");
     expect((await kall("/api/admin/ehf-test", { orgnr: "1234" }, admin)).data.error).toBe("Skriv et org.nr. med ni siffer.");
     expect((await kall("/api/admin/ehf-test", { orgnr: NR }, "Bearer test:uid-ehf-x:x@server.test:mfa")).status).toBe(403);

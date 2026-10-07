@@ -2,16 +2,19 @@
 // gjør det: SML-en (DNS, NAPTR-post) peker til mottakerens SMP (for de fleste norske
 // mottakere ELMA), og SMP-en svarer for dokumenttypen (EHF-faktura, PEPPOL BIS Billing 3).
 //
-// Oppslaget skal tåle det som kan gå galt underveis: finner ikke DNS-en i miljøet noe,
-// spørres Google eller Cloudflare (DNS over HTTPS) før svaret er nei. SMP-en spørres direkte
-// om dokumenttypen (det avsenderne gjør), med identifikatorene kodet på to måter, og
-// tjenestelisten leses om det ikke gir svar. Stegene logges, så Admin kan se hva som skjedde.
+// Oppslaget skal tåle det som kan gå galt underveis. DNS-en i Cloud Run svarer ikke på
+// NAPTR-oppslag, så finner den ingenting, spørres Google og Cloudflare (DNS over HTTPS).
+// Finner ingen av dem SMP-en, spørres ELMA direkte (der er de fleste norske mottakerne).
+// SMP-en spørres om dokumenttypen (det avsenderne gjør), med identifikatorene kodet på to
+// måter, og tjenestelisten leses om det ikke gir svar. Stegene logges, så Admin kan se
+// hva som skjedde.
 import { createHash } from "node:crypto";
 import dns from "node:dns/promises";
 import { CUSTOMIZATION_ID } from "./ehf.js";
 import { config } from "./config.js";
 
 const SML = "edelivery.tech.ec.europa.eu";
+const ELMA = "https://smp.elma-smp.no";
 const FAKTURA = `urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##${CUSTOMIZATION_ID}`;
 // Dokumenttypen slik avsenderne spør etter den (med UBL-versjonen).
 const DOKUMENTTYPE = `busdox-docid-qns::${FAKTURA}::2.1`;
@@ -48,7 +51,8 @@ export interface Oppslag {
 export type EhfOppslag = { svar: boolean | null; smp: string | null; steg: string[] };
 
 let resolver: dns.Resolver | undefined;
-const systemetsDns = (navn: string) => (resolver ??= new dns.Resolver({ timeout: 2000, tries: 2 })).resolveNaptr(navn);
+const systemet = () => (resolver ??= new dns.Resolver({ timeout: 2000, tries: 2 }));
+const systemetsDns = (navn: string) => systemet().resolveNaptr(navn);
 
 // SMP-adressen i NAPTR-posten: regexp har formen «!.*!https://smp.example.com/!» (skilletegnet
 // er første tegn).
@@ -61,45 +65,55 @@ function smpAdresse(poster: Naptr[]): string | null {
 }
 
 // NAPTR-data slik DNS over HTTPS viser den: 100 10 "U" "Meta:SMP" "!.*!https://smp.example.com/!" .
-const tekstfelt = String.raw`"((?:[^"\\]|\\.)*)"`;
-const NAPTR_DATA = new RegExp(String.raw`^(\d+)\s+(\d+)\s+${tekstfelt}\s+${tekstfelt}\s+${tekstfelt}\s+\S+\s*$`);
-const lesNaptr = (data: string): Naptr | null => {
-  const m = NAPTR_DATA.exec(data.trim());
-  if (!m) return null;
-  const ut = (s: string) => s.replace(/\\(.)/g, "$1");
-  return { order: Number(m[1]), preference: Number(m[2]), flags: ut(m[3]!), service: ut(m[4]!), regexp: ut(m[5]!) };
-};
+// (feltene kan også stå uten anførselstegn).
+export function lesNaptr(data: string): Naptr | null {
+  const felt = (data.trim().match(/"(?:[^"\\]|\\.)*"|\S+/g) ?? []).map((t) => (t.length >= 2 && t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1).replace(/\\(.)/g, "$1") : t));
+  const [order, preference, flags, service, regexp] = felt;
+  if (felt.length < 5 || !/^\d+$/.test(order!) || !/^\d+$/.test(preference!)) return null;
+  return { order: Number(order), preference: Number(preference), flags: flags!, service: service!, regexp: regexp! };
+}
 
-// DNS over HTTPS (Google, så Cloudflare). poster: svaret; null: fikk ikke svar.
-async function dnsOverHttps(navn: string, hent: typeof fetch, steg: string[]): Promise<Naptr[] | null> {
-  for (const [kilde, url] of [
-    ["Google", `https://dns.google/resolve?name=${navn}&type=NAPTR`],
-    ["Cloudflare", `https://cloudflare-dns.com/dns-query?name=${navn}&type=NAPTR`],
-  ] as const) {
-    try {
-      const r = await hent(url, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(4000) });
-      if (!r.ok) {
-        steg.push(`DNS hos ${kilde}: HTTP ${r.status}`);
-        continue;
-      }
-      const d = (await r.json()) as { Status?: number; Answer?: { type: number; data: string }[] };
-      // 3: navnet finnes ikke (NXDOMAIN). 0 uten NAPTR-svar: ingen slik post.
-      if (d.Status === 3) {
-        steg.push(`DNS hos ${kilde}: ingen post`);
-        return [];
-      }
-      if (d.Status !== 0) {
-        steg.push(`DNS hos ${kilde}: status ${d.Status}`);
-        continue;
-      }
-      const poster = (d.Answer ?? []).filter((a) => a.type === 35).map((a) => lesNaptr(a.data)).filter((p): p is Naptr => p !== null);
-      steg.push(`DNS hos ${kilde}: ${poster.length ? poster.map((p) => p.regexp).join(", ") : "ingen post"}`);
-      return poster;
-    } catch (e) {
-      steg.push(`DNS hos ${kilde}: ${(e as Error).message}`);
+// DNS over HTTPS. poster: svaret (tomt: ingen post); null: fikk ikke svar.
+const DOH = [
+  ["Google", (navn: string) => `https://dns.google/resolve?name=${navn}&type=35`],
+  ["Cloudflare", (navn: string) => `https://cloudflare-dns.com/dns-query?name=${navn}&type=35`],
+] as const;
+async function dnsOverHttps(kilde: string, url: string, hent: typeof fetch, steg: string[]): Promise<Naptr[] | null> {
+  try {
+    const r = await hent(url, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(4000) });
+    if (!r.ok) {
+      steg.push(`DNS hos ${kilde}: HTTP ${r.status}`);
+      return null;
     }
+    const d = (await r.json()) as { Status?: number; Answer?: { type: number; data: string }[] };
+    // 3: navnet finnes ikke (NXDOMAIN). 0 uten NAPTR-svar: ingen slik post.
+    if (d.Status === 3) {
+      steg.push(`DNS hos ${kilde}: finnes ikke (NXDOMAIN)`);
+      return [];
+    }
+    if (d.Status !== 0) {
+      steg.push(`DNS hos ${kilde}: status ${d.Status}`);
+      return null;
+    }
+    const svar = d.Answer ?? [];
+    const naptr = svar.filter((a) => Number(a.type) === 35);
+    const poster = naptr.map((a) => lesNaptr(String(a.data))).filter((p): p is Naptr => p !== null);
+    steg.push(
+      `DNS hos ${kilde}: ${
+        poster.length
+          ? poster.map((p) => p.regexp).join(", ")
+          : naptr.length
+            ? `kunne ikke lese «${String(naptr[0]!.data).slice(0, 120)}»`
+            : svar.length
+              ? `svar uten NAPTR (typer ${svar.map((a) => a.type).join(", ")})`
+              : "ingen post (NOERROR uten svar)"
+      }`,
+    );
+    return poster;
+  } catch (e) {
+    steg.push(`DNS hos ${kilde}: ${(e as Error).message}`);
+    return null;
   }
-  return null;
 }
 
 // Svaret fra SMP-en for dokumenttypen (en ServiceMetadata, signert eller ikke).
@@ -120,37 +134,11 @@ function dokumenttyper(xml: string): string[] {
 const erFaktura = (doktype: string) => doktype.toLowerCase().includes(FAKTURA.toLowerCase());
 const kort = (doktype: string) => doktype.replace(/^[^:]+::/, "").replace(/^urn:oasis:names:specification:ubl:schema:xsd:/, "");
 
-export async function ehfOppslag(orgnr: string, o: Oppslag = {}): Promise<EhfOppslag> {
-  const steg: string[] = [];
-  if (!/^\d{9}$/.test(orgnr)) return { svar: false, smp: null, steg: ["Ugyldig org.nr."] };
-  const navn = smlNavn(orgnr);
-  const hent = o.hent ?? fetch;
-
-  // 1. Hvilken SMP mottakeren er registrert hos (SML-en). sikkertIkke: et DNS-svar sa
-  // at mottakeren ikke er registrert i PEPPOL.
-  let smp: string | null = null;
-  let sikkertIkke = false;
-  try {
-    const poster = await (o.naptr ?? systemetsDns)(navn);
-    smp = smpAdresse(poster);
-    steg.push(`DNS: ${smp ?? "ingen SMP i svaret"}`);
-    sikkertIkke = !smp;
-  } catch (e) {
-    const kode = (e as { code?: string }).code ?? (e as Error).message;
-    sikkertIkke = kode === "ENOTFOUND" || kode === "ENODATA";
-    steg.push(`DNS: ${sikkertIkke ? "ingen post" : `feil (${kode})`}`);
-  }
-  if (!smp) {
-    const poster = await dnsOverHttps(navn, hent, steg);
-    if (poster) {
-      smp = smpAdresse(poster);
-      sikkertIkke ||= !smp;
-    }
-  }
-  if (!smp) return { svar: sikkertIkke ? false : null, smp: null, steg };
-
-  // 2. Spør SMP-en om EHF-fakturaen direkte, med identifikatorene kodet fullt ut (standard)
-  // og bare med # kodet (noen SMP-er vil ha :: som det er).
+// Spør SMP-en om EHF-fakturaen. true: mottakeren tar imot den. false: SMP-en kjenner ikke
+// mottakeren, eller tjenestelisten er uten EHF-faktura. null: fikk ikke svar.
+async function sporSmp(smp: string, orgnr: string, hent: typeof fetch, steg: string[], hvem = "SMP"): Promise<boolean | null> {
+  // Direkte, med identifikatorene kodet fullt ut (standard) og bare med # kodet (noen SMP-er
+  // vil ha :: som det er).
   const former: [string, (s: string) => string][] = [
     ["kodet", encodeURIComponent],
     ["med ::", (s) => s.replace(/%/g, "%25").replace(/#/g, "%23")],
@@ -160,35 +148,69 @@ export async function ehfOppslag(orgnr: string, o: Oppslag = {}): Promise<EhfOpp
     try {
       const r = await hent(url, { headers: HODER, signal: AbortSignal.timeout(6000) });
       const tekst = r.ok ? await r.text() : "";
-      steg.push(`${beskrivelse}: HTTP ${r.status}`);
+      steg.push(`${hvem}, ${beskrivelse}: HTTP ${r.status}`);
       if (r.status !== 404 && !r.ok) feilet = true;
       return { status: r.status, tekst };
     } catch (e) {
-      steg.push(`${beskrivelse}: ${(e as Error).message}`);
+      steg.push(`${hvem}, ${beskrivelse}: ${(e as Error).message}`);
       feilet = true;
       return { status: 0, tekst: "" };
     }
   };
   for (const [form, kod] of former) {
-    const r = await spor(`SMP, EHF-faktura (${form})`, `${smp}/${kod(deltaker(orgnr))}/services/${kod(DOKUMENTTYPE)}`);
-    if (r.status === 200 && ER_TJENESTE.test(r.tekst)) return { svar: true, smp, steg };
+    const r = await spor(`EHF-faktura (${form})`, `${smp}/${kod(deltaker(orgnr))}/services/${kod(DOKUMENTTYPE)}`);
+    if (r.status === 200 && ER_TJENESTE.test(r.tekst)) return true;
   }
-
-  // 3. Tjenestelisten: alle dokumenttypene mottakeren tar imot.
-  let fantListe = false;
+  // Tjenestelisten: alle dokumenttypene mottakeren tar imot.
   for (const [form, kod] of former) {
-    const r = await spor(`SMP, tjenesteliste (${form})`, `${smp}/${kod(deltaker(orgnr))}`);
+    const r = await spor(`tjenesteliste (${form})`, `${smp}/${kod(deltaker(orgnr))}`);
     if (r.status !== 200) continue;
-    fantListe = true;
     const typer = dokumenttyper(r.tekst);
     steg.push(
       `${typer.length} ${typer.length === 1 ? "dokumenttype" : "dokumenttyper"}${typer.length ? `: ${typer.slice(0, 8).map(kort).join(" | ")}${typer.length > 8 ? " …" : ""}` : ""}`,
     );
-    if (typer.some(erFaktura) || r.tekst.toLowerCase().includes(FAKTURA.toLowerCase())) return { svar: true, smp, steg };
-    break;
+    return typer.some(erFaktura) || r.tekst.toLowerCase().includes(FAKTURA.toLowerCase());
   }
-  // Listen uten EHF-faktura, eller SMP-en kjenner ikke mottakeren: nei. Ellers ukjent.
-  return { svar: fantListe || !feilet ? false : null, smp, steg };
+  // SMP-en kjenner ikke mottakeren (bare 404): nei. Ellers ukjent.
+  return feilet ? null : false;
+}
+
+export async function ehfOppslag(orgnr: string, o: Oppslag = {}): Promise<EhfOppslag> {
+  if (!/^\d{9}$/.test(orgnr)) return { svar: false, smp: null, steg: ["Ugyldig org.nr."] };
+  const navn = smlNavn(orgnr);
+  const steg: string[] = [`Navn i SML: ${navn}`];
+  const hent = o.hent ?? fetch;
+
+  // 1. Hvilken SMP mottakeren er registrert hos (SML-en), først med DNS-en i miljøet.
+  // sikkertIkke: et DNS-svar sa at mottakeren ikke er registrert i PEPPOL.
+  let smp: string | null = null;
+  let sikkertIkke = false;
+  const hvilken = o.naptr ? "DNS" : `DNS i miljøet (${systemet().getServers().join(", ") || "standard"})`;
+  try {
+    const poster = await (o.naptr ?? systemetsDns)(navn);
+    smp = smpAdresse(poster);
+    steg.push(`${hvilken}: ${smp ?? `ingen SMP i svaret (${poster.length} poster)`}`);
+    sikkertIkke = !smp;
+  } catch (e) {
+    const kode = (e as { code?: string }).code ?? (e as Error).message;
+    sikkertIkke = kode === "ENOTFOUND" || kode === "ENODATA";
+    steg.push(`${hvilken}: ${kode === "ENOTFOUND" ? "finnes ikke (ENOTFOUND)" : kode === "ENODATA" ? "ingen post (ENODATA)" : `feil (${kode})`}`);
+  }
+  // 2. Google og Cloudflare (DNS over HTTPS), til en av dem finner SMP-en.
+  for (const [kilde, url] of DOH) {
+    if (smp) break;
+    const poster = await dnsOverHttps(kilde, url(navn), hent, steg);
+    if (!poster) continue;
+    smp = smpAdresse(poster);
+    sikkertIkke ||= !smp;
+  }
+  if (smp) return { svar: await sporSmp(smp, orgnr, hent, steg), smp, steg };
+
+  // 3. Ingen DNS fant SMP-en: spør ELMA direkte, der de fleste norske mottakerne er.
+  // Nei bare når både DNS-en og ELMA sier det; ellers er svaret ukjent.
+  const elma = await sporSmp(ELMA, orgnr, hent, steg, "ELMA direkte");
+  if (elma) return { svar: true, smp: ELMA, steg };
+  return { svar: elma === false && sikkertIkke ? false : null, smp: null, steg };
 }
 
 // true: mottar EHF-faktura (PEPPOL BIS Billing 3). false: ikke registrert for det.
