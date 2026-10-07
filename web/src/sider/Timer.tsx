@@ -334,6 +334,9 @@ function Ukeside({
   const ansattDag = (d: string) => !!a && d >= a.ansatt_fra && (!a.ansatt_til || d <= a.ansatt_til);
   // Den ansatte fører sine egne timer så lenge den er aktiv; eier og administrator alltid.
   const kanFore = !!a && (personal || (egen && a.aktiv));
+  // Endre en føring: eier og administrator alltid, den ansatte selv før den er levert (eller når
+  // den er avvist). Regnskap ser bare.
+  const kanEndre = (f: Partial<Foring>) => personal || (kanFore && (!f.id || f.status === "utkast" || f.status === "avvist"));
   const nr = ukenr(uke).uke;
 
   const lever = () =>
@@ -464,13 +467,13 @@ function Ukeside({
         Overtid: over {tallformat.format(data.regler.daglig_grense)} timer per dag eller {tallformat.format(data.regler.ukentlig_grense)} per uke, med{" "}
         {data.regler.overtid_prosent} % tillegg.
       </p>
-      <Dialog apen={!!apen} lukk={() => settApen(null)} tittel={apen?.id ? (personal || apen.status === "utkast" || apen.status === "avvist" ? "Endre timer" : "Timer") : "Før timer"}>
+      <Dialog apen={!!apen} lukk={() => settApen(null)} tittel={!apen?.id ? "Før timer" : apen && kanEndre(apen) ? "Endre timer" : "Timer"}>
         {apen && (
           <ForingSkjema
             foring={apen}
             ansatt={a}
             regler={data.regler}
-            kanEndre={!apen.id || personal || apen.status === "utkast" || apen.status === "avvist"}
+            kanEndre={kanEndre(apen)}
             ferdig={() => {
               settApen(null);
               settMelding(null);
@@ -566,7 +569,11 @@ function ForingSkjema({
     <form onSubmit={lagre} className="foring-skjema">
       {!kanEndre && (
         <div className="melding info">
-          {foring.status === "godkjent" ? "Timene er godkjent og kan ikke endres." : "Timene er levert og kan ikke endres før de eventuelt blir avvist."}
+          {foring.status === "godkjent"
+            ? "Timene er godkjent og kan ikke endres."
+            : foring.status === "levert"
+              ? "Timene er levert og kan ikke endres før de eventuelt blir avvist."
+              : "Du kan se timene, men ikke endre dem."}
         </div>
       )}
       {foring.status === "avvist" && foring.avvist_grunn && <div className="melding feil">Avvist: {foring.avvist_grunn}</div>}
