@@ -33,7 +33,7 @@ export function Fakturaliste() {
   const settStatus = (s: string) => settSok(s ? { status: s } : {}, { replace: true });
   // «Ubetalt» er bare fakturaer; kreditnotaer skal ikke betales og står under «Kreditert».
   const filter = status === "utstedt" ? "?status=utstedt&type=faktura" : status === "kreditert" ? "?status=kreditert&kreditnotaer=1" : status ? `?status=${status}` : "";
-  const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/fakturaer${filter}`), [org?.id, status]);
+  const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/fakturaer${filter}`), [org?.id, status], { oppdater: true });
   const [sendUtkast, settSendUtkast] = useState(false);
   const utkast = status === "utkast" ? (data ?? []) : [];
 
@@ -300,6 +300,7 @@ export function FakturaSkjema() {
   const { id } = useParams();
   const { org } = useKonto();
   const nav = useNavigate();
+  const sted = useLocation();
   const [sporring] = useSearchParams();
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const kunder = useData(() => hent(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
@@ -435,6 +436,17 @@ export function FakturaSkjema() {
     settFeil(null);
   }
 
+  // Åpnet fra AI-assistenten med et utkast: fyll ut skjemaet (én gang per åpning).
+  const fraAssistent = !id ? ((sted.state as { aiUtkast?: AiUtkast } | null)?.aiUtkast ?? null) : null;
+  const brukt = useRef<string | null>(null);
+  useEffect(() => {
+    if (fraAssistent && orgData.data && brukt.current !== sted.key) {
+      brukt.current = sted.key;
+      brukAi(fraAssistent);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sted.key, Boolean(orgData.data)]);
+
   // Et produkt laget fra skjemaet havner på linjen det ble laget fra, ellers på første
   // tomme linje (eller en ny linje).
   function brukNyttProdukt(p: any, hvor: number | "ny") {
@@ -510,6 +522,7 @@ export function FakturaSkjema() {
           Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
         </div>
       )}
+      {fraAssistent && <div className="melding info">Fylt ut av AI-assistenten. Se over kunde, linjer og datoer før du sender.</div>}
       {!id && !kopiId && orgData.data.ai_tilgjengelig && orgData.data.ai_aktiv && <AiFaktura orgId={org!.id} bruk={brukAi} />}
       <div className="kort">
         <div className="rad">
@@ -709,7 +722,7 @@ export function FakturaVisning() {
   const { id } = useParams();
   const { org } = useKonto();
   const nav = useNavigate();
-  const { data: f, feil, last } = useData(() => hent(`/org/${org!.id}/fakturaer/${id}`), [org?.id, id]);
+  const { data: f, feil, last } = useData(() => hent(`/org/${org!.id}/fakturaer/${id}`), [org?.id, id], { oppdater: true });
   const sted = useLocation();
   // Rett etter sending: bekreftelse med snarvei til neste faktura (vises bare én gang).
   const [nettoppSendt, settNettoppSendt] = useState(Boolean((sted.state as any)?.sendt));

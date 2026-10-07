@@ -74,7 +74,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   registrene), og svaret (JSON etter et fast skjema) sjekkes før skjemaet fylles ut; ingenting
   lagres. Innbetalinger reglene ikke fant noen faktura for, får et forslag fra Gemini når den
   er rimelig sikker (`foresla_banktransaksjon`); forslag registreres aldri uten at en person
-  bekrefter
+  bekrefter. AI-assistenten (knappen på alle sider) tar kommandoer med tale eller tekst: Gemini
+  velger handling og fyller ut feltene, serveren slår opp og svarer (betalinger, utestående),
+  og alt som endrer noe (sende faktura eller utkast, registrere betaling, purre) blir forslag
+  som appen utfører med de vanlige rutene når brukeren bekrefter
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 

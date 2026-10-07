@@ -23,6 +23,7 @@ import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
 import { TemaBryter } from "./TemaBryter";
 import { installer } from "./pwa";
+import { Assistent } from "./assistent";
 import {
   IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
@@ -319,6 +320,7 @@ function Ramme() {
           </Routes>
         )}
       </main>
+      {org && <Assistent key={org.id} />}
     </div>
   );
 }

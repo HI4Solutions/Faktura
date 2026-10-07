@@ -22,6 +22,7 @@ import { MAKS_ANTALL, skrivVedlegg, vedleggFiler, vedleggRuter } from "./vedlegg
 import { ehfRuter } from "./ehfRuter.js";
 import { bankRuter } from "./bankRuter.js";
 import { aiRuter } from "./aiFaktura.js";
+import { assistentRuter } from "./aiAssistent.js";
 import { aiPaa } from "./ai.js";
 
 const uuid = z.string().uuid();
@@ -316,6 +317,7 @@ export function lagApi() {
   org.route("/", ehfRuter());
   org.route("/", bankRuter());
   org.route("/", aiRuter());
+  org.route("/", assistentRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting

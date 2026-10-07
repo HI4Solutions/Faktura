@@ -559,8 +559,8 @@ export function Innbetalinger() {
   const { org } = useKonto();
   const [sok, settSok] = useSearchParams();
   const fane = (["se", "koblet", "ignorert", "alle"].includes(sok.get("vis") ?? "") ? sok.get("vis") : "se") as Fane;
-  const bank = useData(() => hent<BankStatus>(`/org/${org!.id}/bank`), [org?.id]);
-  const { data, last } = useData(() => hent<{ transaksjoner: any[]; antall: BankStatus["antall"] }>(`/org/${org!.id}/banktransaksjoner?status=${fane}`), [org?.id, fane]);
+  const bank = useData(() => hent<BankStatus>(`/org/${org!.id}/bank`), [org?.id], { oppdater: true });
+  const { data, last } = useData(() => hent<{ transaksjoner: any[]; antall: BankStatus["antall"] }>(`/org/${org!.id}/banktransaksjoner?status=${fane}`), [org?.id, fane], { oppdater: true });
   const h = useHandling();
   const [velg, settVelg] = useState<any | null>(null);
   const [henter, settHenter] = useState(false);

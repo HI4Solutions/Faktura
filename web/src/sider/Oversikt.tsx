@@ -11,7 +11,7 @@ import { dagerTil, navnListe, type BankStatus } from "./Bank";
 export function Oversikt() {
   const { org, meg, velgOrg } = useKonto();
   const nav = useNavigate();
-  const { data, feil } = useData(() => hent<any[]>(`/org/${org!.id}/fakturaer`), [org?.id]);
+  const { data, feil } = useData(() => hent<any[]>(`/org/${org!.id}/fakturaer`), [org?.id], { oppdater: true });
   const bank = useData(() => (org?.type === "regnskapsbyraa" ? Promise.resolve(null) : hent<BankStatus>(`/org/${org!.id}/bank`).catch(() => null)), [org?.id]);
 
   // Regnskapsbyrå: felles oversikt over klientene.

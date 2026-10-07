@@ -1045,3 +1045,86 @@ button.ai-stopp:hover:not(:disabled) { border-color: var(--fare); }
 .ai-test { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0 12px; }
 .ai-test .melding { flex-basis: 100%; margin: 0; }
 .ai-detaljer { display: block; color: var(--dempet); overflow-wrap: anywhere; }
+
+/* AI-assistenten: knappen nederst til høyre på alle sider, og panelet med samtalen */
+.assistent-knapp {
+  position: fixed; z-index: 35; right: max(24px, env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom));
+  width: 58px; height: 58px; min-height: 0; padding: 0; justify-content: center; border-radius: 20px; border: 0;
+  background: var(--aksent); color: var(--aksent-tekst);
+  box-shadow: 0 12px 28px -10px rgba(47, 86, 216, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.assistent-knapp:hover:not(:disabled) { background: var(--aksent-hover); }
+.assistent-knapp { transition: transform 0.22s ease, opacity 0.22s ease, background 0.15s; }
+.assistent-knapp.skjult { transform: translateY(24px) scale(0.85); opacity: 0; pointer-events: none; }
+body.med-assistent .innhold { padding-bottom: 112px; }
+@media (max-width: 860px) {
+  .assistent-knapp {
+    right: max(14px, env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom) + var(--under-bunn));
+    width: 52px; height: 52px; border-radius: 17px;
+  }
+  body.skriver .assistent-knapp { display: none; }
+  body.med-assistent .innhold { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+}
+dialog.assistent {
+  width: min(440px, calc(100vw - 32px)); height: min(700px, calc(100vh - 48px)); max-height: none; overflow: hidden;
+  margin: auto max(24px, env(safe-area-inset-right)) 24px auto;
+}
+dialog.assistent[open] { display: flex; flex-direction: column; }
+.assistent-topp { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--kant); flex: none; }
+.assistent-topp h2 { margin: 0; font-size: 1.02rem; flex: 1; }
+.assistent-topp .ai-ikon { width: 30px; height: 30px; border-radius: 9px; }
+.assistent-topp button.lenke { font-size: 0.85rem; }
+.assistent-topp button.ikon { border: 0; box-shadow: none; background: none; }
+.assistent-logg { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; overscroll-behavior: contain; }
+.boble { max-width: 88%; padding: 10px 13px; border-radius: 16px; font-size: 0.93rem; line-height: 1.45; overflow-wrap: anywhere; }
+.boble p { margin: 0; }
+.boble.bruker { align-self: flex-end; background: var(--aksent); color: var(--aksent-tekst); border-bottom-right-radius: 6px; }
+.boble.bruker .dempet { color: inherit; opacity: 0.8; font-style: italic; }
+.boble.assistent { align-self: flex-start; background: var(--flate-2); border: 1px solid var(--kant); border-bottom-left-radius: 6px; display: flex; flex-direction: column; gap: 8px; }
+.boble.assistent.feil { border-color: color-mix(in srgb, var(--fare) 35%, var(--kant)); color: var(--fare); background: var(--fare-lys); }
+.boble.assistent > button.primar { align-self: flex-start; }
+.boble.tenker { flex-direction: row; align-items: center; gap: 8px; color: var(--dempet); }
+.boble .spinner { width: 14px; height: 14px; }
+.assistent-forslag { background: var(--flate); border: 1px solid var(--kant); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.assistent-forslag.ferdig { border-color: color-mix(in srgb, var(--ok) 40%, var(--kant)); }
+.assistent-forslag.avvist { opacity: 0.7; }
+.assistent-forslag p { margin: 0; }
+.assistent-forslag .knapper { gap: 6px; }
+.assistent-status { display: inline-flex; align-items: center; gap: 8px; }
+.assistent-lenker { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.assistent-lenker button.lenke, .assistent-forslag > button.lenke { font-size: 0.88rem; align-self: flex-start; }
+.assistent-velkommen p { margin: 0 0 12px; color: var(--tekst-2); }
+.assistent-velkommen p.dempet { color: var(--dempet); }
+.assistent-eksempler { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.assistent-eksempler button { border-radius: 999px; font-size: 0.86rem; padding: 6px 12px; }
+dialog.assistent > .melding { margin: 0 16px 8px; flex: none; }
+.assistent-bunn {
+  display: flex; align-items: center; gap: 8px; flex: none;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--kant); background: var(--flate);
+}
+.assistent-bunn input { flex: 1; min-width: 0; }
+.assistent-bunn > button.primar { flex: none; }
+.assistent-mik {
+  width: 46px; height: 46px; min-height: 0; padding: 0; justify-content: center; border-radius: 999px; flex: none;
+  background: var(--aksent); color: var(--aksent-tekst); border-color: var(--aksent);
+}
+.assistent-mik:hover:not(:disabled) { background: var(--aksent-hover); }
+.assistent-mik.tar, .assistent-mik.tar:hover:not(:disabled) { background: var(--fare); border-color: var(--fare); animation: ai-ring 1.4s ease-out infinite; }
+.assistent-stopp { width: 14px; height: 14px; border-radius: 3px; background: #fff; }
+@keyframes ai-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fare) 55%, transparent); }
+  100% { box-shadow: 0 0 0 14px transparent; }
+}
+.assistent-lytter { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.assistent-lytter .liten { font-weight: 450; }
+.assistent-niva { display: block; height: 4px; border-radius: 999px; background: var(--fare); transform-origin: left; transition: transform 0.1s linear; }
+@media (prefers-reduced-motion: reduce) { .assistent-mik.tar { animation: none; } }
+@media (max-width: 700px) {
+  dialog.assistent { width: 100%; height: min(88dvh, calc(100dvh - 20px - env(safe-area-inset-top))); margin: auto 0 var(--under-bunn); }
+  .assistent-topp { padding-top: 20px; position: relative; }
+  .assistent-topp::before {
+    content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px;
+    border-radius: 999px; background: var(--kant-sterk);
+  }
+  .boble { max-width: 92%; }
+}

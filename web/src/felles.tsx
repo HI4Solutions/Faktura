@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-// Henter data og gir laster/feil/last-på-nytt.
-export function useData<T>(fn: () => Promise<T>, avhengigheter: unknown[]) {
+// Noe er endret utenfor siden (f.eks. av AI-assistenten): sider som viser fakturaer og
+// innbetalinger henter dem på nytt.
+export const DATA_ENDRET = "hi4:data-endret";
+export const dataEndret = () => window.dispatchEvent(new Event(DATA_ENDRET));
+
+// Henter data og gir laster/feil/last-på-nytt. oppdater: hent på nytt når data er endret.
+export function useData<T>(fn: () => Promise<T>, avhengigheter: unknown[], valg: { oppdater?: boolean } = {}) {
   const [data, settData] = useState<T | undefined>();
   const [feil, settFeil] = useState<string | null>(null);
   const [laster, settLaster] = useState(true);
@@ -24,6 +29,13 @@ export function useData<T>(fn: () => Promise<T>, avhengigheter: unknown[]) {
     last();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, avhengigheter);
+
+  useEffect(() => {
+    if (!valg.oppdater) return;
+    const f = () => void last();
+    window.addEventListener(DATA_ENDRET, f);
+    return () => window.removeEventListener(DATA_ENDRET, f);
+  }, [valg.oppdater, last]);
 
   return { data, feil, laster, last, settData };
 }

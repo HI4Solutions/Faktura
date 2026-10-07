@@ -26,7 +26,7 @@ klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
 | Google Disk | Ferdig, krever OAuth-klient (`GOOGLE_OAUTH_CLIENT_ID`) |
 | EHF/Peppol (gjennom hver organisasjons konto hos Recommand) | Ferdig |
 | Innbetalinger fra banken (Enable Banking, flere banker) | Ferdig |
-| AI med Gemini på Vertex AI: faktura fra tekst eller tale, forslag på innbetalinger | Ferdig (valgfrie GitHub-variabler `AI_AKTIV`, `AI_REGION`, `AI_MODELL`, `AI_GRENSE`) |
+| AI med Gemini på Vertex AI: assistent med talekommandoer, faktura fra tekst eller tale, forslag på innbetalinger | Ferdig (valgfrie GitHub-variabler `AI_AKTIV`, `AI_REGION`, `AI_MODELL`, `AI_GRENSE`) |
 | Regnskapssystemer | Ikke startet |
 
 Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og veikart.

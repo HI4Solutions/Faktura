@@ -96,23 +96,33 @@ export const utkastSkjema: Skjema = {
 
 const krTekst = (n: number) => new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 }).format(n).replace(/[\u00a0\u202f]/g, " ");
 
-export function systemtekst(g: Grunnlag, naa = new Date()): string {
+// Reglene for å fylle ut en faktura (brukes også av assistenten).
+export const fakturaRegler = [
+  "- Kunden: velg id-en (K1, K2 …) til kunden i kundelisten som brukeren mener, også når navnet er skrevet litt annerledes, forkortet eller uten AS. Er du ikke sikker, eller finnes ikke kunden, sett kunde til null og skriv navnet slik brukeren sa det i kunde_navn.",
+  "- Linjer: én linje per vare eller tjeneste. Gjelder linjen et produkt i produktlisten, sett produkt til id-en (P1, P2 …) og bruk produktets pris når brukeren ikke sier en annen.",
+  "- enhetspris er prisen for én enhet. Sier brukeren en sum for flere enheter, del summen på antallet. pris_inkl_mva er true bare når brukeren sier at prisen er med mva («inkl. mva», «med moms»).",
+  "- mva_sats er 25, 15, 12 eller 0. Bruk produktets sats for produkter. Ellers 25, om ikke brukeren sier noe annet (matvarer 15, persontransport og overnatting 12, fritatt 0).",
+  "- Regn om relative datoer («i morgen», «neste fredag», «om 14 dager») til ÅÅÅÅ-MM-DD. «For oktober» betyr periode_fra første og periode_til siste dag i oktober. Sett bare periode når brukeren nevner en.",
+  "- forfallsdato bare når brukeren sier en frist; ellers null (appen bruker standard betalingsfrist). fakturadato bare når brukeren sier en; ellers null (i dag).",
+  "- deres_referanse: kundens referanse eller bestiller når brukeren sier det («referanse Ola», «att. Kari»).",
+  "- kommentar: bare tekst brukeren ber om å få på fakturaen («skriv at …»).",
+  "- Ikke finn på noe: felt du ikke vet, er null. Ingen linje uten at brukeren har nevnt hva som skal faktureres.",
+];
+
+// Dagens dato og selgeren, så modellen kan regne om datoer og vet om det er mva.
+export const datoOgSelger = (g: Grunnlag, naa = new Date()) => {
   const { dato, ukedag } = iDagOslo(naa);
+  return `Dagens dato er ${dato} (${ukedag}). Selger er ${enLinje(g.navn)}, ${g.mva ? "som er mva-registrert" : "som ikke er mva-registrert: alle linjer skal ha mva_sats 0"}.`;
+};
+
+export function systemtekst(g: Grunnlag, naa = new Date()): string {
   return [
     "Du lager utkast til fakturaer i fakturaprogrammet HI4 Faktura ut fra det brukeren skriver eller sier. Svar bare med JSON etter skjemaet.",
     "",
-    `Dagens dato er ${dato} (${ukedag}). Selger er ${enLinje(g.navn)}, ${g.mva ? "som er mva-registrert" : "som ikke er mva-registrert: alle linjer skal ha mva_sats 0"}.`,
+    datoOgSelger(g, naa),
     "",
     "Regler:",
-    "- Kunden: velg id-en (K1, K2 …) til kunden i kundelisten som brukeren mener, også når navnet er skrevet litt annerledes, forkortet eller uten AS. Er du ikke sikker, eller finnes ikke kunden, sett kunde til null og skriv navnet slik brukeren sa det i kunde_navn.",
-    "- Linjer: én linje per vare eller tjeneste. Gjelder linjen et produkt i produktlisten, sett produkt til id-en (P1, P2 …) og bruk produktets pris når brukeren ikke sier en annen.",
-    "- enhetspris er prisen for én enhet. Sier brukeren en sum for flere enheter, del summen på antallet. pris_inkl_mva er true bare når brukeren sier at prisen er med mva («inkl. mva», «med moms»).",
-    "- mva_sats er 25, 15, 12 eller 0. Bruk produktets sats for produkter. Ellers 25, om ikke brukeren sier noe annet (matvarer 15, persontransport og overnatting 12, fritatt 0).",
-    "- Regn om relative datoer («i morgen», «neste fredag», «om 14 dager») til ÅÅÅÅ-MM-DD. «For oktober» betyr periode_fra første og periode_til siste dag i oktober. Sett bare periode når brukeren nevner en.",
-    "- forfallsdato bare når brukeren sier en frist; ellers null (appen bruker standard betalingsfrist). fakturadato bare når brukeren sier en; ellers null (i dag).",
-    "- deres_referanse: kundens referanse eller bestiller når brukeren sier det («referanse Ola», «att. Kari»).",
-    "- kommentar: bare tekst brukeren ber om å få på fakturaen («skriv at …»).",
-    "- Ikke finn på noe: felt du ikke vet, er null. Ingen linje uten at brukeren har nevnt hva som skal faktureres.",
+    ...fakturaRegler,
     "- merknader: korte setninger på norsk om det brukeren bør sjekke, for eksempel en pris som mangler eller noe du var usikker på. Ikke skriv at kunden mangler (appen viser det selv). Tom liste når alt er klart.",
     "- transkripsjon: når beskrivelsen er et lydopptak, skriv ordrett hva som ble sagt. Ellers null.",
   ].join("\n");
@@ -244,7 +254,7 @@ export function tilUtkast(ai: AiUtkast, g: Grunnlag): Utkast {
 }
 
 // Lydformatene nettlesere tar opp i (MediaRecorder) og Gemini forstår.
-const LYDTYPER: Record<string, string> = {
+export const LYDTYPER: Record<string, string> = {
   "audio/webm": "audio/webm",
   "audio/mp4": "audio/mp4",
   "audio/m4a": "audio/m4a",

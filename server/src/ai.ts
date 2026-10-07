@@ -36,7 +36,7 @@ export type Skjema = {
 // Det som sendes til modellen: tekst, eller lyd (base64).
 export type Del = { text: string } | { inlineData: { mimeType: string; data: string } };
 export type AiSvar<T> = { data: T; tokens_inn: number; tokens_ut: number };
-export type Funksjon = "faktura" | "innbetaling";
+export type Funksjon = "faktura" | "innbetaling" | "assistent";
 
 const logg = (severity: string, message: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ severity, message, ...data }));
 
