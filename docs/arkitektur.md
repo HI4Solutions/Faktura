@@ -50,7 +50,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   før varselet sendes, så ingen sendes to ganger) og sender push-varsel til den som lagde
   dem eller alle som kan fakturere, og e-post om det er valgt. Varselet åpner en kort side
   (`/paaminnelser/<id>`) med kunden og produktene fylt inn: brukeren skriver inn beløpet og
-  sender fakturaen derfra (eller åpner det fulle skjemaet med det som er skrevet)
+  sender fakturaen derfra. Kortet kan også få flere linjer, periode (med hurtigvalg for
+  forrige og denne måneden, kvartalet eller året), rabatt i prosent eller kroner,
+  referanser, melding til kunden, vedlegg, datoer og fakturagebyr. Det fulle skjemaet
+  (kopimottakere, gjentakelse) åpnes med alt som er skrevet
 - `fakturaer`, `faktura_linjer`, `betalinger`
 - `vedlegg`: filer på fakturaer (PDF, bilder, CSV og regneark, typene EHF godtar).
   Lastes opp før utkastet lagres, låses ved utstedelse, og workeren legger en kopi i

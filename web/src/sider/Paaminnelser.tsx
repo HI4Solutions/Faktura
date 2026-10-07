@@ -5,9 +5,11 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
-import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
-import { dato, iDag, kr, leggTilDager, summer } from "../format";
-import { gebyrLinjer } from "../linjer";
+import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
+import { dato, iDag, kr, leggTilDager, linjebelop, summer } from "../format";
+import { erTom, fraProdukt, gebyrLinjer, harRabatt, NotatFelt, tilTallLinjer, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
+import { VedleggFelt } from "../vedlegg";
+import type { Vedlegg } from "../api";
 import { kanSkrive, useKonto } from "../konto";
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { hentAbonnement, pushStotte, slaPaVarsler } from "../pwa";
@@ -407,7 +409,38 @@ function Skjema({ p, ferdig }: { p: Partial<Paaminnelse>; ferdig: () => void }) 
 // Send fakturaen rett fra påminnelsen (varselet åpner denne siden)
 // ---------------------------------------------------------------------------
 
-type HurtigLinje = { produkt_id: string | null; beskrivelse: string; antall: string; enhet: string; pris: string; mva_sats: number; fast: boolean };
+type Ekstra = "periode" | "rabatt" | "referanse" | "melding" | "vedlegg";
+type Felt = { fakturadato: string; forfallsdato: string; periode_fra: string; periode_til: string; deres_referanse: string; var_referanse: string; kommentar: string };
+// Det som tas med til det fulle skjemaet («Åpne i fullt skjema»).
+export type PaaminnelseUtkast = { kunde_id: string | null; f: Felt; linjer: LinjeUtkast[]; gebyr: boolean; vedlegg: Vedlegg[] };
+
+const to = (n: number) => String(n).padStart(2, "0");
+const sisteDag = (a: number, m: number) => new Date(Date.UTC(a, m, 0)).getUTCDate(); // m: 1–12
+const maaned = (a: number, m: number) => ({ fra: `${a}-${to(m)}-01`, til: `${a}-${to(m)}-${sisteDag(a, m)}` });
+const maanedNavn = (m: number) => {
+  const n = new Intl.DateTimeFormat("nb-NO", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2026, m - 1, 15)));
+  return n[0].toUpperCase() + n.slice(1);
+};
+
+// Hurtigvalg for perioden: forrige og denne måneden (kvartalet eller året for slike påminnelser).
+export function periodeValg(intervall: Intervall, dag = iDag()): { navn: string; fra: string; til: string }[] {
+  const [a, m] = dag.split("-").map(Number);
+  if (intervall === "kvartal") {
+    const q = Math.floor((m - 1) / 3); // 0–3
+    const [fa, fq] = q === 0 ? [a - 1, 3] : [a, q - 1];
+    const kvartal = (aar: number, k: number) => ({ fra: maaned(aar, k * 3 + 1).fra, til: maaned(aar, k * 3 + 3).til });
+    return [
+      { navn: `${fq + 1}. kvartal${fa !== a ? ` ${fa}` : ""}`, ...kvartal(fa, fq) },
+      { navn: `${q + 1}. kvartal`, ...kvartal(a, q) },
+    ];
+  }
+  if (intervall === "aar") return [{ navn: String(a - 1), fra: `${a - 1}-01-01`, til: `${a - 1}-12-31` }, { navn: String(a), fra: `${a}-01-01`, til: `${a}-12-31` }];
+  const [fa, fm] = m === 1 ? [a - 1, 12] : [a, m - 1];
+  return [
+    { navn: `${maanedNavn(fm)}${fa !== a ? ` ${fa}` : ""}`, ...maaned(fa, fm) },
+    { navn: maanedNavn(m), ...maaned(a, m) },
+  ];
+}
 
 export function SendFraPaaminnelse() {
   const { id } = useParams();
@@ -418,11 +451,18 @@ export function SendFraPaaminnelse() {
   const kunder = useData(() => hent<any[]>(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
   const produkter = useData(() => hent<any[]>(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
   const [kundeId, settKundeId] = useState<string | null>(null);
-  const [linjer, settLinjer] = useState<HurtigLinje[] | null>(null);
-  const [forfall, settForfall] = useState("");
+  const [linjer, settLinjer] = useState<LinjeUtkast[] | null>(null);
+  const [f, settF] = useState<Felt>({ fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", kommentar: "" });
+  const [forfallValgt, settForfallValgt] = useState(false); // ellers følger forfallet fakturadatoen
+  const [gebyr, settGebyr] = useState(false);
+  const [vis, settVis] = useState<Set<Ekstra>>(new Set());
+  const [nyLinje, settNyLinje] = useState(false); // produktsøket for en ny linje
+  const [vedlegg, settVedlegg] = useState<Vedlegg[]>([]);
+  const [lasterOpp, settLasterOpp] = useState(false);
   const utkastId = useRef<string | null>(null); // utkastet som er lagret (om sendingen feilet etterpå)
   const forstePris = useRef<HTMLInputElement | null>(null);
   const h = useHandling();
+  const sjekkLinjer = useLinjefeil(linjer ?? [], h.settFeil);
   const p = paaminnelse.data;
   const o = orgData.data;
 
@@ -431,20 +471,13 @@ export function SendFraPaaminnelse() {
     if (!p || !o || !kunder.data || !produkter.data || linjer) return;
     const utenMva = !o.mva_registrert;
     settKundeId(p.kunde_id && kunder.data.some((k) => k.id === p.kunde_id) ? p.kunde_id : null);
-    const fra: HurtigLinje[] = p.produkter
+    const fra = p.produkter
       .map((pid) => produkter.data!.find((x) => x.id === pid))
       .filter(Boolean)
-      .map((x: any) => ({
-        produkt_id: x.id,
-        beskrivelse: x.beskrivelse ? `${x.navn} – ${x.beskrivelse}` : x.navn,
-        antall: "1",
-        enhet: x.enhet || "stk",
-        pris: x.enhetspris == null ? "" : String(x.enhetspris).replace(".", ","),
-        mva_sats: utenMva ? 0 : Number(x.mva_sats),
-        fast: x.enhetspris != null,
-      }));
-    settLinjer(fra.length ? fra : [{ produkt_id: null, beskrivelse: "", antall: "1", enhet: "stk", pris: "", mva_sats: utenMva ? 0 : 25, fast: false }]);
-    settForfall(leggTilDager(iDag(), Number(o.standard_forfall_dager ?? 14)));
+      .map((x: any) => ({ ...tomLinje(), ...fraProdukt(x), ...(utenMva ? { mva_sats: "0" } : {}) }));
+    settLinjer(fra.length ? fra : [{ ...tomLinje(), ...(utenMva ? { mva_sats: "0" } : {}) }]);
+    settF((x) => ({ ...x, forfallsdato: leggTilDager(x.fakturadato, Number(o.standard_forfall_dager ?? 14)) }));
+    settGebyr(Number(o.standard_gebyr) > 0);
   }, [p, o, kunder.data, produkter.data, linjer]);
   // Rett til beløpet.
   useEffect(() => {
@@ -458,14 +491,37 @@ export function SendFraPaaminnelse() {
 
   const kunde = kunder.data.find((k) => k.id === kundeId);
   const utenMva = !o.mva_registrert;
-  const gebyr = Number(o.standard_gebyr) > 0;
-  const tallLinjer = linjer.map((l) => ({ antall: tall(l.antall || "0") || 0, enhetspris: tall(l.pris || "0") || 0, mva_sats: l.mva_sats }));
+  const tallLinjer = tilTallLinjer(linjer, utenMva);
   const sum = summer([...tallLinjer, ...gebyrLinjer(gebyr, o)]);
-  const endre = (i: number, e: Partial<HurtigLinje>) => {
+  const rabatt = Math.round((summer(tallLinjer.map((l) => ({ ...l, rabatt_prosent: null, rabatt_belop: null }))).eks - summer(tallLinjer).eks) * 100) / 100;
+  const fokus = Math.max(0, linjer.findIndex((x) => !x.enhetspris.trim())); // første linje uten pris
+  const endre = (i: number, e: Partial<LinjeUtkast>) => {
     h.settFeil(null);
     settLinjer(linjer.map((l, j) => (j === i ? { ...l, ...e } : l)));
   };
-  const fokus = Math.max(0, linjer.findIndex((x) => !x.pris.trim())); // første linje uten pris
+  const sett = (e: Partial<Felt>) => {
+    h.settFeil(null);
+    settF((x) => ({ ...x, ...e }));
+  };
+  const visDel = (d: Ekstra, pa: boolean) => {
+    const ny = new Set(vis);
+    if (pa) ny.add(d);
+    else {
+      ny.delete(d);
+      // Det som tas bort, skal ikke bli med på fakturaen.
+      if (d === "periode") sett({ periode_fra: "", periode_til: "" });
+      if (d === "rabatt") settLinjer(linjer.map((l) => ({ ...l, rabatt: "" })));
+      if (d === "referanse") sett({ deres_referanse: "", var_referanse: "" });
+      if (d === "melding") sett({ kommentar: "" });
+      if (d === "vedlegg") settVedlegg([]);
+    }
+    settVis(ny);
+  };
+  const leggTil = (produktId: string | null) => {
+    const x = produktId ? produkter.data!.find((y) => y.id === produktId) : null;
+    settLinjer([...linjer, { ...tomLinje(), ...(x ? fraProdukt(x) : {}), ...(utenMva ? { mva_sats: "0" } : {}) }]);
+    settNyLinje(false);
+  };
   const mottaker = !kunde
     ? null
     : kunde.epost
@@ -473,27 +529,28 @@ export function SendFraPaaminnelse() {
       : kunde.ehf
         ? "Sendes som EHF."
         : "Kunden har ingen e-postadresse, så fakturaen blir utstedt, men ikke sendt. Du kan laste ned PDF-en etterpå.";
+  const visRabatt = vis.has("rabatt") || harRabatt(linjer);
 
-  const feil = (): string | null => {
-    if (!kunde) return "Velg kunde.";
-    for (const l of linjer) {
-      const navn = l.beskrivelse.trim() || "linjen";
-      if (!l.beskrivelse.trim()) return "Skriv hva fakturaen gjelder.";
-      if (!(tall(l.antall) > 0)) return `Fyll inn antall for «${navn}».`;
-      if (!l.pris.trim() || Number.isNaN(tall(l.pris))) return `Fyll inn prisen for «${navn}».`;
-    }
-    return null;
-  };
   const kropp = () => ({
     kunde_id: kundeId,
-    fakturadato: iDag(),
-    forfallsdato: forfall || null,
+    fakturadato: f.fakturadato || null,
+    forfallsdato: f.forfallsdato || null,
+    periode_fra: f.periode_fra || null,
+    periode_til: f.periode_til || null,
+    deres_referanse: f.deres_referanse.trim() || null,
+    var_referanse: f.var_referanse.trim() || null,
+    kommentar: f.kommentar.trim() || null,
     gebyr,
-    linjer: linjer.map((l) => ({ produkt_id: l.produkt_id, beskrivelse: l.beskrivelse.trim(), antall: tall(l.antall), enhet: l.enhet, enhetspris: tall(l.pris), mva_sats: l.mva_sats })),
+    linjer: tallLinjer,
+    vedlegg: vedlegg.map((v) => v.id),
   });
   async function lagre(send: boolean) {
-    const f = feil();
-    if (f) return h.settFeil(f);
+    if (!kunde) return h.settFeil("Velg kunde.");
+    if (linjer!.every(erTom)) return h.settFeil("Skriv hva fakturaen gjelder.");
+    if (sjekkLinjer()) return;
+    if (f.periode_fra && f.periode_til && f.periode_til < f.periode_fra) return h.settFeil("Slutten på perioden er før starten.");
+    if (f.forfallsdato && f.fakturadato && f.forfallsdato < f.fakturadato) return h.settFeil("Forfallsdatoen er før fakturadatoen.");
+    if (lasterOpp) return h.settFeil("Vent til vedleggene er lastet opp.");
     if (send && !o.kontonr) return h.settFeil("Legg inn kontonummer under Innstillinger → Betaling før du sender fakturaer.");
     const r = await h.kjor(async () => {
       // Feilet sendingen etter at utkastet ble lagret, brukes samme utkast (ikke et nytt).
@@ -504,25 +561,10 @@ export function SendFraPaaminnelse() {
     });
     if (r) nav(`/fakturaer/${r}`, { state: send ? { sendt: true } : undefined });
   }
-  // Mer å fylle inn (periode, referanser, vedlegg …): det fulle skjemaet, med det som er skrevet.
+  // Kopimottakere, gjentakelse o.l.: det fulle skjemaet, med alt som er skrevet her.
   const fulltSkjema = () =>
-    nav(`/fakturaer/ny?paaminnelse=${p.id}`, {
-      state: {
-        kilde: "paaminnelse",
-        aiUtkast: {
-          kunde_id: kundeId,
-          kunde_navn: null,
-          linjer: linjer.map((l) => ({ produkt_id: l.produkt_id, beskrivelse: l.beskrivelse, antall: tall(l.antall || "1") || 1, enhet: l.enhet, enhetspris: l.pris.trim() ? tall(l.pris) : null, mva_sats: l.mva_sats, rabatt_prosent: null })),
-          fakturadato: null,
-          forfallsdato: forfall || null,
-          periode_fra: null,
-          periode_til: null,
-          deres_referanse: null,
-          kommentar: null,
-          merknader: [],
-        },
-      },
-    });
+    nav(`/fakturaer/ny?paaminnelse=${p.id}`, { state: { paaminnelseUtkast: { kunde_id: kundeId, f, linjer, gebyr, vedlegg } satisfies PaaminnelseUtkast } });
+  const valg = periodeValg(p.intervall);
 
   return (
     <>
@@ -544,39 +586,182 @@ export function SendFraPaaminnelse() {
           Kunde
           <Sokefelt valg={kundeValg(kunder.data)} verdi={kundeId} velg={settKundeId} plassholder="Søk etter kunde" etikett="Kunde" />
         </label>
-        {linjer.map((l, i) => (
-          <div key={i} className="hurtig-linje">
-            <label>
-              {linjer.length > 1 ? `Linje ${i + 1}` : "Hva gjelder fakturaen"}
-              <input value={l.beskrivelse} onChange={(e) => endre(i, { beskrivelse: e.target.value })} placeholder="F.eks. Strøm oktober" />
-            </label>
-            <div className="hurtig-tall">
+        {linjer.map((l, i) => {
+          const t = tilTallLinjer([l], utenMva)[0];
+          return (
+            <div key={i} className="hurtig-linje">
+              <div className="hurtig-linje-topp">
+                <label>
+                  {linjer.length > 1 ? `Linje ${i + 1}` : "Hva gjelder fakturaen"}
+                  <input value={l.beskrivelse} onChange={(e) => endre(i, { beskrivelse: e.target.value })} placeholder="F.eks. Strøm oktober" />
+                </label>
+                {linjer.length > 1 && (
+                  <button type="button" className="ikon" aria-label={`Fjern linje ${i + 1}`} onClick={() => settLinjer(linjer.filter((_, j) => j !== i))}>
+                    <IkonLukk storrelse={16} />
+                  </button>
+                )}
+              </div>
+              <div className={`hurtig-tall${visRabatt ? " med-rabatt" : ""}`}>
+                <label>
+                  Antall{l.enhet && l.enhet !== "stk" ? ` (${l.enhet})` : ""}
+                  <input inputMode="decimal" value={l.antall} onChange={(e) => endre(i, { antall: e.target.value })} />
+                </label>
+                <label>
+                  {utenMva ? "Pris" : "Pris eks. mva"}
+                  <input
+                    ref={i === fokus ? forstePris : undefined}
+                    inputMode="decimal"
+                    value={l.enhetspris}
+                    placeholder={l.produkt_id && !l.enhetspris ? "Fyll inn" : undefined}
+                    onChange={(e) => endre(i, { enhetspris: e.target.value })}
+                  />
+                </label>
+                {visRabatt && (
+                  <label>
+                    Rabatt
+                    <span className="hurtig-rabatt">
+                      <input inputMode="decimal" value={l.rabatt} aria-label={`Rabatt på linje ${i + 1}`} onChange={(e) => endre(i, { rabatt: e.target.value })} />
+                      <select value={l.rabatt_type} aria-label={`Rabatt i prosent eller kroner på linje ${i + 1}`} onChange={(e) => endre(i, { rabatt_type: e.target.value as LinjeUtkast["rabatt_type"] })}>
+                        <option value="prosent">%</option>
+                        <option value="kr">kr</option>
+                      </select>
+                    </span>
+                  </label>
+                )}
+              </div>
+              {t && (linjer.length > 1 || visRabatt || t.antall !== 1) && <p className="liten dempet hurtig-linjesum">= {kr(linjebelop(t))} kr{utenMva ? "" : " eks. mva"}</p>}
+            </div>
+          );
+        })}
+        {nyLinje && (
+          <div className="hurtig-ny-linje">
+            <Sokefelt valg={produktValg(produkter.data)} verdi={null} velg={leggTil} tom="Uten produkt (fritekst)" plassholder="Søk etter produkt, eller velg fritekst" etikett="Ny linje" />
+            <button type="button" className="lenke liten" onClick={() => settNyLinje(false)}>
+              Avbryt
+            </button>
+          </div>
+        )}
+        <div className="hurtig-valg" role="group" aria-label="Legg til på fakturaen">
+          {!nyLinje && (
+            <button type="button" onClick={() => settNyLinje(true)}>
+              + Linje
+            </button>
+          )}
+          {(["periode", "rabatt", "referanse", "melding", "vedlegg"] as Ekstra[])
+            .filter((d) => !vis.has(d) && !(d === "rabatt" && visRabatt))
+            .map((d) => (
+              <button key={d} type="button" onClick={() => visDel(d, true)}>
+                + {{ periode: "Periode", rabatt: "Rabatt", referanse: "Referanse", melding: "Melding til kunden", vedlegg: "Vedlegg" }[d]}
+              </button>
+            ))}
+          {visRabatt && (
+            <button type="button" onClick={() => visDel("rabatt", false)}>
+              Fjern rabatt
+            </button>
+          )}
+        </div>
+
+        {vis.has("periode") && (
+          <fieldset className="hurtig-del">
+            <legend>Periode</legend>
+            <div className="hurtig-brikker">
+              {valg.map((v) => (
+                <button key={v.navn} type="button" aria-pressed={f.periode_fra === v.fra && f.periode_til === v.til} onClick={() => sett({ periode_fra: v.fra, periode_til: v.til })}>
+                  {v.navn}
+                </button>
+              ))}
+            </div>
+            <div className="rad">
               <label>
-                Antall{l.enhet && l.enhet !== "stk" ? ` (${l.enhet})` : ""}
-                <input inputMode="decimal" value={l.antall} onChange={(e) => endre(i, { antall: e.target.value })} />
+                Fra
+                <input type="date" value={f.periode_fra} onChange={(e) => sett({ periode_fra: e.target.value })} />
               </label>
               <label>
-                {utenMva ? "Pris" : "Pris eks. mva"}
-                <input
-                  ref={i === fokus ? forstePris : undefined}
-                  inputMode="decimal"
-                  value={l.pris}
-                  placeholder={l.fast ? undefined : "Fyll inn"}
-                  onChange={(e) => endre(i, { pris: e.target.value })}
-                />
+                Til
+                <input type="date" value={f.periode_til} onChange={(e) => sett({ periode_til: e.target.value })} />
               </label>
             </div>
-          </div>
-        ))}
-        <label className="hurtig-forfall">
-          Forfallsdato
-          <input type="date" min={iDag()} value={forfall} onChange={(e) => settForfall(e.target.value)} />
-        </label>
+            <button type="button" className="lenke liten" onClick={() => visDel("periode", false)}>
+              Fjern periode
+            </button>
+          </fieldset>
+        )}
+        {vis.has("referanse") && (
+          <fieldset className="hurtig-del">
+            <legend>Referanser</legend>
+            <div className="rad">
+              <label>
+                Deres ref.
+                <input value={f.deres_referanse} maxLength={100} onChange={(e) => sett({ deres_referanse: e.target.value })} />
+              </label>
+              <label>
+                Vår ref.
+                <input value={f.var_referanse} maxLength={100} onChange={(e) => sett({ var_referanse: e.target.value })} />
+              </label>
+            </div>
+            <button type="button" className="lenke liten" onClick={() => visDel("referanse", false)}>
+              Fjern referanser
+            </button>
+          </fieldset>
+        )}
+        {vis.has("melding") && (
+          <fieldset className="hurtig-del">
+            <legend>Melding til kunden</legend>
+            <NotatFelt verdi={f.kommentar} endre={(v) => sett({ kommentar: v })} etikett="Står på fakturaen" />
+            <button type="button" className="lenke liten" onClick={() => visDel("melding", false)}>
+              Fjern melding
+            </button>
+          </fieldset>
+        )}
+        {vis.has("vedlegg") && (
+          <fieldset className="hurtig-del">
+            <legend>Vedlegg</legend>
+            <VedleggFelt orgId={org!.id} vedlegg={vedlegg} endre={settVedlegg} opptatt={settLasterOpp} />
+            <button type="button" className="lenke liten" onClick={() => visDel("vedlegg", false)}>
+              Fjern vedlegg
+            </button>
+          </fieldset>
+        )}
+
+        <div className="rad hurtig-datoer">
+          <label>
+            Fakturadato
+            <input
+              type="date"
+              value={f.fakturadato}
+              onChange={(e) =>
+                sett({ fakturadato: e.target.value, ...(!forfallValgt && e.target.value ? { forfallsdato: leggTilDager(e.target.value, Number(o.standard_forfall_dager ?? 14)) } : {}) })
+              }
+            />
+          </label>
+          <label>
+            Forfallsdato
+            <input
+              type="date"
+              min={f.fakturadato || undefined}
+              value={f.forfallsdato}
+              onChange={(e) => {
+                settForfallValgt(true);
+                sett({ forfallsdato: e.target.value });
+              }}
+            />
+          </label>
+        </div>
+        {Number(o.standard_gebyr) > 0 && (
+          <label>
+            <input type="checkbox" checked={gebyr} onChange={(e) => settGebyr(e.target.checked)} />
+            Fakturagebyr ({kr(Number(o.standard_gebyr))} kr{utenMva ? "" : " eks. mva"})
+          </label>
+        )}
         <div className="hurtig-sum">
           <span>Å betale{!utenMva && sum.mva ? " inkl. mva" : ""}</span>
           <strong>{kr(sum.inkl)} kr</strong>
         </div>
-        {gebyr && <p className="liten dempet">Med fakturagebyr på {kr(Number(o.standard_gebyr))} kr.</p>}
+        {(rabatt > 0 || (!utenMva && sum.mva > 0)) && (
+          <p className="liten dempet">
+            {[rabatt > 0 ? `Rabatt ${kr(rabatt)} kr` : null, !utenMva && sum.mva > 0 ? `herav mva ${kr(sum.mva)} kr` : null].filter(Boolean).join(" · ")}
+          </p>
+        )}
         {mottaker && <p className="liten dempet">{mottaker}</p>}
         {!o.kontonr && (
           <div className="melding info">
@@ -585,15 +770,15 @@ export function SendFraPaaminnelse() {
         )}
         <Feil melding={h.feil} />
         <div className="knapper hurtig-knapper">
-          <button className="primar" disabled={h.opptatt || !o.kontonr}>
+          <button className="primar" disabled={h.opptatt || lasterOpp || !o.kontonr}>
             {h.opptatt ? "Sender …" : "Send faktura"}
           </button>
-          <button type="button" disabled={h.opptatt} onClick={() => void lagre(false)}>
+          <button type="button" disabled={h.opptatt || lasterOpp} onClick={() => void lagre(false)}>
             Lagre som utkast
           </button>
         </div>
         <button type="button" className="lenke liten" onClick={fulltSkjema} disabled={h.opptatt}>
-          Åpne i fullt skjema (periode, referanser, vedlegg …)
+          Åpne i fullt skjema (kopi til, gjentakelse …)
         </button>
       </form>
     </>

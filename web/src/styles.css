@@ -1158,8 +1158,27 @@ dialog.assistent > .melding { margin: 0 16px 8px; flex: none; }
 .hurtigfaktura { max-width: 560px; }
 .hurtig-linje { border-top: 1px solid var(--kant); padding-top: 14px; margin-top: 2px; }
 .hurtig-tall { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; }
+.hurtig-tall.med-rabatt { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 1.3fr); }
+.hurtig-linje-topp { display: flex; align-items: flex-end; gap: 8px; }
+.hurtig-linje-topp > label { flex: 1; min-width: 0; }
+.hurtig-linje-topp > button.ikon { margin-bottom: 14px; flex: none; }
+.hurtig-rabatt { display: flex; gap: 6px; margin-top: 5px; }
+.hurtig-rabatt input { flex: 1; min-width: 0; }
+.hurtig-rabatt select { flex: none; width: auto; padding-right: 26px; }
+.hurtig-linjesum { margin: -6px 0 10px; text-align: right; font-variant-numeric: tabular-nums; }
+.hurtig-ny-linje { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+.hurtig-ny-linje > :first-child { flex: 1; min-width: 0; }
+.hurtig-valg { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 14px; }
+.hurtig-valg button { border-radius: 999px; font-size: 0.86rem; padding: 6px 12px; min-height: 0; }
+.hurtig-del { margin: 0 0 14px; }
+.hurtig-del legend { font-size: 0.83rem; font-weight: 600; color: var(--tekst-2); padding: 0 4px; }
+.hurtig-del > button.lenke { margin: -4px 0 10px; }
+.hurtig-brikker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.hurtig-brikker button { border-radius: 999px; font-size: 0.86rem; padding: 5px 12px; min-height: 0; }
+.hurtig-brikker button[aria-pressed="true"] { background: var(--aksent-lys); border-color: var(--aksent); color: var(--aksent); }
+@media (max-width: 420px) { .hurtig-tall.med-rabatt { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .hurtig-tall.med-rabatt > label:last-child { grid-column: 1 / -1; } }
 .hurtig-tall input { font-variant-numeric: tabular-nums; }
-.hurtig-forfall { max-width: 260px; }
+.hurtig-datoer { margin-top: 2px; }
 .hurtig-sum { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0 4px; border-top: 1px solid var(--kant); font-size: 1.05rem; }
 .hurtig-sum strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
 .hurtigfaktura .melding { margin: 10px 0; }

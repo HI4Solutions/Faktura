@@ -113,16 +113,28 @@ function Ramme() {
   }, [sted.pathname]);
 
   // Mobil: skjul bunnmenyen mens tastaturet er oppe, så den ikke dekker feltet man skriver i.
+  // Den kommer tilbake litt etter at feltet mister fokus: ellers dukker den opp under fingeren
+  // idet man trykker på en knapp nederst (som «Send faktura»), og trykket går tapt.
   useEffect(() => {
     const erFelt = (e: Event) => {
       const el = e.target as HTMLElement;
       return el.matches?.("textarea, select, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])");
     };
-    const inn = (e: FocusEvent) => erFelt(e) && document.body.classList.add("skriver");
-    const ut = (e: FocusEvent) => erFelt(e) && document.body.classList.remove("skriver");
+    let tid: number | undefined;
+    const inn = (e: FocusEvent) => {
+      if (!erFelt(e)) return;
+      clearTimeout(tid);
+      document.body.classList.add("skriver");
+    };
+    const ut = (e: FocusEvent) => {
+      if (!erFelt(e)) return;
+      clearTimeout(tid);
+      tid = window.setTimeout(() => document.body.classList.remove("skriver"), 300);
+    };
     document.addEventListener("focusin", inn);
     document.addEventListener("focusout", ut);
     return () => {
+      clearTimeout(tid);
       document.removeEventListener("focusin", inn);
       document.removeEventListener("focusout", ut);
     };

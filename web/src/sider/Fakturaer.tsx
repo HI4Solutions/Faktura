@@ -11,6 +11,7 @@ import { fraProdukt, gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt,
 import { kundeValg, Sokefelt } from "../sokefelt";
 import { VedleggFelt, VedleggListe } from "../vedlegg";
 import { AiFaktura, type AiUtkast } from "../ai";
+import type { PaaminnelseUtkast } from "./Paaminnelser";
 
 // Binders etter kundenavnet i lista når fakturaen har vedlegg.
 const HarVedlegg = ({ antall }: { antall?: number }) =>
@@ -392,6 +393,8 @@ export function FakturaSkjema() {
   const ehf = useData(() => hent(`/org/${org!.id}/ehf`), [org?.id]);
   const kopiId = id ? null : sporring.get("kopi"); // ny faktura som kopi av en tidligere
   const paaminnelseId = id || kopiId ? null : sporring.get("paaminnelse"); // ny faktura fra en påminnelse
+  // Fra siden for påminnelsen («Åpne i fullt skjema»): det som ble skrevet der.
+  const fraPaaminnelseSide = !id ? ((sted.state as { paaminnelseUtkast?: PaaminnelseUtkast } | null)?.paaminnelseUtkast ?? null) : null;
   const [f, settF] = useState<any>({ kunde_id: (!id && sporring.get("kunde")) || "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "", kommentar: "" });
   const [linjer, settLinjer] = useState<LinjeUtkast[]>([tomLinje()]);
   const [lastet, settLastet] = useState(!id && !kopiId); // utkastet som endres, eller fakturaen som kopieres, er hentet
@@ -465,11 +468,12 @@ export function FakturaSkjema() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kopiAv, kunder.data]);
 
-  // Standard forfall fra innstillingene (en kopi har med seg gebyret fra originalen).
+  // Standard forfall fra innstillingene (en kopi har med seg gebyret fra originalen, og det
+  // som ble skrevet på siden for påminnelsen, har med seg gebyret derfra).
   useEffect(() => {
     if (!id && orgData.data && f.fakturadato && !f.forfallsdato) {
       settF((x: any) => ({ ...x, forfallsdato: leggTilDager(x.fakturadato, orgData.data.standard_forfall_dager) }));
-      if (!kopiId) settGebyr(orgData.data.standard_gebyr > 0);
+      if (!kopiId && !fraPaaminnelseSide) settGebyr(orgData.data.standard_gebyr > 0);
     }
   }, [orgData.data, id, kopiId, f.fakturadato, f.forfallsdato]);
 
@@ -524,8 +528,19 @@ export function FakturaSkjema() {
 
   // Åpnet fra AI-assistenten med et utkast: fyll ut skjemaet (én gang per åpning).
   const fraAssistent = !id ? ((sted.state as { aiUtkast?: AiUtkast } | null)?.aiUtkast ?? null) : null;
-  // Fra siden for påminnelsen («Åpne i fullt skjema»): utkastet har det som ble skrevet der.
-  const fraPaaminnelseSide = (sted.state as { kilde?: string } | null)?.kilde === "paaminnelse";
+  // Fra siden for påminnelsen: det som ble skrevet der, fylles inn (én gang per åpning).
+  const paaminnelseSideBrukt = useRef<string | null>(null);
+  useEffect(() => {
+    const u = fraPaaminnelseSide;
+    if (!u || paaminnelseSideBrukt.current === sted.key) return;
+    paaminnelseSideBrukt.current = sted.key;
+    settF((x: any) => ({ ...x, ...u.f, kunde_id: u.kunde_id ?? x.kunde_id }));
+    settLinjer(u.linjer.length ? u.linjer : [tomLinje()]);
+    settGebyr(u.gebyr);
+    settVedlegg(u.vedlegg);
+    if (harRabatt(u.linjer)) settRabattValgt(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sted.key]);
   const brukt = useRef<string | null>(null);
   useEffect(() => {
     if (fraAssistent && orgData.data && brukt.current !== sted.key) {
@@ -544,8 +559,8 @@ export function FakturaSkjema() {
     hent<{ tekst: string; kunde_id: string | null; produkter: string[] }>(`/org/${org!.id}/paaminnelser/${paaminnelseId}`).then(
       (p) => {
         // Fylt ut fra siden for påminnelsen: behold det som ble skrevet der.
-        if (fraPaaminnelseSide && fraAssistent) {
-          settFraPaaminnelse({ tekst: p.tekst, manglerPris: fraAssistent.linjer.some((l) => l.enhetspris == null) });
+        if (fraPaaminnelseSide) {
+          settFraPaaminnelse({ tekst: p.tekst, manglerPris: fraPaaminnelseSide.linjer.some((l) => l.produkt_id && !l.enhetspris.trim()) });
           return;
         }
         if (p.kunde_id && kunder.data!.some((k: any) => k.id === p.kunde_id)) settF((x: any) => ({ ...x, kunde_id: p.kunde_id }));
@@ -633,7 +648,7 @@ export function FakturaSkjema() {
           Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
         </div>
       )}
-      {fraAssistent && !fraPaaminnelseSide && <div className="melding info">Fylt ut av AI-assistenten. Se over kunde, linjer og datoer før du sender.</div>}
+      {fraAssistent && <div className="melding info">Fylt ut av AI-assistenten. Se over kunde, linjer og datoer før du sender.</div>}
       {fraPaaminnelse && (
         <div className="melding info">
           Fra påminnelsen «{fraPaaminnelse.tekst}».{" "}
