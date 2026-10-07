@@ -136,6 +136,29 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   uke etter grensene i oppsettet, overlappende vakter og vakter utenfor ansettelsen. Timene
   kan føres fra vakten (`timeforinger.vakt_id`), og timelisten og godkjenningen viser hvor
   mange timer som var planlagt
+- `fravaer`: sykdom, sykt barn, ferie, permisjon og annet fravær per ansatt (fra og med, til
+  og med). Eier og administrator registrerer alt; den ansatte melder selv sykdom (fra og med
+  i går) og kan bare endre sluttdatoen på den etterpå. Melder den ansatte seg syk, får eier og
+  administrator varsel med hvor mange vakter som trenger vikar; registrerer leder fravær, får
+  den ansatte beskjed. Den som er borte, tas ut av ressursene: vaktene er merket med fraværet,
+  teller ikke i advarslene eller som planlagt arbeid, og står som «mangler vikar». Fravær er
+  helseopplysninger: bare eier, administrator, regnskap og den ansatte selv ser det, også i
+  revisjonsloggen
+- `vakter.vikar_for`: en vikar settes inn som en egen vakt med samme tid og oppgave som vakten
+  til den som er borte (den beholder sin). Vikarvakten publiseres med en gang med varsel til
+  vikaren, tar over plassene på tavla, og kopieres ikke til neste uke. Vikaren kan være en ny
+  ansatt (tilkalling, timelønn) lagt inn fra skjemaet
+- `tavle_faser`, `tavle_oppgaver`, `tavle_behov` og `tavle_plasseringer`: tavla
+  (ressursfordelingen). Organisasjonen lager selv fasene (radene, f.eks. forvakt, mellomvakt
+  og senvakt eller før og etter lunsj, med tidsrom) og oppgavene (kolonnene, f.eks. telefon,
+  resepsjon og lab), med hvor mange som trengs i hver oppgave, eventuelt forskjellig per fase.
+  Ressursene en dag er de som har vakt i vaktplanen, og hver hører til fasene vakten
+  overlapper. Eier og administrator plasserer dem i oppgavene (én oppgave per ansatt og fase;
+  dra og slipp på PC, trykk på mobil) og kan kopiere plassene fra en annen dag. Den som er
+  borte, kan ikke plasseres, og plassene den har, teller ikke. Regnskap ser tavla, og den
+  ansatte ser sine egne plasser under Mine vakter. Bemanningskalenderen (i appen, fra
+  vaktplanen og fraværet) viser per dag hvor mange som er på jobb, hvem som er borte, vakter
+  uten vikar og ledige vakter
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
@@ -148,9 +171,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Utstede, sende, kreditere | ✓ | ✓ | ✓ | | | |
 | Registrere betaling og refusjon | ✓ | ✓ | ✓ | ✓ | | |
 | Innstillinger, kontonummer, medlemmer, integrasjoner, regnskapsfører | ✓ | ✓ | | | | |
-| Se ansatte, hele vaktplanen og alle timer | ✓ | ✓ | | ✓ | | |
-| Endre ansatte, gi innlogging, planlegge og publisere vakter, godkjenne og avvise timer | ✓ | ✓ | | | | |
-| Se egne vakter og ta ledige, føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+| Se ansatte, hele vaktplanen, tavla, fraværet og alle timer | ✓ | ✓ | | ✓ | | |
+| Endre ansatte, gi innlogging, planlegge og publisere vakter, sette inn vikarer, styre tavla, registrere fravær, godkjenne og avvise timer | ✓ | ✓ | | | | |
+| Se egne vakter og plasser og ta ledige, melde seg syk, føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 
@@ -160,9 +183,10 @@ begge parter kan trekke den. Byråets ansatte med rollen `ansatt` får ikke tilg
 klientene.
 
 Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort,
-sine egne publiserte vakter, de publiserte ledige vakter og sine egne timer
-(`faktura.kan(org, 'medlem')`, `faktura.er_meg` og `faktura.min_ansatt`), aldri fakturadata,
-andre medlemmer, andres vakter eller revisjonsloggen. Varsler til hele organisasjonen og
+sine egne publiserte vakter, de publiserte ledige vakter, sitt eget fravær, sine egne plasser
+på tavla (og fasene og oppgavene) og sine egne timer (`faktura.kan(org, 'medlem')`,
+`faktura.er_meg` og `faktura.min_ansatt`), aldri fakturadata, andre medlemmer, andres vakter
+og fravær eller revisjonsloggen. Varsler til hele organisasjonen og
 Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter og
 Innstillinger (egen konto og app).
 
@@ -230,7 +254,9 @@ og hastighetsgrenser i API-et.
       med overtid og merarbeid, levering og godkjenning med push-varsler
    2. ~~Vaktplan~~ Ferdig: vakter per uke og ansatt med publisering og varsler, ledige vakter
       som de ansatte tar, kopiering av uker, advarsler etter arbeidsmiljøloven, og timer
-      ført fra vakten
+      ført fra vakten. Tavle (ressursfordeling i egne faser og oppgaver med behov),
+      fravær (sykdom meldt av den ansatte, ferie og permisjon), vikarer og
+      bemanningskalender
    3. Lønnskjøring: lønnsarter, skattetrekk (tabell eller prosent fra skattekortet),
       feriepenger, OTP, arbeidsgiveravgift per sone, sykepenger og lønnsslipp som PDF
    4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og

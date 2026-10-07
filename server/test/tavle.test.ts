@@ -87,6 +87,25 @@ describe.skipIf(!process.env.DATABASE_URL)("tavle, fravær og vikarer", () => {
     expect((await kall("POST", `/api/org/${org}/tavle/oppgaver`, { navn: "Kaffe" }, ola)).status).toBe(403);
   });
 
+  it("behovet kan være forskjellig fra fase til fase", async () => {
+    const behov = (k: Record<string, unknown>, hvem = eier) => kall("PUT", `/api/org/${org}/tavle/behov`, k, hvem);
+    expect((await behov({ fase_id: id.senvakt, oppgave_id: id.telefon, antall: 1 })).status).toBe(204);
+    expect((await behov({ fase_id: id.senvakt, oppgave_id: id.lab, antall: 0 })).status).toBe(204);
+    expect((await behov({ fase_id: id.senvakt, oppgave_id: id.telefon, antall: 3 })).status).toBe(204);
+    expect((await behov({ fase_id: id.forvakt, oppgave_id: id.lab, antall: 51 })).data.error).toBe("Behovet kan være høyst 50");
+    expect((await behov({ fase_id: id.forvakt, oppgave_id: id.lab, antall: 1 }, ola)).status).toBe(403);
+    const sortert = (l: any[]) => l.map((b) => [b.fase_id, b.oppgave_id, b.antall]).sort();
+    expect(sortert((await kall("GET", `/api/org/${org}/tavle/oppsett`)).data.behov)).toEqual(
+      sortert([
+        { fase_id: id.senvakt, oppgave_id: id.telefon, antall: 3 },
+        { fase_id: id.senvakt, oppgave_id: id.lab, antall: 0 },
+      ]),
+    );
+    // Tilbake til behovet på oppgaven.
+    expect((await behov({ fase_id: id.senvakt, oppgave_id: id.telefon, antall: null })).status).toBe(204);
+    expect((await tavle()).behov).toEqual([{ fase_id: id.senvakt, oppgave_id: id.lab, antall: 0 }]);
+  });
+
   it("dagens tavle har ressursene fra vaktplanen, og de plasseres i oppgavene", async () => {
     const t = await tavle();
     expect(t.ressurser.map((r: any) => [r.navn, r.vakter.map((v: any) => `${v.fra}–${v.til}`), r.fravaer])).toEqual([
@@ -134,6 +153,9 @@ describe.skipIf(!process.env.DATABASE_URL)("tavle, fravær og vikarer", () => {
     const plan = (await kall("GET", `/api/org/${org}/vakter?fra=${d(0)}&til=${d(6)}`)).data;
     expect(plan.vakter.find((v: any) => v.id === id.olaVakt)).toMatchObject({ fravaer: "syk", har_vikar: false });
     expect(plan.fravaer.map((f: any) => f.type)).toEqual(["syk"]);
+    // Vakten han er borte fra, teller ikke som planlagt arbeid.
+    expect(plan.uker.find((u: any) => u.ansatt_id === id.Ola)).toBeUndefined();
+    expect(plan.uker.find((u: any) => u.ansatt_id === id.Kari)).toMatchObject({ planlagt: 8 });
   });
 
   it("en vikar settes inn: får varsel og tar over plassene på tavla", async () => {
@@ -183,6 +205,19 @@ describe.skipIf(!process.env.DATABASE_URL)("tavle, fravær og vikarer", () => {
     expect((await kall("POST", `/api/org/${org}/tavle/kopier`, { fra: d(0), til: d(7) })).data).toEqual({ kopiert: 2 });
     expect((await tavle(d(7))).plasseringer.map((p: any) => p.ansatt_id).sort()).toEqual([id.Ola, id.Kari].sort());
     expect((await kall("POST", `/api/org/${org}/tavle/kopier`, { fra: d(0), til: d(0) })).data.error).toBe("Velg en annen dag å kopiere fra");
+  });
+
+  it("den ansatte ser sine egne plasser på tavla", async () => {
+    const mine = (hvem: string) => kall("GET", `/api/org/${org}/tavle/mine?fra=${d(0)}&til=${d(7)}`, undefined, hvem);
+    expect((await mine(kari)).data).toEqual([
+      { dato: d(0), fase: "Senvakt", fra: "14:00", til: "22:00", oppgave: "Lab" },
+      { dato: d(7), fase: "Senvakt", fra: "14:00", til: "22:00", oppgave: "Lab" },
+    ]);
+    expect((await mine(ola)).data.map((p: any) => [p.dato, p.fase, p.oppgave])).toEqual([
+      [d(0), "Forvakt", "Telefon"],
+      [d(7), "Forvakt", "Telefon"],
+    ]);
+    expect((await mine(fakturerer)).data).toEqual([]);
   });
 
   it("slettes en oppgave, forsvinner plassene i den", async () => {

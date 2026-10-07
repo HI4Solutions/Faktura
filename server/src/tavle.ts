@@ -1,9 +1,11 @@
 // Tavla (ressursfordeling, 0037_tavle_og_fravaer.sql): dagen er delt i faser (rader) og
-// oppgaver (kolonner) som organisasjonen lager selv. Ressursene en dag er de ansatte med
-// vakt den dagen i vaktplanen; de som er borte, er med, men merket, og vaktene deres står
-// som «mangler vikar» til en vikar er satt inn. Hvem som hører til hvilken fase (vakten
-// overlapper fasens tidsrom), finner appen ut. Eier og administrator plasserer de ansatte i
-// oppgavene; regnskap ser tavla, og den ansatte ser sine egne plasser.
+// oppgaver (kolonner) som organisasjonen lager selv, med hvor mange som trengs i oppgaven
+// (behov), eventuelt forskjellig fra fase til fase (0038_tavle_behov.sql). Ressursene en
+// dag er de ansatte med vakt den dagen i vaktplanen; de som er borte, er med, men merket, og
+// vaktene deres står som «mangler vikar» til en vikar er satt inn. Hvem som hører til hvilken
+// fase (vakten overlapper fasens tidsrom), finner appen ut. Eier og administrator plasserer
+// de ansatte i oppgavene; regnskap ser tavla, og den ansatte ser sine egne plasser
+// (/tavle/mine).
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
@@ -28,6 +30,7 @@ const oppgaveSkjema = z.object({
 
 const FASER = "select id, navn, to_char(fra, 'HH24:MI') as fra, to_char(til, 'HH24:MI') as til, rekkefolge from faktura.tavle_faser where org_id = $1 order by rekkefolge, opprettet";
 const OPPGAVER = "select id, navn, behov, rekkefolge from faktura.tavle_oppgaver where org_id = $1 order by rekkefolge, opprettet";
+const BEHOV = "select fase_id, oppgave_id, antall from faktura.tavle_behov where org_id = $1";
 
 export function tavleRuter() {
   const r = new Hono();
@@ -35,7 +38,13 @@ export function tavleRuter() {
   // --- Oppsett: faser og oppgaver ---------------------------------------------------
 
   r.get("/tavle/oppsett", async (c) =>
-    c.json(await bruk(c, async (db) => ({ faser: await alle(db, FASER, [orgId(c)]), oppgaver: await alle(db, OPPGAVER, [orgId(c)]) }))),
+    c.json(
+      await bruk(c, async (db) => ({
+        faser: await alle(db, FASER, [orgId(c)]),
+        oppgaver: await alle(db, OPPGAVER, [orgId(c)]),
+        behov: await alle(db, BEHOV, [orgId(c)]),
+      })),
+    ),
   );
 
   for (const [sti, tabell, skjema, felt] of [
@@ -102,6 +111,25 @@ export function tavleRuter() {
     return c.body(null, 204);
   });
 
+  // Behovet i en oppgave i én fase (null: som på oppgaven, 0: trengs ikke i fasen).
+  r.put("/tavle/behov", async (c) => {
+    const b = z
+      .object({ fase_id: uuid, oppgave_id: uuid, antall: z.number().int().min(0, "Behovet kan ikke være negativt").max(50, "Behovet kan være høyst 50").nullable() })
+      .parse(await c.req.json().catch(() => ({})));
+    await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      if (b.antall === null)
+        await db.query("delete from faktura.tavle_behov where org_id = $1 and fase_id = $2 and oppgave_id = $3", [orgId(c), b.fase_id, b.oppgave_id]);
+      else
+        await db.query(
+          `insert into faktura.tavle_behov (org_id, fase_id, oppgave_id, antall) values ($1, $2, $3, $4)
+           on conflict (org_id, fase_id, oppgave_id) do update set antall = excluded.antall`,
+          [orgId(c), b.fase_id, b.oppgave_id, b.antall],
+        );
+    });
+    return c.body(null, 204);
+  });
+
   // --- Dagens tavle --------------------------------------------------------------------
 
   r.get("/tavle", async (c) => {
@@ -142,6 +170,7 @@ export function tavleRuter() {
           dato,
           faser: await alle(db, FASER, [orgId(c)]),
           oppgaver: await alle(db, OPPGAVER, [orgId(c)]),
+          behov: await alle(db, BEHOV, [orgId(c)]),
           ressurser: [...ressurser.values()],
           plasseringer: await alle(db, "select id, fase_id, oppgave_id, ansatt_id from faktura.tavle_plasseringer where org_id = $1 and dato = $2", [orgId(c), dato]),
           fravaer: await alle(
@@ -156,6 +185,27 @@ export function tavleRuter() {
             .map((v) => ({ vakt_id: v.id, ansatt_id: v.ansatt_id, navn: v.navn, fra: v.fra, til: v.til, oppgave: v.oppgave, type: v.fravaer })),
         };
       }),
+    );
+  });
+
+  // Den innloggedes egne plasser i perioden (for «Mine vakter»).
+  r.get("/tavle/mine", async (c) => {
+    const q = z.object({ fra: datoS, til: datoS }).parse(c.req.query());
+    if (q.til < q.fra) throw new ApiFeil(400, "Slutten er før starten");
+    if (Date.parse(q.til) - Date.parse(q.fra) > 93 * 86_400_000) throw new ApiFeil(400, "Velg en periode på høyst tre måneder");
+    return c.json(
+      await bruk(c, (db) =>
+        alle(
+          db,
+          `select p.dato, f.navn as fase, to_char(f.fra, 'HH24:MI') as fra, to_char(f.til, 'HH24:MI') as til, o.navn as oppgave
+             from faktura.tavle_plasseringer p
+             join faktura.tavle_faser f on f.org_id = p.org_id and f.id = p.fase_id
+             join faktura.tavle_oppgaver o on o.org_id = p.org_id and o.id = p.oppgave_id
+            where p.org_id = $1 and p.ansatt_id = faktura.min_ansatt($1) and p.dato between $2 and $3
+            order by p.dato, f.rekkefolge, f.opprettet`,
+          [orgId(c), q.fra, q.til],
+        ),
+      ),
     );
   });
 

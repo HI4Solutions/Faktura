@@ -1,8 +1,9 @@
--- Tavle og fravær (0037_tavle_og_fravaer.sql): fravær registreres av eier og administrator,
--- den ansatte melder bare sykdom selv (fra og med i går, så bare sluttdatoen); fravær er
--- skjult for andre enn dem som ser de ansatte, også i loggen. Tavla har faser og oppgaver
--- som alle ser, men bare personal endrer; den som er borte eller ikke ansatt, kan ikke
--- plasseres. Vikarvakter dekker en annen vakt og kan publiseres hver for seg.
+-- Tavle og fravær (0037_tavle_og_fravaer.sql, 0038_tavle_behov.sql): fravær registreres av
+-- eier og administrator, den ansatte melder bare sykdom selv (fra og med i går, så bare
+-- sluttdatoen); fravær er skjult for andre enn dem som ser de ansatte, også i loggen. Tavla
+-- har faser, oppgaver og behov per fase som alle ser, men bare personal endrer; den som er
+-- borte eller ikke ansatt, kan ikke plasseres. Vikarvakter dekker en annen vakt og kan
+-- publiseres hver for seg.
 
 \set QUIET on
 \set ON_ERROR_STOP on
@@ -84,10 +85,17 @@ insert into faktura.tavle_oppgaver (org_id, navn, behov, rekkefolge) values (:'o
 insert into faktura.tavle_oppgaver (org_id, navn, rekkefolge) values (:'org', 'Lab', 2) returning id as lab \gset
 select test.feiler(format($$insert into faktura.tavle_faser (org_id, navn, fra) values (%L, 'Halv', '08:00')$$, :'org'), '23514');
 select test.feiler(format($$insert into faktura.tavle_oppgaver (org_id, navn, behov) values (%L, 'Mange', 0)$$, :'org'), '23514');
+-- Behov per fase: 0 betyr at oppgaven ikke trenger noen i fasen.
+insert into faktura.tavle_behov (org_id, fase_id, oppgave_id, antall) values (:'org', :'senvakt', :'telefon', 1);
+insert into faktura.tavle_behov (org_id, fase_id, oppgave_id, antall) values (:'org', :'senvakt', :'lab', 0);
+select test.feiler(format($$insert into faktura.tavle_behov (org_id, fase_id, oppgave_id, antall) values (%L, %L, %L, 51)$$, :'org', :'forvakt', :'lab'), '23514');
+select test.feiler(format($$insert into faktura.tavle_behov (org_id, fase_id, oppgave_id, antall) values (%L, %L, %L, 2)$$, :'org', :'senvakt', :'lab'), '23505');
 select set_config('app.bruker_id', :'u_ola', false);
 select test.er((select count(*) from faktura.tavle_faser), 2::bigint, 'den ansatte ser fasene');
 select test.er((select count(*) from faktura.tavle_oppgaver), 2::bigint, 'og oppgavene');
+select test.er((select count(*) from faktura.tavle_behov), 2::bigint, 'og behovet per fase');
 select test.feiler(format($$insert into faktura.tavle_oppgaver (org_id, navn) values (%L, 'Kaffe')$$, :'org'), '42501');
+select test.feiler(format($$insert into faktura.tavle_behov (org_id, fase_id, oppgave_id, antall) values (%L, %L, %L, 1)$$, :'org', :'forvakt', :'lab'), '42501');
 
 -- Plasseringer: ikke den som er borte, har sluttet eller allerede er plassert i fasen.
 select set_config('app.bruker_id', :'u', false);
@@ -110,6 +118,7 @@ select test.er((select count(*) from faktura.tavle_plasseringer where id = :'p1'
 -- Slettes en oppgave, forsvinner plassene i den.
 delete from faktura.tavle_oppgaver where id = :'lab';
 select test.er((select count(*) from faktura.tavle_plasseringer where org_id = :'org'), 1::bigint, 'plassene i lab er borte');
+select test.er((select count(*) from faktura.tavle_behov where org_id = :'org'), 1::bigint, 'og behovet for lab');
 
 -- Vikar: en egen vakt som dekker vakten til den som er syk, og som kan publiseres alene.
 insert into faktura.vakter (org_id, ansatt_id, dato, fra, til) values (:'org', :'ola', :'d1', '07:00', '15:00') returning id as v_ola \gset

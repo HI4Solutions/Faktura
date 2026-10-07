@@ -322,11 +322,13 @@ export function ansattRuter() {
             )
           ).map((a) => [a.id, a.avtalt] as const),
         );
+        // Vakter den ansatte er borte fra (fravær), er ikke planlagt arbeid.
         const planlagt = new Map<string, number>();
         for (const v of await alle<{ ansatt_id: string; dato: string; timer: number }>(
           db,
-          `select ansatt_id, dato, timer from faktura.vakter
-            where org_id = $1 and dato between $2 and $3 and publisert_at is not null and ansatt_id = any($4::uuid[])`,
+          `select v.ansatt_id, v.dato, v.timer from faktura.vakter v
+            where v.org_id = $1 and v.dato between $2 and $3 and v.publisert_at is not null and v.ansatt_id = any($4::uuid[])
+              and not exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til)`,
           [orgId(c), fra, til, [...avtalt.keys()]],
         )) {
           const k = `${v.ansatt_id}:${uke(v.dato).fra}`;

@@ -13,6 +13,7 @@ import { dato, iDag, leggTilDager } from "../format";
 import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
 import { gyldigDato, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import type { VaktSvar } from "./Vakter";
+import { fravaerKlasse, fravaerTekst } from "./Fravaer";
 
 type Status = "utkast" | "levert" | "godkjent" | "avvist";
 
@@ -251,7 +252,10 @@ function Ukeside({
   const { data, feil } = useData(() => hent<TimerSvar>(`/org/${org!.id}/timer?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
   const vaktsvar = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
   const vakter = (vaktsvar.data?.vakter ?? []).filter((v) => v.publisert);
-  const planlagt = vakter.reduce((s, v) => s + Number(v.timer), 0);
+  // Vakter den ansatte er borte fra, er ikke planlagt arbeid.
+  const iArbeid = vakter.filter((v) => !v.fravaer);
+  const planlagt = iArbeid.reduce((s, v) => s + Number(v.timer), 0);
+  const fravaer = vaktsvar.data?.fravaer ?? [];
   const [apen, settApen] = useState<Partial<Foring> | null>(null);
   const [avviser, settAvviser] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
@@ -339,9 +343,9 @@ function Ukeside({
             <h2>Uke {nr}</h2>
             <strong>{timer(sum?.sum ?? 0)}</strong>
           </div>
-          {vakter.length > 0 && (
+          {iArbeid.length > 0 && (
             <p className="liten dempet planlagt">
-              Planlagt i vaktplanen: {timer(planlagt)} ({vakter.length} {vakter.length === 1 ? "vakt" : "vakter"})
+              Planlagt i vaktplanen: {timer(planlagt)} ({iArbeid.length} {iArbeid.length === 1 ? "vakt" : "vakter"})
             </p>
           )}
           <Summer u={sum} />
@@ -371,10 +375,12 @@ function Ukeside({
             const d = leggTilDager(uke, i);
             const dagens = foringer.filter((f) => f.dato === d);
             const sumDag = dagens.reduce((s, f) => s + Number(f.timer), 0);
+            const borte = fravaer.find((f) => f.ansatt_id === ansattId && f.fra <= d && f.til >= d)?.type;
             return (
               <section key={d} className={`dag${d === iDagIso ? " i-dag" : ""}`} aria-label={visDag(d)}>
                 <div className="dag-topp">
                   <span className="dag-navn">{visDag(d)}</span>
+                  {borte && <span className={`merke ${fravaerKlasse[borte]}`}>{fravaerTekst[borte]}</span>}
                   {sumDag > 0 && <span className="dag-sum">{timer(sumDag)}</span>}
                   {kanFore && ansattDag(d) && (
                     <button type="button" className="kopier" aria-label={`Før timer ${visDag(d)}`} title="Før timer" onClick={() => settApen({ dato: d })}>
@@ -388,7 +394,7 @@ function Ukeside({
                     const fort = v.fort || foringer.some((f) => f.vakt_id === v.id);
                     // Timer føres fra vakten når den har vært (eller er i dag), og ikke er ført
                     // på annen måte samme dag.
-                    const kanForeFraVakt = kanFore && ansattDag(d) && d <= iDagIso && !dagens.some((f) => !f.vakt_id);
+                    const kanForeFraVakt = kanFore && ansattDag(d) && d <= iDagIso && !borte && !dagens.some((f) => !f.vakt_id);
                     return (
                       <div key={v.id} className="vakt-linje">
                         <span>

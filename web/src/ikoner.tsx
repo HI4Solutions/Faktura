@@ -229,3 +229,19 @@ export const IkonKalender = (p: P) => (
     <path d="M3.5 10h17M8 3v4M16 3v4" />
   </Ikon>
 );
+export const IkonTavle = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2.2" />
+    <path d="M3 9.5h18M9 9.5V20M15 9.5V20" />
+  </Ikon>
+);
+export const IkonOpp = (p: P) => (
+  <Ikon {...p}>
+    <path d="m6 14.5 6-6 6 6" />
+  </Ikon>
+);
+export const IkonNed = (p: P) => (
+  <Ikon {...p}>
+    <path d="m6 9.5 6 6 6-6" />
+  </Ikon>
+);

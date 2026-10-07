@@ -136,11 +136,11 @@ export function vaktRuter() {
           regel,
           new Map(ansatte.map((x) => [x.id, x])),
         );
-        // Sum per ansatt og uke for ukene i perioden.
+        // Sum per ansatt og uke for ukene i perioden (uten vaktene den ansatte er borte fra).
         const uker = new Map<string, { ansatt_id: string; fra: string; planlagt: number; avtalt: number | null; advarsler: string[] }>();
         for (const v of vakter) {
           const m = uke(v.dato).fra;
-          if (!v.ansatt_id || m > q.til || uke(v.dato).til < q.fra) continue;
+          if (!v.ansatt_id || v.fravaer || m > q.til || uke(v.dato).til < q.fra) continue;
           const k = `${v.ansatt_id}:${m}`;
           const u = uker.get(k) ?? {
             ansatt_id: v.ansatt_id,
