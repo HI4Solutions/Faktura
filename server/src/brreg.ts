@@ -65,3 +65,70 @@ export function maskerEpost(e: string): string {
   const [navn, dom] = e.split("@");
   return `${navn.slice(0, 2)}${"•".repeat(Math.max(1, navn.length - 2))}@${dom}`;
 }
+
+// --- Roller ------------------------------------------------------------------------
+
+export interface Rolle {
+  kode: string; // DAGL, LEDE, INNH …
+  rolle: string; // «Daglig leder»
+  navn: string;
+}
+
+// Kortere navn på de vanligste rollene (Brreg skriver f.eks. «Daglig leder/ adm.direktør»).
+const ROLLENAVN: Record<string, string> = {
+  DAGL: "Daglig leder", LEDE: "Styreleder", NEST: "Nestleder", MEDL: "Styremedlem", VARA: "Varamedlem", OBS: "Observatør",
+  INNH: "Innehaver", KOMP: "Komplementar", DTPR: "Deltaker", DTSO: "Deltaker", BEST: "Bestyrende reder",
+  REPR: "Norsk representant", KONT: "Kontaktperson", "FFØR": "Forretningsfører", SAM: "Sameier",
+};
+// Rollene som kan representere foretaket utad (ikke varamedlem, observatør o.l.).
+export const LEDERROLLER = new Set(["DAGL", "LEDE", "NEST", "MEDL", "INNH", "KOMP", "DTPR", "DTSO", "BEST", "REPR", "KONT", "FFØR"]);
+
+// Personene med roller i foretaket, fra Brregs åpne API (fratrådte og døde tas ikke med).
+export async function hentRoller(nr: string): Promise<Rolle[]> {
+  if (!orgnrGyldig(nr)) throw new ApiFeil(400, "Ugyldig organisasjonsnummer");
+  const r = await fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${nr}/roller`, { headers: { accept: "application/json" } });
+  if (r.status === 404 || r.status === 410) return [];
+  if (!r.ok) throw new ApiFeil(502, "Enhetsregisteret svarer ikke");
+  return tilRoller(await r.json());
+}
+
+export function tilRoller(data: any): Rolle[] {
+  const ut: Rolle[] = [];
+  for (const g of data?.rollegrupper ?? []) {
+    for (const r of g?.roller ?? []) {
+      const p = r?.person;
+      if (!p || r.fratraadt || p.erDoed) continue;
+      const n = p.navn ?? {};
+      const navn = [n.fornavn, n.mellomnavn, n.etternavn].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+      if (!navn) continue;
+      const kode = String(r.type?.kode ?? g.type?.kode ?? "");
+      ut.push({ kode, rolle: ROLLENAVN[kode] ?? String(r.type?.beskrivelse ?? g.type?.beskrivelse ?? kode), navn });
+    }
+  }
+  return ut;
+}
+
+const navneord = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^\p{L}\s-]/gu, " ")
+    .split(/[\s-]+/)
+    .filter(Boolean);
+
+// Samme fornavn og etternavn (mellomnavn kan mangle hos den ene). Bare et hint: navnet en
+// bruker oppgir, kan hvem som helst skrive, så det verifiserer ingen alene.
+export function sammePerson(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = navneord(a ?? "");
+  const y = navneord(b ?? "");
+  if (x.length < 2 || y.length < 2) return false;
+  return x[0] === y[0] && x[x.length - 1] === y[y.length - 1];
+}
+
+// Den viktigste rollen personen med dette navnet har i foretaket, om noen.
+export function finnRolle(roller: Rolle[], navn: string | null | undefined): Rolle | null {
+  const treff = roller.filter((r) => sammePerson(navn, r.navn));
+  return treff.find((r) => LEDERROLLER.has(r.kode)) ?? treff[0] ?? null;
+}
+
+// Er e-postadressen nøyaktig den som står på foretaket (også gratis e-post som Gmail)?
+export const erForetaketsEpost = (epost: string, enhet: Enhet) => Boolean(enhet.epost && enhet.epost.trim().toLowerCase() === epost.trim().toLowerCase());

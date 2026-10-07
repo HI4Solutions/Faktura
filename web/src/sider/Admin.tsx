@@ -39,7 +39,7 @@ type Fane = "oversikt" | "venter" | "organisasjoner" | "brukere" | "drift";
 
 const statusMerke: Record<string, string> = { ny: "merke-advarsel", verifisert: "merke-ok", sperret: "merke-fare" };
 const statusTekst: Record<string, string> = { ny: "Ikke verifisert", verifisert: "Verifisert", sperret: "Sperret" };
-const metodeTekst: Record<string, string> = { epostdomene: "e-postdomene", brreg_epost: "kode til e-post i Enhetsregisteret", manuell: "manuelt" };
+const metodeTekst: Record<string, string> = { epostdomene: "e-postdomene", brreg_epost: "e-posten i Enhetsregisteret", manuell: "manuelt" };
 const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les" };
 const integrasjonTekst: Record<string, string> = { peppol: "EHF (Recommand)", bank: "Enable Banking", google_drive: "Google Disk", fiken: "Fiken", tripletex: "Tripletex", poweroffice: "PowerOffice", visma: "Visma" };
 
@@ -567,13 +567,42 @@ function Behandle({ org, venter, ferdig }: { org: any; venter: boolean; ferdig: 
       ) : (
         <p className="dempet">Mangler organisasjonsnummer.</p>
       )}
+      {brreg.data?.epost_medlem && (
+        <div className="melding ok">
+          E-posten i Enhetsregisteret ({brreg.data.epost}) er innloggingen til {brreg.data.epost_medlem}.
+        </div>
+      )}
+      {brreg.data?.roller && (
+        <>
+          <p className="liten" style={{ margin: "12px 0 4px", fontWeight: 600 }}>
+            Roller i Brreg
+          </p>
+          {brreg.data.roller.length ? (
+            <ul className="admin-rader">
+              {brreg.data.roller.map((r: { kode: string; rolle: string; navn: string; treff: string[] }, i: number) => (
+                <li key={`${r.kode}-${r.navn}-${i}`}>
+                  <span>
+                    {r.rolle}: {r.navn}
+                  </span>
+                  {r.treff.length > 0 && <span className="merke merke-ok">Samme navn som {r.treff.join(", ")}</span>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="liten dempet">Ingen personer med roller i Brreg.</p>
+          )}
+          {brreg.data.roller.some((r: { treff: string[] }) => r.treff.length) && (
+            <p className="liten dempet">Samme navn er et hint, ikke et bevis: navnet på profilen kan brukeren skrive selv.</p>
+          )}
+        </>
+      )}
       {org.orgnr && (
         <p className="liten dempet">
-          Sjekk roller (daglig leder, styreleder, signatur) på{" "}
+          Signatur og prokura står på{" "}
           <a href={`https://virksomhet.brreg.no/nb/oppslag/enheter/${org.orgnr}`} target="_blank" rel="noreferrer">
             virksomhet.brreg.no
-          </a>{" "}
-          før du godkjenner.
+          </a>
+          .
         </p>
       )}
       <label>

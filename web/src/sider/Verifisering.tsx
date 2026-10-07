@@ -4,12 +4,15 @@ import { api, hent } from "../api";
 import { Feil, Laster, useData, useHandling } from "../felles";
 import { erAdmin, useKonto } from "../konto";
 
+type Rolle = { rolle: string; navn: string };
+
 export function Verifisering() {
-  const { org, oppdater } = useKonto();
+  const { org, meg, oppdater } = useKonto();
   const { data, last } = useData(() => hent(`/org/${org!.id}/verifisering`), [org?.id]);
-  const [steg, settSteg] = useState<{ status: string; sendt_til?: string } | null>(null);
+  const [steg, settSteg] = useState<{ status: string; sendt_til?: string; rolle?: Rolle | null } | null>(null);
   const [kode, settKode] = useState("");
   const [notat, settNotat] = useState("");
+  const [navn, settNavn] = useState(meg?.bruker.navn ?? "");
   const h = useHandling();
 
   if (!data) return <Laster />;
@@ -41,12 +44,23 @@ export function Verifisering() {
 
   const venterManuell = data.forsok?.some((f: any) => f.metode === "manuell" && f.status === "venter");
 
+  // Navnet brukes til å se om du står med en rolle i Brreg (og lagres på profilen din).
   async function start() {
-    const r = await h.kjor(() => api("POST", `/org/${org!.id}/verifisering/start`));
+    const n = navn.trim();
+    const r = await h.kjor(async () => {
+      if (n.length >= 2 && n !== (meg?.bruker.navn ?? "")) await api("PATCH", "/meg", { navn: n });
+      return api("POST", `/org/${org!.id}/verifisering/start`, n ? { navn: n } : {});
+    });
     if (!r) return;
     settSteg(r);
     if (r.status === "verifisert") await ferdig();
   }
+  const rolle = steg?.rolle ? (
+    <div className="melding ok">
+      Navnet ditt står som <strong>{steg.rolle.rolle.toLowerCase()}</strong> for {org?.navn} i Enhetsregisteret
+      {steg.rolle.navn.toLowerCase() !== navn.trim().toLowerCase() ? ` (${steg.rolle.navn})` : ""}.
+    </div>
+  ) : null;
 
   return (
     <>
@@ -65,16 +79,22 @@ export function Verifisering() {
         ) : !steg ? (
           <>
             <p className="dempet liten">
-              Vi slår opp org.nr. {data.orgnr} i Enhetsregisteret. Har e-postadressen din samme domene som foretakets nettside
-              eller e-post der, blir organisasjonen godkjent med en gang. Ellers sender vi en kode til foretakets e-post i
-              registeret.
+              Vi slår opp org.nr. {data.orgnr} i Enhetsregisteret. Er e-postadressen din den som står på foretaket der, eller har
+              den samme domene som foretakets nettside eller e-post, blir organisasjonen godkjent med en gang. Ellers sender vi en
+              kode til foretakets e-post i registeret. Vi ser også om navnet ditt står som daglig leder, styreleder, innehaver eller
+              lignende.
             </p>
+            <label style={{ maxWidth: 360 }}>
+              Navnet ditt
+              <input value={navn} onChange={(e) => settNavn(e.target.value)} autoComplete="name" placeholder="Fornavn og etternavn" />
+            </label>
             <button className="primar" onClick={start} disabled={h.opptatt}>
               Start verifisering
             </button>
           </>
         ) : steg.status === "kode_sendt" ? (
           <>
+            {rolle}
             <p>
               Vi har sendt en sekssifret kode til <strong>{steg.sendt_til}</strong>, som er foretakets e-post i Enhetsregisteret.
               Koden gjelder i 30 minutter.
@@ -104,9 +124,11 @@ export function Verifisering() {
           </>
         ) : steg.status === "manuell" ? (
           <>
+            {rolle}
             <p>
               Foretaket har ingen e-postadresse i Enhetsregisteret, og e-postdomenet ditt samsvarer ikke med foretaket. Vi kan
-              godkjenne manuelt. Skriv gjerne kort hvilken rolle du har i foretaket.
+              godkjenne manuelt.{" "}
+              {steg.rolle ? "Rollen din i Brreg kommer med i forespørselen, så den går raskere å behandle." : "Skriv gjerne kort hvilken rolle du har i foretaket."}
             </p>
             <label>
               Melding (valgfri)
@@ -116,7 +138,7 @@ export function Verifisering() {
               className="primar"
               disabled={h.opptatt}
               onClick={async () => {
-                const r = await h.kjor(() => api("POST", `/org/${org!.id}/verifisering/manuell`, { notat: notat || undefined }));
+                const r = await h.kjor(() => api("POST", `/org/${org!.id}/verifisering/manuell`, { notat: notat || undefined, navn: navn.trim() || undefined }));
                 if (r) await last();
               }}
             >

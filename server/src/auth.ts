@@ -26,9 +26,9 @@ function firebase() {
 
 async function verifiser(token: string) {
   if (config.testInnlogging && token.startsWith("test:")) {
-    // test:<uid>:<epost>[:mfa]
-    const [, uid, epost, mfa] = token.split(":");
-    return { uid, email: epost, email_verified: true, mfa: mfa === "mfa" || mfa === "passkey", navn: undefined as string | undefined };
+    // test:<uid>:<epost>[:mfa[:navn]]
+    const [, uid, epost, mfa, navn] = token.split(":");
+    return { uid, email: epost, email_verified: true, mfa: mfa === "mfa" || mfa === "passkey", navn: navn ? decodeURIComponent(navn) : (undefined as string | undefined) };
   }
   const t = await firebase().verifyIdToken(token, true);
   return {

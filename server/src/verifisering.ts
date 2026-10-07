@@ -5,7 +5,17 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { alle, en, somBetrodd, somBruker } from "./db.js";
 import { ApiFeil } from "./feil.js";
-import { epostHorerTilForetaket, hentEnhet as ekteHentEnhet, maskerEpost, type Enhet } from "./brreg.js";
+import {
+  epostHorerTilForetaket,
+  erForetaketsEpost,
+  finnRolle,
+  hentEnhet as ekteHentEnhet,
+  hentRoller as ekteHentRoller,
+  maskerEpost,
+  sammePerson,
+  type Enhet,
+  type Rolle,
+} from "./brreg.js";
 import { leggIKo } from "./tjenester.js";
 import { AiFeil, aiPaa, generer, type AiSvar } from "./ai.js";
 import { tilUtkast, utkastForesporsel, type AiUtkast, type Grunnlag } from "./aiFaktura.js";
@@ -13,9 +23,16 @@ import { assistentForesporsel, type AiKommando } from "./aiAssistent.js";
 import { taleForesporsel, talefra, type Tale } from "./aiTale.js";
 
 let hentEnhet = ekteHentEnhet;
-export function settBrreg(fn: typeof ekteHentEnhet) {
+let hentRoller = ekteHentRoller;
+// For testene: Enhetsregisteret (og rollene) byttet ut.
+export function settBrreg(fn: typeof ekteHentEnhet, roller?: typeof ekteHentRoller) {
   hentEnhet = fn;
+  if (roller) hentRoller = roller;
 }
+
+// Rollene i Brreg, men uten å stoppe verifiseringen om oppslaget feiler.
+const rollerEllerIngen = (orgnr: string) => hentRoller(orgnr).catch((): Rolle[] => []);
+const rolleTekst = (r: Rolle) => `${r.navn} står som ${r.rolle.toLowerCase()} i Enhetsregisteret`;
 
 export const erPlattformadmin = (epost: string) => config.adminEposter.includes(epost.toLowerCase());
 
@@ -84,10 +101,16 @@ export function verifiseringRuter() {
     );
   });
 
-  // Prøver automatisk verifisering; ellers sendes kode til e-posten i Enhetsregisteret.
+  // Prøver automatisk verifisering: brukerens bekreftede e-post er den som står på foretaket i
+  // Enhetsregisteret, eller har foretakets eget domene. Ellers sendes en kode til e-posten i
+  // registeret, eller (uten e-post der) kan brukeren be om manuell godkjenning. Står brukerens
+  // navn som daglig leder, styreleder, innehaver o.l. i Brreg, sies det fra om (og
+  // plattformadministratorene ser det), men navnet alene verifiserer ikke: det kan hvem som
+  // helst skrive.
   r.post("/start", async (c) => {
     const b = c.get("bruker");
     const org = orgId(c);
+    const k = z.object({ navn: z.string().trim().max(200).optional() }).parse(await c.req.json().catch(() => ({})));
     const o = await somBruker(b.id, async (db) => {
       if (!(await en(db, "select faktura.kan($1, 'admin') as k", [org]))!.k) throw new ApiFeil(403, "Bare administratorer kan verifisere organisasjonen");
       return en(db, "select id, navn, orgnr, verifisering from faktura.organisasjoner where id = $1", [org]);
@@ -95,13 +118,20 @@ export function verifiseringRuter() {
     if (!o.orgnr) throw new ApiFeil(400, "Legg inn organisasjonsnummer under Innstillinger først");
     if (o.verifisering !== "ny") return c.json({ status: o.verifisering });
 
-    const enhet = await hentEnhet(o.orgnr);
+    const [enhet, roller] = await Promise.all([hentEnhet(o.orgnr), rollerEllerIngen(o.orgnr)]);
     sjekkAktiv(enhet);
 
+    if (b.epostBekreftet && erForetaketsEpost(b.epost, enhet)) {
+      await somBetrodd(b.id, (db) => db.query("select faktura.verifiser_epostdomene($1, $2, 'brreg_epost')", [org, b.epost]));
+      return c.json({ status: "verifisert", metode: "brreg_epost" });
+    }
     if (b.epostBekreftet && epostHorerTilForetaket(b.epost, enhet)) {
       await somBetrodd(b.id, (db) => db.query("select faktura.verifiser_epostdomene($1, $2)", [org, b.epost]));
       return c.json({ status: "verifisert", metode: "epostdomene" });
     }
+    const navn = k.navn || (await somBruker(b.id, (db) => en<{ navn: string | null }>(db, "select navn from faktura.brukere where id = faktura.bruker_id()")))?.navn;
+    const treff = finnRolle(roller, navn);
+    const rolle = treff ? { rolle: treff.rolle, navn: treff.navn } : null;
 
     if (enhet.epost) {
       const kode = String(randomInt(0, 1_000_000)).padStart(6, "0");
@@ -121,10 +151,10 @@ export function verifiseringRuter() {
           `Koden gjelder i 30 minutter. Hvis du ikke kjenner til dette, kan du se bort fra e-posten – da får personen ikke fakturere i foretakets navn.`,
         ].join("\n"),
       });
-      return c.json({ status: "kode_sendt", sendt_til: maskerEpost(enhet.epost) });
+      return c.json({ status: "kode_sendt", sendt_til: maskerEpost(enhet.epost), rolle });
     }
 
-    return c.json({ status: "manuell" });
+    return c.json({ status: "manuell", rolle });
   });
 
   r.post("/kode", async (c) => {
@@ -134,11 +164,18 @@ export function verifiseringRuter() {
     return c.json({ status: "verifisert", metode: "brreg_epost" });
   });
 
+  // Manuell godkjenning. Står brukerens navn med en rolle i Brreg, kommer det med i forespørselen.
   r.post("/manuell", async (c) => {
     const b = c.get("bruker");
-    const k = z.object({ notat: z.string().trim().max(1000).optional() }).parse(await c.req.json().catch(() => ({})));
+    const k = z.object({ notat: z.string().trim().max(1000).optional(), navn: z.string().trim().max(200).optional() }).parse(await c.req.json().catch(() => ({})));
+    const forhand = await somBruker(b.id, async (db) => ({
+      orgnr: (await en<{ orgnr: string | null }>(db, "select orgnr from faktura.organisasjoner where id = $1", [orgId(c)]))?.orgnr ?? null,
+      navn: k.navn || (await en<{ navn: string | null }>(db, "select navn from faktura.brukere where id = faktura.bruker_id()"))?.navn,
+    }));
+    const treff = forhand.orgnr ? finnRolle(await rollerEllerIngen(forhand.orgnr), forhand.navn) : null;
+    const notat = [treff ? `${rolleTekst(treff)} (samme navn som brukeren oppgir).` : null, k.notat ?? null].filter(Boolean).join("\n") || null;
     const o = await somBruker(b.id, async (db) => {
-      await db.query("select faktura.be_om_manuell_verifisering($1, $2)", [orgId(c), k.notat ?? null]);
+      await db.query("select faktura.be_om_manuell_verifisering($1, $2)", [orgId(c), notat]);
       return en(db, "select navn, orgnr from faktura.organisasjoner where id = $1", [orgId(c)]);
     });
     if (config.adminEposter.length) {
@@ -146,7 +183,7 @@ export function verifiseringRuter() {
         type: "epost",
         til: config.adminEposter,
         emne: `Ny forespørsel om verifisering: ${o.navn}`,
-        tekst: `${b.epost} ber om verifisering av ${o.navn} (org.nr. ${o.orgnr ?? "mangler"}).\n\n${k.notat ?? ""}\n\nBehandle den på ${config.appUrl}/admin`,
+        tekst: `${b.epost} ber om verifisering av ${o.navn} (org.nr. ${o.orgnr ?? "mangler"}).\n\n${notat ?? ""}\n\nBehandle den på ${config.appUrl}/admin`,
       }).catch((e) => console.warn("Kunne ikke varsle administratorer", e));
     }
     return c.json({ status: "venter" });
@@ -260,10 +297,20 @@ export function adminRuter() {
     return c.json(d);
   });
 
+  // Enhetsregisteret og rollene i Brreg, med hvilke medlemmer som har samme navn som en
+  // rolleinnehaver, og om e-posten i registeret er et medlems.
   r.get("/organisasjoner/:id/brreg", async (c) => {
-    const o = await somBetrodd(c.get("bruker").id, (db) => en(db, "select orgnr from faktura.admin_organisasjoner() where id = $1", [id(c)]));
-    if (!o?.orgnr) throw new ApiFeil(404, "Mangler organisasjonsnummer");
-    return c.json(await hentEnhet(o.orgnr));
+    const o = await somBetrodd(c.get("bruker").id, async (db) => ({
+      orgnr: (await en<{ orgnr: string | null }>(db, "select orgnr from faktura.admin_organisasjoner() where id = $1", [id(c)]))?.orgnr,
+      medlemmer: ((await en(db, "select faktura.admin_organisasjon($1) as d", [id(c)]))?.d?.medlemmer ?? []) as { navn: string | null; epost: string }[],
+    }));
+    if (!o.orgnr) throw new ApiFeil(404, "Mangler organisasjonsnummer");
+    const [enhet, roller] = await Promise.all([hentEnhet(o.orgnr), rollerEllerIngen(o.orgnr)]);
+    return c.json({
+      ...enhet,
+      epost_medlem: o.medlemmer.find((m) => erForetaketsEpost(m.epost, enhet))?.epost ?? null,
+      roller: roller.map((r) => ({ ...r, treff: o.medlemmer.filter((m) => sammePerson(m.navn, r.navn)).map((m) => m.navn ?? m.epost) })),
+    });
   });
 
   r.post("/organisasjoner/:id/status", async (c) => {

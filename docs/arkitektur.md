@@ -129,10 +129,18 @@ Workeren verifiserer organisasjonen med `faktura.sett_verifisering` etter én av
 kontrollene:
 
 1. organisasjonsnummeret slås opp i Enhetsregisteret, og foretaket er aktivt
-2. e-postdomenet til brukeren samsvarer med foretakets domene, **eller**
-3. en kode sendes til e-postadressen eller telefonnummeret som er registrert i
-   Enhetsregisteret, **eller**
-4. en kode sendes i brev, eller en administrator godkjenner manuelt.
+2. brukerens bekreftede e-postadresse er nøyaktig den som står på foretaket i
+   Enhetsregisteret (også Gmail o.l.), **eller**
+3. e-postdomenet til brukeren samsvarer med foretakets domene, **eller**
+4. en kode sendes til e-postadressen som er registrert i Enhetsregisteret, **eller**
+5. en administrator godkjenner manuelt.
+
+Rollene i Brreg (daglig leder, styreleder, innehaver, deltakere, kontaktperson o.l.) slås
+opp samtidig. Står navnet brukeren oppgir som en rolleinnehaver, får brukeren beskjed om det,
+det kommer med i forespørselen om manuell godkjenning, og adminsiden viser rollene med treff
+på medlemmenes navn. Navnet alene verifiserer ikke, siden det kan skrives av hvem som helst;
+helt automatisk verifisering av personer krever BankID (bekreftet navn og fødselsdato mot
+rollene i Brreg).
 
 Et organisasjonsnummer kan bare være verifisert hos én organisasjon. Andre grenser:
 maks fem uverifiserte organisasjoner per bruker, reCAPTCHA Enterprise ved registrering,

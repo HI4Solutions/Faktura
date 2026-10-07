@@ -4,7 +4,7 @@ import { lagApi } from "../src/api.js";
 import { config } from "../src/config.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 import { settBrreg } from "../src/verifisering.js";
-import { epostHorerTilForetaket, domene, maskerEpost, type Enhet } from "../src/brreg.js";
+import { epostHorerTilForetaket, domene, erForetaketsEpost, finnRolle, maskerEpost, sammePerson, tilRoller, type Enhet, type Rolle } from "../src/brreg.js";
 
 const harDb = Boolean(process.env.DATABASE_URL);
 const app = lagApi();
@@ -19,6 +19,23 @@ const register: Record<string, Enhet> = {
   "910000020": enhet("910000020", { epost: "post@kode-as.no" }),
   "910000039": enhet("910000039"),
   "910000047": enhet("910000047", { konkurs: true }),
+  "910000055": enhet("910000055", { epost: "Ola.Nordmann@gmail.com" }),
+  "910000063": enhet("910000063", { epost: "post@rolle-as.no" }),
+  "910000071": enhet("910000071"),
+};
+// Rollene i Brreg, slik API-et svarer (rollegrupper med personer og enheter).
+const rolleSvar = (personer: [string, string, string, string | null, string][], ekstra: any[] = []) => ({
+  rollegrupper: [
+    ...personer.map(([gruppe, kode, fornavn, mellomnavn, etternavn]) => ({
+      type: { kode: gruppe, beskrivelse: gruppe },
+      roller: [{ type: { kode, beskrivelse: `${kode} (Brreg)` }, person: { fodselsdato: "1980-01-01", navn: { fornavn, mellomnavn, etternavn }, erDoed: false }, fratraadt: false }],
+    })),
+    ...ekstra,
+  ],
+});
+const roller: Record<string, Rolle[]> = {
+  "910000063": tilRoller(rolleSvar([["DAGL", "DAGL", "Ola", "Johan", "Nordmann"], ["STYR", "LEDE", "Kari", null, "Nordmann"]])),
+  "910000071": tilRoller(rolleSvar([["INNH", "INNH", "Per", null, "Olsen"]])),
 };
 
 async function kall(metode: string, sti: string, token: string, kropp?: unknown) {
@@ -40,15 +57,50 @@ describe("domeneregler", () => {
     expect(domene("https://www.firma.no/om")).toBe("firma.no");
     expect(maskerEpost("post@firma.no")).toBe("po••@firma.no");
   });
+
+  it("e-posten i registeret, også Gmail, må være nøyaktig den samme", () => {
+    const e = enhet("1", { epost: " Ola.Nordmann@gmail.com " });
+    expect(erForetaketsEpost("ola.nordmann@gmail.com", e)).toBe(true);
+    expect(erForetaketsEpost("ola.nordmann2@gmail.com", e)).toBe(false);
+    expect(erForetaketsEpost("ola@gmail.com", enhet("2"))).toBe(false);
+  });
+
+  it("leser rollene fra Brreg og finner personen på navn", () => {
+    const r = tilRoller(
+      rolleSvar(
+        [["DAGL", "DAGL", "Ola", "Johan", "Nordmann"], ["STYR", "MEDL", "Kari", null, "Nordmann"], ["STYR", "VARA", "Per", null, "Olsen"]],
+        [
+          { type: { kode: "REVI" }, roller: [{ type: { kode: "REVI", beskrivelse: "Revisor" }, enhet: { organisasjonsnummer: "910000012", navn: ["Revisor AS"] }, fratraadt: false }] },
+          { type: { kode: "STYR" }, roller: [{ type: { kode: "LEDE", beskrivelse: "Styrets leder" }, person: { navn: { fornavn: "Gammel", etternavn: "Leder" } }, fratraadt: true }] },
+        ],
+      ),
+    );
+    expect(r).toEqual([
+      { kode: "DAGL", rolle: "Daglig leder", navn: "Ola Johan Nordmann" },
+      { kode: "MEDL", rolle: "Styremedlem", navn: "Kari Nordmann" },
+      { kode: "VARA", rolle: "Varamedlem", navn: "Per Olsen" },
+    ]);
+    expect(sammePerson("Ola Nordmann", "Ola Johan Nordmann")).toBe(true);
+    expect(sammePerson("ola  nordmann", "OLA NORDMANN")).toBe(true);
+    expect(sammePerson("Ola Hansen", "Ola Johan Nordmann")).toBe(false);
+    expect(sammePerson("Ola", "Ola Nordmann")).toBe(false);
+    expect(sammePerson(null, "Ola Nordmann")).toBe(false);
+    expect(finnRolle(r, "Kari Nordmann")).toMatchObject({ rolle: "Styremedlem" });
+    expect(finnRolle(r, "Per Olsen")).toMatchObject({ rolle: "Varamedlem" });
+    expect(finnRolle(r, "Ukjent Person")).toBeNull();
+  });
 });
 
 describe.skipIf(!harDb)("verifisering", () => {
   beforeAll(() => {
-    settBrreg(async (nr) => {
-      const e = register[nr];
-      if (!e) throw Object.assign(new Error("Fant ikke"), { status: 404 });
-      return e;
-    });
+    settBrreg(
+      async (nr) => {
+        const e = register[nr];
+        if (!e) throw Object.assign(new Error("Fant ikke"), { status: 404 });
+        return e;
+      },
+      async (nr) => roller[nr] ?? [],
+    );
     settLokalOppgavekjorer(async (o) => {
       ko.push(o);
     });
@@ -111,6 +163,38 @@ describe.skipIf(!harDb)("verifisering", () => {
 
     expect((await kall("POST", `/api/admin/organisasjoner/${org}/status`, admin, { status: "sperret" })).status).toBe(400);
     expect((await kall("POST", `/api/admin/organisasjoner/${org}/status`, admin, { status: "verifisert" })).data.verifisering).toBe("verifisert");
+  });
+
+  it("verifiserer automatisk når e-posten er den som står i Enhetsregisteret, også Gmail", async () => {
+    const t = "Bearer test:uid-v6:ola.nordmann@gmail.com:mfa";
+    const org = await nyOrg(t, "910000055");
+    const r = await kall("POST", `/api/org/${org}/verifisering/start`, t);
+    expect(r.data).toEqual({ status: "verifisert", metode: "brreg_epost" });
+    expect((await kall("GET", `/api/org/${org}/verifisering`, t)).data).toMatchObject({ verifisering: "verifisert", verifisert_metode: "brreg_epost" });
+  });
+
+  it("sier fra når navnet står med en rolle i Brreg, men sender likevel koden", async () => {
+    const t = "Bearer test:uid-v7:ola.privat@gmail.com:mfa:Ola%20Nordmann";
+    const org = await nyOrg(t, "910000063");
+    const r = await kall("POST", `/api/org/${org}/verifisering/start`, t);
+    expect(r.data).toEqual({ status: "kode_sendt", sendt_til: "po••@rolle-as.no", rolle: { rolle: "Daglig leder", navn: "Ola Johan Nordmann" } });
+    // Et annet navn i skjemaet: ingen rolle.
+    expect((await kall("POST", `/api/org/${org}/verifisering/start`, t, { navn: "Kari Hansen" })).data.rolle).toBeNull();
+    expect((await kall("POST", `/api/org/${org}/verifisering/start`, t, { navn: "Kari Nordmann" })).data.rolle).toEqual({ rolle: "Styreleder", navn: "Kari Nordmann" });
+    expect((await kall("GET", `/api/org/${org}/verifisering`, t)).data.verifisering).toBe("ny");
+  });
+
+  it("uten e-post i registeret: rollen kommer med i forespørselen, og admin ser treffet", async () => {
+    const t = "Bearer test:uid-v8:per.olsen@gmail.com:mfa:Per%20Olsen";
+    const admin = "Bearer test:uid-adm:admin@server.test:mfa";
+    const org = await nyOrg(t, "910000071");
+    expect((await kall("POST", `/api/org/${org}/verifisering/start`, t)).data).toEqual({ status: "manuell", rolle: { rolle: "Innehaver", navn: "Per Olsen" } });
+    expect((await kall("POST", `/api/org/${org}/verifisering/manuell`, t, { notat: "Enkeltpersonforetak" })).data.status).toBe("venter");
+    const detaljer = (await kall("GET", `/api/admin/organisasjoner/${org}`, admin)).data;
+    expect(detaljer.verifiseringer[0].notat).toBe("Per Olsen står som innehaver i Enhetsregisteret (samme navn som brukeren oppgir).\nEnkeltpersonforetak");
+    const brreg = (await kall("GET", `/api/admin/organisasjoner/${org}/brreg`, admin)).data;
+    expect(brreg).toMatchObject({ orgnr: "910000071", epost_medlem: null, roller: [{ kode: "INNH", rolle: "Innehaver", navn: "Per Olsen", treff: ["Per Olsen"] }] });
+    expect((await kall("GET", `/api/admin/organisasjoner/${org}/brreg`, t)).status).toBe(403);
   });
 
   it("avviser konkurs og krever admin i organisasjonen", async () => {
