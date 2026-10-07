@@ -1,5 +1,5 @@
 // Kunder og produkter: liste og skjema i dialog.
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
@@ -243,14 +243,14 @@ export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; la
   );
 }
 
-// Kan kunden motta EHF (elektronisk faktura)? Sjekkes i PEPPOL-registeret (ELMA) når
-// kunden lagres med org.nr., jevnlig, og når man ber om det her.
+// Kan kunden motta EHF (elektronisk faktura)? Sjekkes i PEPPOL-registeret (ELMA) med en
+// gang org.nr. er skrevet inn, når kunden lagres, jevnlig, og når man ber om det her.
 function EhfStatus({ kunde: k, lagretOrgnr, oppdatert }: { kunde: any; lagretOrgnr?: string | null; oppdatert: (k: any) => void }) {
   const { org } = useKonto();
   const h = useHandling();
   const nr = (k.orgnr ?? "").replace(/\s/g, "");
   if (!/^\d{9}$/.test(nr)) return null;
-  if (!k.id || nr !== lagretOrgnr) return <p className="liten dempet ehf-status">Om kunden kan motta EHF (elektronisk faktura), sjekkes når kunden lagres.</p>;
+  if (!k.id || nr !== (lagretOrgnr ?? "").replace(/\s/g, "")) return <EhfForLagring orgnr={nr} />;
   const tekst =
     k.ehf === true ? "Kan motta EHF (elektronisk faktura)." : k.ehf === false ? "Er ikke registrert for å motta EHF." : "Ikke sjekket om kunden kan motta EHF ennå.";
   return (
@@ -269,6 +269,35 @@ function EhfStatus({ kunde: k, lagretOrgnr, oppdatert }: { kunde: any; lagretOrg
         {h.opptatt ? "Sjekker …" : "Sjekk nå"}
       </button>
       {h.feil && <span className="felt-feil">{h.feil}</span>}
+    </p>
+  );
+}
+
+// Før kunden er lagret (eller når org.nr. er endret): sjekk med en gang org.nr. er skrevet
+// inn. Svaret lagres sammen med kunden.
+function EhfForLagring({ orgnr }: { orgnr: string }) {
+  const [svar, settSvar] = useState<{ orgnr: string; ehf: boolean | null } | null>(null);
+  useEffect(() => {
+    let avbrutt = false;
+    const t = setTimeout(() => {
+      hent<{ orgnr: string; ehf: boolean | null }>(`/peppol/${orgnr}`).then(
+        (s) => !avbrutt && settSvar(s),
+        () => !avbrutt && settSvar({ orgnr, ehf: null }),
+      );
+    }, 400);
+    return () => {
+      avbrutt = true;
+      clearTimeout(t);
+    };
+  }, [orgnr]);
+  if (!svar || svar.orgnr !== orgnr) return <p className="liten dempet ehf-status" role="status">Sjekker om kunden kan motta EHF …</p>;
+  return (
+    <p className={`liten ehf-status${svar.ehf ? " ja" : ""}`} role="status">
+      {svar.ehf === true
+        ? "Kan motta EHF (elektronisk faktura)."
+        : svar.ehf === false
+          ? "Er ikke registrert for å motta EHF."
+          : "Fikk ikke sjekket om kunden kan motta EHF nå. Det sjekkes på nytt når kunden er lagret."}
     </p>
   );
 }

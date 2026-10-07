@@ -227,7 +227,22 @@ export function settEhfOppslag(f?: (orgnr: string) => Promise<boolean | null>) {
 export function settEhfNett(o: Oppslag = {}) {
   nett = o;
 }
-export const sjekkEhf = (orgnr: string): Promise<boolean | null> =>
-  overstyrt ? overstyrt(orgnr) : config.ehfOppslag ? kanMottaEhf(orgnr) : Promise.resolve(null);
+// Svarene huskes en time (samme org.nr. hos flere organisasjoner, og sjekken i kundeskjemaet
+// før kunden lagres). Ukjent svar huskes ikke. fersk: slå opp på nytt («Sjekk nå»).
+const HUSK_MS = 3600_000;
+const husket = new Map<string, { svar: boolean; tid: number }>();
+export async function sjekkEhf(orgnr: string, { fersk = false } = {}): Promise<boolean | null> {
+  if (overstyrt) return overstyrt(orgnr);
+  if (!config.ehfOppslag) return null;
+  const h = husket.get(orgnr);
+  if (!fersk && h && Date.now() - h.tid < HUSK_MS) return h.svar;
+  const svar = await kanMottaEhf(orgnr);
+  if (svar !== null) {
+    husket.delete(orgnr);
+    husket.set(orgnr, { svar, tid: Date.now() });
+    if (husket.size > 5000) husket.delete(husket.keys().next().value!);
+  }
+  return svar;
+}
 // For Admin: hele oppslaget med stegene, også når oppslag ellers er slått av.
 export const testEhf = (orgnr: string) => ehfOppslag(orgnr, nett);

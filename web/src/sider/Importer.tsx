@@ -215,6 +215,7 @@ export function Importer({ type }: { type: Importtype }) {
           </div>
           <h2>Importen er ferdig</h2>
           <p>{deler.length ? setning(deler) : "Ingenting ble importert."}</p>
+          {type === "kunder" && a.ny > 0 && <p className="dempet liten">Om de nye kundene kan motta EHF, sjekkes av seg selv i løpet av noen minutter.</p>}
           <div className="knapper">
             <Link className="knapp primar" to={o.liste}>
               Til {o.flere}

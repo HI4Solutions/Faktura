@@ -47,6 +47,16 @@ function settFelter(data: Record<string, unknown>, start = 1) {
   };
 }
 
+// Nytt org.nr. på en kunde: EHF-svaret gjelder det gamle, så kunden sjekkes på nytt (workeren
+// tar kunder som ikke er sjekket, hvert minutt). Bruker samme parameter som orgnr i settFelter.
+// (Importen endrer aldri org.nr.: den kjenner igjen kunder på org.nr. når raden har det.)
+function nyttOrgnr(data: Record<string, unknown>, start = 1): string | null {
+  const i = Object.keys(data)
+    .filter((k) => data[k] !== undefined)
+    .indexOf("orgnr");
+  return i < 0 ? null : `ehf_sjekket = case when orgnr is distinct from $${i + start} then null else ehf_sjekket end`;
+}
+
 async function kropp<T extends z.ZodTypeAny>(c: Context, skjema: T): Promise<z.infer<T>> {
   let json: unknown = {};
   try {
@@ -225,6 +235,14 @@ export function lagApi() {
   api.route("/admin", adminRuter());
   api.route("/disk", diskRuter());
   api.route("/push", pushRuter());
+
+  // Kan et org.nr. motta EHF? For kundeskjemaet, før kunden er lagret (svaret huskes en time,
+  // så lagringen etterpå bruker det samme). ehf: null når oppslaget ikke ga svar.
+  api.get("/peppol/:orgnr", async (c) => {
+    const orgnr = c.req.param("orgnr").replace(/\s/g, "");
+    if (!/^\d{9}$/.test(orgnr)) throw new ApiFeil(400, "Ugyldig organisasjonsnummer");
+    return c.json({ orgnr, ehf: await sjekkEhf(orgnr) });
+  });
 
   // Konsumprisindeksen (SSB), siste tre år.
   api.get("/kpi", async (c) =>
@@ -423,10 +441,10 @@ export function lagApi() {
 
   // --- Kunder og produkter -----------------------------------------------
   // Kan kunden motta EHF? Sjekkes i PEPPOL når kunden lagres med org.nr. Feiler oppslaget,
-  // står svaret som før (workeren prøver igjen).
-  const medEhf = async (c: Context, k: any) => {
+  // står svaret som før (workeren prøver igjen om litt). fersk: slå opp på nytt.
+  const medEhf = async (c: Context, k: any, fersk = false) => {
     if (!k?.orgnr || (k.land && k.land !== "NO")) return k;
-    const ja = await sjekkEhf(k.orgnr);
+    const ja = await sjekkEhf(k.orgnr, { fersk });
     if (ja === null) return k;
     return (await bruk(c, (db) => en(db, "update faktura.kunder set ehf = $2, ehf_sjekket = now() where id = $1 returning *", [k.id, ja]))) ?? k;
   };
@@ -474,8 +492,13 @@ export function lagApi() {
       const b = (await kropp(c, skjema.partial())) as Record<string, unknown>;
       const s = settFelter(b, 3);
       if (s.tom) throw new ApiFeil(400, "Ingen felt å endre");
+      const ehfPaNytt = tabell === "kunder" ? nyttOrgnr(b, 3) : null;
       const r = await bruk(c, (db) =>
-        en(db, `update faktura.${tabell} set ${s.sql} where id = $1 and org_id = $2 returning *`, [uuid.parse(c.req.param("id")), orgId(c), ...s.verdier]),
+        en(db, `update faktura.${tabell} set ${s.sql}${ehfPaNytt ? `, ${ehfPaNytt}` : ""} where id = $1 and org_id = $2 returning *`, [
+          uuid.parse(c.req.param("id")),
+          orgId(c),
+          ...s.verdier,
+        ]),
       );
       if (!r) throw new ApiFeil(404, "Finnes ikke");
       return c.json(tabell === "kunder" && b.orgnr !== undefined ? await medEhf(c, r) : r);
@@ -741,7 +764,7 @@ export function lagApi() {
     });
     if (!k) throw new ApiFeil(404, "Finnes ikke");
     if (!k.orgnr) throw new ApiFeil(400, "Kunden har ikke organisasjonsnummer. EHF krever org.nr.");
-    const ny = await medEhf(c, k);
+    const ny = await medEhf(c, k, true);
     if (ny === k) throw new ApiFeil(503, "Fikk ikke svar fra EHF-registeret. Prøv igjen om litt.");
     return c.json(ny);
   });

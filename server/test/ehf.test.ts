@@ -1,6 +1,6 @@
 // EHF-filene valideres mot de offisielle reglene (EN 16931 + PEPPOL BIS Billing 3.0 med
 // norske regler). Første kjøring kompilerer reglene (ca. et halvt minutt), deretter går det fort.
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, vi } from "vitest";
 import { ehfHindring, enhetskode, lagEhf } from "../src/ehf.js";
 import { config } from "../src/config.js";
 import { lagApi } from "../src/api.js";
@@ -258,6 +258,51 @@ describe.skipIf(!process.env.DATABASE_URL)("EHF i API-et", () => {
     await oppdaterEhf();
     const etter = await somSystem((db) => en(db, "select ehf from faktura.kunder where id = $1", [ja.data.id]));
     expect(etter?.ehf).toBe(true);
+  });
+
+  it("sjekker nye kunder av seg selv: i skjemaet før lagring, importerte kunder og nytt org.nr.", async () => {
+    // Skjemaet spør med en gang org.nr. er skrevet inn.
+    expect((await kall("GET", "/api/peppol/974760673")).data).toEqual({ orgnr: "974760673", ehf: true });
+    expect((await kall("GET", "/api/peppol/12345")).status).toBe(400);
+    svarUkjent = true;
+    expect((await kall("GET", "/api/peppol/974760673")).data).toEqual({ orgnr: "974760673", ehf: null });
+    svarUkjent = false;
+
+    // Importerte kunder er ikke sjekket; workeren tar dem hvert minutt.
+    const rad = (nr: string) => somSystem((db) => en(db, "select ehf, ehf_sjekket from faktura.kunder where org_id = $1 and orgnr = $2", [org, nr]));
+    const imp = await kall("POST", `/api/org/${org}/kunder/importer`, { rader: [{ navn: "Import Mottaker AS", orgnr: "910000012" }, { navn: "Import Uten EHF AS", orgnr: "910000020" }] });
+    expect(imp.data.antall.ny).toBe(2);
+    expect((await rad("910000012"))?.ehf_sjekket).toBeNull();
+    registrert.add("910000012");
+    // Feiler oppslaget, prøves kunden ikke igjen før om en time.
+    svarUkjent = true;
+    await oppdaterEhf(1000, { nye: true });
+    svarUkjent = false;
+    await oppdaterEhf(1000, { nye: true });
+    expect((await rad("910000012"))?.ehf_sjekket).toBeNull();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 3600_000 + 1000);
+    try {
+      await oppdaterEhf(1000, { nye: true });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await rad("910000012")).toMatchObject({ ehf: true });
+    expect((await rad("910000012"))?.ehf_sjekket).toBeTruthy();
+    expect((await rad("910000020"))?.ehf).toBe(false);
+
+    // Nytt org.nr. i skjemaet: svaret for det gamle gjelder ikke, og feiler oppslaget, sjekker
+    // workeren kunden på nytt.
+    const ja = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Bytter Org AS", orgnr: "974760673" })).data;
+    expect([ja.ehf, Boolean(ja.ehf_sjekket)]).toEqual([true, true]);
+    svarUkjent = true;
+    expect((await kall("PATCH", `/api/org/${org}/kunder/${ja.id}`, { orgnr: "910000039" })).data.ehf_sjekket).toBeNull();
+    svarUkjent = false;
+    const samme = (await kall("PATCH", `/api/org/${org}/kunder/${ja.id}`, { orgnr: "910000039", navn: "Bytter Org ASA" })).data;
+    expect([samme.ehf, Boolean(samme.ehf_sjekket)]).toEqual([false, true]);
+    // Samme org.nr. igjen: svaret står.
+    const uendret = (await kall("PATCH", `/api/org/${org}/kunder/${ja.id}`, { orgnr: "910000039" })).data;
+    expect(Boolean(uendret.ehf_sjekket)).toBe(true);
   });
 
   it("gir gyldig EHF for utstedte fakturaer og kreditnotaer", async () => {

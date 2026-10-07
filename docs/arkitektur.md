@@ -48,8 +48,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   og SMP-en spørres direkte om dokumenttypen (BIS Billing 3), ellers leses tjenestelisten.
   DNS-en i Cloud Run svarer ikke på NAPTR-oppslag, så da spørres Google og Cloudflare (DNS
   over HTTPS), og finner ingen av dem SMP-en, spørres ELMA direkte. Nei bare når både DNS
-  og ELMA sier det. Sjekkes når kunden lagres, med «Sjekk nå» og jevnlig av workeren.
-  Admin → Drift har «Test EHF-oppslag», som viser hvert steg
+  og ELMA sier det. Sjekkes med en gang org.nr. er skrevet inn i kundeskjemaet
+  (`/api/peppol/:orgnr`, svaret huskes en time), når kunden lagres, med «Sjekk nå», og av
+  workeren: kunder som aldri er sjekket (importerte, nytt org.nr. eller feilet oppslag) hvert
+  minutt, alle hver 30. dag. Admin → Drift har «Test EHF-oppslag», som viser hvert steg
 - `paaminnelser`: påminnelser om fakturaer man lager selv (når beløpet varierer og en
   gjentakende faktura ikke passer): hver måned, kvartal, år, uke eller én gang, på et
   klokkeslett. Workeren tar dem hvert minutt (`ta_paaminnelser` flytter hver til neste dato

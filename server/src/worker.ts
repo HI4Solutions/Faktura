@@ -256,33 +256,49 @@ export async function gjenta() {
   return resultat;
 }
 
-// Sjekker kunder med org.nr. som ikke er sjekket på 30 dager (de eldste først), fem om gangen.
-// Samme org.nr. hos flere organisasjoner slås opp én gang.
-export async function oppdaterEhf(maks = 300) {
-  const kunder = await somSystem((db) =>
-    alle<{ id: string; orgnr: string }>(
-      db,
-      `select id, orgnr from faktura.kunder
-        where orgnr is not null and land = 'NO' and aktiv
-          and (ehf_sjekket is null or ehf_sjekket < now() - interval '30 days')
-        order by ehf_sjekket nulls first limit $1`,
-      [maks],
-    ),
-  );
-  const svar = new Map<string, Promise<boolean | null>>();
-  let oppdatert = 0;
-  for (let i = 0; i < kunder.length; i += 5) {
-    await Promise.all(
-      kunder.slice(i, i + 5).map(async (k) => {
-        if (!svar.has(k.orgnr)) svar.set(k.orgnr, sjekkEhf(k.orgnr));
-        const ja = await svar.get(k.orgnr)!;
-        if (ja === null) return;
-        await somSystem((db) => db.query("update faktura.kunder set ehf = $2, ehf_sjekket = now() where id = $1", [k.id, ja]));
-        oppdatert++;
-      }),
+// EHF: hvilke kunder som kan motta EHF. Daglig: de som ikke er sjekket på 30 dager (en
+// mottaker kan bli registrert eller avregistrert når som helst). Hvert minutt (nye): de som
+// aldri er sjekket, som importerte kunder og kunder der oppslaget feilet da de ble lagret, så
+// de er sjekket kort tid etter at de er lagt inn. Feiler oppslaget, prøves kunden igjen om
+// en time. Samme org.nr. hos flere organisasjoner slås opp én gang.
+const ehfFeilet = new Map<string, number>(); // kunde-id → da oppslaget sist feilet
+let ehfPagar = false;
+export async function oppdaterEhf(maks = 300, { nye = false } = {}) {
+  if (nye && ehfPagar) return { sjekket: 0, oppdatert: 0 };
+  if (nye) ehfPagar = true;
+  try {
+    for (const [id, tid] of ehfFeilet) if (Date.now() - tid > 3600_000) ehfFeilet.delete(id);
+    const kunder = await somSystem((db) =>
+      alle<{ id: string; orgnr: string }>(
+        db,
+        nye
+          ? `select id, orgnr from faktura.kunder
+              where orgnr is not null and land = 'NO' and aktiv and ehf_sjekket is null and not (id = any($2::uuid[]))
+              order by opprettet limit $1`
+          : `select id, orgnr from faktura.kunder
+              where orgnr is not null and land = 'NO' and aktiv
+                and (ehf_sjekket is null or ehf_sjekket < now() - interval '30 days')
+              order by ehf_sjekket nulls first limit $1`,
+        nye ? [maks, [...ehfFeilet.keys()]] : [maks],
+      ),
     );
+    const svar = new Map<string, Promise<boolean | null>>();
+    let oppdatert = 0;
+    for (let i = 0; i < kunder.length; i += 5) {
+      await Promise.all(
+        kunder.slice(i, i + 5).map(async (k) => {
+          if (!svar.has(k.orgnr)) svar.set(k.orgnr, sjekkEhf(k.orgnr));
+          const ja = await svar.get(k.orgnr)!;
+          if (ja === null) return void ehfFeilet.set(k.id, Date.now());
+          await somSystem((db) => db.query("update faktura.kunder set ehf = $2, ehf_sjekket = now() where id = $1", [k.id, ja]));
+          oppdatert++;
+        }),
+      );
+    }
+    return { sjekket: kunder.length, oppdatert };
+  } finally {
+    if (nye) ehfPagar = false;
   }
-  return { sjekket: kunder.length, oppdatert };
 }
 
 // Hvert minutt: publiser utboksen til Pub/Sub. «skip locked» gjør at to samtidige
@@ -462,11 +478,13 @@ export function lagWorker() {
 
   app.post("/jobber/gjenta", async (c) => c.json(await gjenta()));
   // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag henter fra banken på de faste
-  // hentetidene (planleggingen tar hver hentetid én gang per bank).
+  // hentetidene (planleggingen tar hver hentetid én gang per bank), og sjekker nye kunder for
+  // EHF (litt om gangen).
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
     await planleggBankhenting().catch((e) => logg("ERROR", "Planlegging av bankhenting feilet", { feil: (e as Error).message }));
+    await oppdaterEhf(10, { nye: true }).catch((e) => logg("ERROR", "EHF-oppslag for nye kunder feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));
