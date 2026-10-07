@@ -34,7 +34,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
   };
   const til = (navn: string) => sendt.filter((s) => s.endpoint === enheter[navn]);
   // Gjør en påminnelse klar til å sendes nå (som om tiden er inne).
-  const forfall = (id: string, dato = dag()) => somSystem((db) => db.query("update faktura.paaminnelser set neste_dato = $2, aktiv = true where id = $1", [id, dato]));
+  // Forfalt nå: i dag kl. 00 norsk tid, så testen ikke avhenger av når på døgnet den kjøres.
+  const forfall = (id: string, dato = dag()) =>
+    somSystem((db) => db.query("update faktura.paaminnelser set neste_dato = $2, klokkeslett = '00:00', aktiv = true where id = $1", [id, dato]));
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async (o) => {

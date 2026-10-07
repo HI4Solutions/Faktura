@@ -171,7 +171,7 @@ type Faktura = {
 
 const FAKTURA_SQL = `
   select f.id, f.fakturanummer, f.status, f.kunde_id, coalesce(f.kunde ->> 'navn', k.navn) as kunde, k.epost as kunde_epost, k.ehf as kunde_ehf,
-         f.fakturadato, f.forfallsdato, f.opprettet::text as opprettet,
+         f.fakturadato, f.forfallsdato, to_char(f.opprettet at time zone 'Europe/Oslo', 'YYYY-MM-DD') as opprettet,
          coalesce(f.sum_inkl_mva, (select sum(round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop), 2)
                                               + round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop) * l.mva_sats / 100, 2))
                                      from faktura.faktura_linjer l where l.faktura_id = f.id), 0) as sum,
