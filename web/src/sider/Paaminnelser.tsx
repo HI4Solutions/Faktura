@@ -1,12 +1,13 @@
 // Påminnelser om å lage fakturaer: et varsel på datoen du velger (hver måned, kvartal, år,
 // uke eller én gang), for fakturaer du må lage selv, for eksempel når beløpet varierer fra
-// gang til gang og en gjentakende faktura ikke passer. Varselet åpner en ny faktura med
-// kunden og produktene fylt inn, så du bare fyller inn beløpet og sender.
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+// gang til gang og en gjentakende faktura ikke passer. Varselet åpner en kort side der kunden
+// og produktene er fylt inn: skriv inn beløpet og send fakturaen derfra.
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
-import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
-import { dato, iDag } from "../format";
+import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
+import { dato, iDag, kr, leggTilDager, summer } from "../format";
+import { gebyrLinjer } from "../linjer";
 import { kanSkrive, useKonto } from "../konto";
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { hentAbonnement, pushStotte, slaPaVarsler } from "../pwa";
@@ -126,7 +127,7 @@ export function Paaminnelser({ faner }: { faner: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const lagFaktura = (p: Paaminnelse) => nav(`/fakturaer/ny?paaminnelse=${p.id}`);
+  const lagFaktura = (p: Paaminnelse) => nav(`/paaminnelser/${p.id}`);
   const hva = (p: Paaminnelse) =>
     [p.kunde_navn, p.produktliste.map((x) => x.navn).join(", ")].filter(Boolean).join(" · ") || "Ingen kunde eller produkt valgt";
   const hvem = (p: Paaminnelse) =>
@@ -145,8 +146,8 @@ export function Paaminnelser({ faner }: { faner: ReactNode }) {
       </div>
       {faner}
       <p className="dempet">
-        Få et varsel på datoen du velger om fakturaer du lager selv, for eksempel når beløpet varierer fra måned til måned. Varselet åpner en ny
-        faktura med kunden og produktene fylt inn, så du bare fyller inn beløpet og sender.
+        Få et varsel på datoen du velger om fakturaer du lager selv, for eksempel når beløpet varierer fra måned til måned. Trykk på varselet, skriv
+        inn beløpet og send fakturaen med en gang: kunden og produktene er fylt inn.
       </p>
       <Varselstatus />
       {feil ? (
@@ -183,7 +184,7 @@ export function Paaminnelser({ faner }: { faner: ReactNode }) {
                     lagFaktura(p);
                   }}
                 >
-                  Lag faktura nå
+                  Send faktura nå
                 </button>
               </span>
             </div>
@@ -218,7 +219,7 @@ export function Paaminnelser({ faner }: { faner: ReactNode }) {
                   <td>{merke(p)}</td>
                   <td className="hoyre" onClick={(e) => e.stopPropagation()}>
                     <button className="lenke" onClick={() => lagFaktura(p)}>
-                      Lag faktura nå
+                      Send faktura nå
                     </button>
                   </td>
                 </tr>
@@ -399,5 +400,202 @@ function Skjema({ p, ferdig }: { p: Partial<Paaminnelse>; ferdig: () => void }) 
         )}
       </div>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Send fakturaen rett fra påminnelsen (varselet åpner denne siden)
+// ---------------------------------------------------------------------------
+
+type HurtigLinje = { produkt_id: string | null; beskrivelse: string; antall: string; enhet: string; pris: string; mva_sats: number; fast: boolean };
+
+export function SendFraPaaminnelse() {
+  const { id } = useParams();
+  const { org } = useKonto();
+  const nav = useNavigate();
+  const paaminnelse = useData(() => hent<Paaminnelse>(`/org/${org!.id}/paaminnelser/${id}`), [org?.id, id]);
+  const orgData = useData(() => hent<any>(`/org/${org!.id}`), [org?.id]);
+  const kunder = useData(() => hent<any[]>(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
+  const produkter = useData(() => hent<any[]>(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
+  const [kundeId, settKundeId] = useState<string | null>(null);
+  const [linjer, settLinjer] = useState<HurtigLinje[] | null>(null);
+  const [forfall, settForfall] = useState("");
+  const utkastId = useRef<string | null>(null); // utkastet som er lagret (om sendingen feilet etterpå)
+  const forstePris = useRef<HTMLInputElement | null>(null);
+  const h = useHandling();
+  const p = paaminnelse.data;
+  const o = orgData.data;
+
+  // Fyll inn kunden og produktene fra påminnelsen (én gang). Produkter uten fast pris får tom pris.
+  useEffect(() => {
+    if (!p || !o || !kunder.data || !produkter.data || linjer) return;
+    const utenMva = !o.mva_registrert;
+    settKundeId(p.kunde_id && kunder.data.some((k) => k.id === p.kunde_id) ? p.kunde_id : null);
+    const fra: HurtigLinje[] = p.produkter
+      .map((pid) => produkter.data!.find((x) => x.id === pid))
+      .filter(Boolean)
+      .map((x: any) => ({
+        produkt_id: x.id,
+        beskrivelse: x.beskrivelse ? `${x.navn} – ${x.beskrivelse}` : x.navn,
+        antall: "1",
+        enhet: x.enhet || "stk",
+        pris: x.enhetspris == null ? "" : String(x.enhetspris).replace(".", ","),
+        mva_sats: utenMva ? 0 : Number(x.mva_sats),
+        fast: x.enhetspris != null,
+      }));
+    settLinjer(fra.length ? fra : [{ produkt_id: null, beskrivelse: "", antall: "1", enhet: "stk", pris: "", mva_sats: utenMva ? 0 : 25, fast: false }]);
+    settForfall(leggTilDager(iDag(), Number(o.standard_forfall_dager ?? 14)));
+  }, [p, o, kunder.data, produkter.data, linjer]);
+  // Rett til beløpet.
+  useEffect(() => {
+    if (linjer) forstePris.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(linjer)]);
+
+  if (paaminnelse.feil) return <Feil melding={paaminnelse.feil} />;
+  if (!p || !o || !kunder.data || !produkter.data || !linjer) return <Laster />;
+  if (!kanSkrive(org?.rolle)) return <Feil melding="Du har ikke tilgang til å lage fakturaer i denne organisasjonen." />;
+
+  const kunde = kunder.data.find((k) => k.id === kundeId);
+  const utenMva = !o.mva_registrert;
+  const gebyr = Number(o.standard_gebyr) > 0;
+  const tallLinjer = linjer.map((l) => ({ antall: tall(l.antall || "0") || 0, enhetspris: tall(l.pris || "0") || 0, mva_sats: l.mva_sats }));
+  const sum = summer([...tallLinjer, ...gebyrLinjer(gebyr, o)]);
+  const endre = (i: number, e: Partial<HurtigLinje>) => {
+    h.settFeil(null);
+    settLinjer(linjer.map((l, j) => (j === i ? { ...l, ...e } : l)));
+  };
+  const fokus = Math.max(0, linjer.findIndex((x) => !x.pris.trim())); // første linje uten pris
+  const mottaker = !kunde
+    ? null
+    : kunde.epost
+      ? `Sendes på e-post til ${kunde.epost}${kunde.ehf ? " (eller som EHF)" : ""}.`
+      : kunde.ehf
+        ? "Sendes som EHF."
+        : "Kunden har ingen e-postadresse, så fakturaen blir utstedt, men ikke sendt. Du kan laste ned PDF-en etterpå.";
+
+  const feil = (): string | null => {
+    if (!kunde) return "Velg kunde.";
+    for (const l of linjer) {
+      const navn = l.beskrivelse.trim() || "linjen";
+      if (!l.beskrivelse.trim()) return "Skriv hva fakturaen gjelder.";
+      if (!(tall(l.antall) > 0)) return `Fyll inn antall for «${navn}».`;
+      if (!l.pris.trim() || Number.isNaN(tall(l.pris))) return `Fyll inn prisen for «${navn}».`;
+    }
+    return null;
+  };
+  const kropp = () => ({
+    kunde_id: kundeId,
+    fakturadato: iDag(),
+    forfallsdato: forfall || null,
+    gebyr,
+    linjer: linjer.map((l) => ({ produkt_id: l.produkt_id, beskrivelse: l.beskrivelse.trim(), antall: tall(l.antall), enhet: l.enhet, enhetspris: tall(l.pris), mva_sats: l.mva_sats })),
+  });
+  async function lagre(send: boolean) {
+    const f = feil();
+    if (f) return h.settFeil(f);
+    if (send && !o.kontonr) return h.settFeil("Legg inn kontonummer under Innstillinger → Betaling før du sender fakturaer.");
+    const r = await h.kjor(async () => {
+      // Feilet sendingen etter at utkastet ble lagret, brukes samme utkast (ikke et nytt).
+      if (utkastId.current) await api("PUT", `/org/${org!.id}/fakturaer/${utkastId.current}`, kropp());
+      else utkastId.current = (await api<{ id: string }>("POST", `/org/${org!.id}/fakturaer`, kropp())).id;
+      if (send) await api("POST", `/org/${org!.id}/fakturaer/${utkastId.current}/utsted`, { send_epost: true });
+      return utkastId.current;
+    });
+    if (r) nav(`/fakturaer/${r}`, { state: send ? { sendt: true } : undefined });
+  }
+  // Mer å fylle inn (periode, referanser, vedlegg …): det fulle skjemaet, med det som er skrevet.
+  const fulltSkjema = () =>
+    nav(`/fakturaer/ny?paaminnelse=${p.id}`, {
+      state: {
+        kilde: "paaminnelse",
+        aiUtkast: {
+          kunde_id: kundeId,
+          kunde_navn: null,
+          linjer: linjer.map((l) => ({ produkt_id: l.produkt_id, beskrivelse: l.beskrivelse, antall: tall(l.antall || "1") || 1, enhet: l.enhet, enhetspris: l.pris.trim() ? tall(l.pris) : null, mva_sats: l.mva_sats, rabatt_prosent: null })),
+          fakturadato: null,
+          forfallsdato: forfall || null,
+          periode_fra: null,
+          periode_til: null,
+          deres_referanse: null,
+          kommentar: null,
+          merknader: [],
+        },
+      },
+    });
+
+  return (
+    <>
+      <div className="topp">
+        <h1>{p.tekst}</h1>
+      </div>
+      <p className="undertittel">
+        Påminnelse · {naar(p)}
+        {p.aktiv ? ` · neste ${dato(p.neste_dato)}` : ""}
+      </p>
+      <form
+        className="kort hurtigfaktura"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void lagre(true);
+        }}
+      >
+        <label>
+          Kunde
+          <Sokefelt valg={kundeValg(kunder.data)} verdi={kundeId} velg={settKundeId} plassholder="Søk etter kunde" etikett="Kunde" />
+        </label>
+        {linjer.map((l, i) => (
+          <div key={i} className="hurtig-linje">
+            <label>
+              {linjer.length > 1 ? `Linje ${i + 1}` : "Hva gjelder fakturaen"}
+              <input value={l.beskrivelse} onChange={(e) => endre(i, { beskrivelse: e.target.value })} placeholder="F.eks. Strøm oktober" />
+            </label>
+            <div className="hurtig-tall">
+              <label>
+                Antall{l.enhet && l.enhet !== "stk" ? ` (${l.enhet})` : ""}
+                <input inputMode="decimal" value={l.antall} onChange={(e) => endre(i, { antall: e.target.value })} />
+              </label>
+              <label>
+                {utenMva ? "Pris" : "Pris eks. mva"}
+                <input
+                  ref={i === fokus ? forstePris : undefined}
+                  inputMode="decimal"
+                  value={l.pris}
+                  placeholder={l.fast ? undefined : "Fyll inn"}
+                  onChange={(e) => endre(i, { pris: e.target.value })}
+                />
+              </label>
+            </div>
+          </div>
+        ))}
+        <label className="hurtig-forfall">
+          Forfallsdato
+          <input type="date" min={iDag()} value={forfall} onChange={(e) => settForfall(e.target.value)} />
+        </label>
+        <div className="hurtig-sum">
+          <span>Å betale{!utenMva && sum.mva ? " inkl. mva" : ""}</span>
+          <strong>{kr(sum.inkl)} kr</strong>
+        </div>
+        {gebyr && <p className="liten dempet">Med fakturagebyr på {kr(Number(o.standard_gebyr))} kr.</p>}
+        {mottaker && <p className="liten dempet">{mottaker}</p>}
+        {!o.kontonr && (
+          <div className="melding info">
+            Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
+          </div>
+        )}
+        <Feil melding={h.feil} />
+        <div className="knapper hurtig-knapper">
+          <button className="primar" disabled={h.opptatt || !o.kontonr}>
+            {h.opptatt ? "Sender …" : "Send faktura"}
+          </button>
+          <button type="button" disabled={h.opptatt} onClick={() => void lagre(false)}>
+            Lagre som utkast
+          </button>
+        </div>
+        <button type="button" className="lenke liten" onClick={fulltSkjema} disabled={h.opptatt}>
+          Åpne i fullt skjema (periode, referanser, vedlegg …)
+        </button>
+      </form>
+    </>
   );
 }

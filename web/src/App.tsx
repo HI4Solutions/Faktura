@@ -16,6 +16,7 @@ import { Innstillinger } from "./sider/Innstillinger";
 import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
+import { SendFraPaaminnelse } from "./sider/Paaminnelser";
 import { Rapporter } from "./sider/Rapporter";
 import { BankTilbake, Innbetalinger } from "./sider/Bank";
 import { Logo } from "./Logo";
@@ -305,6 +306,8 @@ function Ramme() {
             <Route path="/fakturaer/:id/endre" element={<FakturaSkjema />} />
             <Route path="/fakturaer/:id" element={<FakturaVisning />} />
             <Route path="/gjentakende" element={<Gjentakende />} />
+            <Route path="/paaminnelser" element={<Navigate to="/gjentakende?fane=paaminnelser" replace />} />
+            <Route path="/paaminnelser/:id" element={<SendFraPaaminnelse />} />
             <Route path="/innbetalinger" element={<Innbetalinger />} />
             <Route path="/bank/tilbake" element={<BankTilbake />} />
             <Route path="/kunder" element={<Kunder />} />

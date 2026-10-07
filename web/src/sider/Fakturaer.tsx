@@ -524,6 +524,8 @@ export function FakturaSkjema() {
 
   // Åpnet fra AI-assistenten med et utkast: fyll ut skjemaet (én gang per åpning).
   const fraAssistent = !id ? ((sted.state as { aiUtkast?: AiUtkast } | null)?.aiUtkast ?? null) : null;
+  // Fra siden for påminnelsen («Åpne i fullt skjema»): utkastet har det som ble skrevet der.
+  const fraPaaminnelseSide = (sted.state as { kilde?: string } | null)?.kilde === "paaminnelse";
   const brukt = useRef<string | null>(null);
   useEffect(() => {
     if (fraAssistent && orgData.data && brukt.current !== sted.key) {
@@ -541,6 +543,11 @@ export function FakturaSkjema() {
     paaminnelseBrukt.current = paaminnelseId;
     hent<{ tekst: string; kunde_id: string | null; produkter: string[] }>(`/org/${org!.id}/paaminnelser/${paaminnelseId}`).then(
       (p) => {
+        // Fylt ut fra siden for påminnelsen: behold det som ble skrevet der.
+        if (fraPaaminnelseSide && fraAssistent) {
+          settFraPaaminnelse({ tekst: p.tekst, manglerPris: fraAssistent.linjer.some((l) => l.enhetspris == null) });
+          return;
+        }
         if (p.kunde_id && kunder.data!.some((k: any) => k.id === p.kunde_id)) settF((x: any) => ({ ...x, kunde_id: p.kunde_id }));
         const valgte = p.produkter.map((pid) => produkter.data!.find((x: any) => x.id === pid)).filter(Boolean);
         if (valgte.length) settLinjer(valgte.map((x: any) => ({ ...tomLinje(), ...fraProdukt(x) })));
@@ -626,7 +633,7 @@ export function FakturaSkjema() {
           Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
         </div>
       )}
-      {fraAssistent && <div className="melding info">Fylt ut av AI-assistenten. Se over kunde, linjer og datoer før du sender.</div>}
+      {fraAssistent && !fraPaaminnelseSide && <div className="melding info">Fylt ut av AI-assistenten. Se over kunde, linjer og datoer før du sender.</div>}
       {fraPaaminnelse && (
         <div className="melding info">
           Fra påminnelsen «{fraPaaminnelse.tekst}».{" "}

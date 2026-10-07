@@ -129,8 +129,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
       expect.objectContaining({
         tittel: "Send strømfaktura til Kari",
         // Med i flere organisasjoner: organisasjonen står først.
-        tekst: "Påminnelse Utleie AS: Trykk for å lage fakturaen til Kari Hansen for Strøm.",
-        url: `/fakturaer/ny?paaminnelse=${p.id}&org=${org}`,
+        tekst: "Påminnelse Utleie AS: Trykk for å skrive inn beløpet og sende fakturaen til Kari Hansen for Strøm.",
+        url: `/paaminnelser/${p.id}?org=${org}`,
         tag: `paaminnelse-${p.id}`,
       }),
     ]);
@@ -161,14 +161,14 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
     ko.length = 0;
     expect(await sendPaaminnelser()).toBe(1);
     expect(til("eier").map((s) => s.innhold.tittel)).toEqual(["Fakturer strøm for oktober"]);
-    expect(til("fakturerer").map((s) => s.innhold.tekst)).toEqual(["Trykk for å lage fakturaen."]);
-    expect(til("eier").map((s) => s.innhold.tekst)).toEqual(["Påminnelse Utleie AS: Trykk for å lage fakturaen."]);
+    expect(til("fakturerer").map((s) => s.innhold.tekst)).toEqual(["Trykk for å skrive inn beløpet og sende fakturaen."]);
+    expect(til("eier").map((s) => s.innhold.tekst)).toEqual(["Påminnelse Utleie AS: Trykk for å skrive inn beløpet og sende fakturaen."]);
     expect(til("leser")).toEqual([]);
     const eposter = ko.filter((o): o is Extract<Oppgave, { type: "epost" }> => o.type === "epost");
     expect(eposter.map((e) => e.til).sort()).toEqual([["paam-eier@server.test"], ["paam-fakt@server.test"]]);
     expect(eposter[0].emne).toBe("Påminnelse: Fakturer strøm for oktober");
     expect(eposter[0].tekst).toContain("Dette er en påminnelse du har satt opp i HI4 Faktura for Påminnelse Utleie AS:");
-    expect(eposter[0].tekst).toContain(`/fakturaer/ny?paaminnelse=${p.id}&org=${org}`);
+    expect(eposter[0].tekst).toContain(`/paaminnelser/${p.id}?org=${org}`);
     expect(eposter[0].tekst).toContain("Dette var den siste påminnelsen.");
 
     // Stoppet etterpå; en ny dato må velges for å starte den igjen.

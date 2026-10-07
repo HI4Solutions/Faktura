@@ -1,8 +1,8 @@
 // Påminnelser om fakturaer som må lages for hånd (0032_paaminnelser.sql), for eksempel når
 // beløpet varierer fra måned til måned og en gjentakende faktura ikke passer. Rutene brukes
 // av appen; workeren sender påminnelsene hvert minutt som push-varsel (og e-post om man har
-// valgt det). Varselet åpner en ny faktura med kunden og produktene fylt inn
-// (/fakturaer/ny?paaminnelse=<id>), og man fyller inn beløpet selv.
+// valgt det). Varselet åpner en side i appen der kunden og produktene er fylt inn
+// (/paaminnelser/<id>): man skriver inn beløpet og sender fakturaen derfra.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { config } from "./config.js";
@@ -170,13 +170,13 @@ async function varsle(p: Tatt) {
     return;
   }
   const hva = `${info.kunde ? ` til ${info.kunde}` : ""}${info.produkter ? ` for ${info.produkter}` : ""}`;
-  const sti = `/fakturaer/ny?paaminnelse=${p.id}`;
+  const sti = `/paaminnelser/${p.id}`;
   const push = await sendVarsel({
     hendelse: "paaminnelse",
     org_id: p.org_id,
     bruker_ider: mottakere.map((m) => m.bruker_id),
     tittel: p.tekst,
-    tekst: `Trykk for å lage fakturaen${hva}.`,
+    tekst: `Trykk for å skrive inn beløpet og sende fakturaen${hva}.`,
     url: sti,
     tag: `paaminnelse-${p.id}`,
   });
@@ -194,7 +194,7 @@ async function varsle(p: Tatt) {
           "",
           p.tekst,
           "",
-          `Lag fakturaen${hva}: ${config.appUrl}${sti}&org=${p.org_id}`,
+          `Skriv inn beløpet og send fakturaen${hva}: ${config.appUrl}${sti}?org=${p.org_id}`,
           "",
           neste,
           "Du kan endre eller stoppe påminnelsene under Gjentakende → Påminnelser i appen.",

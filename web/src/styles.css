@@ -1153,3 +1153,17 @@ dialog.assistent > .melding { margin: 0 16px 8px; flex: none; }
 .valg-rad { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 14px 0; }
 .valg-rad legend { font-size: 0.83rem; font-weight: 600; color: var(--tekst-2); padding: 0 4px; }
 .valg-rad label { margin-bottom: 10px; }
+
+/* Send fakturaen rett fra påminnelsen (/paaminnelser/:id) */
+.hurtigfaktura { max-width: 560px; }
+.hurtig-linje { border-top: 1px solid var(--kant); padding-top: 14px; margin-top: 2px; }
+.hurtig-tall { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; }
+.hurtig-tall input { font-variant-numeric: tabular-nums; }
+.hurtig-forfall { max-width: 260px; }
+.hurtig-sum { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0 4px; border-top: 1px solid var(--kant); font-size: 1.05rem; }
+.hurtig-sum strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.hurtigfaktura .melding { margin: 10px 0; }
+.hurtig-knapper { margin-top: 12px; }
+.hurtig-knapper button.primar { flex: 1 1 200px; min-height: 50px; font-size: 1.05rem; justify-content: center; }
+.hurtig-knapper button:not(.primar) { flex: 1 1 140px; min-height: 50px; justify-content: center; }
+.hurtigfaktura > button.lenke { margin-top: 12px; }
