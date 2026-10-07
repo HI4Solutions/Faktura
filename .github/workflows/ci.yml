@@ -28,8 +28,11 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: server/package-lock.json
+      # psql finnes på GitHubs Ubuntu-maskiner; installer bare om den mangler (pakkekilden
+      # kan henge, derfor tidsgrensen).
       - name: Installer psql
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+        timeout-minutes: 5
+        run: command -v psql >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
       - run: npm ci
         working-directory: server
       - run: npm run typecheck
