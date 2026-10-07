@@ -461,16 +461,12 @@ export function lagWorker() {
   });
 
   app.post("/jobber/gjenta", async (c) => c.json(await gjenta()));
-  // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag planlegger henting fra banken
-  // (høyst hvert kvarter per instans; planleggingen selv sørger for seks timer mellom hver henting).
-  let bankPlanlagt = 0;
+  // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag henter fra banken på de faste
+  // hentetidene (planleggingen tar hver hentetid én gang per bank).
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
-    if (Date.now() - bankPlanlagt > 15 * 60_000) {
-      bankPlanlagt = Date.now();
-      await planleggBankhenting().catch((e) => logg("ERROR", "Planlegging av bankhenting feilet", { feil: (e as Error).message }));
-    }
+    await planleggBankhenting().catch((e) => logg("ERROR", "Planlegging av bankhenting feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));

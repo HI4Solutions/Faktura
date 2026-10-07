@@ -14,7 +14,7 @@ import { ApiFeil } from "./feil.js";
 import { krevMfa } from "./auth.js";
 import { krypter } from "./kryptering.js";
 import { BankFeil, gyldigTil, hentApplikasjon, hentBanker, nokkelFeil, normaliserPem, startAutorisering, velgBank, type BankNokkel } from "./enableBanking.js";
-import { egneKontoer, nyState, tilbakeUrl, type BankAppKonfig, type Bankkobling } from "./bank.js";
+import { egneKontoer, HENTETIDER, nyState, tilbakeUrl, type BankAppKonfig, type Bankkobling } from "./bank.js";
 import { leggIKo } from "./tjenester.js";
 import { aiPaa } from "./ai.js";
 import { foreslaFaktura } from "./aiInnbetaling.js";
@@ -71,6 +71,7 @@ async function status(db: Db, org: string) {
     fra: start?.fra ?? null,
     fra_satt: start?.satt ?? false,
     tilkoblet: koblinger.some((k) => k.tilkoblet),
+    hentetider: HENTETIDER, // når workeren henter av seg selv hver dag (norsk tid)
     tilbake_url: tilbakeUrl(),
     antall: await antall(db, org),
     ai: aiPaa() && Boolean(start?.ai_aktiv), // AI kan foreslå fakturaen for uavklarte innbetalinger

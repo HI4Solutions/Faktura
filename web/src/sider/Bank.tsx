@@ -1,7 +1,7 @@
 // Innbetalinger fra banken (open banking gjennom Enable Banking): kobling under
 // Innstillinger → Betaling, siden der brukeren kommer tilbake etter BankID, og listen
 // over innbetalinger som kobles til fakturaene.
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
@@ -9,7 +9,7 @@ import { AiMerke, aiGrunn } from "../ai";
 import { dato, kr } from "../format";
 import { erAdmin, kanBokfore, useKonto } from "../konto";
 import { Sokefelt } from "../sokefelt";
-import { IkonGnist, IkonKroner } from "../ikoner";
+import { IkonGnist, IkonKlokke, IkonKroner } from "../ikoner";
 import { HemmeligFelt, HemmeligTekst } from "../hemmelig";
 
 // En konto i banken som er lagt inn i HI4 Faktura (bare de leses), med navnet derfra.
@@ -41,6 +41,7 @@ export interface BankStatus {
   fra: string | null; // innbetalinger hentes fra og med denne datoen
   fra_satt: boolean; // valgt av en administrator (ellers dagen organisasjonen ble opprettet)
   tilkoblet: boolean;
+  hentetider: string[]; // når appen henter av seg selv hver dag (TT:MM, norsk tid)
   tilbake_url: string;
   antall: { forslag: number; uavklart: number; koblet: number; ignorert: number };
   ai: boolean; // AI kan foreslå fakturaen for uavklarte innbetalinger
@@ -51,12 +52,92 @@ const pause = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 const kontonrTekst = (k: string) => k.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3");
 const kontotype = (t: Bankkobling["psu_type"]) => (t === "personal" ? "privatkonto" : "bedriftskonto");
 const iDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
-const tid = (iso: string | null) => (iso ? new Date(iso).toLocaleString("nb-NO", { dateStyle: "short", timeStyle: "short" }) : "");
 export const dagerTil = (iso: string | null) => (iso ? Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000) : null);
 // «DNB», «DNB og Storebrand Bank», «DNB, Nordea og Storebrand Bank».
 export const navnListe = (navn: string[]) => (navn.length <= 1 ? navn.join("") : `${navn.slice(0, -1).join(", ")} og ${navn.at(-1)}`);
 // Kontonumrene er endret (kontonummeret eller Flere kontonumre): bankene viser kontoene på nytt.
 export const kontoerEndret = () => window.dispatchEvent(new Event("faktura-kontoer"));
+
+// Dato (ÅÅÅÅ-MM-DD) og klokkeslett (TT:MM) i Oslo: hentetidene er norsk tid.
+const osloFormat = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Oslo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+const iOslo = (t: Date) => {
+  const d = Object.fromEntries(osloFormat.formatToParts(t).map((x) => [x.type, x.value]));
+  return { dato: `${d.year}-${d.month}-${d.day}`, klokke: `${d.hour}:${d.minute}` };
+};
+// Neste hentetid etter nå: senere i dag, ellers den første i morgen.
+export function nesteHenting(tider: string[] | undefined, naa = new Date()): { iDag: boolean; klokke: string } | null {
+  if (!tider?.length) return null;
+  const senere = tider.find((t) => t > iOslo(naa).klokke);
+  return senere ? { iDag: true, klokke: senere } : { iDag: false, klokke: tider[0] };
+}
+// «i dag kl. 06:02», «i går kl. 18:00» eller «05.10.2026 kl. 12:00».
+export function naarTekst(iso: string, naa = new Date()) {
+  const t = iOslo(new Date(iso));
+  const dag = t.dato === iOslo(naa).dato ? "i dag" : t.dato === iOslo(new Date(naa.getTime() - 86_400_000)).dato ? "i går" : dato(t.dato);
+  return `${dag} kl.\u00a0${t.klokke}`;
+}
+
+// Tegner på nytt ved hvert nytt minutt (og når appen kommer fram igjen), så «neste henting»
+// ikke blir stående på en tid som er passert.
+function useMinutt() {
+  const [naa, settNaa] = useState(() => new Date());
+  useEffect(() => {
+    let t = 0;
+    const tikk = () => {
+      settNaa(new Date());
+      clearTimeout(t);
+      t = window.setTimeout(tikk, 60_000 - (Date.now() % 60_000) + 50);
+    };
+    t = window.setTimeout(tikk, 60_000 - (Date.now() % 60_000) + 50);
+    const synlig = () => document.visibilityState === "visible" && tikk();
+    document.addEventListener("visibilitychange", synlig);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("visibilitychange", synlig);
+    };
+  }, []);
+  return naa;
+}
+
+// Når appen henter innbetalingene av seg selv, neste gang og sist. Når en hentetid passerer
+// mens siden er åpen, hentes statusen på nytt litt etter (workeren trenger litt tid).
+export function Hentetider({ tider, sist, oppdater }: { tider: string[]; sist: string | null; oppdater?: () => void }) {
+  const naa = useMinutt();
+  const neste = nesteHenting(tider, naa);
+  const forrige = useRef(neste && `${neste.iDag}${neste.klokke}`);
+  const noekkel = neste && `${neste.iDag}${neste.klokke}`;
+  useEffect(() => {
+    if (forrige.current === noekkel) return;
+    forrige.current = noekkel;
+    if (!oppdater) return;
+    const t = setTimeout(oppdater, 90_000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noekkel]);
+  if (!neste) return null;
+  return (
+    <div className="hentetider">
+      <IkonKlokke />
+      <div>
+        <div>
+          Neste henting <strong>{neste.iDag ? "i dag" : "i morgen"} kl.&nbsp;{neste.klokke}</strong>
+        </div>
+        <div className="liten dempet">
+          Automatisk hver dag kl.&nbsp;{navnListe(tider)}
+          {sist ? ` · sist hentet ${naarTekst(sist, naa)}` : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // BankID-adressen workeren lager for banken: spør til den er klar.
 async function ventPaBankId(orgId: string, koblingId: string): Promise<string> {
@@ -204,6 +285,7 @@ export function BankKobling() {
           ) : (
             <p>Ingen bank er koblet til ennå.</p>
           )}
+          {data.koblinger.some((k) => k.tilkoblet && k.kontoer.length > 0) && <Hentetider tider={data.hentetider} sist={null} oppdater={last} />}
           {endreFra === null && data.fra && (
             <p className="dempet liten">
               Henter innbetalinger fra og med {dato(data.fra)}
@@ -456,7 +538,7 @@ function BankRad({
         <p className={`liten ${snart ? "advarsel-tekst" : "dempet"}`}>
           Lesetilgang til {dato(k.gyldig_til)}
           {snart ? ` (${igjen! <= 0 ? "går ut i dag" : `${igjen} ${igjen === 1 ? "dag" : "dager"} igjen`}). Forny med BankID.` : "."}
-          {k.kontoer.length > 0 && k.sist_hentet && ` Sist hentet ${tid(k.sist_hentet)}.`}
+          {k.kontoer.length > 0 && k.sist_hentet && ` Sist hentet ${naarTekst(k.sist_hentet)}.`}
         </p>
       )}
       {k.tilkoblet && k.kontoer.length > 0 && (
@@ -623,11 +705,19 @@ export function Innbetalinger() {
       </div>
       {bank.data && (
         <p className="undertittel">
-          {aktive.length
-            ? `Fra ${navnListe(aktive.map((k) => k.bank))}${sist ? ` · sist hentet ${tid(sist)}` : ""}. Hentes automatisk noen ganger om dagen.`
-            : "Banken er ikke koblet til."}{" "}
+          {aktive.length ? `Fra ${navnListe(aktive.map((k) => k.bank))}.` : "Banken er ikke koblet til."}{" "}
           {!aktive.length && erAdmin(org?.rolle) && <Link to="/innstillinger?fane=betaling">Koble til under Innstillinger → Betaling</Link>}
         </p>
+      )}
+      {bank.data && aktive.some((k) => k.kontoer.length > 0) && (
+        <Hentetider
+          tider={bank.data.hentetider}
+          sist={sist}
+          oppdater={() => {
+            last();
+            bank.last();
+          }}
+        />
       )}
       {bank.data?.koblinger
         .filter((k) => k.siste_feil)

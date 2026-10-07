@@ -9,7 +9,7 @@ import { lagApi } from "../src/api.js";
 import { alle, en, somSystem } from "../src/db.js";
 import { settKryptering } from "../src/kryptering.js";
 import { lagJwt, nokkelFeil, normaliserPem, settBankFetch, tilInnbetalinger, velgBank, type Bank, type Innbetaling } from "../src/enableBanking.js";
-import { finnFaktura, fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, sammeNavn, slettBankOkter, type ApenFaktura } from "../src/bank.js";
+import { finnFaktura, fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, sammeNavn, sisteHentetid, slettBankOkter, type ApenFaktura } from "../src/bank.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 
 const { privateKey: privat, publicKey: offentlig } = generateKeyPairSync("rsa", {
@@ -270,6 +270,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(kall.at(-1)!.kropp).toEqual({ code: "kode-1" });
     const s = await bankStatus();
     expect(s.tilkoblet).toBe(true);
+    expect(s.hentetider).toEqual(["06:00", "12:00", "18:00"]);
     expect(s.koblinger[0]).toMatchObject({ id: dnbId, bank: "DNB", tilkoblet: true, status: "aktiv", gyldig_til: "2027-04-04T10:00:00.000Z", siste_feil: null, auth_url: null });
     expect(s.koblinger[0].fullfort).toBeTruthy();
     // Organisasjonens kontonummer er lagt inn; sparekontoen er ikke det, og vises ikke.
@@ -447,29 +448,56 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect((await kobling(dnbId))!.kontoer[0]).toMatchObject({ kontonr: "86011117947", hent_fra: dagerSiden(5) });
   });
 
-  it("planlegger henting høyst hver sjette time per bank, og bare på dagtid", async () => {
+  it("hentetidene følger norsk tid, også vintertid", () => {
+    expect(sisteHentetid(new Date("2026-10-06T03:59:00Z"))).toBeNull(); // 05:59 (sommertid)
+    expect(sisteHentetid(new Date("2026-10-06T04:00:00Z"))!.toISOString()).toBe("2026-10-06T04:00:00.000Z"); // 06:00
+    expect(sisteHentetid(new Date("2026-10-06T15:59:00Z"))!.toISOString()).toBe("2026-10-06T10:00:00.000Z"); // 17:59 → 12:00
+    expect(sisteHentetid(new Date("2026-12-01T11:30:00Z"))!.toISOString()).toBe("2026-12-01T11:00:00.000Z"); // 12:30 (vintertid) → 12:00
+    expect(sisteHentetid(new Date("2026-12-01T22:30:00Z"))!.toISOString()).toBe("2026-12-01T17:00:00.000Z"); // 23:30 → 18:00
+    expect(sisteHentetid(new Date("2026-12-01T23:30:00Z"))).toBeNull(); // 00:30 neste dag
+  });
+
+  it("henter på de faste hentetidene, én gang per hentetid og bank", async () => {
     const natt = new Date("2026-10-06T01:00:00Z"); // 03:00 i Oslo
     const middag = new Date("2026-10-06T10:00:00Z"); // 12:00 i Oslo
+    const kveld = new Date("2026-10-06T16:00:00Z"); // 18:00 i Oslo
+    const lagt = (fra: number) => ko.slice(fra).filter((o: any) => o.type === "bank-hent" && o.org_id === org).map((o: any) => o.kobling_id).sort();
+    const nullstill = () => somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = '2026-01-01T00:00:00Z' where org_id = $1", [org]));
     // En bank uten noen konto som er lagt inn i HI4 Faktura, har ingenting å hente.
     expect((await api("DELETE", `/api/org/${org}/kontoer/${husleie}`)).status).toBe(204);
-    await somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = '2026-01-01T00:00:00Z' where org_id = $1", [org]));
-    const forst = ko.length;
+    await nullstill();
+    let fra = ko.length;
     await planleggBankhenting(middag);
-    expect(ko.slice(forst).filter((o: any) => o.type === "bank-hent" && o.org_id === org).map((o: any) => o.kobling_id)).toEqual([dnbId]);
+    expect(lagt(fra)).toEqual([dnbId]);
     husleie = (await api("POST", `/api/org/${org}/kontoer`, { navn: "Husleiekonto", kontonr: "95300000003" })).data.id;
 
-    await somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = '2026-01-01T00:00:00Z' where org_id = $1", [org]));
-    const start = ko.length;
+    // Om natten hentes ingenting; på hentetiden hentes hver bank én gang, også når to
+    // kjøringer går samtidig.
+    await nullstill();
+    fra = ko.length;
     expect(await planleggBankhenting(natt)).toBe(0);
-    expect(await planleggBankhenting(middag)).toBeGreaterThanOrEqual(2);
-    const lagt = ko.slice(start).filter((o: any) => o.type === "bank-hent" && o.org_id === org).map((o: any) => o.kobling_id);
-    expect(lagt.sort()).toEqual([dnbId, sbId].sort());
-    const etter = ko.length;
+    await Promise.all([planleggBankhenting(middag), planleggBankhenting(middag)]);
+    expect(lagt(fra)).toEqual([dnbId, sbId].sort());
+    expect(new Date((await kobling(dnbId))!.sist_hentet).getTime()).toBe(middag.getTime());
+    // Resten av dagen fram til neste hentetid: ikke igjen.
+    fra = ko.length;
     await planleggBankhenting(new Date(middag.getTime() + 3600_000));
-    expect(ko.slice(etter).some((o: any) => o.type === "bank-hent" && o.org_id === org)).toBe(false);
+    await planleggBankhenting(new Date(kveld.getTime() - 60_000));
+    expect(lagt(fra)).toEqual([]);
+    // «Hent nå» like etter klokka 18 tar hentetiden for den banken; den andre hentes.
+    await somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = $2 where id = $1", [dnbId, new Date(kveld.getTime() + 30_000).toISOString()]));
+    await planleggBankhenting(new Date(kveld.getTime() + 60_000));
+    expect(lagt(fra)).toEqual([sbId]);
+    // En hentetid som ble gått glipp av (worker nede), tas igjen senere samme kveld.
+    await somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = $2 where id = $1", [sbId, middag.toISOString()]));
+    fra = ko.length;
+    await planleggBankhenting(new Date(kveld.getTime() + 4 * 3600_000)); // 22:00
+    expect(lagt(fra)).toEqual([sbId]);
 
-    // Samtykket til Storebrand går ut om tre dager: varsles én gang.
+    // Samtykket til Storebrand går ut om tre dager: varsles én gang, og bare på dagtid.
     await somSystem((db) => db.query("update faktura.bankkoblinger set gyldig_til = '2026-10-09T10:00:00Z', varslet_utlop = null where id = $1", [sbId]));
+    await planleggBankhenting(new Date(kveld.getTime() + 4 * 3600_000 + 60_000)); // 22:01
+    expect((await kobling(sbId))!.varslet_utlop).toBeNull();
     await planleggBankhenting(middag);
     const varslet = (await kobling(sbId))!.varslet_utlop;
     expect(varslet).toBeTruthy();

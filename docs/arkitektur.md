@@ -65,8 +65,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   fram, sender workeren e-post i stedet
 - `banktransaksjoner`: innbetalinger lest fra organisasjonens egne bankkontoer gjennom open
   banking (Enable Banking, type `bank` i `integrasjoner`: egen applikasjon per organisasjon,
-  privat nøkkel KMS-kryptert, bare workeren bruker den). Workeren henter høyst hver sjette
-  time på dagtid og kobler innbetalingene til fakturaer: KID eller fakturanummer i meldingen
+  privat nøkkel KMS-kryptert, bare workeren bruker den). Workeren henter på faste tider hver
+  dag (`HENTETIDER` i `bank.ts`, kl. 06, 12 og 18 norsk tid, innenfor PSD2-grensen på fire
+  hentinger i døgnet uten brukeren; «Hent nå» kommer i tillegg). Hver hentetid tas én gang per
+  bank (atomisk, også med flere instanser), og en som ble gått glipp av, tas igjen før neste.
+  Appen viser hentetidene, neste henting og når det sist ble hentet. Innbetalingene kobles
+  til fakturaer: KID eller fakturanummer i meldingen
   registreres med en gang (`koble_banktransaksjon`), samme beløp og betaler blir forslag,
   resten uavklart. Uten KID-avtale med banken. Innbetalinger fra før startdatoen
   (`organisasjoner.bank_fra`, som standard dagen organisasjonen ble opprettet) hentes ikke,

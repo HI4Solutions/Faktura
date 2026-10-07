@@ -621,6 +621,11 @@ ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 .bank p { margin: 8px 0 0; }
 .bank .melding { margin: 10px 0 0; }
 .bank-kontoer { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 4px; font-size: 0.92rem; }
+.hentetider { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; margin: 0 0 1rem; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate-2); }
+.hentetider > svg { flex: none; margin-top: 2px; color: var(--aksent); }
+.hentetider strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.hentetider .liten { margin-top: 2px; }
+.kort .hentetider { margin: 12px 0; }
 .bank .knapper { margin-top: 10px; }
 .ny-bank { border: 1px dashed var(--kant); border-radius: var(--radius-s); padding: 12px 14px 14px; margin: 14px 0 4px; }
 .ny-bank h3 { margin: 0 0 4px; font-size: 1rem; }

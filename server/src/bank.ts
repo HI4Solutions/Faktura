@@ -1,5 +1,5 @@
 // Innbetalinger fra organisasjonens bankkontoer (Enable Banking): bare kontoene som er lagt
-// inn i HI4 Faktura. Workeren henter nye transaksjoner noen ganger om dagen, lagrer
+// inn i HI4 Faktura. Workeren henter nye transaksjoner på faste tider (HENTETIDER), lagrer
 // innbetalingene og kobler dem til fakturaene:
 //
 //   KID, eller fakturanummeret i meldingen sammen med riktig beløp, riktig betaler eller
@@ -74,6 +74,37 @@ const iDag = (dager = 0) => {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(d);
 };
 const somDato = (d: unknown) => (d instanceof Date ? d.toISOString() : d == null ? null : String(d));
+
+// Når workeren henter av seg selv hver dag (norsk tid). Bankene tillater høyst fire hentinger
+// i døgnet uten at brukeren er til stede (PSD2); «Hent nå» teller ikke med. Appen viser tidene.
+export const HENTETIDER = ["06:00", "12:00", "18:00"];
+
+// Dato (ÅÅÅÅ-MM-DD) og klokkeslett (TT:MM) i Oslo.
+const osloFormat = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Oslo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+const iOslo = (t: Date) => {
+  const d = Object.fromEntries(osloFormat.formatToParts(t).map((x) => [x.type, x.value]));
+  return { dato: `${d.year}-${d.month}-${d.day}`, klokke: `${d.hour}:${d.minute}` };
+};
+// Tidspunktet for et klokkeslett i Oslo den dagen (med sommertid).
+const osloTidspunkt = (dato: string, klokke: string) => {
+  const utc = Date.parse(`${dato}T${klokke}:00Z`);
+  const vist = iOslo(new Date(utc));
+  return new Date(utc - (Date.parse(`${vist.dato}T${vist.klokke}:00Z`) - utc));
+};
+// Den siste hentetiden som er passert i dag, eller null før dagens første.
+export function sisteHentetid(naa = new Date()): Date | null {
+  const { dato, klokke } = iOslo(naa);
+  const passert = HENTETIDER.filter((t) => t <= klokke).at(-1);
+  return passert ? osloTidspunkt(dato, passert) : null;
+}
 const senest = (a: string, b: string) => (a > b ? a : b); // datoer som ÅÅÅÅ-MM-DD
 
 // Applikasjonen med nøkkelen dekryptert (bare workeren kan dekryptere).
@@ -443,36 +474,54 @@ async function varsle(orgId: string, tittel: string, tekst: string, url: string)
   }
 }
 
-// Planlegger henting for bankene som ikke er hentet de siste timene. Kjøres jevnlig; med
-// seks timer mellom blir det høyst fire hentinger i døgnet uten brukeren (PSD2, per bank).
-// Varsler også når samtykket til en bank snart går ut.
+// Merker banken som hentet nå, om den ikke er hentet siden hentetiden. Gir false når en
+// annen kjøring (eller «Hent nå») kom først.
+const taHentetid = async (id: string, naa: Date, hentetid: Date) =>
+  Boolean(
+    await somSystem((db) =>
+      en(
+        db,
+        "update faktura.bankkoblinger set sist_hentet = $2 where id = $1 and (sist_hentet is null or sist_hentet < $3) returning id",
+        [id, naa.toISOString(), hentetid.toISOString()],
+      ),
+    ),
+  );
+
+// Planlegger henting for bankene som ikke er hentet siden siste hentetid. Kjøres hvert
+// minutt; en hentetid som ble gått glipp av (f.eks. under en utrulling), tas igjen til neste.
+// Varsler også (på dagtid) når samtykket til en bank snart går ut.
 export async function planleggBankhenting(naa = new Date()): Promise<number> {
-  const timeOslo = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Oslo", hour: "2-digit", hourCycle: "h23" }).format(naa));
-  if (timeOslo < 6 || timeOslo > 21) return 0;
+  const hentetid = sisteHentetid(naa);
+  const timeOslo = Number(iOslo(naa).klokke.slice(0, 2));
+  const dagtid = timeOslo >= 6 && timeOslo <= 21;
+  if (!hentetid && !dagtid) return 0;
+  const uke = new Date(naa.getTime() + 7 * 86400_000).toISOString();
   const rader = await somSystem((db) =>
-    alle<Bankkobling & { har_egne: boolean }>(
+    alle<Bankkobling & { skal_hentes: boolean }>(
       db,
       `select k.*,
-              exists (select 1 from jsonb_array_elements(k.kontoer) x
-                       where x ->> 'kontonr' in (select o.kontonr from faktura.organisasjoner o where o.id = k.org_id
-                                                 union select e.kontonr from faktura.kontoer e where e.org_id = k.org_id)) as har_egne
+              coalesce(k.sist_hentet < $1::timestamptz, $1 is not null)
+              and exists (select 1 from jsonb_array_elements(k.kontoer) x
+                           where x ->> 'kontonr' in (select o.kontonr from faktura.organisasjoner o where o.id = k.org_id
+                                                     union select e.kontonr from faktura.kontoer e where e.org_id = k.org_id)) as skal_hentes
          from faktura.bankkoblinger k
          join faktura.integrasjoner i on i.org_id = k.org_id and i.type = 'bank' and i.status <> 'frakoblet'
-        where k.status = 'aktiv' and k.okt_id is not null`,
+        where k.status = 'aktiv' and k.okt_id is not null
+          and ((k.sist_hentet is null or k.sist_hentet < $1::timestamptz)
+               or ($2 and k.gyldig_til < $3::timestamptz and k.varslet_utlop is null))`,
+      [hentetid?.toISOString() ?? null, dagtid, uke],
     ),
   );
   let antall = 0;
   for (const k of rader) {
-    const sist = k.sist_hentet ? Date.parse(somDato(k.sist_hentet)!) : 0;
-    // Banker uten noen konto som er lagt inn i HI4 Faktura, har ingenting å hente.
-    if (k.har_egne && naa.getTime() - sist >= 5 * 3600_000 + 50 * 60_000) {
-      // Merkes med en gang, så neste kjøring ikke legger den i kø igjen.
-      await oppdater(k.id, { sist_hentet: naa.toISOString() });
+    // Banker uten noen konto som er lagt inn i HI4 Faktura, har ingenting å hente. Bare én
+    // kjøring får ta hentetiden (de andre ser at banken alt er merket som hentet).
+    if (k.skal_hentes && (await taHentetid(k.id, naa, hentetid!))) {
       await leggIKo({ type: "bank-hent", org_id: k.org_id, kobling_id: k.id });
       antall++;
     }
     const utlop = k.gyldig_til ? Date.parse(somDato(k.gyldig_til)!) : NaN;
-    if (Number.isFinite(utlop) && utlop - naa.getTime() < 7 * 86400_000 && !k.varslet_utlop) {
+    if (dagtid && Number.isFinite(utlop) && utlop - naa.getTime() < 7 * 86400_000 && !k.varslet_utlop) {
       await oppdater(k.id, { varslet_utlop: naa.toISOString() });
       await varsle(
         k.org_id,
