@@ -1042,3 +1042,6 @@ button.ai-stopp:hover:not(:disabled) { border-color: var(--fare); }
   .ai-knapper > button { flex: 1 1 auto; justify-content: center; }
   .ai-knapper > span { flex-basis: 100%; }
 }
+.ai-test { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0 12px; }
+.ai-test .melding { flex-basis: 100%; margin: 0; }
+.ai-detaljer { display: block; color: var(--dempet); overflow-wrap: anywhere; }

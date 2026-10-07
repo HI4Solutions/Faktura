@@ -24,7 +24,10 @@ klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
 | Rapporter (reskontro, mva, salg) og CSV-eksport | Ferdig |
 | E-postsporing (Resend-webhook) | Ferdig, krever webhook i Resend |
 | Google Disk | Ferdig, krever OAuth-klient (`GOOGLE_OAUTH_CLIENT_ID`) |
-| Bank (KID/OCR), regnskapssystemer, EHF/Peppol | Ikke startet |
+| EHF/Peppol (gjennom hver organisasjons konto hos Recommand) | Ferdig |
+| Innbetalinger fra banken (Enable Banking, flere banker) | Ferdig |
+| AI med Gemini på Vertex AI: faktura fra tekst eller tale, forslag på innbetalinger | Ferdig (valgfrie GitHub-variabler `AI_AKTIV`, `AI_REGION`, `AI_MODELL`, `AI_GRENSE`) |
+| Regnskapssystemer | Ikke startet |
 
 Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og veikart.
 

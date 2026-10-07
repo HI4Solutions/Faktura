@@ -57,7 +57,7 @@ export const config = {
   aiRegion: valgfri("AI_REGION") ?? "europe-west3",
   aiModell: valgfri("AI_MODELL") ?? "gemini-3.5-flash",
   // Høyst så mange AI-forespørsler per organisasjon per måned (tak på kostnaden).
-  aiGrense: Number(valgfri("AI_GRENSE") ?? 1000),
+  aiGrense: Math.max(0, Math.floor(Number(valgfri("AI_GRENSE") ?? 1000))) || 1000,
 
   // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
   adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),

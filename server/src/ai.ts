@@ -12,8 +12,13 @@ import { config } from "./config.js";
 import { en, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 
-// Feil fra AI-tjenesten, med en melding som kan vises til brukeren.
-export class AiFeil extends ApiFeil {}
+// Feil fra AI-tjenesten, med en melding som kan vises til brukeren. detaljer: svaret fra
+// Google (for plattformadministratorene, se «Test AI» på adminsiden).
+export class AiFeil extends ApiFeil {
+  constructor(status: number, melding: string, readonly detaljer: string | null = null) {
+    super(status, melding);
+  }
+}
 
 // Svarskjemaet (OpenAPI-delmengden Vertex AI bruker).
 export type Skjema = {
@@ -94,7 +99,7 @@ export async function generer<T>(valg: { system: string; deler: Del[]; skjema: S
         await vent(1000);
         continue;
       }
-      throw new AiFeil(503, "Fikk ikke kontakt med AI-tjenesten. Prøv igjen om litt.");
+      throw new AiFeil(503, "Fikk ikke kontakt med AI-tjenesten. Prøv igjen om litt.", (e as Error).message);
     }
     const data: any = await r.json().catch(() => null);
     if (!r.ok) {
@@ -110,9 +115,10 @@ export async function generer<T>(valg: { system: string; deler: Del[]; skjema: S
         continue;
       }
       logg(r.status === 429 ? "WARNING" : "ERROR", "AI-tjenesten svarte med en feil", { status: r.status, feil: melding.slice(0, 500), modell: config.aiModell, region: config.aiRegion });
-      if (r.status === 429) throw new AiFeil(503, "AI-tjenesten er opptatt akkurat nå. Prøv igjen om litt.");
-      if (r.status === 401 || r.status === 403 || r.status === 404) throw new AiFeil(503, "AI-tjenesten er ikke tilgjengelig akkurat nå.");
-      throw new AiFeil(502, "AI-tjenesten svarte med en feil. Prøv igjen.");
+      const detaljer = `${r.status}: ${melding.slice(0, 500) || "uten melding"}`;
+      if (r.status === 429) throw new AiFeil(503, "AI-tjenesten er opptatt akkurat nå. Prøv igjen om litt.", detaljer);
+      if (r.status === 401 || r.status === 403 || r.status === 404) throw new AiFeil(503, "AI-tjenesten er ikke tilgjengelig akkurat nå.", detaljer);
+      throw new AiFeil(502, "AI-tjenesten svarte med en feil. Prøv igjen.", detaljer);
     }
     const kandidat = data?.candidates?.[0];
     const deler: any[] = kandidat?.content?.parts ?? [];
@@ -122,13 +128,21 @@ export async function generer<T>(valg: { system: string; deler: Del[]; skjema: S
     const tokens = { tokens_inn: Number(bruk.promptTokenCount) || 0, tokens_ut: (Number(bruk.candidatesTokenCount) || 0) + (Number(bruk.thoughtsTokenCount) || 0) };
     if (!tekst.trim()) {
       logg("WARNING", "AI-en ga ikke noe svar", { grunn });
-      throw new AiFeil(502, grunn === "MAX_TOKENS" ? "Svaret fra AI-en ble for langt. Prøv med en kortere beskrivelse." : "AI-en ga ikke noe svar. Prøv å si det på en annen måte.");
+      throw new AiFeil(
+        502,
+        grunn === "MAX_TOKENS" ? "Svaret fra AI-en ble for langt. Prøv med en kortere beskrivelse." : "AI-en ga ikke noe svar. Prøv å si det på en annen måte.",
+        grunn,
+      );
     }
     try {
       return { data: JSON.parse(tekst) as T, ...tokens };
     } catch {
       logg("WARNING", "Svaret fra AI-en var ikke JSON", { grunn, lengde: tekst.length });
-      throw new AiFeil(502, grunn === "MAX_TOKENS" ? "Svaret fra AI-en ble for langt. Prøv med en kortere beskrivelse." : "AI-en svarte ikke i riktig format. Prøv igjen.");
+      throw new AiFeil(
+        502,
+        grunn === "MAX_TOKENS" ? "Svaret fra AI-en ble for langt. Prøv med en kortere beskrivelse." : "AI-en svarte ikke i riktig format. Prøv igjen.",
+        grunn,
+      );
     }
   }
 }

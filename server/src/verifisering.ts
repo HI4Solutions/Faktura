@@ -7,6 +7,7 @@ import { alle, en, somBetrodd, somBruker } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { epostHorerTilForetaket, hentEnhet as ekteHentEnhet, maskerEpost, type Enhet } from "./brreg.js";
 import { leggIKo } from "./tjenester.js";
+import { AiFeil, aiPaa, generer } from "./ai.js";
 
 let hentEnhet = ekteHentEnhet;
 export function settBrreg(fn: typeof ekteHentEnhet) {
@@ -135,6 +136,24 @@ export function adminRuter() {
       ))!.d,
     ),
   );
+
+  // Prøver AI-oppsettet (Gemini på Vertex AI) med en liten forespørsel, og viser svaret
+  // fra Google når det ikke virker (manglende tilgang, modellen finnes ikke i regionen …).
+  r.post("/ai-test", async (c) => {
+    const oppsett = { modell: config.aiModell, region: config.aiRegion };
+    if (!aiPaa()) return c.json({ ok: false, ...oppsett, feil: "AI er ikke satt opp (AI_PROSJEKT mangler).", detaljer: null, ms: 0 });
+    const start = Date.now();
+    try {
+      const s = await generer<{ svar: string }>({
+        system: "Svar kort på norsk.",
+        deler: [{ text: "Skriv «Hei fra Gemini» i feltet svar." }],
+        skjema: { type: "OBJECT", properties: { svar: { type: "STRING" } }, required: ["svar"] },
+      });
+      return c.json({ ok: true, ...oppsett, svar: s.data.svar, ms: Date.now() - start, tokens_inn: s.tokens_inn, tokens_ut: s.tokens_ut });
+    } catch (e) {
+      return c.json({ ok: false, ...oppsett, feil: (e as Error).message, detaljer: e instanceof AiFeil ? e.detaljer : null, ms: Date.now() - start });
+    }
+  });
 
   r.get("/organisasjoner", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_organisasjoner()"))));
 

@@ -753,6 +753,32 @@ const ehfStatus: [string, string][] = [
   ["feilet", "Feilet"],
 ];
 
+// Prøver AI-oppsettet med en liten forespørsel til Gemini, og viser svaret fra Google.
+function AiTest() {
+  const [svar, settSvar] = useState<any | null>(null);
+  const h = useHandling();
+  const sek = (ms: number) => `${(ms / 1000).toLocaleString("nb-NO", { maximumFractionDigits: 1 })} s`;
+  return (
+    <div className="ai-test">
+      <button type="button" onClick={async () => settSvar(await h.kjor(() => api("POST", "/admin/ai-test")))} disabled={h.opptatt}>
+        {h.opptatt ? "Tester …" : "Test AI"}
+      </button>
+      {svar?.ok && (
+        <span className="ok-tekst liten" role="status">
+          Virker: «{svar.svar}» på {sek(svar.ms)}
+        </span>
+      )}
+      {svar && !svar.ok && (
+        <span className="fare-tekst liten" role="status">
+          {svar.feil}
+          {svar.detaljer && <span className="ai-detaljer"> Svar fra Google: {svar.detaljer}</span>}
+        </span>
+      )}
+      <Feil melding={h.feil} />
+    </div>
+  );
+}
+
 function Drift({ apne }: { apne: (id: string) => void }) {
   const { data: d, feil, last, laster } = useData(() => hent<any>("/admin/drift"), []);
   if (feil) return <Feil melding={feil} />;
@@ -845,6 +871,7 @@ function Drift({ apne }: { apne: (id: string) => void }) {
               <p className="dempet liten" style={{ marginTop: 0 }}>
                 {d.ai.modell} i {d.ai.region} · høyst {d.ai.grense} forespørsler per organisasjon i måneden
               </p>
+              <AiTest />
               <div className="admin-tellinger">
                 <span>
                   <strong>{d.ai.sum.antall}</strong> forespørsler denne måneden

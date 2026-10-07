@@ -368,6 +368,25 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
     expect(foresporsler.length).toBe(n);
   });
 
+  it("plattformadministratoren kan teste oppsettet og se svaret fra Google", async () => {
+    const admin = "Bearer test:uid-ai-admin:ai-admin@server.test:mfa";
+    (config as any).adminEposter = ["ai-admin@server.test"];
+    modell = () => svar({ svar: "Hei fra Gemini" });
+    expect((await kall("POST", "/api/admin/ai-test", undefined, admin)).data).toMatchObject({
+      ok: true, svar: "Hei fra Gemini", modell: "gemini-3.5-flash", region: "europe-west3", tokens_inn: 1000, tokens_ut: 70,
+    });
+    modell = () => json(404, { error: { code: 404, message: "Publisher Model `gemini-3.5-flash` was not found or your project does not have access to it." } });
+    expect((await kall("POST", "/api/admin/ai-test", undefined, admin)).data).toMatchObject({
+      ok: false,
+      feil: "AI-tjenesten er ikke tilgjengelig akkurat nå.",
+      detaljer: "404: Publisher Model `gemini-3.5-flash` was not found or your project does not have access to it.",
+    });
+    (config as any).aiProsjekt = undefined;
+    expect((await kall("POST", "/api/admin/ai-test", undefined, admin)).data).toMatchObject({ ok: false, feil: "AI er ikke satt opp (AI_PROSJEKT mangler)." });
+    expect((await kall("POST", "/api/admin/ai-test")).status).toBe(403);
+    (config as any).adminEposter = [];
+  });
+
   it("stopper ved taket for måneden", async () => {
     const brukt = (await bruk()).reduce((s: number, b: any) => s + b.antall, 0);
     (config as any).aiGrense = brukt;
