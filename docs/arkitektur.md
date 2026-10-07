@@ -69,19 +69,24 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   å spørre etter statusen
 - `ai_bruk`: AI-forespørsler og tokens per organisasjon, måned og funksjon. Hver organisasjon
   har et tak per måned (`AI_GRENSE`), og en administrator kan slå AI av
-  (`organisasjoner.ai_aktiv`). Fakturautkast: teksten eller lydopptaket sendes til Gemini
+  (`organisasjoner.ai_aktiv`). Tale skrives først ned (`…/ai/faktura/tale`,
+  `…/ai/assistent/tale`): Gemini skriver ned ordrett og sier fra når det ikke er tale i
+  opptaket, og brukeren ser (og kan rette) teksten før den sendes; appen sender heller ikke
+  opptak der den ikke hørte noe. Fakturautkast: teksten sendes til Gemini
   sammen med kundene og produktene (med korte id-er, så modellen bare kan velge fra
   registrene), og svaret (JSON etter et fast skjema) sjekkes før skjemaet fylles ut; ingenting
   lagres. Innbetalinger reglene ikke fant noen faktura for, får et forslag fra Gemini når den
   er rimelig sikker (`foresla_banktransaksjon`); forslag registreres aldri uten at en person
-  bekrefter. AI-assistenten (knappen på alle sider) tar kommandoer med tale eller tekst: Gemini
+  bekrefter. AI-assistenten (knappen på alle sider; man velger å snakke eller skrive) tar
+  kommandoer som tekst: Gemini
   velger handling og fyller ut feltene, serveren slår opp og svarer (betalinger, utestående),
   og alt som endrer noe (sende faktura eller utkast, registrere betaling, purre) blir forslag
   som appen utfører med de vanlige rutene når brukeren bekrefter. Avviser Gemini svarskjemaet
   (400, eller 500 for innviklede skjemaer), prøver serveren én gang til uten det, med
   skjemaet i systemteksten; svaret tilpasses skjemaet og sjekkes som ellers. Plattform-
   administratorene ser svaret fra Google i feilmeldingene, og «Test AI» på adminsiden prøver
-  de samme forespørslene som fakturautkast og assistenten
+  de samme forespørslene som fakturautkast og assistenten, og tale til tekst med et stille
+  opptak (der AI-en ikke skal finne noen tale)
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 

@@ -1,6 +1,6 @@
-// Fakturautkast fra tekst eller tale: brukeren skriver eller sier hva som skal faktureres
-// («Faktura til Kari Hansen for tre timer rådgivning à 1200, forfall om 14 dager»), og
-// Gemini fyller ut skjemaet. Kunder og produkter kan bare velges fra registrene, med korte
+// Fakturautkast fra tekst: brukeren skriver eller sier hva som skal faktureres («Faktura til
+// Kari Hansen for tre timer rådgivning à 1200, forfall om 14 dager»), og Gemini fyller ut
+// skjemaet. Tale skrives ned først (aiTale.ts), så brukeren ser teksten før den sendes. Kunder og produkter kan bare velges fra registrene, med korte
 // id-er (K1, P1 …) så modellen ikke kan finne på noe, og alt sjekkes her før utkastet går
 // tilbake til appen. Ingenting lagres: brukeren ser over skjemaet og lagrer selv.
 import { Hono, type Context } from "hono";
@@ -9,6 +9,7 @@ import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { aiPaa, enLinje, generer, iDagOslo, medKvote, type Del, type Skjema } from "./ai.js";
 import { sammeNavn } from "./bank.js";
+import { gammelApp, taleRute } from "./aiTale.js";
 
 export type Kunde = { id: string; navn: string; orgnr: string | null };
 export type Produkt = { id: string; navn: string; varenummer: string | null; enhet: string; enhetspris: number | null; mva_sats: number };
@@ -26,7 +27,6 @@ export type AiLinje = {
   rabatt_prosent: number | null;
 };
 export type AiUtkast = {
-  transkripsjon: string | null;
   kunde: string | null;
   kunde_navn: string | null;
   linjer: AiLinje[];
@@ -41,7 +41,6 @@ export type AiUtkast = {
 
 // Det appen får: klart til å fylles inn i skjemaet.
 export type Utkast = {
-  transkripsjon: string | null;
   kunde_id: string | null;
   kunde_navn: string | null; // navnet brukeren sa, når kunden ikke finnes i registeret
   linjer: { produkt_id: string | null; beskrivelse: string; antall: number; enhet: string; enhetspris: number | null; mva_sats: number; rabatt_prosent: number | null }[];
@@ -60,7 +59,6 @@ const datofelt = (beskrivelse: string): Skjema => tekst(`${beskrivelse} (ÅÅÅ�
 export const utkastSkjema: Skjema = {
   type: "OBJECT",
   properties: {
-    transkripsjon: tekst("Ordrett hva brukeren sa når beskrivelsen er et lydopptak, ellers null"),
     kunde: tekst("Id-en til kunden i kundelisten (K1, K2 …), eller null"),
     kunde_navn: tekst("Kunden slik brukeren sa det, eller null"),
     linjer: {
@@ -89,8 +87,8 @@ export const utkastSkjema: Skjema = {
     kommentar: tekst("Tekst som skal stå på fakturaen til kunden, bare når brukeren ber om det"),
     merknader: { type: "ARRAY", items: { type: "STRING" }, description: "Korte setninger om det brukeren bør sjekke" },
   },
-  required: ["transkripsjon", "kunde", "kunde_navn", "linjer", "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "merknader"],
-  propertyOrdering: ["transkripsjon", "kunde", "kunde_navn", "linjer", "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "merknader"],
+  required: ["kunde", "kunde_navn", "linjer", "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "merknader"],
+  propertyOrdering: ["kunde", "kunde_navn", "linjer", "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "merknader"],
 };
 
 const krTekst = (n: number) => new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 }).format(n).replace(/[\u00a0\u202f]/g, " ");
@@ -116,14 +114,13 @@ export const datoOgSelger = (g: Grunnlag, naa = new Date()) => {
 
 export function systemtekst(g: Grunnlag, naa = new Date()): string {
   return [
-    "Du lager utkast til fakturaer i fakturaprogrammet HI4 Faktura ut fra det brukeren skriver eller sier. Svar bare med JSON etter skjemaet.",
+    "Du lager utkast til fakturaer i fakturaprogrammet HI4 Faktura ut fra det brukeren skriver. Svar bare med JSON etter skjemaet.",
     "",
     datoOgSelger(g, naa),
     "",
     "Regler:",
     ...fakturaRegler,
     "- merknader: korte setninger på norsk om det brukeren bør sjekke, for eksempel en pris som mangler eller noe du var usikker på. Ikke skriv at kunden mangler (appen viser det selv). Tom liste når alt er klart.",
-    "- transkripsjon: når beskrivelsen er et lydopptak, skriv ordrett hva som ble sagt. Ellers null.",
   ].join("\n");
 }
 
@@ -238,7 +235,6 @@ export function tilUtkast(ai: AiUtkast, g: Grunnlag): Utkast {
     .filter(Boolean)
     .slice(0, 8);
   return {
-    transkripsjon: valgfri(ai.transkripsjon, 4000),
     kunde_id: kunde?.id ?? null,
     kunde_navn: kunde ? null : navn,
     linjer,
@@ -252,33 +248,10 @@ export function tilUtkast(ai: AiUtkast, g: Grunnlag): Utkast {
   };
 }
 
-// Lydformatene nettlesere tar opp i (MediaRecorder) og Gemini forstår.
-export const LYDTYPER: Record<string, string> = {
-  "audio/webm": "audio/webm",
-  "audio/mp4": "audio/mp4",
-  "audio/m4a": "audio/m4a",
-  "audio/x-m4a": "audio/m4a",
-  "audio/aac": "audio/aac",
-  "audio/mpeg": "audio/mpeg",
-  "audio/mp3": "audio/mp3",
-  "audio/ogg": "audio/ogg",
-  "audio/wav": "audio/wav",
-  "audio/x-wav": "audio/wav",
-  "audio/flac": "audio/flac",
-};
-export const MAKS_LYD = 4_000_000; // rundt fire minutter tale
-
-// Det brukeren skrev, eller lydopptaket (base64).
-export type Beskrivelse = { tekst: string } | { lyd: { mimeType: string; data: string } };
-
 // Forespørselen til modellen (ruten under og «Test AI» på adminsiden).
-export function utkastForesporsel(g: Grunnlag, inn: Beskrivelse, naa = new Date()): { system: string; deler: Del[]; skjema: Skjema } {
-  const beskrivelse: Del[] =
-    "lyd" in inn ? [{ text: "Brukeren beskriver fakturaen i lydopptaket." }, { inlineData: inn.lyd }] : [{ text: `Brukerens beskrivelse:\n${inn.tekst}` }];
-  return { system: systemtekst(g, naa), deler: [{ text: registertekst(g) }, ...beskrivelse], skjema: utkastSkjema };
+export function utkastForesporsel(g: Grunnlag, tekst: string, naa = new Date()): { system: string; deler: Del[]; skjema: Skjema } {
+  return { system: systemtekst(g, naa), deler: [{ text: registertekst(g) }, { text: `Brukerens beskrivelse:\n${tekst}` }], skjema: utkastSkjema };
 }
-
-const forLangt = () => new ApiFeil(413, "Opptaket er for langt. Hold det under to minutter.");
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
 const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("bruker").id, fn);
@@ -286,24 +259,13 @@ const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("
 export function aiRuter() {
   const r = new Hono();
 
-  // Utkast fra tekst ({ tekst }) eller et lydopptak (rå lyd i kroppen, med lydtypen).
+  // Utkast fra tekst ({ tekst }).
   r.post("/ai/faktura", async (c) => {
     if (!aiPaa()) throw new ApiFeil(503, "AI er ikke satt opp");
-    const type = (c.req.header("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    let inn: Beskrivelse;
-    if (type.startsWith("audio/")) {
-      const mime = LYDTYPER[type];
-      if (!mime) throw new ApiFeil(400, "Appen kjenner ikke lydformatet. Skriv i stedet.");
-      if (Number(c.req.header("content-length") ?? 0) > MAKS_LYD) throw forLangt();
-      const data = new Uint8Array(await c.req.arrayBuffer());
-      if (data.length < 500) throw new ApiFeil(400, "Opptaket er tomt. Prøv igjen og snakk litt lenger.");
-      if (data.length > MAKS_LYD) throw forLangt();
-      inn = { lyd: { mimeType: mime, data: Buffer.from(data).toString("base64") } };
-    } else {
-      inn = z
-        .object({ tekst: z.string().trim().min(3, "Skriv hva som skal faktureres").max(4000, "Teksten kan være høyst 4000 tegn") })
-        .parse(await c.req.json().catch(() => ({})));
-    }
+    if ((c.req.header("content-type") ?? "").toLowerCase().startsWith("audio/")) throw gammelApp();
+    const { tekst } = z
+      .object({ tekst: z.string().trim().min(3, "Skriv hva som skal faktureres").max(4000, "Teksten kan være høyst 4000 tegn") })
+      .parse(await c.req.json().catch(() => ({})));
     const g = await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'skriv')", [orgId(c)]);
       return hentGrunnlag(db, orgId(c));
@@ -312,13 +274,16 @@ export function aiRuter() {
       (fn) => somBruker(c.get("bruker").id, fn),
       orgId(c),
       "faktura",
-      () => generer<AiUtkast>(utkastForesporsel(g, inn)),
+      () => generer<AiUtkast>(utkastForesporsel(g, tekst)),
     );
     const u = tilUtkast(svar.data, g);
     if (!u.kunde_id && !u.kunde_navn && !u.linjer.length)
-      throw new ApiFeil(422, u.transkripsjon ? `Fant ikke hva som skal faktureres i «${u.transkripsjon}». Si hvem kunden er og hva du vil fakturere.` : "Fant ikke hva som skal faktureres. Si hvem kunden er og hva du vil fakturere.");
+      throw new ApiFeil(422, "Fant ikke hva som skal faktureres. Si hvem kunden er og hva du vil fakturere.");
     return c.json(u);
   });
+
+  // Tale til tekst for boksen: teksten vises før utkastet lages.
+  r.post("/ai/faktura/tale", taleRute("faktura"));
 
   return r;
 }

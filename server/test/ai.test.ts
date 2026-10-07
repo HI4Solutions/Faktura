@@ -177,7 +177,6 @@ describe("Gemini på Vertex AI", () => {
         utkastSkjema,
       ),
     ).toEqual({
-      transkripsjon: null,
       kunde: "K1",
       kunde_navn: null,
       linjer: [
@@ -216,7 +215,7 @@ describe("fakturautkast: svaret sjekkes mot registrene", () => {
   };
   const linje = (l: Partial<AiUtkast["linjer"][number]>) => ({ produkt: null, beskrivelse: "", antall: 1, enhet: null, enhetspris: null, pris_inkl_mva: false, mva_sats: null, rabatt_prosent: null, ...l });
   const ai = (u: Partial<AiUtkast>): AiUtkast => ({
-    transkripsjon: null, kunde: null, kunde_navn: null, linjer: [], fakturadato: null, forfallsdato: null, periode_fra: null,
+    kunde: null, kunde_navn: null, linjer: [], fakturadato: null, forfallsdato: null, periode_fra: null,
     periode_til: null, deres_referanse: null, kommentar: null, merknader: [], ...u,
   });
 
@@ -260,7 +259,6 @@ describe("fakturautkast: svaret sjekkes mot registrene", () => {
       g,
     );
     expect(u).toEqual({
-      transkripsjon: null,
       kunde_id: "k-fjord",
       kunde_navn: null,
       linjer: [
@@ -379,7 +377,6 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
       expect(tekstIForesporsel(f)).toContain("P1: Husleie | 8 000 kr per mnd eks. mva | 0 % mva");
       expect(tekstIForesporsel(f)).toContain("Brukerens beskrivelse:\nHusleie for oktober til Kari, og to timer vask à 500 inkl. mva");
       return svar({
-        transkripsjon: null,
         kunde: "K2",
         kunde_navn: "Kari",
         linjer: [
@@ -398,7 +395,6 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
     const r = await kall("POST", `/api/org/${org}/ai/faktura`, { tekst: "Husleie for oktober til Kari, og to timer vask à 500 inkl. mva" });
     expect(r.status).toBe(200);
     expect(r.data).toEqual({
-      transkripsjon: null,
       kunde_id: kari,
       kunde_navn: null,
       linjer: [
@@ -426,36 +422,29 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
     expect(tokens).toEqual({ tokens_inn: 1000, tokens_ut: 70 });
   });
 
-  it("lager et utkast fra et lydopptak, med det som ble sagt", async () => {
-    modell = (f) => {
-      const lyd = f.kropp.contents[0].parts.find((p: any) => p.inlineData);
-      expect(lyd.inlineData).toEqual({ mimeType: "audio/webm", data: Buffer.from(opptak).toString("base64") });
-      expect(tekstIForesporsel(f)).toContain("Brukeren beskriver fakturaen i lydopptaket.");
-      return svar({
-        transkripsjon: "Faktura til Per Olsen for en konsulenttime",
-        kunde: null,
-        kunde_navn: "Per Olsen",
-        linjer: [{ produkt: null, beskrivelse: "Konsulenttime", antall: 1, enhet: "time", enhetspris: null, pris_inkl_mva: false, mva_sats: 25, rabatt_prosent: null }],
-        fakturadato: null, forfallsdato: null, periode_fra: null, periode_til: null, deres_referanse: null, kommentar: null,
-        merknader: ["Prisen for konsulenttimen er ikke oppgitt."],
-      });
-    };
+  it("skriver ned tale, så brukeren ser teksten før utkastet lages", async () => {
     const opptak = new Uint8Array(2000).map((_, i) => i % 251);
-    const r = await kall("POST", `/api/org/${org}/ai/faktura`, opptak, eier, "audio/webm;codecs=opus");
-    expect(r.status).toBe(200);
-    expect(r.data).toMatchObject({
-      transkripsjon: "Faktura til Per Olsen for en konsulenttime",
-      kunde_id: null,
-      kunde_navn: "Per Olsen",
-      linjer: [{ beskrivelse: "Konsulenttime", enhetspris: null, mva_sats: 25 }],
-      merknader: ["Prisen for konsulenttimen er ikke oppgitt."],
-    });
-    expect((await kall("POST", `/api/org/${org}/ai/faktura`, new Uint8Array(100), eier, "audio/webm")).data.error).toContain("Opptaket er tomt");
-    expect((await kall("POST", `/api/org/${org}/ai/faktura`, opptak, eier, "audio/x-midi")).status).toBe(400);
+    modell = (f) => {
+      expect(f.kropp.systemInstruction.parts[0].text).toMatch(/^Du skriver ned tale på norsk, ordrett\./);
+      expect(f.kropp.contents[0].parts.find((p: any) => p.inlineData).inlineData).toEqual({ mimeType: "audio/webm", data: Buffer.from(opptak).toString("base64") });
+      return svar({ tale: true, tekst: "Faktura til Per Olsen for en konsulenttime." });
+    };
+    const r = await kall("POST", `/api/org/${org}/ai/faktura/tale`, opptak, eier, "audio/webm;codecs=opus");
+    expect(r).toEqual({ status: 200, data: { tekst: "Faktura til Per Olsen for en konsulenttime." } });
+    expect((await bruk()).find((b: any) => b.funksjon === "faktura")).toEqual({ funksjon: "faktura", antall: 2 });
+
+    // Ingen tale i opptaket: sier fra i stedet for å gjette.
+    modell = () => svar({ tale: false, tekst: "" });
+    expect((await kall("POST", `/api/org/${org}/ai/faktura/tale`, opptak, eier, "audio/webm")).data).toEqual({ error: "Hørte ingen tale. Prøv igjen, eller skriv i stedet." });
+    expect((await kall("POST", `/api/org/${org}/ai/faktura/tale`, new Uint8Array(100), eier, "audio/webm")).data.error).toContain("Opptaket er tomt");
+    expect((await kall("POST", `/api/org/${org}/ai/faktura/tale`, opptak, eier, "audio/x-midi")).status).toBe(400);
+    // Bare de som kan lage fakturaer; eldre versjoner av appen sendte lyden rett til utkastet.
+    expect((await kall("POST", `/api/org/${org}/ai/faktura/tale`, opptak, leser, "audio/webm")).status).toBe(403);
+    expect((await kall("POST", `/api/org/${org}/ai/faktura`, opptak, eier, "audio/webm")).data).toEqual({ error: "Appen er oppdatert. Last inn siden på nytt for å bruke tale." });
   });
 
   it("sier fra når teksten ikke beskriver en faktura, og andre får ikke bruke det", async () => {
-    modell = () => svar({ transkripsjon: null, kunde: null, kunde_navn: null, linjer: [], fakturadato: null, forfallsdato: null, periode_fra: null, periode_til: null, deres_referanse: null, kommentar: null, merknader: [] });
+    modell = () => svar({ kunde: null, kunde_navn: null, linjer: [], fakturadato: null, forfallsdato: null, periode_fra: null, periode_til: null, deres_referanse: null, kommentar: null, merknader: [] });
     const r = await kall("POST", `/api/org/${org}/ai/faktura`, { tekst: "Hvordan blir været i morgen?" });
     expect(r.status).toBe(422);
     expect(r.data.error).toBe("Fant ikke hva som skal faktureres. Si hvem kunden er og hva du vil fakturere.");
@@ -470,14 +459,18 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
     const admin = "Bearer test:uid-ai-admin:ai-admin@server.test:mfa";
     (config as any).adminEposter = ["ai-admin@server.test"];
     // Samme forespørsler som fakturautkast og assistenten, med eksempelregistrene.
-    const modellSvar = (f: Foresporsel, avvisSkjema = false) => {
+    const modellSvar = (f: Foresporsel, avvisSkjema = false, hort = "") => {
       const system = f.kropp.systemInstruction.parts[0].text as string;
+      if (system.startsWith("Du skriver ned tale")) {
+        expect(f.kropp.contents[0].parts.find((p: any) => p.inlineData).inlineData.mimeType).toBe("audio/wav");
+        return svar(hort ? { tale: true, tekst: hort } : { tale: false, tekst: "" });
+      }
       if (avvisSkjema && f.kropp.generationConfig.responseSchema && !system.startsWith("Svar kort")) return json(400, { error: { message: "too many states" } });
       if (system.startsWith("Du lager utkast")) {
         expect(tekstIForesporsel(f)).toContain("K1: Kari Hansen");
         expect(tekstIForesporsel(f)).toContain("Brukerens beskrivelse:\nHusleie for oktober til Kari Hansen");
         return svar({
-          transkripsjon: null, kunde: "K1", kunde_navn: "Kari Hansen",
+          kunde: "K1", kunde_navn: "Kari Hansen",
           linjer: [{ produkt: "P1", beskrivelse: "Husleie oktober", antall: 1, enhet: "mnd", enhetspris: null, pris_inkl_mva: false, mva_sats: 0, rabatt_prosent: null }],
           fakturadato: null, forfallsdato: "2026-10-21", periode_fra: null, periode_til: null, deres_referanse: null, kommentar: null, merknader: [],
         });
@@ -490,12 +483,17 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
     };
     modell = (f) => modellSvar(f);
     const ok = (await kall("POST", "/api/admin/ai-test", undefined, admin)).data;
-    expect(ok).toMatchObject({ ok: true, svar: "Hei fra Gemini", modell: "gemini-3.5-flash", region: "europe-west3", tokens_inn: 3000, tokens_ut: 210, feil: null });
+    expect(ok).toMatchObject({ ok: true, svar: "Hei fra Gemini", modell: "gemini-3.5-flash", region: "europe-west3", tokens_inn: 4000, tokens_ut: 280, feil: null });
     expect(ok.tester).toMatchObject([
       { navn: "Enkelt svar", ok: true, svar: "Hei fra Gemini", skjemafeil: null },
       { navn: "Fakturautkast", ok: true, svar: "Kari Hansen: Husleie oktober (14500), forfall 2026-10-21", skjemafeil: null },
       { navn: "Assistent", ok: true, svar: "sjekk_betaling (K1)", skjemafeil: null },
+      { navn: "Tale (stille opptak)", ok: true, svar: "Ingen tale, som ventet", skjemafeil: null },
     ]);
+    // Finner AI-en tale i stillheten, er det en feil.
+    modell = (f) => modellSvar(f, false, "Takk for at du så på.");
+    const hallusinasjon = (await kall("POST", "/api/admin/ai-test", undefined, admin)).data;
+    expect(hallusinasjon).toMatchObject({ ok: false, feil: "Tale (stille opptak): AI-en fant tale i et stille opptak: «Takk for at du så på.»" });
 
     // Gemini avviser de store skjemaene: testen viser det, og svaret kommer likevel.
     modell = (f) => modellSvar(f, true);
@@ -505,6 +503,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
       ["Enkelt svar", true, null],
       ["Fakturautkast", true, "400: too many states"],
       ["Assistent", true, "400: too many states"],
+      ["Tale (stille opptak)", true, null],
     ]);
 
     modell = () => json(404, { error: { code: 404, message: "Publisher Model `gemini-3.5-flash` was not found or your project does not have access to it." } });
@@ -514,7 +513,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
       feil: "Enkelt svar: AI-tjenesten er ikke tilgjengelig akkurat nå.",
       detaljer: "404: Publisher Model `gemini-3.5-flash` was not found or your project does not have access to it.",
     });
-    expect(feil.tester.map((t: any) => t.ok)).toEqual([false, false, false]);
+    expect(feil.tester.map((t: any) => t.ok)).toEqual([false, false, false, false]);
     (config as any).aiProsjekt = undefined;
     expect((await kall("POST", "/api/admin/ai-test", undefined, admin)).data).toMatchObject({ ok: false, feil: "AI er ikke satt opp (AI_PROSJEKT mangler)." });
     expect((await kall("POST", "/api/admin/ai-test")).status).toBe(403);

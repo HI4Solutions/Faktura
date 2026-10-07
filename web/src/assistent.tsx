@@ -1,13 +1,15 @@
-// AI-assistenten: knappen nederst til høyre på alle sider. Trykk og snakk (eller skriv), så
-// tolker Gemini kommandoen. Spørsmål («har Kari betalt?») besvares, og det som endrer noe
-// (sende en faktura, registrere en betaling, sende purring) vises som forslag du bekrefter
-// med ett trykk. Forslagene utføres med de vanlige rutene i API-et, med dine tilganger.
+// AI-assistenten: knappen nederst til høyre på alle sider. Trykk på den, og velg å snakke
+// eller skrive. Tale skrives ned i feltet først, så du ser hva som ble hørt (og kan rette
+// det) før du sender. Så tolker Gemini kommandoen. Spørsmål («har Kari betalt?») besvares,
+// og det som endrer noe (sende en faktura, registrere en betaling, sende purring) vises som
+// forslag du bekrefter med ett trykk. Forslagene utføres med de vanlige rutene i API-et,
+// med dine tilganger.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, hent } from "./api";
+import { api, hent, sendLyd } from "./api";
 import { dataEndret, Feil, useData } from "./felles";
 import { kanTaOpp, useOpptak, type AiUtkast } from "./ai";
-import { IkonGnist, IkonLukk, IkonMikrofon } from "./ikoner";
+import { IkonGnist, IkonLukk, IkonMikrofon, IkonTastatur } from "./ikoner";
 import { useKonto } from "./konto";
 
 type Forslag =
@@ -17,13 +19,12 @@ type Forslag =
   | { type: "betaling"; tekst: string; knapp: string; faktura_id: string; fakturanummer: number; belop: number; dato: string }
   | { type: "purring"; tekst: string; knapp: string; faktura_id: string; fakturanummer: number; purring: "paaminnelse" | "inkassovarsel" };
 type Lenke = { tekst: string; til: string };
-type Svar = { transkripsjon: string | null; tekst: string; forslag: Forslag[]; lenker: Lenke[]; gaa_til: string | null; utkast: AiUtkast | null };
+type Svar = { tekst: string; forslag: Forslag[]; lenker: Lenke[]; gaa_til: string | null; utkast: AiUtkast | null };
 type Utfall = { status: "venter" | "utforer" | "ferdig" | "feil" | "avvist"; melding?: string; lenke?: Lenke };
 type Melding = {
   id: number;
   rolle: "bruker" | "assistent";
   tekst: string;
-  lyd?: boolean; // brukerens lydopptak (teksten kommer med svaret)
   feil?: boolean;
   forslag?: { f: Forslag; u: Utfall }[];
   lenker?: Lenke[];
@@ -32,15 +33,6 @@ type Melding = {
 
 const EKSEMPLER = ["Hvem skylder oss penger?", "Har det kommet noen betalinger?", "Send purring på alle forfalte", "Vis utkastene"];
 const tid = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-
-function base64(blob: Blob): Promise<string> {
-  return new Promise((ok, feil) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result).replace(/^data:[^,]*,/, ""));
-    r.onerror = () => feil(r.error);
-    r.readAsDataURL(blob);
-  });
-}
 
 // Utfører et bekreftet forslag med de vanlige rutene.
 async function utfor(orgId: string, f: Forslag): Promise<{ melding: string; lenke?: Lenke }> {
@@ -98,13 +90,15 @@ export function Assistent() {
   const [apen, settApen] = useState(false);
   const [logg, settLogg] = useState<Melding[]>([]);
   const [tekst, settTekst] = useState("");
+  const [fraTale, settFraTale] = useState(false); // teksten i feltet er skrevet ned fra tale
+  const [skriverNed, settSkriverNed] = useState(false);
   const [tenker, settTenker] = useState(false);
   const ref = useRef<HTMLDialogElement>(null);
   const loggRef = useRef<HTMLDivElement>(null);
+  const feltRef = useRef<HTMLTextAreaElement>(null);
   const nesteId = useRef(1);
   const avbrutt = useRef(false);
-  const utenMikrofon = useRef(false); // mikrofonen virket ikke: knappen starter ikke lytting av seg selv
-  const opptak = useOpptak((lyd) => !avbrutt.current && void spor({ lyd }), { stilleStopp: true, maksSek: 60 });
+  const opptak = useOpptak((lyd) => !avbrutt.current && void skrivNed(lyd), { stilleStopp: true, maksSek: 60 });
   const stotter = kanTaOpp();
 
   // Plass til knappen nederst på sidene, og ny samtale i en annen organisasjon.
@@ -132,12 +126,23 @@ export function Assistent() {
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (apen && !d.open) d.showModal();
+    if (apen && !d.open) {
+      d.showModal();
+      // Med mus og tastatur kan man skrive med en gang; på mobil kommer tastaturet først når man velger «Skriv».
+      if (window.matchMedia("(pointer: fine)").matches) feltRef.current?.focus();
+    }
     if (!apen && d.open) d.close();
   }, [apen]);
   useEffect(() => {
     loggRef.current?.scrollTo({ top: loggRef.current.scrollHeight, behavior: "smooth" });
-  }, [logg, tenker, opptak.tar]);
+  }, [logg, tenker, opptak.tar, skriverNed]);
+  // Feltet vokser med teksten (opptil fire–fem linjer), så en lengre kommando kan leses før den sendes.
+  useEffect(() => {
+    const f = feltRef.current;
+    if (!f) return;
+    f.style.height = "auto";
+    f.style.height = `${Math.min(f.scrollHeight + 2, 140)}px`;
+  }, [tekst, apen, skriverNed, opptak.tar]);
 
   const lukk = () => {
     if (opptak.tar) {
@@ -160,24 +165,19 @@ export function Assistent() {
   // Det assistenten har sagt og gjort, så den forstår «den» og «henne» i neste kommando.
   const historikk = () =>
     logg
-      .filter((m) => !m.feil && (m.rolle === "assistent" || !m.lyd || m.tekst))
+      .filter((m) => !m.feil)
       .slice(-8)
       .map((m) => ({
         rolle: m.rolle,
         tekst: [m.tekst, ...(m.forslag ?? []).filter((x) => x.u.status === "ferdig").map((x) => `Utført: ${x.u.melding}`)].join(" "),
       }));
 
-  async function spor(innhold: { tekst: string } | { lyd: Blob }) {
-    const lyd = "lyd" in innhold;
+  async function spor(t: string) {
     opptak.settFeil(null);
-    const brukerId = leggTil({ rolle: "bruker", tekst: lyd ? "" : innhold.tekst, lyd });
+    leggTil({ rolle: "bruker", tekst: t });
     settTenker(true);
     try {
-      const kropp = lyd
-        ? { lyd: { data: await base64(innhold.lyd), type: innhold.lyd.type || "audio/webm" }, historikk: historikk() }
-        : { tekst: innhold.tekst, historikk: historikk() };
-      const s = await api<Svar>("POST", `/org/${org!.id}/ai/assistent`, kropp);
-      if (lyd) endre(brukerId, (m) => ({ ...m, tekst: s.transkripsjon ?? "" }));
+      const s = await api<Svar>("POST", `/org/${org!.id}/ai/assistent`, { tekst: t, historikk: historikk() });
       leggTil({
         rolle: "assistent",
         tekst: s.tekst,
@@ -190,6 +190,20 @@ export function Assistent() {
       leggTil({ rolle: "assistent", tekst: (e as Error).message, feil: true });
     } finally {
       settTenker(false);
+    }
+  }
+
+  // Tale til tekst: det som ble hørt, kommer i feltet (etter det som står der fra før).
+  async function skrivNed(lyd: Blob) {
+    settSkriverNed(true);
+    try {
+      const { tekst: hort } = await sendLyd<{ tekst: string }>(`/org/${org!.id}/ai/assistent/tale`, lyd);
+      settTekst((t) => (t.trim() ? `${t.trim()} ${hort}` : hort));
+      settFraTale(true);
+    } catch (e) {
+      opptak.settFeil((e as Error).message);
+    } finally {
+      settSkriverNed(false);
     }
   }
 
@@ -217,27 +231,25 @@ export function Assistent() {
   function snakk() {
     avbrutt.current = false;
     opptak.settFeil(null);
-    void opptak.start().then((ok) => {
-      utenMikrofon.current = !ok;
-    });
+    void opptak.start();
   }
-  function aapne() {
-    settApen(true);
-    // Trykk på knappen: lytt med en gang (mikrofonen må startes i trykket).
-    if (stotter && !utenMikrofon.current && !tenker && !opptak.tar) snakk();
+  function skriv() {
+    opptak.settFeil(null);
+    feltRef.current?.focus();
   }
-  function send(ev: FormEvent) {
-    ev.preventDefault();
+  function send(ev?: FormEvent) {
+    ev?.preventDefault();
     const t = tekst.trim();
-    if (t.length < 2 || tenker) return;
+    if (t.length < 2 || tenker || skriverNed || opptak.tar) return;
     settTekst("");
-    void spor({ tekst: t });
+    settFraTale(false);
+    void spor(t);
   }
 
   if (!tilgjengelig) return null;
   return (
     <>
-      <button type="button" className={`assistent-knapp${skjult ? " skjult" : ""}`} onClick={aapne} aria-label="AI-assistent: trykk og snakk" title="AI-assistent">
+      <button type="button" className={`assistent-knapp${skjult ? " skjult" : ""}`} onClick={() => settApen(true)} aria-label="AI-assistent" title="AI-assistent">
         <IkonGnist storrelse={26} />
       </button>
       <dialog ref={ref} className="assistent" onClose={lukk} onCancel={lukk} aria-label="AI-assistent">
@@ -268,23 +280,34 @@ export function Assistent() {
           {logg.length === 0 && !opptak.tar && (
             <div className="assistent-velkommen">
               <p>
-                {stotter ? "Trykk på mikrofonen og si" : "Skriv"} hva du vil gjøre, for eksempel «Send faktura til Kari Hansen for husleie oktober», «Har
-                Fjordline betalt?» eller «Registrer betaling på faktura 1043».
+                Hva vil du gjøre? {stotter ? "Snakk eller skriv" : "Skriv"}, for eksempel «Send faktura til Kari Hansen for husleie oktober», «Har Fjordline
+                betalt?» eller «Registrer betaling på faktura 1043».
               </p>
+              <div className="assistent-valg">
+                {stotter && (
+                  <button type="button" className="primar" onClick={snakk} disabled={tenker || skriverNed}>
+                    <IkonMikrofon storrelse={20} /> Snakk
+                  </button>
+                )}
+                <button type="button" onClick={skriv}>
+                  <IkonTastatur storrelse={20} /> Skriv
+                </button>
+              </div>
+              <p className="liten dempet">Eller prøv:</p>
               <div className="assistent-eksempler">
                 {EKSEMPLER.map((e) => (
-                  <button key={e} type="button" onClick={() => void spor({ tekst: e })} disabled={tenker}>
+                  <button key={e} type="button" onClick={() => void spor(e)} disabled={tenker}>
                     {e}
                   </button>
                 ))}
               </div>
-              <p className="liten dempet">Alt som sender, registrerer eller purrer, må du bekrefte først.</p>
+              <p className="liten dempet">{stotter ? "Det du sier, skrives ned i feltet først, så du kan sjekke det før du sender. " : ""}Alt som sender, registrerer eller purrer, må du bekrefte.</p>
             </div>
           )}
           {logg.map((m) =>
             m.rolle === "bruker" ? (
               <div key={m.id} className="boble bruker">
-                {m.lyd && !m.tekst ? <span className="dempet">{tenker ? "Lydopptak …" : "Lydopptak"}</span> : m.tekst}
+                {m.tekst}
               </div>
             ) : (
               <div key={m.id} className={`boble assistent${m.feil ? " feil" : ""}`}>
@@ -358,6 +381,7 @@ export function Assistent() {
         </div>
 
         <Feil melding={opptak.feil} />
+        {fraTale && tekst.trim() && !skriverNed && !opptak.tar && <p className="assistent-hint liten dempet">Skrevet ned fra tale. Sjekk teksten, og trykk Send.</p>}
         <form className="assistent-bunn" onSubmit={send}>
           {opptak.tar ? (
             <div className="assistent-lytter" role="status">
@@ -365,32 +389,43 @@ export function Assistent() {
               <span>Lytter … {tid(opptak.sek)}</span>
               <span className="dempet liten">Stopper når du tier</span>
             </div>
+          ) : skriverNed ? (
+            <div className="assistent-lytter" role="status">
+              <span className="assistent-status">
+                <span className="spinner" /> Skriver ned …
+              </span>
+            </div>
           ) : (
-            <input
+            <textarea
+              ref={feltRef}
+              rows={1}
               value={tekst}
               onChange={(e) => settTekst(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) send(e);
+              }}
               placeholder={stotter ? "Skriv, eller trykk på mikrofonen" : "Skriv en kommando"}
               aria-label="Kommando til assistenten"
               enterKeyHint="send"
               maxLength={2000}
             />
           )}
-          {tekst.trim() && !opptak.tar ? (
+          {stotter && (
+            <button
+              type="button"
+              className={`assistent-mik${opptak.tar ? " tar" : ""}`}
+              onClick={opptak.tar ? opptak.stopp : snakk}
+              disabled={(tenker || skriverNed) && !opptak.tar}
+              aria-label={opptak.tar ? "Stopp opptaket" : "Snakk"}
+              title={opptak.tar ? "Stopp opptaket" : "Snakk"}
+            >
+              {opptak.tar ? <span className="assistent-stopp" aria-hidden="true" /> : <IkonMikrofon storrelse={22} />}
+            </button>
+          )}
+          {tekst.trim() && !opptak.tar && !skriverNed && (
             <button type="submit" className="primar" disabled={tenker}>
               Send
             </button>
-          ) : (
-            stotter && (
-              <button
-                type="button"
-                className={`assistent-mik${opptak.tar ? " tar" : ""}`}
-                onClick={opptak.tar ? opptak.stopp : snakk}
-                disabled={tenker && !opptak.tar}
-                aria-label={opptak.tar ? "Stopp opptaket" : "Snakk"}
-              >
-                {opptak.tar ? <span className="assistent-stopp" aria-hidden="true" /> : <IkonMikrofon storrelse={22} />}
-              </button>
-            )
           )}
         </form>
       </dialog>

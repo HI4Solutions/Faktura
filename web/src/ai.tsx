@@ -1,6 +1,7 @@
 // AI (Gemini i Google Cloud): fakturautkast fra tekst eller tale. Opptaket gjøres i
-// nettleseren (MediaRecorder) og sendes til serveren, som lar Gemini både skrive ned og
-// fylle ut. Svaret fyller skjemaet; brukeren ser over før noe lagres eller sendes.
+// nettleseren (MediaRecorder), og serveren lar Gemini skrive det ned. Teksten kommer i
+// feltet, så brukeren ser hva som ble hørt (og kan rette det) før skjemaet fylles ut.
+// Svaret fyller skjemaet; brukeren ser over før noe lagres eller sendes.
 import { useEffect, useRef, useState } from "react";
 import { api, sendLyd } from "./api";
 import { Feil } from "./felles";
@@ -8,7 +9,6 @@ import { IkonGnist, IkonMikrofon } from "./ikoner";
 
 export type AiLinje = { produkt_id: string | null; beskrivelse: string; antall: number; enhet: string; enhetspris: number | null; mva_sats: number; rabatt_prosent: number | null };
 export type AiUtkast = {
-  transkripsjon: string | null;
   kunde_id: string | null;
   kunde_navn: string | null;
   linjer: AiLinje[];
@@ -28,9 +28,10 @@ const TYPER = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;c
 export const kanTaOpp = () =>
   typeof window !== "undefined" && typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 
-// Opptak fra mikrofonen: start, stopp (eller stopp av seg selv etter maksSek). Med
-// stilleStopp stopper opptaket av seg selv når man har sagt noe og så er stille litt, og
-// forkastes om ingen sier noe. niva (0–1) er hvor høyt det er akkurat nå.
+// Opptak fra mikrofonen: start, stopp (eller stopp av seg selv etter maksSek). Lyden måles
+// mens den tas opp: et opptak der ingen sa noe, forkastes i stedet for å sendes. Med
+// stilleStopp stopper opptaket av seg selv når man har sagt noe og så er stille litt.
+// niva (0–1) er hvor høyt det er akkurat nå.
 export function useOpptak(ferdig: (lyd: Blob) => void, valg: { stilleStopp?: boolean; maksSek?: number } = {}) {
   const [tar, settTar] = useState(false);
   const [sek, settSek] = useState(0);
@@ -70,16 +71,14 @@ export function useOpptak(ferdig: (lyd: Blob) => void, valg: { stilleStopp?: boo
   async function start(): Promise<boolean> {
     settFeil(null);
     forkast.current = false;
-    // Lyden måles mens den tas opp. Konteksten lages i trykket (iOS krever det).
+    // Konteksten for å måle lyden lages i trykket (iOS krever det).
     let ctx: AudioContext | null = null;
-    if (valg.stilleStopp) {
-      try {
-        const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
-        ctx = Ctx ? new Ctx() : null;
-        void ctx?.resume().catch(() => undefined);
-      } catch {
-        ctx = null;
-      }
+    try {
+      const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
+      ctx = Ctx ? new Ctx() : null;
+      void ctx?.resume().catch(() => undefined);
+    } catch {
+      ctx = null;
     }
     let strom: MediaStream;
     try {
@@ -97,6 +96,9 @@ export function useOpptak(ferdig: (lyd: Blob) => void, valg: { stilleStopp?: boo
     const type = TYPER.find((t) => MediaRecorder.isTypeSupported?.(t));
     const r = new MediaRecorder(strom, type ? { mimeType: type, audioBitsPerSecond: 32_000 } : undefined);
     const biter: Blob[] = [];
+    // Målingen av lyden (se under): hørte vi noe som ligner tale?
+    let snakket = false;
+    let hoyest = 0;
     r.ondataavailable = (e) => {
       if (e.data.size) biter.push(e.data);
     };
@@ -104,8 +106,9 @@ export function useOpptak(ferdig: (lyd: Blob) => void, valg: { stilleStopp?: boo
       rydd();
       strom.getTracks().forEach((t) => t.stop());
       settTar(false);
-      if (forkast.current) {
-        settFeil("Hørte ingenting. Trykk og prøv igjen, eller skriv i stedet.");
+      // Ingen tale (og målingen virket): send ikke stillhet til AI-en.
+      if (forkast.current || (hoyest > 0 && !snakket)) {
+        settFeil("Hørte ingenting. Prøv igjen, eller skriv i stedet.");
         return;
       }
       const lyd = new Blob(biter, { type: (r.mimeType || type || "audio/webm").split(";")[0] });
@@ -117,7 +120,6 @@ export function useOpptak(ferdig: (lyd: Blob) => void, valg: { stilleStopp?: boo
     settSek(0);
     const startet = Date.now();
 
-    // Stille og snakk: støynivået de første tidelene, og terskelen over det.
     let analyse: (() => number) | null = null;
     if (ctx) {
       try {
@@ -136,9 +138,11 @@ export function useOpptak(ferdig: (lyd: Blob) => void, valg: { stilleStopp?: boo
         void ctx.close().catch(() => undefined);
       }
     }
-    let stoy = 0;
-    let hoyest = 0;
-    let snakket = false;
+    // Støynivået er det laveste i de siste tre sekundene (også mellom ordene), og tale er
+    // tydelig høyere enn det i minst to tideler på rad (et klikk er ikke tale). De første
+    // tidelene (trykket, mikrofonen som starter) teller ikke.
+    const siste: number[] = [];
+    let over = 0;
     let stilleFra = 0;
     klokke.current = window.setInterval(() => {
       const ms = Date.now() - startet;
@@ -146,20 +150,22 @@ export function useOpptak(ferdig: (lyd: Blob) => void, valg: { stilleStopp?: boo
       if (ms >= maks * 1000 && r.state === "recording") return r.stop();
       if (!analyse) return;
       const rms = analyse();
-      hoyest = Math.max(hoyest, rms);
       settNiva(Math.min(1, rms * 12));
-      if (ms < 400) {
-        stoy = Math.max(stoy, rms);
+      siste.push(rms);
+      if (siste.length > 30) siste.shift();
+      if (ms < 300) return;
+      hoyest = Math.max(hoyest, rms);
+      const stoy = [...siste].sort((a, b) => a - b)[Math.floor(siste.length / 10)];
+      if (rms > Math.max(0.01, stoy * 2.5)) {
+        if (++over >= 2) snakket = true;
+        stilleFra = 0;
         return;
       }
-      const terskel = Math.max(0.012, stoy * 2.5);
-      if (rms > terskel) {
-        snakket = true;
-        stilleFra = 0;
-      } else if (snakket) {
+      over = 0;
+      if (valg.stilleStopp && snakket) {
         stilleFra ||= Date.now();
         if (Date.now() - stilleFra > 1500 && r.state === "recording") r.stop();
-      } else if (ms > 9000 && hoyest > 0 && r.state === "recording") {
+      } else if (valg.stilleStopp && !snakket && ms > 9000 && hoyest > 0 && r.state === "recording") {
         // Ingen sa noe (og mikrofonen virker): forkast.
         forkast.current = true;
         r.stop();
@@ -176,21 +182,38 @@ export function useOpptak(ferdig: (lyd: Blob) => void, valg: { stilleStopp?: boo
 
 const tid = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-// Boksen øverst i «Ny faktura»: skriv eller snakk inn, og få skjemaet fylt ut.
+// Boksen øverst i «Ny faktura»: skriv eller snakk inn, og få skjemaet fylt ut. Tale skrives
+// ned i feltet først, så man ser hva som ble hørt før man trykker «Fyll ut».
 export function AiFaktura({ orgId, bruk }: { orgId: string; bruk: (u: AiUtkast) => void }) {
   const [tekst, settTekst] = useState("");
-  const [opptatt, settOpptatt] = useState<null | "lytter" | "lager">(null);
+  const [fraTale, settFraTale] = useState(false);
+  const [opptatt, settOpptatt] = useState<null | "skriver" | "lager">(null);
   const [feil, settFeil] = useState<string | null>(null);
   const [fylt, settFylt] = useState<AiUtkast | null>(null);
-  const opptak = useOpptak((lyd) => lag(lyd));
+  const opptak = useOpptak((lyd) => void skrivNed(lyd));
 
-  async function lag(lyd?: Blob) {
+  async function skrivNed(lyd: Blob) {
+    settFeil(null);
+    settOpptatt("skriver");
+    try {
+      const { tekst: hort } = await sendLyd<{ tekst: string }>(`/org/${orgId}/ai/faktura/tale`, lyd);
+      settTekst((t) => (t.trim() ? `${t.trim()} ${hort}` : hort));
+      settFraTale(true);
+      settFylt(null);
+    } catch (e) {
+      settFeil((e as Error).message);
+    } finally {
+      settOpptatt(null);
+    }
+  }
+
+  async function lag() {
     settFeil(null);
     settFylt(null);
-    settOpptatt(lyd ? "lytter" : "lager");
+    settFraTale(false);
+    settOpptatt("lager");
     try {
-      const u = lyd ? await sendLyd<AiUtkast>(`/org/${orgId}/ai/faktura`, lyd) : await api<AiUtkast>("POST", `/org/${orgId}/ai/faktura`, { tekst });
-      if (u.transkripsjon) settTekst(u.transkripsjon);
+      const u = await api<AiUtkast>("POST", `/org/${orgId}/ai/faktura`, { tekst });
       bruk(u);
       settFylt(u);
     } catch (e) {
@@ -223,6 +246,7 @@ export function AiFaktura({ orgId, bruk }: { orgId: string; bruk: (u: AiUtkast) 
         }}
         disabled={opptak.tar || opptatt !== null}
       />
+      {fraTale && tekst.trim() && !opptatt && !opptak.tar && <p className="liten dempet ai-hint">Skrevet ned fra tale. Sjekk teksten, og trykk «Fyll ut».</p>}
       <div className="knapper ai-knapper">
         {stotter &&
           (opptak.tar ? (
@@ -239,7 +263,7 @@ export function AiFaktura({ orgId, bruk }: { orgId: string; bruk: (u: AiUtkast) 
         </button>
         {opptatt && (
           <span className="dempet liten ai-status" role="status">
-            <span className="spinner" /> {opptatt === "lytter" ? "Lytter og fyller ut …" : "Fyller ut …"}
+            <span className="spinner" /> {opptatt === "skriver" ? "Skriver ned …" : "Fyller ut …"}
           </span>
         )}
         {opptak.tar && <span className="dempet liten">Snakk fritt, og trykk Stopp når du er ferdig.</span>}

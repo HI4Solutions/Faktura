@@ -1,5 +1,5 @@
 // AI-assistenten (falske svar fra Gemini): ny faktura, utkast, sende på nytt, betaling,
-// purring, utestående, åpne sider, tilgang, lyd og samtalen før. Forslagene utføres med de
+// purring, utestående, åpne sider, tilgang, tale til tekst og samtalen før. Forslagene utføres med de
 // vanlige rutene, som i appen.
 import { beforeAll, describe, expect, it } from "vitest";
 import { config } from "../src/config.js";
@@ -12,8 +12,9 @@ import type { AiKommando } from "../src/aiAssistent.js";
 type Foresporsel = { kropp: any; tekst: string };
 const foresporsler: Foresporsel[] = [];
 let neste: Partial<AiKommando> = {};
+let tale = { tale: true, tekst: "" }; // svaret når opptaket skal skrives ned
 const kommando = (k: Partial<AiKommando>): AiKommando => ({
-  transkripsjon: null, handling: "annet", kunde: null, kunde_navn: null, betaler: null, fakturanumre: [], alle_forfalte: false, belop: null,
+  handling: "annet", kunde: null, kunde_navn: null, betaler: null, fakturanumre: [], alle_forfalte: false, belop: null,
   dato: null, send: false, side: "ingen", linjer: [], fakturadato: null, forfallsdato: null, periode_fra: null, periode_til: null,
   deres_referanse: null, kommentar: null, svar: null, merknader: [], ...k,
 });
@@ -57,8 +58,9 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten", () => {
       fetch: async (_url, init) => {
         const kropp = JSON.parse(String(init?.body));
         foresporsler.push({ kropp, tekst: kropp.contents[0].parts.map((p: any) => p.text ?? "").join("\n") });
+        const svar = String(kropp.systemInstruction.parts[0].text).startsWith("Du skriver ned tale") ? tale : kommando(neste);
         return new Response(
-          JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(kommando(neste)) }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 40 } }),
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(svar) }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 40 } }),
           { status: 200, headers: { "content-type": "application/json" } },
         );
       },
@@ -94,7 +96,6 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten", () => {
       { tekst: "Hva kan du?", historikk: [{ rolle: "bruker", tekst: "Har Kari betalt?" }, { rolle: "assistent", tekst: "Faktura 1 er ikke betalt." }] },
     );
     expect(svar).toEqual({
-      transkripsjon: null,
       tekst: "Jeg kan lage og sende fakturaer, sjekke betalinger og sende purringer.",
       forslag: [],
       lenker: [],
@@ -265,13 +266,37 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten", () => {
     expect((await kall("PATCH", `/api/org/${org}`, { standard_gebyr: 0 })).status).toBe(200);
   });
 
-  it("tar imot lyd og teller i taket for måneden", async () => {
-    const lyd = Buffer.from(new Uint8Array(3000).map((_, i) => i % 199)).toString("base64");
-    const svar = await spor({ handling: "vis", side: "utkast", transkripsjon: "Vis utkastene" }, { lyd: { data: lyd, type: "audio/webm;codecs=opus" } });
-    expect(svar).toMatchObject({ transkripsjon: "Vis utkastene", gaa_til: "/fakturaer?status=utkast" });
-    const del = foresporsler.at(-1)!.kropp.contents[0].parts.find((p: any) => p.inlineData);
-    expect(del.inlineData).toEqual({ mimeType: "audio/webm", data: lyd });
-    expect((await kall("POST", `/api/org/${org}/ai/assistent`, { lyd: { data: lyd, type: "audio/midi" } })).status).toBe(400);
+  it("skriver ned tale, som brukeren ser og sender som tekst, og teller i taket for måneden", async () => {
+    const opptak = new Uint8Array(3000).map((_, i) => i % 199);
+    const lyd = async (body: Uint8Array, type = "audio/webm;codecs=opus", hvem = eier) => {
+      const r = await app.request(`/api/org/${org}/ai/assistent/tale`, { method: "POST", headers: { authorization: hvem, "content-type": type }, body });
+      return { status: r.status, data: (await r.json()) as any };
+    };
+    tale = { tale: true, tekst: "Vis  utkastene" };
+    expect(await lyd(opptak)).toEqual({ status: 200, data: { tekst: "Vis utkastene" } });
+    const f = foresporsler.at(-1)!;
+    expect(f.kropp.systemInstruction.parts[0].text).toContain("Er det ingen tydelig tale i opptaket");
+    expect(f.kropp.generationConfig.responseSchema.propertyOrdering).toEqual(["tale", "tekst"]);
+    expect(f.kropp.contents[0].parts.find((p: any) => p.inlineData).inlineData).toEqual({ mimeType: "audio/webm", data: Buffer.from(opptak).toString("base64") });
+    // Teksten sendes som en vanlig kommando.
+    expect(await spor({ handling: "vis", side: "utkast" }, { tekst: "Vis utkastene" })).toMatchObject({ gaa_til: "/fakturaer?status=utkast" });
+
+    // Stillhet eller støy: ingen gjetning.
+    tale = { tale: false, tekst: "" };
+    expect(await lyd(opptak)).toEqual({ status: 422, data: { error: "Hørte ingen tale. Prøv igjen, eller skriv i stedet." } });
+    tale = { tale: true, tekst: "[stillhet]" };
+    expect((await lyd(opptak)).status).toBe(422);
+    tale = { tale: false, tekst: "Takk for at du så på." };
+    expect((await lyd(opptak)).status).toBe(422);
+    // Leseren kan også snakke til assistenten.
+    tale = { tale: true, tekst: "Har Kari betalt?" };
+    expect(await lyd(opptak, "audio/mp4", leser)).toEqual({ status: 200, data: { tekst: "Har Kari betalt?" } });
+    expect((await lyd(opptak, "audio/midi")).status).toBe(400);
+    expect((await lyd(new Uint8Array(100))).data.error).toBe("Opptaket er tomt. Prøv igjen og snakk litt lenger.");
+    // Eldre versjoner av appen sendte lyden rett til assistenten.
+    expect((await kall("POST", `/api/org/${org}/ai/assistent`, { lyd: { data: "x".repeat(200), type: "audio/webm" } })).data.error).toBe(
+      "Appen er oppdatert. Last inn siden på nytt for å bruke tale.",
+    );
     expect((await kall("POST", `/api/org/${org}/ai/assistent`, {})).data.error).toBe("Si eller skriv hva du vil gjøre");
     const bruk = await somSystem((db) => en(db, "select antall from faktura.ai_bruk where org_id = $1 and funksjon = 'assistent'", [org]));
     expect(bruk!.antall).toBe(foresporsler.length);

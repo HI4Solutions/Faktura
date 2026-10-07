@@ -10,6 +10,7 @@ import { leggIKo } from "./tjenester.js";
 import { AiFeil, aiPaa, generer, type AiSvar } from "./ai.js";
 import { tilUtkast, utkastForesporsel, type AiUtkast, type Grunnlag } from "./aiFaktura.js";
 import { assistentForesporsel, type AiKommando } from "./aiAssistent.js";
+import { taleForesporsel, talefra, type Tale } from "./aiTale.js";
 
 let hentEnhet = ekteHentEnhet;
 export function settBrreg(fn: typeof ekteHentEnhet) {
@@ -41,6 +42,31 @@ const TESTREGISTER: Grunnlag = {
 };
 const TESTFAKTURA = "Husleie for oktober til Kari Hansen, og to timer konsulent. Forfall om 14 dager.";
 const TESTKOMMANDO = "Har Kari Hansen betalt?";
+
+// Et opptak uten tale: to sekunder svak sus, som i et stille rom (WAV, 16 kHz). AI-en skal
+// svare at det ikke er tale, ikke gjette.
+function stilleOpptak(sek = 2, rate = 16_000): string {
+  const lengde = sek * rate * 2;
+  const b = Buffer.alloc(44 + lengde);
+  b.write("RIFF", 0);
+  b.writeUInt32LE(36 + lengde, 4);
+  b.write("WAVEfmt ", 8);
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); // PCM
+  b.writeUInt16LE(1, 22); // mono
+  b.writeUInt32LE(rate, 24);
+  b.writeUInt32LE(rate * 2, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write("data", 36);
+  b.writeUInt32LE(lengde, 40);
+  let x = 12345;
+  for (let i = 0; i < lengde / 2; i++) {
+    x = (x * 1103515245 + 12345) & 0x7fffffff;
+    b.writeInt16LE((x % 161) - 80, 44 + i * 2);
+  }
+  return b.toString("base64");
+}
 
 // Monteres under /api/org/:org/verifisering.
 export function verifiseringRuter() {
@@ -155,8 +181,9 @@ export function adminRuter() {
     ),
   );
 
-  // Prøver AI-oppsettet (Gemini på Vertex AI): et enkelt svar, og de samme forespørslene som
-  // fakturautkast og assistenten sender (med eksempelregistrene over). Viser svaret fra Google
+  // Prøver AI-oppsettet (Gemini på Vertex AI): et enkelt svar, de samme forespørslene som
+  // fakturautkast og assistenten sender (med eksempelregistrene over), og tale til tekst med
+  // et stille opptak. Viser svaret fra Google
   // når noe ikke virker (manglende tilgang, modellen finnes ikke i regionen …), og om Gemini
   // avviste svarskjemaet (skjemafeil: da kom svaret uten). Alle prøver med skjemaet først.
   r.post("/ai-test", async (c) => {
@@ -186,7 +213,7 @@ export function adminRuter() {
       ),
       test<AiUtkast>(
         "Fakturautkast",
-        () => generer({ ...utkastForesporsel(TESTREGISTER, { tekst: TESTFAKTURA }), husk: false }),
+        () => generer({ ...utkastForesporsel(TESTREGISTER, TESTFAKTURA), husk: false }),
         (d) => {
           const u = tilUtkast(d, TESTREGISTER);
           const kunde = TESTREGISTER.kunder.find((k) => k.id === u.kunde_id)?.navn ?? u.kunde_navn ?? "ingen kunde";
@@ -195,8 +222,17 @@ export function adminRuter() {
       ),
       test<AiKommando>(
         "Assistent",
-        () => generer({ ...assistentForesporsel(TESTREGISTER, { tekst: TESTKOMMANDO }), husk: false }),
+        () => generer({ ...assistentForesporsel(TESTREGISTER, TESTKOMMANDO), husk: false }),
         (d) => `${d.handling}${d.kunde ? ` (${d.kunde})` : ""}`,
+      ),
+      test<Tale>(
+        "Tale (stille opptak)",
+        () => generer({ ...taleForesporsel({ mimeType: "audio/wav", data: stilleOpptak() }), husk: false }),
+        (d) => {
+          const tekst = talefra(d);
+          if (tekst) throw new Error(`AI-en fant tale i et stille opptak: «${tekst}»`);
+          return "Ingen tale, som ventet";
+        },
       ),
     ]);
     const feilet = tester.find((t) => !t.ok);

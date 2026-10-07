@@ -1,4 +1,5 @@
-// AI-assistenten: en kommando med tale eller tekst fra hvor som helst i appen («send faktura
+// AI-assistenten: en kommando med tekst (eller tale, som skrives ned og vises først, se
+// aiTale.ts) fra hvor som helst i appen («send faktura
 // til Kari for husleie oktober», «har Fjordline betalt?», «registrer betaling på faktura
 // 1043», «send purring på alle forfalte»). Gemini finner ut hva brukeren vil og fyller ut
 // feltene; her slås kunder og fakturaer opp, spørsmål besvares, og alt som endrer noe blir
@@ -13,17 +14,15 @@ import {
   datoOgSelger,
   fakturaRegler,
   hentGrunnlag,
-  LYDTYPER,
-  MAKS_LYD,
   registertekst,
   tilUtkast,
   utkastSkjema,
   type AiLinje,
-  type Beskrivelse,
   type Grunnlag,
   type Kunde,
   type Utkast,
 } from "./aiFaktura.js";
+import { gammelApp, taleRute } from "./aiTale.js";
 import { sammeNavn } from "./bank.js";
 import { dato, iDag, kr, summer } from "./regler.js";
 
@@ -34,7 +33,6 @@ type Side = (typeof SIDER)[number];
 
 // Svaret fra modellen.
 export type AiKommando = {
-  transkripsjon: string | null;
   handling: Handling;
   kunde: string | null;
   kunde_navn: string | null;
@@ -65,7 +63,6 @@ export type Forslag =
   | { type: "purring"; tekst: string; knapp: string; faktura_id: string; fakturanummer: number; purring: "paaminnelse" | "inkassovarsel" };
 export type Lenke = { tekst: string; til: string };
 export type AssistentSvar = {
-  transkripsjon: string | null;
   tekst: string;
   forslag: Forslag[];
   lenker: Lenke[];
@@ -79,7 +76,6 @@ const u = utkastSkjema.properties!;
 export const assistentSkjema: Skjema = {
   type: "OBJECT",
   properties: {
-    transkripsjon: tekst("Ordrett hva brukeren sa når kommandoen er et lydopptak, ellers null"),
     handling: { type: "STRING", enum: [...HANDLINGER], description: "Hva brukeren vil" },
     kunde: tekst("Id-en til kunden i kundelisten (K1, K2 …), eller null"),
     kunde_navn: tekst("Kunden slik brukeren sa det, eller null"),
@@ -101,18 +97,18 @@ export const assistentSkjema: Skjema = {
     merknader: { type: "ARRAY", items: { type: "STRING" }, description: "Korte setninger om det brukeren bør sjekke" },
   },
   required: [
-    "transkripsjon", "handling", "kunde", "kunde_navn", "betaler", "fakturanumre", "alle_forfalte", "belop", "dato", "send", "side", "linjer",
+    "handling", "kunde", "kunde_navn", "betaler", "fakturanumre", "alle_forfalte", "belop", "dato", "send", "side", "linjer",
     "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "svar", "merknader",
   ],
   propertyOrdering: [
-    "transkripsjon", "handling", "kunde", "kunde_navn", "betaler", "fakturanumre", "alle_forfalte", "belop", "dato", "send", "side", "linjer",
+    "handling", "kunde", "kunde_navn", "betaler", "fakturanumre", "alle_forfalte", "belop", "dato", "send", "side", "linjer",
     "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "svar", "merknader",
   ],
 };
 
 export function assistentSystem(g: Grunnlag, naa = new Date()): string {
   return [
-    "Du er assistenten i fakturaprogrammet HI4 Faktura. Brukeren gir en kommando eller stiller et spørsmål, med tekst eller tale. Finn ut hva brukeren vil, og fyll ut feltene. Svar bare med JSON etter skjemaet. Du utfører ingenting selv: appen slår opp, svarer og ber brukeren bekrefte alt som endrer noe.",
+    "Du er assistenten i fakturaprogrammet HI4 Faktura. Brukeren gir en kommando eller stiller et spørsmål (skrevet eller sagt og skrevet ned). Finn ut hva brukeren vil, og fyll ut feltene. Svar bare med JSON etter skjemaet. Du utfører ingenting selv: appen slår opp, svarer og ber brukeren bekrefte alt som endrer noe.",
     "",
     datoOgSelger(g, naa),
     "",
@@ -135,7 +131,6 @@ export function assistentSystem(g: Grunnlag, naa = new Date()): string {
     "- For ny_faktura gjelder også reglene for fakturaer:",
     ...fakturaRegler,
     "- merknader: korte setninger på norsk om noe du var usikker på. Tom liste når alt er klart.",
-    "- transkripsjon: når kommandoen er et lydopptak, skriv ordrett hva som ble sagt. Ellers null.",
   ].join("\n");
 }
 
@@ -143,12 +138,11 @@ export type Melding = { rolle: "bruker" | "assistent"; tekst: string };
 
 // Forespørselen til modellen: registrene, samtalen så langt og kommandoen (ruten under og
 // «Test AI» på adminsiden).
-export function assistentForesporsel(g: Grunnlag, kommando: Beskrivelse, historikk: Melding[] = [], naa = new Date()): { system: string; deler: Del[]; skjema: Skjema } {
+export function assistentForesporsel(g: Grunnlag, kommando: string, historikk: Melding[] = [], naa = new Date()): { system: string; deler: Del[]; skjema: Skjema } {
   const deler: Del[] = [{ text: registertekst(g) }];
   if (historikk.length)
     deler.push({ text: `Samtalen så langt:\n${historikk.map((h) => `${h.rolle === "bruker" ? "Brukeren" : "Assistenten"}: ${enLinje(h.tekst, 600)}`).join("\n")}` });
-  if ("lyd" in kommando) deler.push({ text: "Kommandoen er i lydopptaket." }, { inlineData: kommando.lyd });
-  else deler.push({ text: `Kommandoen:\n${kommando.tekst}` });
+  deler.push({ text: `Kommandoen:\n${kommando}` });
   return { system: assistentSystem(g, naa), deler, skjema: assistentSkjema };
 }
 
@@ -253,7 +247,7 @@ function purring(f: Faktura, iDag: string): Forslag | string {
 }
 
 async function nyFaktura(k: Kontekst, ai: AiKommando): Promise<Partial<AssistentSvar>> {
-  const utkast = tilUtkast({ ...ai, transkripsjon: null }, k.g);
+  const utkast = tilUtkast(ai, k.g);
   if (!k.kan.skriv) return { ...ingenTilgang("lage fakturaer"), utkast: null };
   const kunde = utkast.kunde_id ? k.g.kunder.find((x) => x.id === utkast.kunde_id)! : null;
   const mangler: string[] = [];
@@ -572,7 +566,7 @@ export const HJELP =
   "Jeg kan lage og sende fakturaer, sende utkast, sjekke om noen har betalt, registrere betalinger, sende purringer og vise hva som er utestående. Si for eksempel «Send faktura til Kari Hansen for husleie oktober» eller «Har Fjordline betalt?».";
 
 // Gjør svaret fra modellen om til det appen viser.
-export async function utfor(k: Kontekst, ai: AiKommando): Promise<Omit<AssistentSvar, "transkripsjon">> {
+export async function utfor(k: Kontekst, ai: AiKommando): Promise<AssistentSvar> {
   const kunde = finnKunde(ai, k.g);
   const handling: Handling = HANDLINGER.includes(ai.handling) ? ai.handling : "annet";
   // En kunde som ikke finnes, sies tydelig (unntatt for nye fakturaer, som kan åpnes i skjemaet).
@@ -595,16 +589,13 @@ export async function utfor(k: Kontekst, ai: AiKommando): Promise<Omit<Assistent
 // Ruten
 // ---------------------------------------------------------------------------
 
-const kroppSkjema = z
-  .object({
-    tekst: z.string().trim().max(2000, "Kommandoen kan være høyst 2000 tegn").optional(),
-    lyd: z.object({ data: z.string().min(100).max(Math.ceil((MAKS_LYD * 4) / 3) + 8), type: z.string().max(100) }).optional(),
-    historikk: z
-      .array(z.object({ rolle: z.enum(["bruker", "assistent"]), tekst: z.string().max(4000) }))
-      .max(12)
-      .optional(),
-  })
-  .refine((b) => (b.tekst && b.tekst.length >= 2) || b.lyd, "Si eller skriv hva du vil gjøre");
+const kroppSkjema = z.object({
+  tekst: z.string({ error: "Si eller skriv hva du vil gjøre" }).trim().min(2, "Si eller skriv hva du vil gjøre").max(2000, "Kommandoen kan være høyst 2000 tegn"),
+  historikk: z
+    .array(z.object({ rolle: z.enum(["bruker", "assistent"]), tekst: z.string().max(4000) }))
+    .max(12)
+    .optional(),
+});
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
 
@@ -613,13 +604,9 @@ export function assistentRuter() {
 
   r.post("/ai/assistent", async (c) => {
     if (!aiPaa()) throw new ApiFeil(503, "AI er ikke satt opp");
-    const b = kroppSkjema.parse(await c.req.json().catch(() => ({})));
-    let kommando: Beskrivelse;
-    if (b.lyd) {
-      const mime = LYDTYPER[b.lyd.type.split(";")[0].trim().toLowerCase()];
-      if (!mime) throw new ApiFeil(400, "Appen kjenner ikke lydformatet. Skriv i stedet.");
-      kommando = { lyd: { mimeType: mime, data: b.lyd.data } };
-    } else kommando = { tekst: b.tekst! };
+    const kropp = await c.req.json().catch(() => ({}));
+    if (kropp?.lyd) throw gammelApp();
+    const b = kroppSkjema.parse(kropp);
 
     const kjor = <X>(fn: (db: Db) => Promise<X>) => somBruker<X>(c.get("bruker").id, fn);
     const { g, kan, org } = await kjor(async (db) => {
@@ -630,10 +617,13 @@ export function assistentRuter() {
         org: (await en<Org>(db, "select kontonr, standard_forfall_dager, standard_gebyr from faktura.organisasjoner where id = $1", [orgId(c)]))!,
       };
     });
-    const svar = await medKvote(kjor, orgId(c), "assistent", () => generer<AiKommando>(assistentForesporsel(g, kommando, (b.historikk ?? []).slice(-8))));
+    const svar = await medKvote(kjor, orgId(c), "assistent", () => generer<AiKommando>(assistentForesporsel(g, b.tekst, (b.historikk ?? []).slice(-8))));
     const resultat = await kjor((db) => utfor({ db, orgId: orgId(c), g, kan, org, iDag: iDag() }, svar.data));
-    return c.json({ transkripsjon: enLinje(svar.data.transkripsjon, 2000) || null, ...resultat } satisfies AssistentSvar);
+    return c.json(resultat satisfies AssistentSvar);
   });
+
+  // Tale til tekst: teksten vises i appen, og brukeren sender den som en kommando.
+  r.post("/ai/assistent/tale", taleRute("assistent"));
 
   return r;
 }
