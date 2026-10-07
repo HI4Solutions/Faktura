@@ -43,7 +43,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `nummerserier`: neste fakturanummer og kundenummer per organisasjon, låst med radlås
 - `medlemmer`, `invitasjoner`: brukere og roller
 - `org_tilgang`: regnskapsbyrå ↔ klient (les eller bokfør), alltid med klientens samtykke
-- `kunder`, `produkter`, `gjentakelser`
+- `kunder`, `produkter`, `gjentakelser`. `kunder.ehf`: om kunden kan motta EHF-faktura, slått
+  opp i PEPPOL slik aksesspunktene gjør det (`peppol.ts`): SML-en i DNS (NAPTR) gir SMP-en,
+  og SMP-en spørres direkte om dokumenttypen (BIS Billing 3), ellers leses tjenestelisten.
+  Finner ikke DNS-en i miljøet noe, bekreftes det med Google eller Cloudflare (DNS over
+  HTTPS). Sjekkes når kunden lagres, med «Sjekk nå» og jevnlig av workeren. Admin → Drift
+  har «Test EHF-oppslag», som viser hvert steg
 - `paaminnelser`: påminnelser om fakturaer man lager selv (når beløpet varierer og en
   gjentakende faktura ikke passer): hver måned, kvartal, år, uke eller én gang, på et
   klokkeslett. Workeren tar dem hvert minutt (`ta_paaminnelser` flytter hver til neste dato

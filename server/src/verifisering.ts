@@ -21,6 +21,7 @@ import { AiFeil, aiPaa, generer, type AiSvar } from "./ai.js";
 import { tilUtkast, utkastForesporsel, type AiUtkast, type Grunnlag } from "./aiFaktura.js";
 import { assistentForesporsel, type AiKommando } from "./aiAssistent.js";
 import { taleForesporsel, talefra, type Tale } from "./aiTale.js";
+import { testEhf } from "./peppol.js";
 
 let hentEnhet = ekteHentEnhet;
 let hentRoller = ekteHentRoller;
@@ -284,6 +285,16 @@ export function adminRuter() {
       detaljer: feilet?.detaljer ?? null,
       tester,
     });
+  });
+
+  // Prøver EHF-oppslaget i PEPPOL for et org.nr., med hvert steg: DNS (SML), SMP-en,
+  // svaret for EHF-fakturaen og dokumenttypene mottakeren er registrert for.
+  r.post("/ehf-test", async (c) => {
+    const { orgnr } = z
+      .object({ orgnr: z.string().transform((s) => s.replace(/\s/g, "")).pipe(z.string().regex(/^\d{9}$/, "Skriv et org.nr. med ni siffer.")) })
+      .parse(await c.req.json().catch(() => ({})));
+    const start = Date.now();
+    return c.json({ orgnr, ...(await testEhf(orgnr)), ms: Date.now() - start });
   });
 
   r.get("/organisasjoner", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_organisasjoner()"))));

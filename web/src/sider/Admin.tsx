@@ -822,6 +822,49 @@ function AiTest() {
   );
 }
 
+// Prøver EHF-oppslaget i PEPPOL for et org.nr. og viser hvert steg: DNS (SML), SMP-en,
+// svaret for EHF-fakturaen og dokumenttypene mottakeren er registrert for.
+type EhfTestResultat = { orgnr: string; svar: boolean | null; smp: string | null; steg: string[]; ms: number };
+function EhfTest() {
+  const [nr, settNr] = useState("");
+  const [svar, settSvar] = useState<EhfTestResultat | null>(null);
+  const h = useHandling();
+  const sek = (ms: number) => `${(ms / 1000).toLocaleString("nb-NO", { maximumFractionDigits: 1 })} s`;
+  return (
+    <form
+      className="ehf-test"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        settSvar((await h.kjor(() => api<EhfTestResultat>("POST", "/admin/ehf-test", { orgnr: nr }))) ?? null);
+      }}
+    >
+      <div className="ehf-test-rad">
+        <label>
+          Test EHF-oppslag for org.nr.
+          <input inputMode="numeric" autoComplete="off" value={nr} placeholder="F.eks. 986252932" onChange={(e) => settNr(e.target.value)} />
+        </label>
+        <button disabled={h.opptatt || !nr.trim()}>{h.opptatt ? "Sjekker …" : "Test"}</button>
+      </div>
+      {svar && (
+        <div className="liten" role="status">
+          <p className={svar.svar ? "ok-tekst" : svar.svar === false ? "fare-tekst" : "advarsel-tekst"}>
+            <strong>{svar.svar ? "✓ Kan motta EHF-faktura" : svar.svar === false ? "✗ Ikke registrert for EHF-faktura" : "? Fikk ikke svar"}</strong>{" "}
+            <span className="dempet">
+              ({orgnr(svar.orgnr)}, {sek(svar.ms)})
+            </span>
+          </p>
+          <ol className="ehf-steg">
+            {svar.steg.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+      <Feil melding={h.feil} />
+    </form>
+  );
+}
+
 function Drift({ apne }: { apne: (id: string) => void }) {
   const { data: d, feil, last, laster } = useData(() => hent<any>("/admin/drift"), []);
   if (feil) return <Feil melding={feil} />;
@@ -887,6 +930,7 @@ function Drift({ apne }: { apne: (id: string) => void }) {
         <section className="kort">
           <h2>EHF</h2>
           <Tellinger tall={d.ehf} navn={ehfStatus} />
+          <EhfTest />
           {d.ehf_problemer.length > 0 && (
             <ul className="admin-rader">
               {d.ehf_problemer.map((p: any, i: number) => (

@@ -1054,6 +1054,11 @@ button.ai-stopp:hover:not(:disabled) { border-color: var(--fare); }
 .ai-detaljer { display: block; color: var(--dempet); overflow-wrap: anywhere; }
 .ai-hint { margin: 8px 0 0; }
 .ai-testliste { flex-basis: 100%; list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ehf-test { margin: 12px 0; }
+.ehf-test-rad { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; }
+.ehf-test-rad label { flex: 1 1 220px; margin: 0; }
+.ehf-test p { margin: 10px 0 4px; }
+.ehf-steg { margin: 0; padding-left: 20px; display: grid; gap: 3px; color: var(--tekst-2); overflow-wrap: anywhere; }
 
 /* AI-assistenten: knappen nederst til høyre på alle sider, og panelet med samtalen */
 .assistent-knapp {
