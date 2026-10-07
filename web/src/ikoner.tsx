@@ -206,3 +206,20 @@ export const IkonTastatur = (p: P) => (
     <path d="M6.5 9.5h.01M10 9.5h.01M13.5 9.5h.01M17 9.5h.01M6.5 12.5h.01M17 12.5h.01M10 12.5h4M8 15.5h8" />
   </Ikon>
 );
+export const IkonAnsatte = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3" y="5" width="18" height="14.5" rx="2.2" />
+    <circle cx="8.8" cy="11" r="2.2" />
+    <path d="M5.6 16.3a3.4 3.4 0 0 1 6.4 0M14.5 10h3.5M14.5 13.5h3.5" />
+  </Ikon>
+);
+export const IkonVenstre = (p: P) => (
+  <Ikon {...p}>
+    <path d="m14.5 6-6 6 6 6" />
+  </Ikon>
+);
+export const IkonHoyre = (p: P) => (
+  <Ikon {...p}>
+    <path d="m9.5 6 6 6-6 6" />
+  </Ikon>
+);

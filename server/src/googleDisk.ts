@@ -129,6 +129,7 @@ export function diskRuter() {
           `select o.id, o.navn, o.direkte_medlem, coalesce(d.aktiv, false) as aktiv, d.sist_kopiert
              from faktura.mine_organisasjoner o
              left join faktura.disk_organisasjoner d on d.org_id = o.id and d.bruker_id = faktura.bruker_id()
+            where o.rolle is distinct from 'ansatt'
             order by o.direkte_medlem desc, o.navn`,
         ),
       })),
@@ -239,7 +240,7 @@ export function googleCallback() {
         return alle<{ id: string }>(
           db,
           `insert into faktura.disk_organisasjoner (bruker_id, org_id)
-           select faktura.bruker_id(), m.org_id from faktura.medlemmer m where m.bruker_id = faktura.bruker_id()
+           select faktura.bruker_id(), m.org_id from faktura.medlemmer m where m.bruker_id = faktura.bruker_id() and m.rolle <> 'ansatt'
            returning org_id as id`,
         );
       });

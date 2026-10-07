@@ -109,22 +109,47 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   administratorene ser svaret fra Google i feilmeldingene, og «Test AI» på adminsiden prøver
   de samme forespørslene som fakturautkast og assistenten, og tale til tekst med et stille
   opptak (der AI-en ikke skal finne noen tale)
+- `lonn_oppsett`, `ansatte`, `timeforinger`: ansatte og timer, slått på per organisasjon
+  (Innstillinger → Ansatte og timer). Ansattregisteret har personalia, ansettelse og lønn.
+  Fødselsnummeret krypteres med KMS i API-et, som ikke kan lese det igjen (bare workeren kan,
+  til lønn og a-melding senere); revisjonsloggen sier bare at det er registrert eller endret.
+  En ansatt kan få egen innlogging: invitasjonen (`inviter_ansatt`) gir rollen `ansatt` og
+  kobler brukeren til ansattkortet, og er e-posten alt med i organisasjonen, kobles den med
+  en gang. Timene føres med fra og til (over midnatt går fint) og pause, eller som antall
+  timer. Den ansatte leverer uka (`lever_timer`), eier eller administrator godkjenner eller
+  avviser med en grunn (`godkjenn_timer`, `avvis_timer`), og begge får push-varsel. Status
+  endres bare gjennom funksjonene, og leverte timer er låst for den ansatte. Overtiden regnes
+  ut per uke (`arbeidstid.ts`): timene over grensen per dag, så timene over grensen per uke av
+  resten, med tillegg (arbeidsmiljøloven: 9 og 40 timer, minst 40 %; grensene kan endres for
+  tariffavtaler). Føringer merket som overtid teller i sin helhet med sitt tillegg, og
+  ordinære timer over avtalt arbeidstid er merarbeid
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
 ### Roller
 
-| Handling | eier | admin | fakturerer | regnskap | les |
-|---|:-:|:-:|:-:|:-:|:-:|
-| Lese alt | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Kunder, produkter, utkast, gjentakelser | ✓ | ✓ | ✓ | | |
-| Utstede, sende, kreditere | ✓ | ✓ | ✓ | | |
-| Registrere betaling og refusjon | ✓ | ✓ | ✓ | ✓ | |
-| Innstillinger, kontonummer, medlemmer, integrasjoner, regnskapsfører | ✓ | ✓ | | | |
+| Handling | eier | admin | fakturerer | regnskap | les | ansatt |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Lese fakturadata (kunder, fakturaer, innbetalinger, rapporter) | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| Kunder, produkter, utkast, gjentakelser | ✓ | ✓ | ✓ | | | |
+| Utstede, sende, kreditere | ✓ | ✓ | ✓ | | | |
+| Registrere betaling og refusjon | ✓ | ✓ | ✓ | ✓ | | |
+| Innstillinger, kontonummer, medlemmer, integrasjoner, regnskapsfører | ✓ | ✓ | | | | |
+| Se ansatte og alle timer | ✓ | ✓ | | ✓ | | |
+| Endre ansatte, gi innlogging, godkjenne og avvise timer | ✓ | ✓ | | | | |
+| Føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+
+¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 
 En regnskapsfører med tilgangen «bokfør» får rollen `regnskap` hos klienten. Med
 tilgangen «les» får regnskapsføreren rollen `les`. Tilgangen kan ha utløpsdato, og
-begge parter kan trekke den.
+begge parter kan trekke den. Byråets ansatte med rollen `ansatt` får ikke tilgang til
+klientene.
+
+Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort
+og sine egne timer (`faktura.kan(org, 'medlem')` og `faktura.er_meg`), aldri fakturadata,
+andre medlemmer eller revisjonsloggen. Varsler til hele organisasjonen og Google Disk-kopier
+går ikke til ansatte, og appen viser dem bare Timer og Innstillinger (egen konto og app).
 
 ### Sikkerhet i databasen
 
@@ -185,3 +210,12 @@ og hastighetsgrenser i API-et.
 7. **EHF/Peppol** via aksesspunkt, betalingslenker (Vipps/Stripe Connect) og
    abonnementer for plattformens egne kunder
 8. ~~**Passkeys**~~ Ferdig: WebAuthn i API-et, nøkler i Postgres, innlogging via Firebase custom token med kravet `passkey` (teller som totrinn)
+9. **Ansatte og lønn**, i steg:
+   1. ~~Ansatte og timer~~ Ferdig: ansattregister, egen innlogging for ansatte, timeføring
+      med overtid og merarbeid, levering og godkjenning med push-varsler
+   2. Vaktplan: vakter per uke og ansatt, som timene kan føres fra
+   3. Lønnskjøring: lønnsarter, skattetrekk (tabell eller prosent fra skattekortet),
+      feriepenger, OTP, arbeidsgiveravgift per sone, sykepenger og lønnsslipp som PDF
+   4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og
+      arbeidsgiveravgift, feriepengeliste og årsoversikt for den ansatte
+   5. Utbetaling: betalingsfil (pain.001) til nettbanken først, direkte bankintegrasjon senere

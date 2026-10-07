@@ -40,7 +40,7 @@ type Fane = "oversikt" | "venter" | "organisasjoner" | "brukere" | "drift";
 const statusMerke: Record<string, string> = { ny: "merke-advarsel", verifisert: "merke-ok", sperret: "merke-fare" };
 const statusTekst: Record<string, string> = { ny: "Ikke verifisert", verifisert: "Verifisert", sperret: "Sperret" };
 const metodeTekst: Record<string, string> = { epostdomene: "e-postdomene", brreg_epost: "e-posten i Enhetsregisteret", manuell: "manuelt" };
-const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les" };
+const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les", ansatt: "ansatt" };
 const integrasjonTekst: Record<string, string> = { peppol: "EHF (Recommand)", bank: "Enable Banking", google_drive: "Google Disk", fiken: "Fiken", tripletex: "Tripletex", poweroffice: "PowerOffice", visma: "Visma" };
 
 // «for 5 min siden», «for 3 t siden», «for 2 dager siden», ellers datoen.

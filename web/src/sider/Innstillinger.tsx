@@ -12,7 +12,7 @@ import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 
-type Fane = "organisasjon" | "faktura" | "betaling" | "ehf" | "brukere" | "konto" | "app";
+type Fane = "organisasjon" | "faktura" | "betaling" | "ehf" | "brukere" | "personal" | "konto" | "app";
 type OrgDel = "organisasjon" | "faktura" | "betaling";
 
 // Innstillingene er delt i faner. Fanen står i adressen (?fane=), så lenker kan gå rett til
@@ -29,6 +29,7 @@ export function Innstillinger() {
     if (!byraa) faner.push(["faktura", "Faktura"], ["betaling", "Betaling"]);
     if (!byraa && org?.type !== "privatperson") faner.push(["ehf", "EHF"]);
     faner.push(["brukere", "Brukere"]);
+    if (org?.type !== "privatperson") faner.push(["personal", "Ansatte og timer"]);
   }
   faner.push(["konto", "Min konto"], ["app", "App"]);
   // Tilbake fra Google (Google Disk-koblingen): «Min konto».
@@ -62,9 +63,84 @@ export function Innstillinger() {
           <Regnskapsforer />
         </>
       )}
+      {fane === "personal" && <PersonalOppsett />}
       {fane === "konto" && <MinKonto />}
       {fane === "app" && <AppOgVarsler />}
     </>
+  );
+}
+
+// Ansatte og timer: slås på per organisasjon, med grensene for overtid.
+function PersonalOppsett() {
+  const { org, oppdater } = useKonto();
+  const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
+  const [o, settO] = useState<{ aktiv: boolean; daglig_grense: string; ukentlig_grense: string; overtid_prosent: string } | null>(null);
+  const [lagret, settLagret] = useState(false);
+  const h = useHandling();
+  const tekst = (n: number) => String(n).replace(".", ",");
+  useEffect(() => {
+    if (data)
+      settO({ aktiv: data.aktiv, daglig_grense: tekst(data.daglig_grense), ukentlig_grense: tekst(data.ukentlig_grense), overtid_prosent: String(data.overtid_prosent) });
+  }, [data]);
+  if (!o) return <Laster />;
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    settLagret(false);
+    const r = await h.kjor(() =>
+      api("PUT", `/org/${org!.id}/lonn-oppsett`, {
+        aktiv: o!.aktiv,
+        daglig_grense: tall(o!.daglig_grense),
+        ukentlig_grense: tall(o!.ukentlig_grense),
+        overtid_prosent: tall(o!.overtid_prosent),
+      }),
+    );
+    if (!r) return;
+    settLagret(true);
+    await oppdater(); // menyen får (eller mister) Ansatte og Timer
+  }
+
+  return (
+    <form className="kort" onSubmit={lagre}>
+      <h2>Ansatte og timer</h2>
+      <p className="dempet">
+        Hold oversikt over de ansatte, og la dem føre timene sine i appen. De leverer uka, og du godkjenner eller avviser den. Overtiden regnes ut av seg selv.
+      </p>
+      <label>
+        <input type="checkbox" checked={o.aktiv} onChange={(e) => settO({ ...o, aktiv: e.target.checked })} />
+        Bruk ansatte og timer i {org?.navn}
+      </label>
+      <h3>Overtid</h3>
+      <div className="rad">
+        <label>
+          Timer per dag før overtid
+          <input inputMode="decimal" required value={o.daglig_grense} onChange={(e) => settO({ ...o, daglig_grense: e.target.value })} />
+        </label>
+        <label>
+          Timer per uke før overtid
+          <input inputMode="decimal" required value={o.ukentlig_grense} onChange={(e) => settO({ ...o, ukentlig_grense: e.target.value })} />
+        </label>
+        <label>
+          Overtidstillegg (%)
+          <input inputMode="numeric" required value={o.overtid_prosent} onChange={(e) => settO({ ...o, overtid_prosent: e.target.value })} />
+        </label>
+      </div>
+      <p className="liten dempet">
+        Arbeidsmiljøloven: arbeid ut over 9 timer per dag eller 40 timer per uke er overtid, med minst 40 % tillegg (§ 10-4 og § 10-6). Har dere tariffavtale
+        med andre grenser, skriver du dem her.
+      </p>
+      <Feil melding={h.feil} />
+      {lagret && (
+        <div className="melding ok" role="status">
+          Lagret.{o.aktiv ? " Ansatte og Timer ligger i menyen." : ""}
+        </div>
+      )}
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt}>
+          Lagre
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -604,7 +680,7 @@ function Medlemmer() {
     }
   }
 
-  const rolletekst: Record<string, string> = { eier: "Eier", admin: "Administrator", fakturerer: "Fakturerer", regnskap: "Regnskap", les: "Les" };
+  const rolletekst: Record<string, string> = { eier: "Eier", admin: "Administrator", fakturerer: "Fakturerer", regnskap: "Regnskap", les: "Les", ansatt: "Ansatt (timer)" };
 
   return (
     <div className="kort">

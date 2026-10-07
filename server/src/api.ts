@@ -24,6 +24,7 @@ import { bankRuter } from "./bankRuter.js";
 import { aiRuter } from "./aiFaktura.js";
 import { assistentRuter } from "./aiAssistent.js";
 import { paaminnelseRuter } from "./paaminnelser.js";
+import { ansattRuter } from "./ansatte.js";
 import { aiPaa } from "./ai.js";
 
 const uuid = z.string().uuid();
@@ -303,6 +304,8 @@ export function lagApi() {
         [orgId(c)],
       );
       if (!o) throw new ApiFeil(404, "Fant ikke organisasjonen");
+      // Ansatte (rollen ansatt) ser organisasjonens navn i /meg, men ikke innstillingene.
+      if (!(await en<{ k: boolean }>(db, "select faktura.kan($1, 'les') as k", [orgId(c)]))!.k) throw new ApiFeil(403, "Ingen tilgang");
       const direkte = await en(db, "select 1 from faktura.medlemmer where org_id = $1 and bruker_id = faktura.bruker_id()", [orgId(c)]);
       if (!direkte) await db.query("select faktura.logg_oppslag($1, 'organisasjon')", [orgId(c)]);
       // ai_tilgjengelig: AI er satt opp for plattformen (og ai_aktiv: slått på for organisasjonen).
@@ -338,6 +341,7 @@ export function lagApi() {
   org.route("/", aiRuter());
   org.route("/", assistentRuter());
   org.route("/", paaminnelseRuter());
+  org.route("/", ansattRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting

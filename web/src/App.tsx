@@ -4,7 +4,7 @@ import { hentAuth } from "./firebase";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster } from "./felles";
-import { KontoProvider, kanSkrive, useKonto } from "./konto";
+import { KontoProvider, erAnsatt, kanSePersonal, kanSkrive, useKonto } from "./konto";
 import { BekreftEpost, Innlogging } from "./sider/Innlogging";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
@@ -19,6 +19,8 @@ import { Gjentakende } from "./sider/Gjentakende";
 import { SendFraPaaminnelse } from "./sider/Paaminnelser";
 import { Rapporter } from "./sider/Rapporter";
 import { BankTilbake, Innbetalinger } from "./sider/Bank";
+import { Ansatte } from "./sider/Ansatte";
+import { Timer } from "./sider/Timer";
 import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
@@ -26,7 +28,8 @@ import { TemaBryter } from "./TemaBryter";
 import { installer } from "./pwa";
 import { Assistent } from "./assistent";
 import {
-  IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss, IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
+  IkonAnsatte, IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKlokke, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
+  IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -140,6 +143,10 @@ function Ramme() {
     };
   }, []);
   const orgs = meg?.organisasjoner ?? [];
+  // Ansatte (rollen ansatt) ser bare timene sine. Ellers: Ansatte og Timer når det er slått på.
+  const ansatt = erAnsatt(org?.rolle);
+  const visAnsatte = !ansatt && !!org?.personal && kanSePersonal(org.rolle);
+  const visTimer = ansatt || (!!org?.personal && (kanSePersonal(org.rolle) || !!org.ansatt_id));
 
   if (ny || orgs.length === 0) {
     return (
@@ -176,11 +183,18 @@ function Ramme() {
         </div>
       </header>
       <nav className="bunnmeny" aria-label="Hovedmeny">
-        <NavLink to="/" end>
-          <IkonOversikt storrelse={22} />
-          <span>{org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}</span>
-        </NavLink>
-        {org?.type !== "regnskapsbyraa" && (
+        {ansatt ? (
+          <NavLink to="/timer">
+            <IkonKlokke storrelse={22} />
+            <span>Timer</span>
+          </NavLink>
+        ) : (
+          <NavLink to="/" end>
+            <IkonOversikt storrelse={22} />
+            <span>{org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}</span>
+          </NavLink>
+        )}
+        {!ansatt && org?.type !== "regnskapsbyraa" && (
           <>
             <NavLink to="/fakturaer" end={false}>
               <IkonFaktura storrelse={22} />
@@ -199,7 +213,7 @@ function Ramme() {
             </NavLink>
           </>
         )}
-        {org?.type === "regnskapsbyraa" && (
+        {(ansatt || org?.type === "regnskapsbyraa") && (
           <NavLink to="/innstillinger">
             <IkonInnstillinger storrelse={22} />
             <span>Innstillinger</span>
@@ -220,7 +234,7 @@ function Ramme() {
           <div style={{ minWidth: 0 }}>
             <div className="navn">{org?.navn}</div>
             <div className="type">
-              {org ? orgType[org.type] ?? org.type : ""}
+              {org ? (ansatt ? "Ansatt" : orgType[org.type] ?? org.type) : ""}
               {org && !org.direkte_medlem ? " · klient" : ""}
             </div>
           </div>
@@ -238,11 +252,18 @@ function Ramme() {
           </select>
         </div>
         <div className="meny-seksjon">Meny</div>
-        <NavLink to="/" end>
-          <IkonOversikt />
-          {org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}
-        </NavLink>
-        {org?.type !== "regnskapsbyraa" && (
+        {ansatt ? (
+          <NavLink to="/timer">
+            <IkonKlokke />
+            Timer
+          </NavLink>
+        ) : (
+          <NavLink to="/" end>
+            <IkonOversikt />
+            {org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}
+          </NavLink>
+        )}
+        {!ansatt && org?.type !== "regnskapsbyraa" && (
           <>
             <NavLink to="/fakturaer">
               <IkonFaktura />
@@ -270,12 +291,29 @@ function Ramme() {
             </NavLink>
           </>
         )}
+        {!ansatt && (visAnsatte || visTimer) && (
+          <>
+            <div className="meny-seksjon">Personal</div>
+            {visAnsatte && (
+              <NavLink to="/ansatte">
+                <IkonAnsatte />
+                Ansatte
+              </NavLink>
+            )}
+            {visTimer && (
+              <NavLink to="/timer">
+                <IkonKlokke />
+                Timer
+              </NavLink>
+            )}
+          </>
+        )}
         <div className="meny-seksjon">Konto</div>
         <NavLink to="/innstillinger">
           <IkonInnstillinger />
           Innstillinger
         </NavLink>
-        {org?.verifisering === "ny" && org.direkte_medlem && (
+        {org?.verifisering === "ny" && org.direkte_medlem && !ansatt && (
           <NavLink to="/verifisering">
             <IkonSkjold />
             Verifiser organisasjon
@@ -309,7 +347,16 @@ function Ramme() {
         </div>
       </nav>
       <main className="innhold">
-        {org && (
+        {org && ansatt && (
+          <Routes>
+            <Route path="/timer" element={<Timer />} />
+            <Route path="/innstillinger" element={<Innstillinger />} />
+            {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
+            <Route path="/invitasjon/:token" element={<Invitasjon />} />
+            <Route path="*" element={<Navigate to="/timer" replace />} />
+          </Routes>
+        )}
+        {org && !ansatt && (
           <Routes>
             <Route path="/" element={<Oversikt />} />
             <Route path="/fakturaer" element={<Fakturaliste />} />
@@ -327,6 +374,8 @@ function Ramme() {
             <Route path="/rapporter" element={<Rapporter />} />
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/produkter/importer" element={<Importer key="produkter" type="produkter" />} />
+            <Route path="/ansatte" element={<Ansatte />} />
+            <Route path="/timer" element={<Timer />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
@@ -335,7 +384,7 @@ function Ramme() {
           </Routes>
         )}
       </main>
-      {org && <Assistent key={org.id} />}
+      {org && !ansatt && <Assistent key={org.id} />}
     </div>
   );
 }

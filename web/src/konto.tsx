@@ -13,6 +13,10 @@ export interface MinOrg {
   verifisering: string;
   rolle: string;
   direkte_medlem: boolean;
+  // Ansatte og timer er slått på (Innstillinger → Ansatte og timer).
+  personal: boolean;
+  // Den innloggedes egen ansattrad her (fører egne timer), eller null.
+  ansatt_id: string | null;
 }
 
 interface Meg {
@@ -118,3 +122,8 @@ export function useKonto() {
 export const kanSkrive = (rolle?: string) => ["eier", "admin", "fakturerer"].includes(rolle ?? "");
 export const kanBokfore = (rolle?: string) => ["eier", "admin", "fakturerer", "regnskap"].includes(rolle ?? "");
 export const erAdmin = (rolle?: string) => ["eier", "admin"].includes(rolle ?? "");
+// Ansatte (rollen ansatt) ser bare sine egne timer; personal styrer ansatte og godkjenner timer,
+// og regnskap kan se dem.
+export const erAnsatt = (rolle?: string) => rolle === "ansatt";
+export const kanPersonal = erAdmin;
+export const kanSePersonal = (rolle?: string) => ["eier", "admin", "regnskap"].includes(rolle ?? "");

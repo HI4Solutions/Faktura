@@ -6,7 +6,8 @@ Google Cloud. Kjernen er portert fra fakturamodulen i MedSide og gjort flerbruke
 
 Funksjoner: produkter, kunder, fakturaer og kreditnotaer (hel eller delvis),
 vedlegg på fakturaer, EHF (Peppol) gjennom egen Recommand-konto, betaling og refusjon, gjentakende fakturaer, regnskapsførertilgang på tvers av
-klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
+klienter, Google Disk, ansatte med timeføring og godkjenning, og et adapterlag for bank og
+regnskapssystemer.
 
 ## Status
 
@@ -28,6 +29,8 @@ klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
 | EHF/Peppol (gjennom hver organisasjons konto hos Recommand) | Ferdig |
 | Innbetalinger fra banken (Enable Banking, flere banker) | Ferdig |
 | AI med Gemini på Vertex AI: assistent med talekommandoer, faktura fra tekst eller tale, forslag på innbetalinger | Ferdig (valgfrie GitHub-variabler `AI_AKTIV`, `AI_REGION`, `AI_MODELL`, `AI_GRENSE`) |
+| Ansatte og timer: ansattregister, egen innlogging for ansatte, timeføring med overtid, levering og godkjenning | Ferdig (slås på under Innstillinger → Ansatte og timer) |
+| Vaktplan, lønnskjøring, a-melding og utbetaling | Planlagt (se veikartet) |
 | Regnskapssystemer | Ikke startet |
 
 Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og veikart.

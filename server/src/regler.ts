@@ -72,6 +72,16 @@ export function orgnrGyldig(n: string): boolean {
   return rest !== 10 && rest === Number(n[8]);
 }
 
+// Kontonummer (11 siffer, kontrollsiffer etter modulus 11).
+export function kontonrGyldig(n: string): boolean {
+  if (!/^\d{11}$/.test(n)) return false;
+  const v = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+  const sum = v.reduce((s, x, i) => s + x * Number(n[i]), 0);
+  let rest = 11 - (sum % 11);
+  if (rest === 11) rest = 0;
+  return rest !== 10 && rest === Number(n[10]);
+}
+
 export function iDag(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
 }
