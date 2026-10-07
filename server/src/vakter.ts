@@ -2,7 +2,8 @@
 // den ansatte ser sine egne publiserte vakter og de ledige, og kan ta en ledig vakt. Varsler
 // går ut når vakter publiseres, endres, fjernes eller tas. Advarslene etter
 // arbeidsmiljøloven (hviletid, overtid) regnes i vaktregler.ts og vises bare for dem som ser
-// hele planen.
+// hele planen. Er den ansatte borte (fravær, 0037), er vakten merket med fraværet, teller ikke
+// i advarslene, og en vikar kan settes inn på en egen vakt som tar over plassene på tavla.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
@@ -33,10 +34,16 @@ const vaktSkjema = z.object({
   notat: valgfri(tekst(500, "Notatet")),
 });
 
+// vikar_for_navn: den som er borte (bare for dem som ser hele planen); har_vikar: en annen
+// vakt dekker denne; fravaer: den ansatte er borte den dagen (typen).
 const VAKT = `
   select v.id, v.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, v.dato,
          to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.pause_min, v.timer,
-         v.oppgave, v.notat, v.publisert_at is not null as publisert, v.oppdatert,
+         v.oppgave, v.notat, v.publisert_at is not null as publisert, v.oppdatert, v.vikar_for,
+         (select o.fornavn || ' ' || o.etternavn from faktura.vakter ov join faktura.ansatte o on o.org_id = ov.org_id and o.id = ov.ansatt_id
+           where ov.org_id = v.org_id and ov.id = v.vikar_for) as vikar_for_navn,
+         exists (select 1 from faktura.vakter x where x.org_id = v.org_id and x.vikar_for = v.id) as har_vikar,
+         (select f.type from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer,
          exists (select 1 from faktura.timeforinger t where t.org_id = v.org_id and t.vakt_id = v.id) as fort
     from faktura.vakter v
     left join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id`;
@@ -53,6 +60,8 @@ type Vakt = {
   oppgave: string | null;
   notat: string | null;
   publisert: boolean;
+  vikar_for: string | null;
+  fravaer: string | null;
 };
 
 type Varsel = { bruker_id: string; tittel: string; tekst: string; url: string; tag: string };
@@ -105,14 +114,28 @@ export function vaktRuter() {
           [orgId(c), fra, til, q.ansatt ?? null],
         );
         const iPerioden = vakter.filter((v) => v.dato >= q.fra && v.dato <= q.til);
-        if (!helPlan) return { regler: regel, vakter: iPerioden.map((v) => ({ ...v, advarsler: [] })), uker: [], upubliserte: 0 };
+        // Fraværet i perioden (den ansatte ser bare sitt eget).
+        const fravaer = await alle(
+          db,
+          `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, f.type, f.fra, f.til
+             from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
+            where f.org_id = $1 and f.til >= $2 and f.fra <= $3 and ($4::uuid is null or f.ansatt_id = $4)
+            order by f.fra`,
+          [orgId(c), q.fra, q.til, q.ansatt ?? null],
+        );
+        if (!helPlan) return { regler: regel, vakter: iPerioden.map((v) => ({ ...v, advarsler: [] })), uker: [], upubliserte: 0, fravaer };
 
         const ansatte = await alle<Ansettelse & { id: string; avtalt: number }>(
           db,
           "select id, ansatt_fra, ansatt_til, aktiv, ukentlig_arbeidstid * stillingsprosent / 100 as avtalt from faktura.ansatte where org_id = $1",
           [orgId(c)],
         );
-        const a = advarsler(vakter, regel, new Map(ansatte.map((x) => [x.id, x])));
+        // Vakter den ansatte ikke går (borte), teller ikke i hviletid og overtid.
+        const a = advarsler(
+          vakter.filter((v) => !v.fravaer),
+          regel,
+          new Map(ansatte.map((x) => [x.id, x])),
+        );
         // Sum per ansatt og uke for ukene i perioden.
         const uker = new Map<string, { ansatt_id: string; fra: string; planlagt: number; avtalt: number | null; advarsler: string[] }>();
         for (const v of vakter) {
@@ -134,6 +157,7 @@ export function vaktRuter() {
           vakter: iPerioden.map((v) => ({ ...v, advarsler: a.perVakt.get(v.id) ?? [] })),
           uker: [...uker.values()],
           upubliserte: iPerioden.filter((v) => !v.publisert).length,
+          fravaer,
         };
       }),
     );
@@ -257,8 +281,8 @@ export function vaktRuter() {
   });
 
   // Kopier vaktene i en uke til en annen (og eventuelt flere uker etter den), som utkast.
-  // Vakter for ansatte som ikke er aktive eller ansatt den nye dagen, og vakter som finnes
-  // fra før, hoppes over.
+  // Vakter for ansatte som ikke er aktive eller ansatt den nye dagen, vakter som finnes fra
+  // før, og vikarvakter, hoppes over.
   r.post("/vakter/kopier", async (c) => {
     const b = z
       .object({ fra: datoS, til: datoS, antall: z.number().int().min(1).max(12, "Høyst 12 uker om gangen").optional() })
@@ -269,7 +293,7 @@ export function vaktRuter() {
     const antall = b.antall ?? 1;
     const svar = await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
-      const n = (await en<{ n: number }>(db, "select count(*)::int as n from faktura.vakter where org_id = $1 and dato between $2 and $3", [
+      const n = (await en<{ n: number }>(db, "select count(*)::int as n from faktura.vakter where org_id = $1 and dato between $2 and $3 and vikar_for is null", [
         orgId(c),
         kilde,
         leggTilDager(kilde, 6),
@@ -282,7 +306,7 @@ export function vaktRuter() {
            cross join generate_series(0, $5::int - 1) as k(n)
            cross join lateral (select v.dato + $4::int + k.n * 7 as dato) ny
            left join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id
-          where v.org_id = $1 and v.dato between $2 and $3
+          where v.org_id = $1 and v.dato between $2 and $3 and v.vikar_for is null
             and (v.ansatt_id is null or (a.aktiv and ny.dato >= a.ansatt_fra and (a.ansatt_til is null or ny.dato <= a.ansatt_til)))
             and not exists (select 1 from faktura.vakter d
                              where d.org_id = v.org_id and d.dato = ny.dato and d.fra = v.fra and d.til = v.til
@@ -293,6 +317,43 @@ export function vaktRuter() {
       return { kopiert: nye.length, hoppet_over: n * antall - nye.length };
     });
     return c.json(svar);
+  });
+
+  // Sett inn en vikar for en vakt (vanligvis når den ansatte er borte): en egen vakt med samme
+  // tid og oppgave, som tar over plassene den ansatte hadde på tavla den dagen. Med publiser
+  // (standard) går den ut med en gang, og vikaren får varsel.
+  r.post("/vakter/:id/vikar", async (c) => {
+    const b = z.object({ ansatt_id: uuid, publiser: z.boolean().optional() }).parse(await c.req.json().catch(() => ({})));
+    const { vakt, varsler } = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      const o = await en<Vakt>(db, `${VAKT} where v.org_id = $1 and v.id = $2`, [orgId(c), id(c)]);
+      if (!o) throw new ApiFeil(404, "Fant ikke vakten");
+      if (o.ansatt_id === b.ansatt_id) throw new ApiFeil(400, "Velg en annen enn den som har vakten");
+      const ny = (await en<{ id: string }>(
+        db,
+        `insert into faktura.vakter (org_id, ansatt_id, dato, fra, til, pause_min, oppgave, notat, vikar_for)
+         select org_id, $3, dato, fra, til, pause_min, oppgave, $4, id from faktura.vakter where org_id = $1 and id = $2
+         returning id`,
+        [orgId(c), id(c), b.ansatt_id, o.ansatt_navn ? `Vikar for ${o.ansatt_navn}` : "Vikar"],
+      ))!;
+      if (o.ansatt_id)
+        await db.query(
+          `insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id)
+           select org_id, dato, fase_id, oppgave_id, $4 from faktura.tavle_plasseringer where org_id = $1 and dato = $2 and ansatt_id = $3
+           on conflict (org_id, dato, fase_id, ansatt_id) do nothing`,
+          [orgId(c), o.dato, o.ansatt_id, b.ansatt_id],
+        );
+      const publiser = b.publiser !== false;
+      if (publiser) await db.query("select faktura.publiser_vakt($1, $2)", [orgId(c), ny.id]);
+      const vakt = (await en<Vakt>(db, `${VAKT} where v.id = $1`, [ny.id]))!;
+      const bruker = publiser ? (await brukere(db, orgId(c), [b.ansatt_id])).get(b.ansatt_id) : undefined;
+      const varsler: Varsel[] = bruker
+        ? [{ bruker_id: bruker, tittel: "Ny vakt", tekst: `${tid(vakt)}${vakt.oppgave ? ` (${vakt.oppgave})` : ""}.`, url: ukeUrl(vakt.dato), tag: `vakt-${vakt.id}` }]
+        : [];
+      return { vakt, varsler };
+    });
+    await sendVarsler(orgId(c), varsler);
+    return c.json(vakt, 201);
   });
 
   // Ta en ledig vakt. Eier og administrator får beskjed.

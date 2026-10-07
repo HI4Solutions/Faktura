@@ -23,6 +23,7 @@ export const VARSELTYPER = {
   paaminnelse: "Påminnelser om å lage fakturaer",
   timer: "Timelister levert, godkjent og avvist",
   vakter: "Vaktplan: nye, endrede og ledige vakter",
+  fravaer: "Sykdom og fravær",
 } as const;
 export type Varseltype = keyof typeof VARSELTYPER;
 

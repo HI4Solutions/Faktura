@@ -141,9 +141,9 @@ function ukesummer(foringer: Foringsrad[], r: Regler, avtalt: Map<string, number
     }));
 }
 
-// Push til eier og administrator (de som godkjenner timer og planlegger vakter), unntatt den
-// som selv gjorde det. Slås opp av serveren: en ansatt ser ikke hvem de andre medlemmene er.
-export async function varslePersonal(org: string, unntatt: string, hendelse: "timer" | "vakter", tittel: string, tekst: string, url: string, tag: string) {
+// Push til eier og administrator (de som godkjenner timer, planlegger vakter og får vite om
+// sykdom), unntatt den som selv gjorde det. Slås opp av serveren: en ansatt ser ikke hvem de andre medlemmene er.
+export async function varslePersonal(org: string, unntatt: string, hendelse: "timer" | "vakter" | "fravaer", tittel: string, tekst: string, url: string, tag: string) {
   const mottakere = await somSystem((db) =>
     alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and rolle in ('eier', 'admin') and bruker_id <> $2", [
       org,
