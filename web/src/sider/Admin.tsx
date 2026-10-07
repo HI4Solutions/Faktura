@@ -754,25 +754,39 @@ const ehfStatus: [string, string][] = [
 ];
 
 // Prøver AI-oppsettet med en liten forespørsel til Gemini, og viser svaret fra Google.
+type AiTestResultat = { navn: string; ok: boolean; ms: number; svar?: string; feil?: string; detaljer?: string | null; skjemafeil?: string | null };
+
+// Tester et enkelt svar og de ekte forespørslene for fakturautkast og assistenten.
 function AiTest() {
   const [svar, settSvar] = useState<any | null>(null);
   const h = useHandling();
   const sek = (ms: number) => `${(ms / 1000).toLocaleString("nb-NO", { maximumFractionDigits: 1 })} s`;
+  const tester: AiTestResultat[] = svar?.tester ?? [];
   return (
     <div className="ai-test">
       <button type="button" onClick={async () => settSvar(await h.kjor(() => api("POST", "/admin/ai-test")))} disabled={h.opptatt}>
         {h.opptatt ? "Tester …" : "Test AI"}
       </button>
-      {svar?.ok && (
-        <span className="ok-tekst liten" role="status">
-          Virker: «{svar.svar}» på {sek(svar.ms)}
+      {h.opptatt && <span className="dempet liten">Tester enkelt svar, fakturautkast og assistenten …</span>}
+      {svar && !tester.length && (
+        <span className={`${svar.ok ? "ok-tekst" : "fare-tekst"} liten`} role="status">
+          {svar.ok ? `Virker: «${svar.svar}» på ${sek(svar.ms)}` : svar.feil}
+          {!svar.ok && svar.detaljer && <span className="ai-detaljer"> Svar fra Google: {svar.detaljer}</span>}
         </span>
       )}
-      {svar && !svar.ok && (
-        <span className="fare-tekst liten" role="status">
-          {svar.feil}
-          {svar.detaljer && <span className="ai-detaljer"> Svar fra Google: {svar.detaljer}</span>}
-        </span>
+      {tester.length > 0 && (
+        <ul className="ai-testliste liten" role="status">
+          {tester.map((t) => (
+            <li key={t.navn}>
+              <span className={t.ok ? "ok-tekst" : "fare-tekst"}>
+                {t.ok ? "✓" : "✗"} <strong>{t.navn}:</strong> {t.ok ? `virker (${sek(t.ms)})` : t.feil}
+              </span>
+              {t.ok && t.svar && <span className="ai-detaljer">Svar: {t.svar}</span>}
+              {t.skjemafeil && <span className="ai-detaljer">Google avviste svarskjemaet, så svaret kom uten: {t.skjemafeil}</span>}
+              {!t.ok && t.detaljer && <span className="ai-detaljer">Svar fra Google: {t.detaljer}</span>}
+            </li>
+          ))}
+        </ul>
       )}
       <Feil melding={h.feil} />
     </div>

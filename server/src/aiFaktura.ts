@@ -65,7 +65,6 @@ export const utkastSkjema: Skjema = {
     kunde_navn: tekst("Kunden slik brukeren sa det, eller null"),
     linjer: {
       type: "ARRAY",
-      maxItems: 50,
       items: {
         type: "OBJECT",
         properties: {
@@ -88,7 +87,7 @@ export const utkastSkjema: Skjema = {
     periode_til: datofelt("Siste dag i perioden"),
     deres_referanse: tekst("Kundens referanse eller bestiller, eller null"),
     kommentar: tekst("Tekst som skal stå på fakturaen til kunden, bare når brukeren ber om det"),
-    merknader: { type: "ARRAY", maxItems: 8, items: { type: "STRING" }, description: "Korte setninger om det brukeren bør sjekke" },
+    merknader: { type: "ARRAY", items: { type: "STRING" }, description: "Korte setninger om det brukeren bør sjekke" },
   },
   required: ["transkripsjon", "kunde", "kunde_navn", "linjer", "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "merknader"],
   propertyOrdering: ["transkripsjon", "kunde", "kunde_navn", "linjer", "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "merknader"],
@@ -268,6 +267,17 @@ export const LYDTYPER: Record<string, string> = {
   "audio/flac": "audio/flac",
 };
 export const MAKS_LYD = 4_000_000; // rundt fire minutter tale
+
+// Det brukeren skrev, eller lydopptaket (base64).
+export type Beskrivelse = { tekst: string } | { lyd: { mimeType: string; data: string } };
+
+// Forespørselen til modellen (ruten under og «Test AI» på adminsiden).
+export function utkastForesporsel(g: Grunnlag, inn: Beskrivelse, naa = new Date()): { system: string; deler: Del[]; skjema: Skjema } {
+  const beskrivelse: Del[] =
+    "lyd" in inn ? [{ text: "Brukeren beskriver fakturaen i lydopptaket." }, { inlineData: inn.lyd }] : [{ text: `Brukerens beskrivelse:\n${inn.tekst}` }];
+  return { system: systemtekst(g, naa), deler: [{ text: registertekst(g) }, ...beskrivelse], skjema: utkastSkjema };
+}
+
 const forLangt = () => new ApiFeil(413, "Opptaket er for langt. Hold det under to minutter.");
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
@@ -280,7 +290,7 @@ export function aiRuter() {
   r.post("/ai/faktura", async (c) => {
     if (!aiPaa()) throw new ApiFeil(503, "AI er ikke satt opp");
     const type = (c.req.header("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    let del: Del;
+    let inn: Beskrivelse;
     if (type.startsWith("audio/")) {
       const mime = LYDTYPER[type];
       if (!mime) throw new ApiFeil(400, "Appen kjenner ikke lydformatet. Skriv i stedet.");
@@ -288,23 +298,21 @@ export function aiRuter() {
       const data = new Uint8Array(await c.req.arrayBuffer());
       if (data.length < 500) throw new ApiFeil(400, "Opptaket er tomt. Prøv igjen og snakk litt lenger.");
       if (data.length > MAKS_LYD) throw forLangt();
-      del = { inlineData: { mimeType: mime, data: Buffer.from(data).toString("base64") } };
+      inn = { lyd: { mimeType: mime, data: Buffer.from(data).toString("base64") } };
     } else {
-      const b = z
+      inn = z
         .object({ tekst: z.string().trim().min(3, "Skriv hva som skal faktureres").max(4000, "Teksten kan være høyst 4000 tegn") })
         .parse(await c.req.json().catch(() => ({})));
-      del = { text: `Brukerens beskrivelse:\n${b.tekst}` };
     }
     const g = await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'skriv')", [orgId(c)]);
       return hentGrunnlag(db, orgId(c));
     });
-    const deler: Del[] = [{ text: registertekst(g) }, ...("inlineData" in del ? [{ text: "Brukeren beskriver fakturaen i lydopptaket." }, del] : [del])];
     const svar = await medKvote(
       (fn) => somBruker(c.get("bruker").id, fn),
       orgId(c),
       "faktura",
-      () => generer<AiUtkast>({ system: systemtekst(g), deler, skjema: utkastSkjema }),
+      () => generer<AiUtkast>(utkastForesporsel(g, inn)),
     );
     const u = tilUtkast(svar.data, g);
     if (!u.kunde_id && !u.kunde_navn && !u.linjer.length)

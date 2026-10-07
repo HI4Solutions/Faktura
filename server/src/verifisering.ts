@@ -7,7 +7,9 @@ import { alle, en, somBetrodd, somBruker } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { epostHorerTilForetaket, hentEnhet as ekteHentEnhet, maskerEpost, type Enhet } from "./brreg.js";
 import { leggIKo } from "./tjenester.js";
-import { AiFeil, aiPaa, generer } from "./ai.js";
+import { AiFeil, aiPaa, generer, type AiSvar } from "./ai.js";
+import { tilUtkast, utkastForesporsel, type AiUtkast, type Grunnlag } from "./aiFaktura.js";
+import { assistentForesporsel, type AiKommando } from "./aiAssistent.js";
 
 let hentEnhet = ekteHentEnhet;
 export function settBrreg(fn: typeof ekteHentEnhet) {
@@ -23,6 +25,22 @@ function sjekkAktiv(e: Enhet) {
   if (e.konkurs) throw new ApiFeil(409, "Foretaket er konkurs");
   if (e.under_avvikling) throw new ApiFeil(409, "Foretaket er under avvikling");
 }
+
+// Eksempelregistre og -tekster for «Test AI» på adminsiden.
+const TESTREGISTER: Grunnlag = {
+  navn: "Testfirma AS",
+  mva: true,
+  kunder: [
+    { id: "test-kunde-1", navn: "Kari Hansen", orgnr: null },
+    { id: "test-kunde-2", navn: "Fjordline Logistikk AS", orgnr: "912345678" },
+  ],
+  produkter: [
+    { id: "test-produkt-1", navn: "Husleie", varenummer: null, enhet: "mnd", enhetspris: 14500, mva_sats: 0 },
+    { id: "test-produkt-2", navn: "Konsulenttime", varenummer: "K1", enhet: "time", enhetspris: 1200, mva_sats: 25 },
+  ],
+};
+const TESTFAKTURA = "Husleie for oktober til Kari Hansen, og to timer konsulent. Forfall om 14 dager.";
+const TESTKOMMANDO = "Har Kari Hansen betalt?";
 
 // Monteres under /api/org/:org/verifisering.
 export function verifiseringRuter() {
@@ -137,22 +155,62 @@ export function adminRuter() {
     ),
   );
 
-  // Prøver AI-oppsettet (Gemini på Vertex AI) med en liten forespørsel, og viser svaret
-  // fra Google når det ikke virker (manglende tilgang, modellen finnes ikke i regionen …).
+  // Prøver AI-oppsettet (Gemini på Vertex AI): et enkelt svar, og de samme forespørslene som
+  // fakturautkast og assistenten sender (med eksempelregistrene over). Viser svaret fra Google
+  // når noe ikke virker (manglende tilgang, modellen finnes ikke i regionen …), og om Gemini
+  // avviste svarskjemaet (skjemafeil: da kom svaret uten). Alle prøver med skjemaet først.
   r.post("/ai-test", async (c) => {
     const oppsett = { modell: config.aiModell, region: config.aiRegion };
-    if (!aiPaa()) return c.json({ ok: false, ...oppsett, feil: "AI er ikke satt opp (AI_PROSJEKT mangler).", detaljer: null, ms: 0 });
+    if (!aiPaa()) return c.json({ ok: false, ...oppsett, feil: "AI er ikke satt opp (AI_PROSJEKT mangler).", detaljer: null, ms: 0, tester: [] });
     const start = Date.now();
-    try {
-      const s = await generer<{ svar: string }>({
-        system: "Svar kort på norsk.",
-        deler: [{ text: "Skriv «Hei fra Gemini» i feltet svar." }],
-        skjema: { type: "OBJECT", properties: { svar: { type: "STRING" } }, required: ["svar"] },
-      });
-      return c.json({ ok: true, ...oppsett, svar: s.data.svar, ms: Date.now() - start, tokens_inn: s.tokens_inn, tokens_ut: s.tokens_ut });
-    } catch (e) {
-      return c.json({ ok: false, ...oppsett, feil: (e as Error).message, detaljer: e instanceof AiFeil ? e.detaljer : null, ms: Date.now() - start });
-    }
+    const test = async <T>(navn: string, kall: () => Promise<AiSvar<T>>, svar: (data: T) => string) => {
+      const fra = Date.now();
+      try {
+        const s = await kall();
+        return { navn, ok: true, ms: Date.now() - fra, svar: svar(s.data), skjemafeil: s.skjemafeil ?? null, tokens_inn: s.tokens_inn, tokens_ut: s.tokens_ut };
+      } catch (e) {
+        return { navn, ok: false, ms: Date.now() - fra, feil: (e as Error).message, detaljer: e instanceof AiFeil ? e.detaljer : null, tokens_inn: 0, tokens_ut: 0 };
+      }
+    };
+    const tester = await Promise.all([
+      test<{ svar: string }>(
+        "Enkelt svar",
+        () =>
+          generer({
+            system: "Svar kort på norsk.",
+            deler: [{ text: "Skriv «Hei fra Gemini» i feltet svar." }],
+            skjema: { type: "OBJECT", properties: { svar: { type: "STRING" } }, required: ["svar"] },
+            husk: false,
+          }),
+        (d) => d.svar,
+      ),
+      test<AiUtkast>(
+        "Fakturautkast",
+        () => generer({ ...utkastForesporsel(TESTREGISTER, { tekst: TESTFAKTURA }), husk: false }),
+        (d) => {
+          const u = tilUtkast(d, TESTREGISTER);
+          const kunde = TESTREGISTER.kunder.find((k) => k.id === u.kunde_id)?.navn ?? u.kunde_navn ?? "ingen kunde";
+          return `${kunde}: ${u.linjer.map((l) => `${l.beskrivelse} (${l.enhetspris ?? "uten pris"})`).join(", ") || "ingen linjer"}${u.forfallsdato ? `, forfall ${u.forfallsdato}` : ""}`;
+        },
+      ),
+      test<AiKommando>(
+        "Assistent",
+        () => generer({ ...assistentForesporsel(TESTREGISTER, { tekst: TESTKOMMANDO }), husk: false }),
+        (d) => `${d.handling}${d.kunde ? ` (${d.kunde})` : ""}`,
+      ),
+    ]);
+    const feilet = tester.find((t) => !t.ok);
+    return c.json({
+      ok: !feilet,
+      ...oppsett,
+      svar: tester[0].svar ?? null,
+      ms: Date.now() - start,
+      tokens_inn: tester.reduce((s, t) => s + t.tokens_inn, 0),
+      tokens_ut: tester.reduce((s, t) => s + t.tokens_ut, 0),
+      feil: feilet ? `${feilet.navn}: ${feilet.feil}` : null,
+      detaljer: feilet?.detaljer ?? null,
+      tester,
+    });
   });
 
   r.get("/organisasjoner", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_organisasjoner()"))));

@@ -6,8 +6,8 @@ import { generateKeyPairSync } from "node:crypto";
 import { config } from "../src/config.js";
 import { lagApi } from "../src/api.js";
 import { alle, en, somSystem } from "../src/db.js";
-import { aiAdresse, generer, settAi, type Skjema } from "../src/ai.js";
-import { registertekst, systemtekst, tilUtkast, type AiUtkast, type Grunnlag } from "../src/aiFaktura.js";
+import { aiAdresse, etterSkjema, generer, lesJson, settAi, type Skjema } from "../src/ai.js";
+import { registertekst, systemtekst, tilUtkast, utkastSkjema, type AiUtkast, type Grunnlag } from "../src/aiFaktura.js";
 import { forslagTekst, tilTreff, type FakturaForAi } from "../src/aiInnbetaling.js";
 import { settKryptering } from "../src/kryptering.js";
 import { settBankFetch } from "../src/enableBanking.js";
@@ -97,8 +97,106 @@ describe("Gemini på Vertex AI", () => {
       throw new TypeError("fetch failed");
     };
     await expect(generer({ system: "x", deler: [{ text: "y" }], skjema })).rejects.toMatchObject({ status: 503, message: "Fikk ikke kontakt med AI-tjenesten. Prøv igjen om litt." });
+    modell = () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    };
+    await expect(generer({ system: "x", deler: [{ text: "y" }], skjema })).rejects.toMatchObject({ status: 504, message: "AI-tjenesten brukte for lang tid på å svare. Prøv igjen." });
     (config as any).aiProsjekt = undefined;
     await expect(generer({ system: "x", deler: [{ text: "y" }], skjema })).rejects.toMatchObject({ status: 503, message: "AI er ikke satt opp" });
+  });
+
+  it("prøver uten skjemaet når Gemini avviser det, og husker det en stund", async () => {
+    const stort: Skjema = {
+      type: "OBJECT",
+      properties: {
+        svar: { type: "STRING" },
+        antall: { type: "INTEGER", nullable: true },
+        ok: { type: "BOOLEAN" },
+        sikkerhet: { type: "STRING", enum: ["hoy", "middels", "lav"] },
+        liste: { type: "ARRAY", items: { type: "STRING" } },
+      },
+      required: ["svar", "antall", "ok", "sikkerhet", "liste"],
+    };
+    const avvisning = "The specified schema produces a constraint that has too many states for serving.";
+    let n = 0;
+    modell = (f) => {
+      n++;
+      if (f.kropp.generationConfig.responseSchema) return json(400, { error: { code: 400, message: avvisning } });
+      // Uten skjemaet: fortsatt JSON, og skjemaet står i systemteksten.
+      expect(f.kropp.generationConfig.responseMimeType).toBe("application/json");
+      expect(f.kropp.systemInstruction.parts[0].text).toMatch(/^Vær kort\.\n\nSvar med ett JSON-objekt/);
+      expect(f.kropp.systemInstruction.parts[0].text).toContain('"sikkerhet":{"type":"STRING","enum":["hoy","middels","lav"]}');
+      return json(200, { candidates: [{ content: { parts: [{ text: '```json\n{"svar": "ok", "antall": "3", "ok": "true", "sikkerhet": "Høy"}\n```' }] }, finishReason: "STOP" }] });
+    };
+    const r = await generer({ system: "Vær kort.", deler: [{ text: "y" }], skjema: stort });
+    expect(r).toEqual({ data: { svar: "ok", antall: 3, ok: true, sikkerhet: "hoy", liste: [] }, tokens_inn: 0, tokens_ut: 0, skjemafeil: `400: ${avvisning}` });
+    expect(n).toBe(2);
+    // Neste kall går rett uten skjemaet; «Test AI» (husk: false) prøver med det igjen.
+    expect((await generer({ system: "Vær kort.", deler: [{ text: "y" }], skjema: stort })).skjemafeil).toBe(`400: ${avvisning}`);
+    expect(n).toBe(3);
+    await generer({ system: "Vær kort.", deler: [{ text: "y" }], skjema: stort, husk: false });
+    expect(n).toBe(5);
+  });
+
+  it("prøver uten skjemaet også ved 500, og viser begge svarene fra Google når det ikke hjelper", async () => {
+    const eget: Skjema = { type: "OBJECT", properties: { svar: { type: "STRING" } }, required: ["svar"] };
+    let n = 0;
+    modell = (f) => {
+      n++;
+      return f.kropp.generationConfig.responseSchema ? json(500, { error: { code: 500, message: "Internal error encountered." } }) : svar({ svar: "uten" });
+    };
+    const r = await generer<{ svar: string }>({ system: "x", deler: [{ text: "y" }], skjema: eget, husk: false });
+    expect(r).toMatchObject({ data: { svar: "uten" }, skjemafeil: "500: Internal error encountered." });
+    expect(n).toBe(2);
+
+    modell = (f) => json(400, { error: { message: f.kropp.generationConfig.responseSchema ? "too many states" : "Unsupported MIME type: audio/x-test" } });
+    await expect(generer({ system: "x", deler: [{ text: "y" }], skjema: eget, husk: false })).rejects.toMatchObject({
+      status: 502,
+      message: "AI-tjenesten svarte med en feil. Prøv igjen.",
+      detaljer: "400: Unsupported MIME type: audio/x-test (med skjemaet: 400: too many states)",
+    });
+    // Feiler alt med 500, blir det bare ett nytt forsøk (uten skjemaet).
+    n = 0;
+    modell = () => {
+      n++;
+      return json(500, { error: { message: "Internal" } });
+    };
+    await expect(generer({ system: "x", deler: [{ text: "y" }], skjema: eget, husk: false })).rejects.toMatchObject({ status: 502, detaljer: "500: Internal" });
+    expect(n).toBe(2);
+  });
+
+  it("leser JSON med tekst rundt og tilpasser svaret skjemaet", () => {
+    expect(lesJson('{"a": 1}')).toEqual({ a: 1 });
+    expect(lesJson('Her er svaret:\n```json\n{"a": 2}\n```')).toEqual({ a: 2 });
+    expect(lesJson('Svaret er {"a": 3}.')).toEqual({ a: 3 });
+    expect(lesJson("ikke json")).toBeUndefined();
+
+    expect(
+      etterSkjema(
+        { kunde: "K1", linjer: [{ beskrivelse: "Vask", antall: "2", enhetspris: "1 500,50", pris_inkl_mva: "false", mva_sats: "25" }, "rot"], merknader: "Sjekk prisen" },
+        utkastSkjema,
+      ),
+    ).toEqual({
+      transkripsjon: null,
+      kunde: "K1",
+      kunde_navn: null,
+      linjer: [
+        { produkt: null, beskrivelse: "Vask", antall: 2, enhet: null, enhetspris: 1500.5, pris_inkl_mva: false, mva_sats: 25, rabatt_prosent: null },
+        { produkt: null, beskrivelse: "", antall: 0, enhet: null, enhetspris: null, pris_inkl_mva: false, mva_sats: null, rabatt_prosent: null },
+      ],
+      fakturadato: null,
+      forfallsdato: null,
+      periode_fra: null,
+      periode_til: null,
+      deres_referanse: null,
+      kommentar: null,
+      merknader: ["Sjekk prisen"],
+    });
+    const valg: Skjema = { type: "OBJECT", properties: { handling: { type: "STRING", enum: ["sjekk_betaling", "utestaende", "annet"] } } };
+    expect(etterSkjema({ handling: "Sjekk betaling" }, valg)).toEqual({ handling: "sjekk_betaling" });
+    expect(etterSkjema({ handling: "utestående" }, valg)).toEqual({ handling: "utestaende" });
+    expect(etterSkjema({ handling: "fly" }, valg)).toEqual({ handling: "" });
+    expect(etterSkjema(null, valg)).toEqual({ handling: "" });
   });
 });
 
@@ -371,19 +469,65 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
   it("plattformadministratoren kan teste oppsettet og se svaret fra Google", async () => {
     const admin = "Bearer test:uid-ai-admin:ai-admin@server.test:mfa";
     (config as any).adminEposter = ["ai-admin@server.test"];
-    modell = () => svar({ svar: "Hei fra Gemini" });
-    expect((await kall("POST", "/api/admin/ai-test", undefined, admin)).data).toMatchObject({
-      ok: true, svar: "Hei fra Gemini", modell: "gemini-3.5-flash", region: "europe-west3", tokens_inn: 1000, tokens_ut: 70,
-    });
+    // Samme forespørsler som fakturautkast og assistenten, med eksempelregistrene.
+    const modellSvar = (f: Foresporsel, avvisSkjema = false) => {
+      const system = f.kropp.systemInstruction.parts[0].text as string;
+      if (avvisSkjema && f.kropp.generationConfig.responseSchema && !system.startsWith("Svar kort")) return json(400, { error: { message: "too many states" } });
+      if (system.startsWith("Du lager utkast")) {
+        expect(tekstIForesporsel(f)).toContain("K1: Kari Hansen");
+        expect(tekstIForesporsel(f)).toContain("Brukerens beskrivelse:\nHusleie for oktober til Kari Hansen");
+        return svar({
+          transkripsjon: null, kunde: "K1", kunde_navn: "Kari Hansen",
+          linjer: [{ produkt: "P1", beskrivelse: "Husleie oktober", antall: 1, enhet: "mnd", enhetspris: null, pris_inkl_mva: false, mva_sats: 0, rabatt_prosent: null }],
+          fakturadato: null, forfallsdato: "2026-10-21", periode_fra: null, periode_til: null, deres_referanse: null, kommentar: null, merknader: [],
+        });
+      }
+      if (system.startsWith("Du er assistenten")) {
+        expect(tekstIForesporsel(f)).toContain("Kommandoen:\nHar Kari Hansen betalt?");
+        return svar({ handling: "sjekk_betaling", kunde: "K1" });
+      }
+      return svar({ svar: "Hei fra Gemini" });
+    };
+    modell = (f) => modellSvar(f);
+    const ok = (await kall("POST", "/api/admin/ai-test", undefined, admin)).data;
+    expect(ok).toMatchObject({ ok: true, svar: "Hei fra Gemini", modell: "gemini-3.5-flash", region: "europe-west3", tokens_inn: 3000, tokens_ut: 210, feil: null });
+    expect(ok.tester).toMatchObject([
+      { navn: "Enkelt svar", ok: true, svar: "Hei fra Gemini", skjemafeil: null },
+      { navn: "Fakturautkast", ok: true, svar: "Kari Hansen: Husleie oktober (14500), forfall 2026-10-21", skjemafeil: null },
+      { navn: "Assistent", ok: true, svar: "sjekk_betaling (K1)", skjemafeil: null },
+    ]);
+
+    // Gemini avviser de store skjemaene: testen viser det, og svaret kommer likevel.
+    modell = (f) => modellSvar(f, true);
+    const uten = (await kall("POST", "/api/admin/ai-test", undefined, admin)).data;
+    expect(uten.ok).toBe(true);
+    expect(uten.tester.map((t: any) => [t.navn, t.ok, t.skjemafeil])).toEqual([
+      ["Enkelt svar", true, null],
+      ["Fakturautkast", true, "400: too many states"],
+      ["Assistent", true, "400: too many states"],
+    ]);
+
     modell = () => json(404, { error: { code: 404, message: "Publisher Model `gemini-3.5-flash` was not found or your project does not have access to it." } });
-    expect((await kall("POST", "/api/admin/ai-test", undefined, admin)).data).toMatchObject({
+    const feil = (await kall("POST", "/api/admin/ai-test", undefined, admin)).data;
+    expect(feil).toMatchObject({
       ok: false,
-      feil: "AI-tjenesten er ikke tilgjengelig akkurat nå.",
+      feil: "Enkelt svar: AI-tjenesten er ikke tilgjengelig akkurat nå.",
       detaljer: "404: Publisher Model `gemini-3.5-flash` was not found or your project does not have access to it.",
     });
+    expect(feil.tester.map((t: any) => t.ok)).toEqual([false, false, false]);
     (config as any).aiProsjekt = undefined;
     expect((await kall("POST", "/api/admin/ai-test", undefined, admin)).data).toMatchObject({ ok: false, feil: "AI er ikke satt opp (AI_PROSJEKT mangler)." });
     expect((await kall("POST", "/api/admin/ai-test")).status).toBe(403);
+    (config as any).adminEposter = [];
+  });
+
+  it("feil fra Google vises til plattformadministratorene, ikke til andre", async () => {
+    modell = () => json(400, { error: { code: 400, message: "Request contains an invalid argument." } });
+    const vanlig = await kall("POST", `/api/org/${org}/ai/faktura`, { tekst: "Faktura til Kari" });
+    expect(vanlig).toEqual({ status: 502, data: { error: "AI-tjenesten svarte med en feil. Prøv igjen." } });
+    (config as any).adminEposter = ["ai-eier@server.test"];
+    const admin = await kall("POST", `/api/org/${org}/ai/faktura`, { tekst: "Faktura til Kari" });
+    expect(admin.data.error).toBe("AI-tjenesten svarte med en feil. Prøv igjen. (Google: 400: Request contains an invalid argument.)");
     (config as any).adminEposter = [];
   });
 

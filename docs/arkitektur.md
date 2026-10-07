@@ -77,7 +77,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   bekrefter. AI-assistenten (knappen på alle sider) tar kommandoer med tale eller tekst: Gemini
   velger handling og fyller ut feltene, serveren slår opp og svarer (betalinger, utestående),
   og alt som endrer noe (sende faktura eller utkast, registrere betaling, purre) blir forslag
-  som appen utfører med de vanlige rutene når brukeren bekrefter
+  som appen utfører med de vanlige rutene når brukeren bekrefter. Avviser Gemini svarskjemaet
+  (400, eller 500 for innviklede skjemaer), prøver serveren én gang til uten det, med
+  skjemaet i systemteksten; svaret tilpasses skjemaet og sjekkes som ellers. Plattform-
+  administratorene ser svaret fra Google i feilmeldingene, og «Test AI» på adminsiden prøver
+  de samme forespørslene som fakturautkast og assistenten
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 

@@ -19,6 +19,7 @@ import {
   tilUtkast,
   utkastSkjema,
   type AiLinje,
+  type Beskrivelse,
   type Grunnlag,
   type Kunde,
   type Utkast,
@@ -83,7 +84,7 @@ export const assistentSkjema: Skjema = {
     kunde: tekst("Id-en til kunden i kundelisten (K1, K2 …), eller null"),
     kunde_navn: tekst("Kunden slik brukeren sa det, eller null"),
     betaler: tekst("Navnet på den brukeren spør om har betalt, når det ikke er en kunde i listen, ellers null"),
-    fakturanumre: { type: "ARRAY", maxItems: 20, items: { type: "INTEGER" }, description: "Fakturanumrene brukeren nevner, eller som samtalen viser til" },
+    fakturanumre: { type: "ARRAY", items: { type: "INTEGER" }, description: "Fakturanumrene brukeren nevner, eller som samtalen viser til" },
     alle_forfalte: { type: "BOOLEAN", description: "true når brukeren vil purre alle forfalte fakturaer" },
     belop: { type: "NUMBER", nullable: true, description: "Beløp i kroner brukeren sier at er betalt, eller null" },
     dato: tekst("Betalingsdatoen brukeren sier (ÅÅÅÅ-MM-DD), eller null"),
@@ -97,7 +98,7 @@ export const assistentSkjema: Skjema = {
     deres_referanse: u.deres_referanse,
     kommentar: u.kommentar,
     svar: tekst("annet: et kort svar på norsk til brukeren, ellers null"),
-    merknader: { type: "ARRAY", maxItems: 5, items: { type: "STRING" }, description: "Korte setninger om det brukeren bør sjekke" },
+    merknader: { type: "ARRAY", items: { type: "STRING" }, description: "Korte setninger om det brukeren bør sjekke" },
   },
   required: [
     "transkripsjon", "handling", "kunde", "kunde_navn", "betaler", "fakturanumre", "alle_forfalte", "belop", "dato", "send", "side", "linjer",
@@ -136,6 +137,19 @@ export function assistentSystem(g: Grunnlag, naa = new Date()): string {
     "- merknader: korte setninger på norsk om noe du var usikker på. Tom liste når alt er klart.",
     "- transkripsjon: når kommandoen er et lydopptak, skriv ordrett hva som ble sagt. Ellers null.",
   ].join("\n");
+}
+
+export type Melding = { rolle: "bruker" | "assistent"; tekst: string };
+
+// Forespørselen til modellen: registrene, samtalen så langt og kommandoen (ruten under og
+// «Test AI» på adminsiden).
+export function assistentForesporsel(g: Grunnlag, kommando: Beskrivelse, historikk: Melding[] = [], naa = new Date()): { system: string; deler: Del[]; skjema: Skjema } {
+  const deler: Del[] = [{ text: registertekst(g) }];
+  if (historikk.length)
+    deler.push({ text: `Samtalen så langt:\n${historikk.map((h) => `${h.rolle === "bruker" ? "Brukeren" : "Assistenten"}: ${enLinje(h.tekst, 600)}`).join("\n")}` });
+  if ("lyd" in kommando) deler.push({ text: "Kommandoen er i lydopptaket." }, { inlineData: kommando.lyd });
+  else deler.push({ text: `Kommandoen:\n${kommando.tekst}` });
+  return { system: assistentSystem(g, naa), deler, skjema: assistentSkjema };
 }
 
 // ---------------------------------------------------------------------------
@@ -600,12 +614,12 @@ export function assistentRuter() {
   r.post("/ai/assistent", async (c) => {
     if (!aiPaa()) throw new ApiFeil(503, "AI er ikke satt opp");
     const b = kroppSkjema.parse(await c.req.json().catch(() => ({})));
-    let kommando: Del[];
+    let kommando: Beskrivelse;
     if (b.lyd) {
       const mime = LYDTYPER[b.lyd.type.split(";")[0].trim().toLowerCase()];
       if (!mime) throw new ApiFeil(400, "Appen kjenner ikke lydformatet. Skriv i stedet.");
-      kommando = [{ text: "Kommandoen er i lydopptaket." }, { inlineData: { mimeType: mime, data: b.lyd.data } }];
-    } else kommando = [{ text: `Kommandoen:\n${b.tekst}` }];
+      kommando = { lyd: { mimeType: mime, data: b.lyd.data } };
+    } else kommando = { tekst: b.tekst! };
 
     const kjor = <X>(fn: (db: Db) => Promise<X>) => somBruker<X>(c.get("bruker").id, fn);
     const { g, kan, org } = await kjor(async (db) => {
@@ -616,15 +630,7 @@ export function assistentRuter() {
         org: (await en<Org>(db, "select kontonr, standard_forfall_dager, standard_gebyr from faktura.organisasjoner where id = $1", [orgId(c)]))!,
       };
     });
-    const historikk = (b.historikk ?? []).slice(-8);
-    const deler: Del[] = [
-      { text: registertekst(g) },
-      ...(historikk.length
-        ? [{ text: `Samtalen så langt:\n${historikk.map((h) => `${h.rolle === "bruker" ? "Brukeren" : "Assistenten"}: ${enLinje(h.tekst, 600)}`).join("\n")}` }]
-        : []),
-      ...kommando,
-    ];
-    const svar = await medKvote(kjor, orgId(c), "assistent", () => generer<AiKommando>({ system: assistentSystem(g), deler, skjema: assistentSkjema }));
+    const svar = await medKvote(kjor, orgId(c), "assistent", () => generer<AiKommando>(assistentForesporsel(g, kommando, (b.historikk ?? []).slice(-8))));
     const resultat = await kjor((db) => utfor({ db, orgId: orgId(c), g, kan, org, iDag: iDag() }, svar.data));
     return c.json({ transkripsjon: enLinje(svar.data.transkripsjon, 2000) || null, ...resultat } satisfies AssistentSvar);
   });

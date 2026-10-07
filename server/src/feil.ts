@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { ZodError } from "zod";
+import { config } from "./config.js";
 
 export class ApiFeil extends Error {
   constructor(public status: number, melding: string) {
@@ -65,5 +66,11 @@ export function tilHttp(e: unknown): { status: number; error: string } {
 export function feilhandterer(e: Error, c: Context) {
   const { status, error } = tilHttp(e);
   if (status >= 500) console.error(JSON.stringify({ severity: "ERROR", message: e.message, stack: e.stack }));
+  // Feil fra AI-tjenesten (AiFeil i ai.ts) har med svaret fra Google. Plattformadministratorene
+  // får se det, så de kan finne ut hva som er galt; andre får bare meldingen.
+  const detaljer = (e as { detaljer?: unknown }).detaljer;
+  const b = c.get("bruker") as { epost?: string; epostBekreftet?: boolean } | undefined;
+  if (typeof detaljer === "string" && detaljer && b?.epost && b.epostBekreftet && config.adminEposter.includes(b.epost.toLowerCase()))
+    return c.json({ error: `${error} (Google: ${detaljer})` }, status as 400);
   return c.json({ error }, status as 400);
 }
