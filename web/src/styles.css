@@ -470,6 +470,19 @@ dialog::backdrop { background: rgba(8, 12, 28, 0.5); backdrop-filter: blur(3px);
 
 .qr { display: block; margin: 12px auto; background: white; padding: 8px; border-radius: 10px; }
 code.hemmelig { word-break: break-all; font-size: 0.85rem; }
+/* Nøkler skjules som standard; øyet viser dem. */
+.hemmelig-felt { display: block; position: relative; margin-top: 5px; }
+.hemmelig-felt input { padding-right: 46px; }
+button.oye {
+  min-height: 0; padding: 0; justify-content: center; border: 0; border-radius: 8px; background: none; box-shadow: none;
+  color: var(--dempet); -webkit-tap-highlight-color: transparent;
+}
+button.oye:hover:not(:disabled) { color: var(--aksent); background: var(--flate-2); }
+button.oye:active:not(:disabled) { transform: none; }
+.hemmelig-felt .oye { position: absolute; top: 4px; bottom: 4px; right: 4px; width: 38px; }
+.hemmelig-tekst { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; max-width: 100%; }
+.hemmelig-tekst .oye { width: 30px; height: 30px; flex: none; }
+@media (pointer: coarse) { .hemmelig-tekst .oye { width: 38px; height: 38px; } }
 
 /* Laster */
 .laster { display: flex; align-items: center; gap: 10px; color: var(--dempet); padding: 24px 0; }

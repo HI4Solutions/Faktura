@@ -8,7 +8,7 @@ import { config } from "../src/config.js";
 import { lagApi } from "../src/api.js";
 import { alle, en, somSystem } from "../src/db.js";
 import { settKryptering } from "../src/kryptering.js";
-import { lagJwt, settBankFetch, tilInnbetalinger, velgBank, type Bank, type Innbetaling } from "../src/enableBanking.js";
+import { lagJwt, nokkelFeil, normaliserPem, settBankFetch, tilInnbetalinger, velgBank, type Bank, type Innbetaling } from "../src/enableBanking.js";
 import { finnFaktura, fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, sammeNavn, slettBankOkter, type ApenFaktura } from "../src/bank.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 
@@ -47,6 +47,15 @@ describe("Enable Banking: signatur og transaksjoner", () => {
     expect(ut[1]).toMatchObject({ betaler: "FJORDLINE", melding: "Faktura 2 takk", valuta: "NOK" });
     expect(ut[0].referanse).toBe("0100001");
     expect(ut[2].ekstern_id).not.toBe(ut[3].ekstern_id);
+  });
+
+  it("gjør om en nøkkel limt inn på én linje til vanlig PEM", () => {
+    const enLinje = privat.replace(/\n/g, "");
+    expect(nokkelFeil(enLinje)).not.toBeNull();
+    expect(normaliserPem(enLinje)).toBe(privat.trim());
+    expect(nokkelFeil(normaliserPem(enLinje))).toBeNull();
+    expect(normaliserPem(`  ${privat.replace(/\n/g, " \r\n ")}  `)).toBe(privat.trim());
+    expect(normaliserPem("ikke en nøkkel ")).toBe("ikke en nøkkel");
   });
 
   it("finner banken med det nøyaktige navnet Enable Banking krever", () => {
@@ -217,7 +226,8 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(await integrasjon()).toBeUndefined();
 
     svar["POST /auth"] = () => json(200, { url: "https://bank.test/bankid?x=1", authorization_id: "a1" });
-    const r = await api("PUT", `/api/org/${org}/bank`, kropp);
+    // Nøkkelen limt inn i det skjulte feltet (én linje): lagres som vanlig PEM.
+    const r = await api("PUT", `/api/org/${org}/bank`, { ...kropp, privat_nokkel: privat.replace(/\n/g, "") });
     expect(r.status).toBe(200);
     expect(r.data).toMatchObject({ url: "https://bank.test/bankid?x=1", tilkoblet: false, app: { app_id: APP, app_navn: "HI4 Faktura" } });
     expect(r.data.koblinger).toHaveLength(1);

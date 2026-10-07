@@ -9,6 +9,7 @@ import { dato, kr } from "../format";
 import { erAdmin, kanBokfore, useKonto } from "../konto";
 import { Sokefelt } from "../sokefelt";
 import { IkonKroner } from "../ikoner";
+import { HemmeligFelt, HemmeligTekst } from "../hemmelig";
 
 // En konto i banken som er lagt inn i HI4 Faktura (bare de leses), med navnet derfra.
 export interface BankKonto {
@@ -297,7 +298,9 @@ export function BankKobling() {
               </div>
             </>
           )}
-          {data.app.app_navn && <p className="dempet liten bank-app">Applikasjon hos Enable Banking: «{data.app.app_navn}»</p>}
+          <p className="dempet liten bank-app">
+            Applikasjon hos Enable Banking{data.app.app_navn ? `: «${data.app.app_navn}»` : ""} · ID <HemmeligTekst verdi={data.app.app_id} />
+          </p>
         </>
       ) : skjema ? (
         <form onSubmit={koble} className="bank-skjema">
@@ -359,21 +362,19 @@ export function BankKobling() {
                 )}
               </p>
               {!skjema.filnavn && skjema.privat_nokkel !== "" && (
-                <textarea
-                  aria-label="Privat nøkkel (innholdet i .pem-filen)"
-                  rows={5}
-                  spellCheck={false}
-                  autoCapitalize="off"
-                  style={{ marginBottom: 14 }}
-                  placeholder={"-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----"}
-                  value={skjema.privat_nokkel.trim()}
-                  onChange={(e) => settSkjema({ ...skjema, privat_nokkel: e.target.value || " " })}
-                />
+                <div style={{ margin: "-6px 0 14px" }}>
+                  <HemmeligFelt
+                    aria-label="Privat nøkkel (innholdet i .pem-filen)"
+                    placeholder="-----BEGIN PRIVATE KEY----- …"
+                    verdi={skjema.privat_nokkel.trim()}
+                    endre={(v) => settSkjema({ ...skjema, privat_nokkel: v || " " })}
+                  />
+                </div>
               )}
             </div>
             <label className="hel">
               Applikasjons-ID (Application ID)
-              <input required autoComplete="off" autoCapitalize="off" spellCheck={false} value={skjema.app_id} onChange={(e) => settSkjema({ ...skjema, app_id: e.target.value.trim() })} />
+              <HemmeligFelt required verdi={skjema.app_id} endre={(v) => settSkjema({ ...skjema, app_id: v.trim() })} />
             </label>
             <label>
               Bank

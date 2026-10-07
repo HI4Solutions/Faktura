@@ -5,6 +5,7 @@ import { api, hent } from "../api";
 import { Feil, useData, useHandling } from "../felles";
 import { dato, orgnr } from "../format";
 import { useKonto } from "../konto";
+import { HemmeligFelt, HemmeligTekst } from "../hemmelig";
 
 export function EhfSending() {
   const { org, meg } = useKonto();
@@ -41,7 +42,10 @@ export function EhfSending() {
         <div className="ehf-kobling">
           <p>
             <span className="merke merke-ok">Tilkoblet</span> <strong>{data.selskap}</strong> (org.nr. {orgnr(data.orgnr)}) hos Recommand
-            <span className="dempet liten"> · nøkkel {data.nokkel_id} · {dato(data.oppdatert)}</span>
+            <span className="dempet liten">
+              {" "}
+              · nøkkel <HemmeligTekst verdi={data.nokkel_id} /> · {dato(data.oppdatert)}
+            </span>
           </p>
           {data.verifisert === false && (
             <div className="melding info">
@@ -71,17 +75,11 @@ export function EhfSending() {
           </p>
           <label>
             Nøkkel-ID
-            <input required autoComplete="off" autoCapitalize="off" spellCheck={false} value={skjema.nokkel_id} onChange={(e) => settSkjema({ ...skjema, nokkel_id: e.target.value })} />
+            <HemmeligFelt required verdi={skjema.nokkel_id} endre={(v) => settSkjema({ ...skjema, nokkel_id: v })} />
           </label>
           <label>
             Hemmelighet
-            <input
-              required
-              type="password"
-              autoComplete="new-password"
-              value={skjema.hemmelighet}
-              onChange={(e) => settSkjema({ ...skjema, hemmelighet: e.target.value })}
-            />
+            <HemmeligFelt required verdi={skjema.hemmelighet} endre={(v) => settSkjema({ ...skjema, hemmelighet: v })} />
             <span className="felt-hjelp">Lagres kryptert og vises ikke igjen. Nøkkelen sjekkes mot Recommand før den lagres.</span>
           </label>
           {!meg?.mfa && <div className="melding info">Du må være logget inn med passkey eller kode fra autentiseringsappen for å koble til.</div>}

@@ -13,7 +13,7 @@ import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { krevMfa } from "./auth.js";
 import { krypter } from "./kryptering.js";
-import { BankFeil, gyldigTil, hentApplikasjon, hentBanker, nokkelFeil, startAutorisering, velgBank, type BankNokkel } from "./enableBanking.js";
+import { BankFeil, gyldigTil, hentApplikasjon, hentBanker, nokkelFeil, normaliserPem, startAutorisering, velgBank, type BankNokkel } from "./enableBanking.js";
 import { egneKontoer, nyState, tilbakeUrl, type BankAppKonfig, type Bankkobling } from "./bank.js";
 import { leggIKo } from "./tjenester.js";
 
@@ -120,9 +120,11 @@ export function bankRuter() {
       })
       .parse(await c.req.json().catch(() => ({})));
     await bruk(c, (db) => krev(c, db, "admin"));
-    const feil = nokkelFeil(b.privat_nokkel);
+    // Limt inn i et skjult felt på én linje: linjeskiftene settes inn igjen.
+    const pem = normaliserPem(b.privat_nokkel);
+    const feil = nokkelFeil(pem);
     if (feil) throw new ApiFeil(400, feil);
-    const n: BankNokkel = { appId: b.app_id, privatNokkel: b.privat_nokkel };
+    const n: BankNokkel = { appId: b.app_id, privatNokkel: pem };
 
     let app: any;
     let bank;
@@ -146,7 +148,7 @@ export function bankRuter() {
       throw fraEnableBanking(e);
     }
 
-    const kryptert = await krypter(b.privat_nokkel);
+    const kryptert = await krypter(pem);
     const konfig: BankAppKonfig = { leverandor: "enablebanking", app_id: b.app_id, app_navn: typeof app?.name === "string" ? app.name : null };
     const svar = await bruk(c, async (db) => {
       const for_ = await en(db, "select konfig from faktura.integrasjoner where org_id = $1 and type = 'bank' and status <> 'frakoblet'", [orgId(c)]);

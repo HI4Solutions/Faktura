@@ -36,6 +36,15 @@ export function lagJwt(n: BankNokkel, naa = Math.floor(Date.now() / 1000)): stri
   return `${hode}.${innhold}.${b64(signatur)}`;
 }
 
+// En PEM-nøkkel som er limt inn i et felt på én linje (linjeskiftene forsvinner) eller med
+// ekstra mellomrom, gjøres om til vanlig PEM med 64 tegn per linje.
+export function normaliserPem(tekst: string): string {
+  const m = tekst.match(/-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/);
+  if (!m) return tekst.trim();
+  const kropp = m[2].replace(/\s+/g, "");
+  return `-----BEGIN ${m[1]}-----\n${(kropp.match(/.{1,64}/g) ?? []).join("\n")}\n-----END ${m[1]}-----`;
+}
+
 // Hva som er galt med nøkkelen, eller null om den er en privat RSA-nøkkel (PEM).
 export function nokkelFeil(pem: string): string | null {
   try {

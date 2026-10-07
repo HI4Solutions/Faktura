@@ -3,6 +3,7 @@ import { multiFactor, TotpMultiFactorGenerator, type TotpSecret } from "firebase
 import QRCode from "qrcode";
 import { hentAuth } from "../firebase";
 import { Feil } from "../felles";
+import { HemmeligTekst } from "../hemmelig";
 
 // Oppsett av totrinnsbekreftelse med autentiseringsapp (TOTP).
 export function Totrinn({ ferdig }: { ferdig?: () => void }) {
@@ -77,7 +78,7 @@ export function Totrinn({ ferdig }: { ferdig?: () => void }) {
           <p>Skann koden med appen, og skriv inn den sekssifrede koden den viser.</p>
           {qr && <img className="qr" src={qr} alt="QR-kode for autentiseringsappen" width={200} height={200} />}
           <p className="liten dempet">
-            Kan du ikke skanne? Skriv inn nøkkelen: <code className="hemmelig">{hemmelighet.secretKey}</code>
+            Kan du ikke skanne? Skriv inn nøkkelen: <HemmeligTekst verdi={hemmelighet.secretKey} />
           </p>
           <label>
             Kode fra appen
