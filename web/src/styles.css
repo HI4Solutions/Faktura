@@ -974,3 +974,43 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
 .gjenta-kort .gjenta-bryter { margin: 0; font-size: 0.95rem; font-weight: 600; }
 .gjenta-kort .rad { margin-top: 14px; }
 .gjenta-forklaring { margin: 0; }
+
+/* --------------------------------------------------------------------------
+   Administrasjon
+   -------------------------------------------------------------------------- */
+.fare-tekst { color: var(--fare); }
+.ok-tekst { color: var(--ok); }
+.merker { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.kort.tabell > .kort-topp { padding: 16px 24px 4px; margin-bottom: 4px; }
+.admin-varsel { border-color: color-mix(in srgb, var(--info) 40%, var(--kant)); }
+.admin-problemer { display: flex; align-items: center; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; }
+.admin-verktoy { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.admin-verktoy input[type="search"] { flex: 1 1 260px; max-width: 420px; }
+.admin-verktoy select { flex: 0 1 230px; width: auto; }
+.admin-verktoy > span { flex: 1 1 auto; }
+.admin-fakta { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 10px 20px; margin: 0 0 6px; }
+.admin-fakta > div { min-width: 0; }
+.admin-fakta dt { font-size: 0.7rem; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dempet); }
+.admin-fakta dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.admin td.hel-linje { white-space: nowrap; }
+.admin-detaljer > p:first-child { margin-top: 0; }
+.admin-detaljer section { margin-top: 20px; }
+.admin-detaljer h3 { font-size: 0.95rem; margin: 0 0 8px; }
+.admin-rader { list-style: none; padding: 0; margin: 0; }
+.admin-rader li { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--kant); }
+.admin-rader li:last-child { border-bottom: 0; }
+.admin-rader li > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.admin-rader button.lenke { font-size: inherit; text-align: left; }
+.admin-tellinger { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
+.admin-drift { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 14px; align-items: start; }
+.admin-drift > .kort { margin: 0; }
+.admin-drift h2 { margin: 0 0 10px; }
+.admin-drift p { margin: 0; }
+@media (max-width: 700px) {
+  .kort.tabell > .kort-topp { padding: 12px 16px 2px; }
+  .admin-verktoy input[type="search"] { flex-basis: 100%; max-width: none; }
+  .admin-verktoy select { flex: 1 1 0; }
+  .admin-verktoy > button { flex: none; }
+  .admin .liste-rad .merker { flex: none; }
+  .admin-fakta { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+}

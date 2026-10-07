@@ -92,6 +92,21 @@ describe.skipIf(!harDb)("verifisering", () => {
     expect(brukere.data.find((b: any) => b.epost === "per@gmail.com").organisasjoner[0]).toMatchObject({ rolle: "eier" });
     expect((await kall("GET", "/api/admin/brukere", t)).status).toBe(403);
 
+    // Oversikt, detaljer og driftsstatus: bare for plattformadministratorer.
+    for (const sti of ["/api/admin/oversikt", "/api/admin/drift", `/api/admin/organisasjoner/${org}`]) expect((await kall("GET", sti, t)).status).toBe(403);
+    const oversikt = (await kall("GET", "/api/admin/oversikt", admin)).data;
+    expect(oversikt.organisasjoner.totalt).toBeGreaterThanOrEqual(1);
+    expect(oversikt.venter).toBeGreaterThanOrEqual(1);
+    expect(Object.keys(oversikt.problemer).sort()).toEqual(["banker", "ehf", "epost", "integrasjoner", "utboks"]);
+    const detaljer = (await kall("GET", `/api/admin/organisasjoner/${org}`, admin)).data;
+    expect(detaljer).toMatchObject({ id: org, orgnr: "910000039", verifisering: "ny" });
+    expect(detaljer.medlemmer).toEqual([expect.objectContaining({ epost: "per@gmail.com", rolle: "eier" })]);
+    expect(detaljer.verifiseringer[0]).toMatchObject({ metode: "manuell", status: "venter", notat: "Jeg er daglig leder" });
+    expect((await kall("GET", "/api/admin/organisasjoner/00000000-0000-4000-8000-000000000000", admin)).status).toBe(404);
+    expect((await kall("GET", "/api/admin/organisasjoner/ikke-en-id", admin)).status).toBe(400);
+    const drift = (await kall("GET", "/api/admin/drift", admin)).data;
+    expect(Object.keys(drift).sort()).toEqual(["banker", "ehf", "ehf_problemer", "epost", "epost_problemer", "integrasjoner", "utboks"]);
+
     expect((await kall("POST", `/api/admin/organisasjoner/${org}/status`, admin, { status: "sperret" })).status).toBe(400);
     expect((await kall("POST", `/api/admin/organisasjoner/${org}/status`, admin, { status: "verifisert" })).data.verifisering).toBe("verifisert");
   });

@@ -121,12 +121,25 @@ export function adminRuter() {
     await next();
   });
 
+  const id = (c: Context) => z.string().uuid().parse(c.req.param("id"));
+
+  // Tellinger for oversikten, og driftsstatus.
+  r.get("/oversikt", async (c) => c.json((await somBetrodd(c.get("bruker").id, (db) => en(db, "select faktura.admin_oversikt() as d")))!.d));
+  r.get("/drift", async (c) => c.json((await somBetrodd(c.get("bruker").id, (db) => en(db, "select faktura.admin_drift() as d")))!.d));
+
   r.get("/organisasjoner", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_organisasjoner()"))));
 
   r.get("/brukere", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_brukere()"))));
 
+  // Alt om én organisasjon: medlemmer, bruk, integrasjoner, kontonummerendringer og aktivitet.
+  r.get("/organisasjoner/:id", async (c) => {
+    const d = (await somBetrodd(c.get("bruker").id, (db) => en(db, "select faktura.admin_organisasjon($1) as d", [id(c)])))?.d;
+    if (!d) throw new ApiFeil(404, "Fant ikke organisasjonen");
+    return c.json(d);
+  });
+
   r.get("/organisasjoner/:id/brreg", async (c) => {
-    const o = await somBetrodd(c.get("bruker").id, (db) => en(db, "select orgnr from faktura.admin_organisasjoner() where id = $1", [c.req.param("id")]));
+    const o = await somBetrodd(c.get("bruker").id, (db) => en(db, "select orgnr from faktura.admin_organisasjoner() where id = $1", [id(c)]));
     if (!o?.orgnr) throw new ApiFeil(404, "Mangler organisasjonsnummer");
     return c.json(await hentEnhet(o.orgnr));
   });
@@ -135,7 +148,7 @@ export function adminRuter() {
     const k = z.object({ status: z.enum(["verifisert", "sperret", "ny"]), grunn: z.string().trim().max(500).optional() }).parse(await c.req.json());
     if (k.status === "sperret" && !k.grunn) throw new ApiFeil(400, "Oppgi grunn for sperring");
     const o = await somBetrodd(c.get("bruker").id, (db) =>
-      en(db, "select id, verifisering from faktura.sett_verifisering($1, $2, 'manuell', $3)", [z.string().uuid().parse(c.req.param("id")), k.status, k.grunn ?? null]),
+      en(db, "select id, verifisering from faktura.sett_verifisering($1, $2, 'manuell', $3)", [id(c), k.status, k.grunn ?? null]),
     );
     return c.json(o);
   });

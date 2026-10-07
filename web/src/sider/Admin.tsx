@@ -1,144 +1,581 @@
-import { useState } from "react";
+// Plattformadministrasjon: oversikt over bruken, organisasjoner som venter på godkjenning,
+// alle organisasjoner og brukere (med søk, detaljer og eksport) og driftsstatus. På smale
+// skjermer vises listene som kort.
+import { useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
-import { Dialog, Feil, Laster, useData, useHandling } from "../felles";
+import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
 import { dato, kr, orgnr } from "../format";
+import { IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
+
+type Org = {
+  id: string;
+  navn: string;
+  orgnr: string | null;
+  type: string;
+  verifisering: "ny" | "verifisert" | "sperret";
+  verifisert_metode: string | null;
+  sperret_grunn: string | null;
+  opprettet: string;
+  eier_epost: string | null;
+  antall_fakturaer: number;
+  sum_fakturert: number;
+  venter_manuell: boolean;
+  notat: string | null;
+  antall_medlemmer: number;
+  sist_aktiv: string | null;
+};
+type Bruker = {
+  id: string;
+  epost: string;
+  navn: string | null;
+  opprettet: string;
+  organisasjoner: { id: string; navn: string; rolle: string; verifisering: Org["verifisering"] }[];
+  antall_passkeys: number;
+  sist_passkey: string | null;
+  sist_aktiv: string | null;
+};
+type Fane = "oversikt" | "venter" | "organisasjoner" | "brukere" | "drift";
 
 const statusMerke: Record<string, string> = { ny: "merke-advarsel", verifisert: "merke-ok", sperret: "merke-fare" };
 const statusTekst: Record<string, string> = { ny: "Ikke verifisert", verifisert: "Verifisert", sperret: "Sperret" };
+const metodeTekst: Record<string, string> = { epostdomene: "e-postdomene", brreg_epost: "kode til e-post i Enhetsregisteret", manuell: "manuelt" };
+const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les" };
+const integrasjonTekst: Record<string, string> = { peppol: "EHF (Recommand)", bank: "Enable Banking", google_drive: "Google Disk", fiken: "Fiken", tripletex: "Tripletex", poweroffice: "PowerOffice", visma: "Visma" };
+
+// «for 5 min siden», «for 3 t siden», «for 2 dager siden», ellers datoen.
+function siden(iso: string | null | undefined): string {
+  if (!iso) return "–";
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (min < 1) return "nå";
+  if (min < 60) return `for ${min} min siden`;
+  if (min < 24 * 60) return `for ${Math.round(min / 60)} t siden`;
+  if (min < 7 * 24 * 60) return `for ${Math.round(min / (24 * 60))} ${Math.round(min / (24 * 60)) === 1 ? "dag" : "dager"} siden`;
+  return dato(iso);
+}
+
+// CSV som åpnes riktig i norsk Excel (semikolon og BOM).
+function lastNedCsv(filnavn: string, rader: (string | number | null | undefined)[][]) {
+  const celle = (v: string | number | null | undefined) => {
+    const s = v == null ? "" : String(v);
+    return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const tekst = "﻿" + rader.map((r) => r.map(celle).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([tekst], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filnavn;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// «Venter» sier nok for en ny organisasjon som venter på godkjenning.
+const OrgStatus = ({ o }: { o: Pick<Org, "verifisering" | "venter_manuell"> }) => (
+  <>
+    {!(o.venter_manuell && o.verifisering === "ny") && <span className={`merke ${statusMerke[o.verifisering]}`}>{statusTekst[o.verifisering]}</span>}
+    {o.venter_manuell && <span className="merke merke-info">Venter</span>}
+  </>
+);
+const kontonrTekst = (k: string | null | undefined) => k?.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3") ?? null;
 
 export function Admin() {
-  const { data, feil, last } = useData(() => hent<any[]>("/admin/organisasjoner"), []);
-  const [filter, settFilter] = useState<"venter" | "alle" | "ny" | "sperret" | "brukere">("venter");
-  const [valgt, settValgt] = useState<any | null>(null);
+  const [sok, settSok] = useSearchParams();
+  const fane = (["oversikt", "venter", "organisasjoner", "brukere", "drift"].includes(sok.get("fane") ?? "") ? sok.get("fane") : "oversikt") as Fane;
+  const orgs = useData(() => hent<Org[]>("/admin/organisasjoner"), []);
+  const [valgt, settValgt] = useState<string | null>(null);
+  const velgFane = (f: Fane) => settSok(f === "oversikt" ? {} : { fane: f }, { replace: true });
 
-  if (feil) return <Feil melding={feil} />;
-  if (!data) return <Laster />;
-
-  const rader = data.filter((o) =>
-    filter === "venter" ? o.venter_manuell : filter === "ny" ? o.verifisering === "ny" : filter === "sperret" ? o.verifisering === "sperret" : true,
-  );
+  if (orgs.feil) return <Feil melding={orgs.feil} />;
+  const venter = (orgs.data ?? []).filter((o) => o.venter_manuell);
+  const faner: [Fane, string][] = [
+    ["oversikt", "Oversikt"],
+    ["venter", `Venter${venter.length ? ` (${venter.length})` : ""}`],
+    ["organisasjoner", "Organisasjoner"],
+    ["brukere", "Brukere"],
+    ["drift", "Drift"],
+  ];
 
   return (
-    <>
+    <div className="admin">
       <h1>Administrasjon</h1>
       <div className="faner" role="tablist">
-        {(
-          [
-            ["venter", `Venter på godkjenning (${data.filter((o) => o.venter_manuell).length})`],
-            ["ny", "Ikke verifisert"],
-            ["sperret", "Sperret"],
-            ["alle", `Alle organisasjoner (${data.length})`],
-            ["brukere", "Brukere"],
-          ] as const
-        ).map(([v, t]) => (
-          <button key={v} className={filter === v ? "valgt" : ""} onClick={() => settFilter(v)}>
+        {faner.map(([v, t]) => (
+          <button key={v} role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : ""} onClick={() => velgFane(v)}>
             {t}
           </button>
         ))}
       </div>
-      {filter === "brukere" ? (
-        <Brukere />
+      {!orgs.data ? (
+        <Laster />
+      ) : fane === "oversikt" ? (
+        <Oversikt orgs={orgs.data} apne={settValgt} velgFane={velgFane} />
+      ) : fane === "venter" ? (
+        venter.length ? (
+          <OrgListe rader={venter} apne={settValgt} />
+        ) : (
+          <div className="kort">
+            <p className="dempet" style={{ margin: 0 }}>
+              Ingen organisasjoner venter på godkjenning.
+            </p>
+          </div>
+        )
+      ) : fane === "organisasjoner" ? (
+        <Organisasjoner orgs={orgs.data} apne={settValgt} />
+      ) : fane === "brukere" ? (
+        <Brukere apneOrg={settValgt} />
       ) : (
-      <div className="kort tabell">
-        <table>
-          <thead>
-            <tr>
-              <th>Organisasjon</th>
-              <th>Org.nr.</th>
-              <th>Eier</th>
-              <th>Opprettet</th>
-              <th className="hoyre">Fakturert</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rader.map((o) => (
-              <tr key={o.id} className="klikkbar" onClick={() => settValgt(o)}>
-                <td>
-                  {o.navn}
-                  {o.type === "regnskapsbyraa" && <span className="dempet liten"> (byrå)</span>}
-                </td>
-                <td>{orgnr(o.orgnr)}</td>
-                <td className="liten">{o.eier_epost}</td>
-                <td>{dato(o.opprettet)}</td>
-                <td className="tall">
-                  {kr(o.sum_fakturert)} <span className="dempet liten">({o.antall_fakturaer})</span>
-                </td>
-                <td>
-                  <span className={`merke ${statusMerke[o.verifisering]}`}>{statusTekst[o.verifisering]}</span>
-                  {o.venter_manuell && <span className="merke merke-info" style={{ marginLeft: 4 }}>Venter</span>}
-                </td>
-              </tr>
-            ))}
-            {rader.length === 0 && (
-              <tr>
-                <td colSpan={6} className="dempet">
-                  Ingenting her.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+        <Drift apne={settValgt} />
       )}
-      <Dialog apen={!!valgt} lukk={() => settValgt(null)} tittel={valgt?.navn ?? ""}>
+      <Dialog apen={valgt !== null} lukk={() => settValgt(null)} tittel={orgs.data?.find((o) => o.id === valgt)?.navn ?? "Organisasjon"} bred>
         {valgt && (
-          <Behandle
-            org={valgt}
-            ferdig={() => {
+          <OrgDetaljer
+            id={valgt}
+            endret={() => {
               settValgt(null);
-              last();
+              orgs.last();
             }}
           />
         )}
       </Dialog>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Oversikt
+// ---------------------------------------------------------------------------
+
+function Oversikt({ orgs, apne, velgFane }: { orgs: Org[]; apne: (id: string) => void; velgFane: (f: Fane) => void }) {
+  const { data, feil } = useData(() => hent<any>("/admin/oversikt"), []);
+  if (feil) return <Feil melding={feil} />;
+  if (!data) return <Laster />;
+  const venter = orgs.filter((o) => o.venter_manuell);
+  const problemer = Object.values(data.problemer as Record<string, number>).reduce((a, b) => a + b, 0);
+  const nyeste = [...orgs].sort((a, b) => b.opprettet.localeCompare(a.opprettet)).slice(0, 5);
+  const o = data.organisasjoner;
+
+  return (
+    <>
+      {venter.length > 0 && (
+        <div className="kort tabell admin-varsel">
+          <div className="kort-topp">
+            <h2>
+              {venter.length === 1 ? "1 organisasjon venter" : `${venter.length} organisasjoner venter`} på godkjenning
+            </h2>
+          </div>
+          <OrgListe rader={venter} apne={apne} enkel />
+        </div>
+      )}
+      {problemer > 0 && (
+        <div className="melding feil admin-problemer">
+          <span>
+            {problemer === 1 ? "1 driftsproblem" : `${problemer} driftsproblemer`}: e-post, EHF, banker eller hendelser som ikke er sendt.
+          </span>
+          <button type="button" className="lenke" onClick={() => velgFane("drift")}>
+            Se drift
+          </button>
+        </div>
+      )}
+      <div className="nokkeltall">
+        <div className="kort">
+          <div className="etikett">
+            <span className="ikonboks"><IkonSkjold /></span> Organisasjoner
+          </div>
+          <div className="verdi">{o.totalt}</div>
+          <div className="under">
+            {o.verifisert} verifisert · {o.ny} ikke verifisert{o.sperret ? ` · ${o.sperret} sperret` : ""}
+          </div>
+        </div>
+        <div className="kort">
+          <div className="etikett">
+            <span className="ikonboks ok"><IkonKunder /></span> Brukere
+          </div>
+          <div className="verdi">{data.brukere.totalt}</div>
+          <div className="under">
+            {data.brukere.aktive_30} aktive og {data.brukere.nye_30} nye siste 30 dager
+          </div>
+        </div>
+        <div className="kort">
+          <div className="etikett">
+            <span className="ikonboks"><IkonFaktura /></span> Fakturert siste 30 dager
+          </div>
+          <div className="verdi">{kr(data.fakturaer.sum_30)}</div>
+          <div className="under">
+            {data.fakturaer.antall_30} fakturaer · totalt {kr(data.fakturaer.sum)}
+          </div>
+        </div>
+        <div className="kort">
+          <div className="etikett">
+            <span className={`ikonboks ${problemer ? "fare" : "noytral"}`}><IkonVarsel /></span> Integrasjoner
+          </div>
+          <div className="verdi">{data.integrasjoner.ehf + data.integrasjoner.bank}</div>
+          <div className="under">
+            EHF hos {data.integrasjoner.ehf} · bank hos {data.integrasjoner.bank}
+          </div>
+        </div>
+      </div>
+      <div className="kort tabell">
+        <div className="kort-topp">
+          <h2>Nyeste organisasjoner</h2>
+          <button type="button" className="lenke" onClick={() => velgFane("organisasjoner")}>
+            Se alle
+          </button>
+        </div>
+        <OrgListe rader={nyeste} apne={apne} enkel />
+      </div>
     </>
   );
 }
 
-function Behandle({ org, ferdig }: { org: any; ferdig: () => void }) {
+// ---------------------------------------------------------------------------
+// Organisasjoner
+// ---------------------------------------------------------------------------
+
+function Organisasjoner({ orgs, apne }: { orgs: Org[]; apne: (id: string) => void }) {
+  const [sok, settSok] = useState("");
+  const [status, settStatus] = useState<"alle" | "venter" | "ny" | "verifisert" | "sperret">("alle");
+  const s = sok.trim().toLowerCase();
+  const rader = orgs.filter(
+    (o) =>
+      (status === "alle" || (status === "venter" ? o.venter_manuell : o.verifisering === status)) &&
+      (!s || `${o.navn} ${o.orgnr ?? ""} ${o.eier_epost ?? ""}`.toLowerCase().includes(s) || (o.orgnr ?? "").includes(s.replace(/\s/g, ""))),
+  );
+  const eksporter = () =>
+    lastNedCsv(`organisasjoner-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ["Navn", "Org.nr.", "Type", "Status", "Eier", "Medlemmer", "Fakturaer", "Fakturert", "Opprettet", "Sist aktiv"],
+      ...rader.map((o) => [o.navn, o.orgnr, o.type, statusTekst[o.verifisering], o.eier_epost, o.antall_medlemmer, o.antall_fakturaer, o.sum_fakturert, o.opprettet.slice(0, 10), o.sist_aktiv?.slice(0, 10)]),
+    ]);
+
+  return (
+    <>
+      <div className="admin-verktoy">
+        <input type="search" placeholder="Søk på navn, org.nr. eller eier" aria-label="Søk i organisasjoner" value={sok} onChange={(e) => settSok(e.target.value)} />
+        <select aria-label="Status" value={status} onChange={(e) => settStatus(e.target.value as typeof status)}>
+          <option value="alle">Alle ({orgs.length})</option>
+          <option value="venter">Venter på godkjenning</option>
+          <option value="ny">Ikke verifisert</option>
+          <option value="verifisert">Verifisert</option>
+          <option value="sperret">Sperret</option>
+        </select>
+        <button type="button" onClick={eksporter} disabled={!rader.length}>
+          Last ned CSV
+        </button>
+      </div>
+      <OrgListe rader={rader} apne={apne} />
+    </>
+  );
+}
+
+function OrgListe({ rader, apne, enkel }: { rader: Org[]; apne: (id: string) => void; enkel?: boolean }) {
+  const smal = useSmal();
+  if (smal)
+    return (
+      <div className={enkel ? "liste" : "kort liste"}>
+        {rader.map((o) => (
+          <button key={o.id} type="button" className="liste-rad" onClick={() => apne(o.id)}>
+            <span className="linje">
+              <span className="tittel">
+                {o.navn}
+                {o.type === "regnskapsbyraa" && <span className="dempet"> (byrå)</span>}
+              </span>
+              <span className="belop">{kr(o.sum_fakturert)}</span>
+            </span>
+            <span className="linje">
+              <span className="under">{[orgnr(o.orgnr) || "uten org.nr.", o.eier_epost, `aktiv ${siden(o.sist_aktiv)}`].filter(Boolean).join(" · ")}</span>
+              <span className="merker">
+                <OrgStatus o={o} />
+              </span>
+            </span>
+          </button>
+        ))}
+        {rader.length === 0 && <p className="dempet" style={{ padding: 16, margin: 0 }}>Ingenting her.</p>}
+      </div>
+    );
+  const tabell = (
+    <table>
+      <thead>
+        <tr>
+          <th>Organisasjon</th>
+          <th>Org.nr.</th>
+          <th>Eier</th>
+          <th>Opprettet</th>
+          <th>Sist aktiv</th>
+          <th className="hoyre">Fakturert</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rader.map((o) => (
+          <tr key={o.id} className="klikkbar" onClick={() => apne(o.id)}>
+            <td>
+              {o.navn}
+              {o.type === "regnskapsbyraa" && <span className="dempet liten"> (byrå)</span>}
+            </td>
+            <td className="hel-linje">{orgnr(o.orgnr)}</td>
+            <td className="liten">{o.eier_epost}</td>
+            <td className="hel-linje">{dato(o.opprettet)}</td>
+            <td className="liten hel-linje">{siden(o.sist_aktiv)}</td>
+            <td className="tall">
+              {kr(o.sum_fakturert)} <span className="dempet liten">({o.antall_fakturaer})</span>
+            </td>
+            <td>
+              <span className="merker">
+                <OrgStatus o={o} />
+              </span>
+            </td>
+          </tr>
+        ))}
+        {rader.length === 0 && (
+          <tr>
+            <td colSpan={7} className="dempet">
+              Ingenting her.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
+  return enkel ? tabell : <div className="kort tabell">{tabell}</div>;
+}
+
+// ---------------------------------------------------------------------------
+// Én organisasjon
+// ---------------------------------------------------------------------------
+
+const tingNavn: Record<string, string> = {
+  organisasjoner: "organisasjon",
+  medlemmer: "medlem",
+  kunder: "kunde",
+  produkter: "produkt",
+  gjentakelser: "gjentakende faktura",
+  fakturaer: "faktura",
+  betalinger: "betaling",
+  integrasjoner: "integrasjon",
+  org_tilgang: "regnskapsførertilgang",
+};
+const stor = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+function aktivitetTekst(a: { handling: string; tabell: string | null; felt: string[] | null; status: string | null }) {
+  const ting = stor(tingNavn[a.tabell ?? ""] ?? a.tabell ?? "endring");
+  if (a.handling === "INSERT") return `${ting} opprettet`;
+  if (a.handling === "DELETE" || a.handling === "SLETTET") return `${ting} slettet`;
+  if (a.handling === "OPPSLAG") return `Oppslag: ${ting.toLowerCase()}`;
+  if (a.handling === "UPDATE" && a.status) return `${ting}: ${a.status}`;
+  if (a.handling === "UPDATE") return `${ting} endret${a.felt?.length ? ` (${a.felt.slice(0, 4).join(", ")}${a.felt.length > 4 ? " …" : ""})` : ""}`;
+  return `${ting}: ${a.handling.toLowerCase()}`;
+}
+
+const Fakta = ({ rader }: { rader: [string, ReactNode][] }) => (
+  <dl className="admin-fakta">
+    {rader.map(([t, v]) => (
+      <div key={t}>
+        <dt>{t}</dt>
+        <dd>{v ?? "–"}</dd>
+      </div>
+    ))}
+  </dl>
+);
+
+function OrgDetaljer({ id, endret }: { id: string; endret: () => void }) {
+  const { data: o, feil } = useData(() => hent<any>(`/admin/organisasjoner/${id}`), [id]);
+  if (feil) return <Feil melding={feil} />;
+  if (!o) return <Laster />;
+  const eier = o.medlemmer.find((m: any) => m.rolle === "eier");
+
+  return (
+    <div className="admin-detaljer">
+      <p className="merker">
+        <span className={`merke ${statusMerke[o.verifisering]}`}>{statusTekst[o.verifisering]}</span>
+        {o.type === "regnskapsbyraa" && <span className="merke merke-noytral">Regnskapsbyrå</span>}
+        <span className="dempet liten">
+          Opprettet {dato(o.opprettet)} · aktiv {siden(o.sist_aktiv)}
+        </span>
+      </p>
+      {o.verifisering === "verifisert" && o.verifisert_metode && (
+        <p className="liten dempet">
+          Verifisert {dato(o.verifisert_at)} ({metodeTekst[o.verifisert_metode] ?? o.verifisert_metode}).
+        </p>
+      )}
+      {o.sperret_grunn && <div className="melding feil">Sperret: {o.sperret_grunn}</div>}
+
+      <section>
+        <h3>Behandling</h3>
+        <Behandle org={o} venter={o.verifiseringer.some((v: any) => v.metode === "manuell" && v.status === "venter")} ferdig={endret} />
+      </section>
+
+      <section>
+        <h3>Organisasjonen</h3>
+        <Fakta
+          rader={[
+            ["Org.nr.", orgnr(o.orgnr) || "mangler"],
+            ["E-post", o.epost ? <a href={`mailto:${o.epost}`}>{o.epost}</a> : null],
+            ["Telefon", o.telefon ? <a href={`tel:${o.telefon}`}>{o.telefon}</a> : null],
+            ["Adresse", o.adresse],
+            ["Kontonummer", kontonrTekst(o.kontonr)],
+            ["Mva", o.mva_registrert ? "Registrert" : "Ikke registrert"],
+            ["Eier", eier ? <a href={`mailto:${eier.epost}`}>{eier.epost}</a> : null],
+          ]}
+        />
+      </section>
+
+      <section>
+        <h3>Bruk</h3>
+        <Fakta
+          rader={[
+            ["Fakturert", `${kr(o.fakturert)} (${o.antall.fakturaer} fakturaer${o.antall.kreditnotaer ? `, ${o.antall.kreditnotaer} kreditnotaer` : ""})`],
+            ["Utestående", kr(o.utestaende)],
+            ["Siste faktura", o.siste_faktura ? dato(o.siste_faktura) : null],
+            ["Utkast", o.antall.utkast],
+            ["Gjentakende", o.antall.gjentakelser],
+            ["Kunder og produkter", `${o.antall.kunder} kunder · ${o.antall.produkter} produkter`],
+          ]}
+        />
+      </section>
+
+      <section>
+        <h3>Medlemmer ({o.medlemmer.length})</h3>
+        <ul className="admin-rader">
+          {o.medlemmer.map((m: any) => (
+            <li key={m.epost}>
+              <span>
+                <strong>{m.navn ?? m.epost}</strong> <span className="dempet liten">({rolleTekst[m.rolle] ?? m.rolle})</span>
+                {m.navn && <span className="dempet liten"> · {m.epost}</span>}
+              </span>
+              <span className="dempet liten">aktiv {siden(m.sist_aktiv)}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {(o.integrasjoner.length > 0 || o.banker.length > 0) && (
+        <section>
+          <h3>Integrasjoner</h3>
+          <ul className="admin-rader">
+            {o.integrasjoner.map((i: any) => (
+              <li key={i.type}>
+                <span>
+                  {integrasjonTekst[i.type] ?? i.type}
+                  {i.siste_feil && <span className="fare-tekst liten"> · {i.siste_feil}</span>}
+                </span>
+                <span className={`merke ${i.status === "aktiv" ? "merke-ok" : "merke-fare"}`}>{i.status === "aktiv" ? "Aktiv" : "Feil"}</span>
+              </li>
+            ))}
+            {o.banker.map((b: any) => (
+              <li key={b.bank}>
+                <span>
+                  Bank: {b.bank}
+                  <span className="dempet liten">
+                    {b.gyldig_til ? ` · til ${dato(b.gyldig_til)}` : ""}
+                    {b.sist_hentet ? ` · hentet ${siden(b.sist_hentet)}` : ""}
+                  </span>
+                  {b.siste_feil && <span className="fare-tekst liten"> · {b.siste_feil}</span>}
+                </span>
+                <span className={`merke ${b.status === "aktiv" ? "merke-ok" : b.status === "venter" ? "merke-advarsel" : "merke-fare"}`}>
+                  {b.status === "aktiv" ? "Aktiv" : b.status === "venter" ? "Venter" : "Feil"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {o.kontonr_endringer.length > 0 && (
+        <section>
+          <h3>Kontonummer endret</h3>
+          <ul className="admin-rader">
+            {o.kontonr_endringer.map((k: any, i: number) => (
+              <li key={i}>
+                <span>
+                  {kontonrTekst(k.fra) ?? "–"} → <strong>{kontonrTekst(k.til) ?? "–"}</strong>
+                  <span className="dempet liten"> · {k.av ?? "ukjent"}</span>
+                </span>
+                <span className="dempet liten">{siden(k.tid)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {o.verifiseringer.length > 0 && (
+        <section>
+          <h3>Verifiseringsforsøk</h3>
+          <ul className="admin-rader">
+            {o.verifiseringer.map((v: any, i: number) => (
+              <li key={i}>
+                <span>
+                  {stor(metodeTekst[v.metode] ?? v.metode)}
+                  {v.sendt_til && <span className="dempet liten"> · til {v.sendt_til}</span>}
+                  {v.notat && <span className="dempet liten"> · «{v.notat}»</span>}
+                </span>
+                <span className="dempet liten">
+                  {v.status} · {siden(v.tid)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {o.aktivitet.length > 0 && (
+        <section>
+          <h3>Siste aktivitet</h3>
+          <ul className="admin-rader">
+            {o.aktivitet.map((a: any, i: number) => (
+              <li key={i}>
+                <span>
+                  {aktivitetTekst(a)}
+                  {a.av && <span className="dempet liten"> · {a.av}</span>}
+                </span>
+                <span className="dempet liten">{siden(a.tid)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+// Godkjenn, sperr eller sett tilbake, med oppslag i Enhetsregisteret.
+function Behandle({ org, venter, ferdig }: { org: any; venter: boolean; ferdig: () => void }) {
   const brreg = useData(() => (org.orgnr ? hent(`/admin/organisasjoner/${org.id}/brreg`) : Promise.resolve(null)), [org.id]);
   const [grunn, settGrunn] = useState("");
   const h = useHandling();
   const sett = async (status: string) => {
+    if (status === "sperret" && !confirm(`Sperre ${org.navn}? De kan ikke sende fakturaer før sperringen oppheves.`)) return;
     const r = await h.kjor(() => api("POST", `/admin/organisasjoner/${org.id}/status`, { status, grunn: grunn || undefined }));
     if (r) ferdig();
   };
+  const venterNotat = org.verifiseringer.find((v: any) => v.metode === "manuell" && v.status === "venter")?.notat;
 
   return (
     <>
-      <p className="dempet">
-        Org.nr. {orgnr(org.orgnr) || "mangler"} · eier {org.eier_epost} · {statusTekst[org.verifisering]}
-      </p>
-      {org.notat && <div className="melding info">«{org.notat}»</div>}
-      <h2>Enhetsregisteret</h2>
+      {venter && <div className="melding info">Ber om manuell godkjenning{venterNotat ? `: «${venterNotat}»` : "."}</div>}
       {brreg.laster ? (
         <Laster />
       ) : brreg.feil ? (
         <Feil melding={brreg.feil} />
       ) : brreg.data ? (
-        <table>
-          <tbody>
-            <tr><td className="dempet">Navn</td><td>{brreg.data.navn}</td></tr>
-            <tr><td className="dempet">Adresse</td><td>{[brreg.data.adresse, brreg.data.postnr, brreg.data.poststed].filter(Boolean).join(", ")}</td></tr>
-            <tr><td className="dempet">Nettside</td><td>{brreg.data.hjemmeside ?? "–"}</td></tr>
-            <tr><td className="dempet">E-post</td><td>{brreg.data.epost ?? "–"}</td></tr>
-            <tr>
-              <td className="dempet">Status</td>
-              <td>{brreg.data.konkurs ? "Konkurs" : brreg.data.under_avvikling ? "Under avvikling" : brreg.data.slettet ? "Slettet" : "Aktiv"}</td>
-            </tr>
-          </tbody>
-        </table>
+        <Fakta
+          rader={[
+            ["Enhetsregisteret", brreg.data.navn],
+            ["Adresse", [brreg.data.adresse, brreg.data.postnr, brreg.data.poststed].filter(Boolean).join(", ") || null],
+            ["Nettside", brreg.data.hjemmeside],
+            ["E-post", brreg.data.epost],
+            ["Status", brreg.data.konkurs ? "Konkurs" : brreg.data.under_avvikling ? "Under avvikling" : brreg.data.slettet ? "Slettet" : "Aktiv"],
+          ]}
+        />
       ) : (
         <p className="dempet">Mangler organisasjonsnummer.</p>
       )}
-      <p className="liten dempet" style={{ marginTop: 12 }}>
-        Sjekk roller (daglig leder, styreleder, signatur) på{" "}
-        <a href={`https://virksomhet.brreg.no/nb/oppslag/enheter/${org.orgnr}`} target="_blank" rel="noreferrer">
-          virksomhet.brreg.no
-        </a>{" "}
-        før du godkjenner.
-      </p>
+      {org.orgnr && (
+        <p className="liten dempet">
+          Sjekk roller (daglig leder, styreleder, signatur) på{" "}
+          <a href={`https://virksomhet.brreg.no/nb/oppslag/enheter/${org.orgnr}`} target="_blank" rel="noreferrer">
+            virksomhet.brreg.no
+          </a>{" "}
+          før du godkjenner.
+        </p>
+      )}
       <label>
         Grunn (påkrevd ved sperring)
         <input value={grunn} onChange={(e) => settGrunn(e.target.value)} />
@@ -165,55 +602,270 @@ function Behandle({ org, ferdig }: { org: any; ferdig: () => void }) {
   );
 }
 
-function Brukere() {
-  const { data, feil } = useData(() => hent<any[]>("/admin/brukere"), []);
+// ---------------------------------------------------------------------------
+// Brukere
+// ---------------------------------------------------------------------------
+
+function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
+  const { data, feil } = useData(() => hent<Bruker[]>("/admin/brukere"), []);
   const [sok, settSok] = useState("");
+  const [valgt, settValgt] = useState<Bruker | null>(null);
+  const smal = useSmal();
   if (feil) return <Feil melding={feil} />;
   if (!data) return <Laster />;
-  const s = sok.toLowerCase();
-  const rader = data.filter((b) => !s || `${b.navn ?? ""} ${b.epost}`.toLowerCase().includes(s));
-  const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les" };
+  const s = sok.trim().toLowerCase();
+  const rader = data.filter((b) => !s || `${b.navn ?? ""} ${b.epost} ${b.organisasjoner.map((o) => o.navn).join(" ")}`.toLowerCase().includes(s));
+  const eksporter = () =>
+    lastNedCsv(`brukere-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ["Navn", "E-post", "Organisasjoner", "Passkeys", "Registrert", "Sist aktiv"],
+      ...rader.map((b) => [b.navn, b.epost, b.organisasjoner.map((o) => `${o.navn} (${rolleTekst[o.rolle] ?? o.rolle})`).join(", "), b.antall_passkeys, b.opprettet.slice(0, 10), b.sist_aktiv?.slice(0, 10)]),
+    ]);
+
   return (
     <>
-      <input placeholder="Søk etter navn eller e-post" value={sok} onChange={(e) => settSok(e.target.value)} style={{ maxWidth: 320, marginBottom: 12 }} />
-      <div className="kort tabell">
-        <table>
-          <thead>
-            <tr>
-              <th>Navn</th>
-              <th>E-post</th>
-              <th>Organisasjoner</th>
-              <th>Passkey</th>
-              <th>Registrert</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rader.map((b) => (
-              <tr key={b.id}>
-                <td>{b.navn ?? <span className="dempet">–</span>}</td>
-                <td>{b.epost}</td>
-                <td className="liten">
-                  {b.organisasjoner.length === 0 && <span className="dempet">Ingen</span>}
-                  {b.organisasjoner.map((o: any) => (
-                    <div key={o.id}>
-                      {o.navn} <span className="dempet">({rolleTekst[o.rolle]})</span>
-                      {o.verifisering !== "verifisert" && <span className={`merke ${statusMerke[o.verifisering]}`} style={{ marginLeft: 4 }}>{statusTekst[o.verifisering]}</span>}
-                    </div>
-                  ))}
-                </td>
-                <td>{b.antall_passkeys > 0 ? `${b.antall_passkeys}` : <span className="dempet">–</span>}</td>
-                <td>{dato(b.opprettet)}</td>
-              </tr>
-            ))}
-            {rader.length === 0 && (
+      <div className="admin-verktoy">
+        <input type="search" placeholder="Søk på navn, e-post eller organisasjon" aria-label="Søk i brukere" value={sok} onChange={(e) => settSok(e.target.value)} />
+        <button type="button" onClick={eksporter} disabled={!rader.length}>
+          Last ned CSV
+        </button>
+      </div>
+      {smal ? (
+        <div className="kort liste">
+          {rader.map((b) => (
+            <button key={b.id} type="button" className="liste-rad" onClick={() => settValgt(b)}>
+              <span className="linje">
+                <span className="tittel">{b.navn ?? b.epost}</span>
+                <span className="under">{siden(b.sist_aktiv)}</span>
+              </span>
+              <span className="linje">
+                <span className="under">
+                  {[b.navn ? b.epost : null, b.organisasjoner.length === 1 ? b.organisasjoner[0].navn : `${b.organisasjoner.length} organisasjoner`].filter(Boolean).join(" · ")}
+                </span>
+                {b.antall_passkeys > 0 && <span className="merke merke-ok">Passkey</span>}
+              </span>
+            </button>
+          ))}
+          {rader.length === 0 && <p className="dempet" style={{ padding: 16, margin: 0 }}>Ingen treff.</p>}
+        </div>
+      ) : (
+        <div className="kort tabell">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={5} className="dempet">
-                  Ingen treff.
-                </td>
+                <th>Navn</th>
+                <th>E-post</th>
+                <th>Organisasjoner</th>
+                <th>Passkey</th>
+                <th>Sist aktiv</th>
+                <th>Registrert</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rader.map((b) => (
+                <tr key={b.id} className="klikkbar" onClick={() => settValgt(b)}>
+                  <td>{b.navn ?? <span className="dempet">–</span>}</td>
+                  <td>{b.epost}</td>
+                  <td className="liten">
+                    {b.organisasjoner.length === 0 && <span className="dempet">Ingen</span>}
+                    {b.organisasjoner.map((o) => (
+                      <div key={o.id}>
+                        {o.navn} <span className="dempet">({rolleTekst[o.rolle] ?? o.rolle})</span>
+                        {o.verifisering !== "verifisert" && <span className={`merke ${statusMerke[o.verifisering]}`} style={{ marginLeft: 4 }}>{statusTekst[o.verifisering]}</span>}
+                      </div>
+                    ))}
+                  </td>
+                  <td>{b.antall_passkeys > 0 ? `${b.antall_passkeys}` : <span className="dempet">–</span>}</td>
+                  <td className="liten hel-linje">{siden(b.sist_aktiv)}</td>
+                  <td className="hel-linje">{dato(b.opprettet)}</td>
+                </tr>
+              ))}
+              {rader.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="dempet">
+                    Ingen treff.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <Dialog apen={valgt !== null} lukk={() => settValgt(null)} tittel={valgt?.navn ?? valgt?.epost ?? ""}>
+        {valgt && (
+          <div className="admin-detaljer">
+            <Fakta
+              rader={[
+                ["E-post", <a href={`mailto:${valgt.epost}`}>{valgt.epost}</a>],
+                ["Registrert", dato(valgt.opprettet)],
+                ["Sist aktiv", siden(valgt.sist_aktiv)],
+                ["Passkeys", valgt.antall_passkeys ? `${valgt.antall_passkeys} (sist brukt ${siden(valgt.sist_passkey)})` : "Ingen"],
+              ]}
+            />
+            <section>
+              <h3>Organisasjoner ({valgt.organisasjoner.length})</h3>
+              {valgt.organisasjoner.length === 0 ? (
+                <p className="dempet">Ingen.</p>
+              ) : (
+                <ul className="admin-rader">
+                  {valgt.organisasjoner.map((o) => (
+                    <li key={o.id}>
+                      <button
+                        type="button"
+                        className="lenke"
+                        onClick={() => {
+                          settValgt(null);
+                          apneOrg(o.id);
+                        }}
+                      >
+                        {o.navn}
+                      </button>
+                      <span className="merker">
+                        <span className="dempet liten">{rolleTekst[o.rolle] ?? o.rolle}</span>
+                        <span className={`merke ${statusMerke[o.verifisering]}`}>{statusTekst[o.verifisering]}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
+      </Dialog>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Drift
+// ---------------------------------------------------------------------------
+
+const epostStatus: [string, string][] = [
+  ["levert", "Levert"],
+  ["sendt", "Sendt"],
+  ["forsinket", "Forsinket"],
+  ["sprett", "Sprett"],
+  ["klage", "Klage"],
+];
+const ehfStatus: [string, string][] = [
+  ["levert", "Levert"],
+  ["venter", "Venter"],
+  ["sender", "Sender"],
+  ["feilet", "Feilet"],
+];
+
+function Drift({ apne }: { apne: (id: string) => void }) {
+  const { data: d, feil, last, laster } = useData(() => hent<any>("/admin/drift"), []);
+  if (feil) return <Feil melding={feil} />;
+  if (!d) return <Laster />;
+  const utboksForsinket = d.utboks.venter > 0 && d.utboks.eldste && Date.now() - Date.parse(d.utboks.eldste) > 15 * 60_000;
+  const Org = ({ p }: { p: any }) => (
+    <button type="button" className="lenke" onClick={() => apne(p.org_id)}>
+      {p.org}
+    </button>
+  );
+  const Tellinger = ({ tall, navn }: { tall: Record<string, number>; navn: [string, string][] }) => (
+    <div className="admin-tellinger">
+      {navn.map(([n, t]) => (
+        <span key={n} className={(n === "sprett" || n === "klage" || n === "feilet") && tall[n] ? "fare-tekst" : undefined}>
+          <strong>{tall[n] ?? 0}</strong> {t.toLowerCase()}
+        </span>
+      ))}
+    </div>
+  );
+
+  return (
+    <>
+      <div className="admin-verktoy">
+        <span className="dempet liten">Siste sju dager, og det som står med feil nå.</span>
+        <button type="button" onClick={last} disabled={laster}>
+          Oppdater
+        </button>
+      </div>
+      <div className="admin-drift">
+        <section className="kort">
+          <h2>Hendelser</h2>
+          {d.utboks.venter === 0 ? (
+            <p className="ok-tekst">Alle hendelser er sendt videre.</p>
+          ) : (
+            <p className={utboksForsinket ? "fare-tekst" : undefined}>
+              {d.utboks.venter} venter på å bli sendt videre, den eldste {siden(d.utboks.eldste)}.
+              {d.utboks.siste_feil && <span className="liten"> Siste feil: {d.utboks.siste_feil}</span>}
+            </p>
+          )}
+        </section>
+
+        <section className="kort">
+          <h2>E-post</h2>
+          <Tellinger tall={d.epost} navn={epostStatus} />
+          {d.epost_problemer.length > 0 && (
+            <ul className="admin-rader">
+              {d.epost_problemer.map((p: any, i: number) => (
+                <li key={i}>
+                  <span>
+                    <Org p={p} /> <span className="dempet liten">· {p.til}</span>
+                    {p.detaljer && <span className="liten"> · {p.detaljer}</span>}
+                  </span>
+                  <span className="merker">
+                    <span className={`merke ${p.status === "forsinket" ? "merke-advarsel" : "merke-fare"}`}>{stor(p.status)}</span>
+                    <span className="dempet liten">{siden(p.tid)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="kort">
+          <h2>EHF</h2>
+          <Tellinger tall={d.ehf} navn={ehfStatus} />
+          {d.ehf_problemer.length > 0 && (
+            <ul className="admin-rader">
+              {d.ehf_problemer.map((p: any, i: number) => (
+                <li key={i}>
+                  <span>
+                    <Org p={p} /> <span className="dempet liten">· til {p.mottaker}</span>
+                    {p.detaljer && <span className="liten"> · {p.detaljer}</span>}
+                  </span>
+                  <span className="merker">
+                    <span className="merke merke-fare">{p.status === "sender" ? "Ukjent utfall" : "Feilet"}</span>
+                    <span className="dempet liten">{siden(p.tid)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="kort">
+          <h2>Integrasjoner og banker</h2>
+          {d.integrasjoner.length === 0 && d.banker.length === 0 ? (
+            <p className="ok-tekst">Ingen feil.</p>
+          ) : (
+            <ul className="admin-rader">
+              {d.integrasjoner.map((p: any, i: number) => (
+                <li key={`i${i}`}>
+                  <span>
+                    <Org p={p} /> <span className="dempet liten">· {integrasjonTekst[p.type] ?? p.type}</span>
+                    {p.siste_feil && <span className="liten"> · {p.siste_feil}</span>}
+                  </span>
+                  <span className="dempet liten">{siden(p.tid)}</span>
+                </li>
+              ))}
+              {d.banker.map((p: any, i: number) => (
+                <li key={`b${i}`}>
+                  <span>
+                    <Org p={p} /> <span className="dempet liten">· bank: {p.bank}</span>
+                    {p.siste_feil && <span className="liten"> · {p.siste_feil}</span>}
+                  </span>
+                  <span className="merker">
+                    <span className={`merke ${p.status === "feil" ? "merke-fare" : "merke-advarsel"}`}>{p.status === "feil" ? "Må kobles til på nytt" : "Feil ved henting"}</span>
+                    <span className="dempet liten">{siden(p.tid)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </>
   );
