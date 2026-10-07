@@ -22,6 +22,7 @@ export const VARSELTYPER = {
   bank: "Innbetalinger fra banken",
   paaminnelse: "Påminnelser om å lage fakturaer",
   timer: "Timelister levert, godkjent og avvist",
+  vakter: "Vaktplan: nye, endrede og ledige vakter",
 } as const;
 export type Varseltype = keyof typeof VARSELTYPER;
 

@@ -24,10 +24,10 @@ const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("
 // --- Skjemaer -----------------------------------------------------------------
 
 // Tomme felt blir null (feltet fjernes).
-const valgfri = <T extends z.ZodTypeAny>(s: T) => z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), s.nullish());
-const tekst = (maks: number, navn: string) => z.string().trim().max(maks, `${navn} kan ha høyst ${maks} tegn`);
-const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato");
-const klokke = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Skriv klokkeslettet som TT:MM");
+export const valgfri = <T extends z.ZodTypeAny>(s: T) => z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), s.nullish());
+export const tekst = (maks: number, navn: string) => z.string().trim().max(maks, `${navn} kan ha høyst ${maks} tegn`);
+export const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato");
+export const klokke = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Skriv klokkeslettet som TT:MM");
 const siffer = (navn: string, antall: number, sjekk?: (s: string) => boolean, melding?: string) =>
   z
     .string()
@@ -76,6 +76,7 @@ const foringSkjema = z.object({
   timer: valgfri(z.number().gt(0, "Skriv antall timer").max(24, "Høyst 24 timer i én føring")),
   overtid_prosent: valgfri(z.number().int().min(40, "Overtidstillegget er minst 40 %").max(200)),
   beskrivelse: valgfri(tekst(500, "Beskrivelsen")),
+  vakt_id: uuid.optional(), // timene føres fra en vakt (bare når føringen lages)
 });
 
 // --- Utvalg -------------------------------------------------------------------
@@ -95,13 +96,13 @@ const ANSATT = `
 const FORING = `
   select t.id, t.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, t.dato,
          to_char(t.fra, 'HH24:MI') as fra, to_char(t.til, 'HH24:MI') as til, t.pause_min, t.timer, t.overtid_prosent,
-         t.beskrivelse, t.status, t.avvist_grunn, t.levert_at, t.godkjent_at, t.opprettet
+         t.beskrivelse, t.status, t.avvist_grunn, t.levert_at, t.godkjent_at, t.opprettet, t.vakt_id
     from faktura.timeforinger t
     join faktura.ansatte a on a.org_id = t.org_id and a.id = t.ansatt_id`;
 
 type Foringsrad = { id: string; ansatt_id: string; ansatt_navn: string; dato: string; timer: number; overtid_prosent: number | null; status: string };
 
-async function regler(db: Db, org: string): Promise<Regler & { aktiv: boolean }> {
+export async function regler(db: Db, org: string): Promise<Regler & { aktiv: boolean }> {
   const r = await en<Regler & { aktiv: boolean }>(
     db,
     "select aktiv, daglig_grense, ukentlig_grense, overtid_prosent from faktura.lonn_oppsett where org_id = $1",
@@ -116,9 +117,10 @@ const meg = (db: Db, org: string) =>
     org,
   ]);
 
-// Ukene med føringer: sum, ordinære timer, overtid og merarbeid per ansatt og uke, og
-// status for uka (den laveste: utkast før levert før godkjent; avvist foran alt).
-function ukesummer(foringer: Foringsrad[], r: Regler, avtalt: Map<string, number | null>) {
+// Ukene med føringer: sum, ordinære timer, overtid og merarbeid per ansatt og uke, status for
+// uka (den laveste: utkast før levert før godkjent; avvist foran alt), og timene som var
+// planlagt i vaktplanen (publiserte vakter, nøkkel «ansatt:mandag»).
+function ukesummer(foringer: Foringsrad[], r: Regler, avtalt: Map<string, number | null>, planlagt: Map<string, number>) {
   const uker = new Map<string, { ansatt_id: string; ansatt_navn: string; aar: number; uke: number; fra: string; til: string; rader: Foringsrad[] }>();
   for (const f of foringer) {
     const u = uke(f.dato);
@@ -132,15 +134,16 @@ function ukesummer(foringer: Foringsrad[], r: Regler, avtalt: Map<string, number
     .map(({ rader, ...u }) => ({
       ...u,
       ...(beregnUke(rader, r, avtalt.get(u.ansatt_id)) as Ukesum),
+      planlagt: planlagt.get(`${u.ansatt_id}:${u.fra}`) ?? null,
       status: rekke.find((s) => rader.some((x) => x.status === s))!,
       antall: rader.length,
       antall_status: Object.fromEntries(rekke.map((s) => [s, rader.filter((x) => x.status === s).length])) as Record<string, number>,
     }));
 }
 
-// Push til de som godkjenner timer (eier og admin), unntatt den som selv gjorde det. Slås
-// opp av serveren: en ansatt ser ikke hvem de andre medlemmene er.
-async function varsleGodkjennere(org: string, unntatt: string, tittel: string, tekst: string, url: string) {
+// Push til eier og administrator (de som godkjenner timer og planlegger vakter), unntatt den
+// som selv gjorde det. Slås opp av serveren: en ansatt ser ikke hvem de andre medlemmene er.
+export async function varslePersonal(org: string, unntatt: string, hendelse: "timer" | "vakter", tittel: string, tekst: string, url: string, tag: string) {
   const mottakere = await somSystem((db) =>
     alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and rolle in ('eier', 'admin') and bruker_id <> $2", [
       org,
@@ -148,7 +151,7 @@ async function varsleGodkjennere(org: string, unntatt: string, tittel: string, t
     ]),
   );
   if (mottakere.length)
-    await leggIKo({ type: "varsel", varsel: { hendelse: "timer", org_id: org, bruker_ider: mottakere.map((m) => m.bruker_id), tittel, tekst, url, tag: `timer-${org}` } });
+    await leggIKo({ type: "varsel", varsel: { hendelse, org_id: org, bruker_ider: mottakere.map((m) => m.bruker_id), tittel, tekst, url, tag } });
 }
 
 const timerTekst = (t: number) => `${t.toLocaleString("nb-NO", { maximumFractionDigits: 2 })} t`;
@@ -319,7 +322,17 @@ export function ansattRuter() {
             )
           ).map((a) => [a.id, a.avtalt] as const),
         );
-        let uker = ukesummer(foringer, regel, avtalt);
+        const planlagt = new Map<string, number>();
+        for (const v of await alle<{ ansatt_id: string; dato: string; timer: number }>(
+          db,
+          `select ansatt_id, dato, timer from faktura.vakter
+            where org_id = $1 and dato between $2 and $3 and publisert_at is not null and ansatt_id = any($4::uuid[])`,
+          [orgId(c), fra, til, [...avtalt.keys()]],
+        )) {
+          const k = `${v.ansatt_id}:${uke(v.dato).fra}`;
+          planlagt.set(k, Math.round(((planlagt.get(k) ?? 0) + Number(v.timer)) * 100) / 100);
+        }
+        let uker = ukesummer(foringer, regel, avtalt, planlagt);
         // Med status: ukene med føringer med den statusen (f.eks. levert, til godkjenning).
         if (q.status) uker = uker.filter((u) => u.antall_status[q.status!] > 0);
         const iPerioden = (d: string) => d >= q.fra && d <= q.til;
@@ -338,9 +351,20 @@ export function ansattRuter() {
       if (!ansatt) throw new ApiFeil(400, "Du er ikke registrert som ansatt her. Velg en ansatt.");
       const ny = await en<{ id: string }>(
         db,
-        `insert into faktura.timeforinger (org_id, ansatt_id, dato, fra, til, pause_min, timer, overtid_prosent, beskrivelse)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
-        [orgId(c), ansatt, b.dato, b.fra ?? null, b.til ?? null, b.pause_min ?? 0, b.fra ? null : b.timer, b.overtid_prosent ?? null, b.beskrivelse ?? null],
+        `insert into faktura.timeforinger (org_id, ansatt_id, dato, fra, til, pause_min, timer, overtid_prosent, beskrivelse, vakt_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+        [
+          orgId(c),
+          ansatt,
+          b.dato,
+          b.fra ?? null,
+          b.til ?? null,
+          b.pause_min ?? 0,
+          b.fra ? null : b.timer,
+          b.overtid_prosent ?? null,
+          b.beskrivelse ?? null,
+          b.vakt_id ?? null,
+        ],
       );
       return en(db, `${FORING} where t.id = $1`, [ny!.id]);
     });
@@ -348,7 +372,7 @@ export function ansattRuter() {
   });
 
   r.patch("/timer/:id", async (c) => {
-    const b = foringSkjema.omit({ ansatt_id: true }).partial().parse(await c.req.json().catch(() => ({})));
+    const b = foringSkjema.omit({ ansatt_id: true, vakt_id: true }).partial().parse(await c.req.json().catch(() => ({})));
     const f = await bruk(c, async (db) => {
       const naa = await en<{ fra: string | null; til: string | null; status: string }>(
         db,
@@ -408,7 +432,7 @@ export function ansattRuter() {
       const periode = u.fra === b.fra && u.til === b.til ? `uke ${u.uke}` : `${visDato(b.fra)}–${visDato(b.til)}`;
       return { levert: n, varsel: { tittel: `Timer levert: ${a!.navn}`, tekst: `${a!.navn} har levert ${timerTekst(a!.timer)} for ${periode}.` } };
     });
-    await varsleGodkjennere(orgId(c), c.get("bruker").id, svar.varsel.tittel, svar.varsel.tekst, "/timer?fane=godkjenning");
+    await varslePersonal(orgId(c), c.get("bruker").id, "timer", svar.varsel.tittel, svar.varsel.tekst, "/timer?fane=godkjenning", `timer-${orgId(c)}`);
     return c.json({ levert: svar.levert });
   });
 
