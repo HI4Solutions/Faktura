@@ -1014,3 +1014,31 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
   .admin .liste-rad .merker { flex: none; }
   .admin-fakta { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
 }
+
+/* AI (Gemini): fakturautkast fra tekst eller tale, og forslag på innbetalinger */
+.ai-kort { border-color: color-mix(in srgb, var(--aksent) 30%, var(--kant)); }
+.ai-topp { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.ai-topp h2 { margin: 0; font-size: 1.02rem; }
+.ai-topp p { margin: 2px 0 0; }
+.ai-ikon { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--aksent-lys); color: var(--aksent); }
+.ai-kort textarea { width: 100%; resize: vertical; min-height: 78px; }
+.ai-knapper { margin-top: 10px; }
+.ai-status { display: inline-flex; align-items: center; gap: 8px; }
+.ai-status .spinner, .innbetaling .forslag button .spinner { width: 14px; height: 14px; }
+button.ai-stopp { color: var(--fare); border-color: color-mix(in srgb, var(--fare) 45%, transparent); background: var(--fare-lys); font-variant-numeric: tabular-nums; }
+button.ai-stopp:hover:not(:disabled) { border-color: var(--fare); }
+.ai-prikk { width: 8px; height: 8px; border-radius: 999px; background: var(--fare); animation: ai-puls 1.2s ease-in-out infinite; }
+@keyframes ai-puls { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .ai-prikk { animation: none; } }
+.ai-kort .melding { margin: 12px 0 0; }
+.ai-resultat ul { margin: 6px 0 0; padding-left: 20px; }
+.ai-merke {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 999px;
+  font-size: 0.74rem; font-weight: 650; line-height: 1.5; background: var(--aksent-lys); color: var(--aksent); vertical-align: 1px; white-space: nowrap;
+}
+.ai-kunde { margin: 0 0 14px; }
+.ai-kunde button.lenke { font-size: inherit; display: inline; }
+@media (max-width: 700px) {
+  .ai-knapper > button { flex: 1 1 auto; justify-content: center; }
+  .ai-knapper > span { flex-basis: 100%; }
+}

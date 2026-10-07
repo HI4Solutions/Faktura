@@ -22,6 +22,7 @@ locals {
     "drive.googleapis.com",
     "picker.googleapis.com",
     "apikeys.googleapis.com",
+    "aiplatform.googleapis.com",
   ]
 
   labels = {

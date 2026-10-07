@@ -837,6 +837,49 @@ function Drift({ apne }: { apne: (id: string) => void }) {
         </section>
 
         <section className="kort">
+          <h2>AI (Gemini)</h2>
+          {!d.ai?.satt_opp ? (
+            <p className="dempet">AI er ikke satt opp.</p>
+          ) : (
+            <>
+              <p className="dempet liten" style={{ marginTop: 0 }}>
+                {d.ai.modell} i {d.ai.region} · høyst {d.ai.grense} forespørsler per organisasjon i måneden
+              </p>
+              <div className="admin-tellinger">
+                <span>
+                  <strong>{d.ai.sum.antall}</strong> forespørsler denne måneden
+                </span>
+                <span>
+                  <strong>{Math.round((Number(d.ai.sum.tokens_inn) + Number(d.ai.sum.tokens_ut)) / 1000)}k</strong> tokens
+                </span>
+                <span>
+                  <strong>{d.ai.forrige.antall}</strong> forrige måned
+                </span>
+              </div>
+              {d.ai.organisasjoner.length > 0 && (
+                <ul className="admin-rader">
+                  {d.ai.organisasjoner.map((p: any) => (
+                    <li key={p.org_id}>
+                      <span>
+                        <Org p={p} />{" "}
+                        <span className="dempet liten">
+                          · {p.faktura} fakturautkast · {p.innbetaling} {p.innbetaling === 1 ? "innbetaling" : "innbetalinger"}
+                        </span>
+                      </span>
+                      <span className="merker">
+                        <span className={`merke ${p.faktura + p.innbetaling >= d.ai.grense * 0.8 ? "merke-advarsel" : "merke-noytral"}`}>
+                          {p.faktura + p.innbetaling} av {d.ai.grense}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </section>
+
+        <section className="kort">
           <h2>Integrasjoner og banker</h2>
           {d.integrasjoner.length === 0 && d.banker.length === 0 ? (
             <p className="ok-tekst">Ingen feil.</p>

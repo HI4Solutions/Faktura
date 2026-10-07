@@ -32,6 +32,11 @@ jobs:
       TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
       TF_VAR_admin_eposter: ${{ vars.ADMIN_EPOSTER }}
       TF_VAR_google_oauth_client_id: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+      # AI (Gemini på Vertex AI): standardverdiene når variablene ikke er satt.
+      TF_VAR_ai_aktiv: ${{ vars.AI_AKTIV || 'true' }}
+      TF_VAR_ai_region: ${{ vars.AI_REGION || 'europe-west3' }}
+      TF_VAR_ai_modell: ${{ vars.AI_MODELL || 'gemini-3.5-flash' }}
+      TF_VAR_ai_grense: ${{ vars.AI_GRENSE || '1000' }}
     steps:
       - uses: actions/checkout@v4
 

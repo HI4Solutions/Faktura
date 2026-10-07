@@ -86,3 +86,27 @@ variable "google_oauth_client_id" {
   type        = string
   default     = ""
 }
+
+variable "ai_aktiv" {
+  description = "AI-funksjonene (Gemini på Vertex AI): fakturautkast fra tekst og tale, og forslag på innbetalinger. Settes med GitHub-variabelen AI_AKTIV."
+  type        = bool
+  default     = true
+}
+
+variable "ai_region" {
+  description = "Region for Gemini på Vertex AI. europe-west3 er Frankfurt; «eu» er EU-multiregionen. Settes med GitHub-variabelen AI_REGION."
+  type        = string
+  default     = "europe-west3"
+}
+
+variable "ai_modell" {
+  description = "Gemini-modellen. Settes med GitHub-variabelen AI_MODELL."
+  type        = string
+  default     = "gemini-3.5-flash"
+}
+
+variable "ai_grense" {
+  description = "Høyst så mange AI-forespørsler per organisasjon per måned (tak på kostnaden). Settes med GitHub-variabelen AI_GRENSE."
+  type        = number
+  default     = 1000
+}

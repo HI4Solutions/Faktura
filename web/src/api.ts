@@ -53,6 +53,18 @@ export async function lastOppLogo(orgId: string, fil: File) {
   if (!r.ok) throw new ApiFeil(r.status, (await r.json().catch(() => ({}))).error ?? `Feil ${r.status}`);
 }
 
+// Sender et lydopptak (fakturautkast fra tale): rå lyd i kroppen, med lydtypen.
+export async function sendLyd<T = any>(sti: string, lyd: Blob): Promise<T> {
+  const r = await fetch(`/api${sti}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${await token()}`, "content-type": lyd.type || "audio/webm" },
+    body: lyd,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiFeil(r.status, data.error ?? (r.status === 413 ? "Opptaket er for langt. Hold det under to minutter." : `Feil ${r.status}`));
+  return data;
+}
+
 export type Vedlegg = { id: string; filnavn: string; type: string; storrelse: number };
 
 // Laster opp et vedlegg. Det står uten faktura til utkastet lagres med det.

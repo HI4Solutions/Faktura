@@ -16,6 +16,8 @@ import { krypter } from "./kryptering.js";
 import { BankFeil, gyldigTil, hentApplikasjon, hentBanker, nokkelFeil, normaliserPem, startAutorisering, velgBank, type BankNokkel } from "./enableBanking.js";
 import { egneKontoer, nyState, tilbakeUrl, type BankAppKonfig, type Bankkobling } from "./bank.js";
 import { leggIKo } from "./tjenester.js";
+import { aiPaa } from "./ai.js";
+import { foreslaFaktura } from "./aiInnbetaling.js";
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
 const koblingId = (c: Context) => z.string().uuid().parse(c.req.param("id"));
@@ -58,9 +60,9 @@ async function status(db: Db, org: string) {
   const koblinger = app ? (await hentKoblinger(db, org)).map((k) => koblingStatus(k, egne)) : [];
   // Innbetalinger hentes fra og med denne datoen (satt: valgt av en administrator, ellers
   // dagen organisasjonen ble opprettet).
-  const start = await en<{ fra: string | null; satt: boolean }>(
+  const start = await en<{ fra: string | null; satt: boolean; ai_aktiv: boolean }>(
     db,
-    "select faktura.bank_fra(id) as fra, bank_fra is not null as satt from faktura.organisasjoner where id = $1",
+    "select faktura.bank_fra(id) as fra, bank_fra is not null as satt, ai_aktiv from faktura.organisasjoner where id = $1",
     [org],
   );
   return {
@@ -71,6 +73,7 @@ async function status(db: Db, org: string) {
     tilkoblet: koblinger.some((k) => k.tilkoblet),
     tilbake_url: tilbakeUrl(),
     antall: await antall(db, org),
+    ai: aiPaa() && Boolean(start?.ai_aktiv), // AI kan foreslå fakturaen for uavklarte innbetalinger
   };
 }
 
@@ -351,6 +354,24 @@ export function bankRuter() {
         return en(db, "select * from faktura.ignorer_banktransaksjon($1, $2)", [id(c), b.ignorer]);
       }),
     );
+  });
+
+  // Be AI-en om et forslag for en uavklart innbetaling. Et forslag må bekreftes som før;
+  // finner den ingen faktura, kommer forklaringen tilbake og ingenting endres.
+  r.post("/banktransaksjoner/:id/ai", async (c) => {
+    if (!aiPaa()) throw new ApiFeil(503, "AI er ikke satt opp");
+    const kjor = <X>(fn: (db: Db) => Promise<X>) => somBruker<X>(c.get("bruker").id, fn);
+    const t = await kjor(async (db) => {
+      await iOrg(c, db);
+      return en(db, "select id, dato, belop, valuta, betaler, betaler_konto, melding, referanse, status from faktura.banktransaksjoner where id = $1", [id(c)]);
+    });
+    if (t.status !== "uavklart") throw new ApiFeil(409, "Innbetalingen er allerede behandlet");
+    if (t.valuta !== "NOK") throw new ApiFeil(400, "Bare innbetalinger i norske kroner kan registreres på fakturaer");
+    const f = await foreslaFaktura(kjor, orgId(c), t);
+    if (!f.faktura) return c.json({ transaksjon: null, grunn: f.grunn });
+    const grunn = `AI${f.sikkerhet === "lav" ? " (usikker)" : ""}: ${f.grunn}`;
+    const ny = await kjor((db) => en(db, "select * from faktura.foresla_banktransaksjon($1, $2, $3)", [id(c), f.faktura!.id, grunn]));
+    return c.json({ transaksjon: ny, grunn });
   });
 
   r.post("/banktransaksjoner/:id/angre", async (c) =>

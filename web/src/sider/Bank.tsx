@@ -5,10 +5,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
+import { AiMerke, aiGrunn } from "../ai";
 import { dato, kr } from "../format";
 import { erAdmin, kanBokfore, useKonto } from "../konto";
 import { Sokefelt } from "../sokefelt";
-import { IkonKroner } from "../ikoner";
+import { IkonGnist, IkonKroner } from "../ikoner";
 import { HemmeligFelt, HemmeligTekst } from "../hemmelig";
 
 // En konto i banken som er lagt inn i HI4 Faktura (bare de leses), med navnet derfra.
@@ -42,6 +43,7 @@ export interface BankStatus {
   tilkoblet: boolean;
   tilbake_url: string;
   antall: { forslag: number; uavklart: number; koblet: number; ignorert: number };
+  ai: boolean; // AI kan foreslå fakturaen for uavklarte innbetalinger
 }
 
 const BANKER = ["DNB", "Storebrand", "Nordea", "Handelsbanken", "Danske Bank", "SpareBank 1 SR-Bank", "SpareBank 1 SMN", "SpareBank 1 Østlandet", "SpareBank 1 Nord-Norge"];
@@ -562,6 +564,8 @@ export function Innbetalinger() {
   const h = useHandling();
   const [velg, settVelg] = useState<any | null>(null);
   const [henter, settHenter] = useState(false);
+  const [spor, settSpor] = useState<string | null>(null); // innbetalingen AI-en ser på
+  const [aiSvar, settAiSvar] = useState<Record<string, string>>({}); // når AI-en ikke fant noen faktura
   const bokfore = kanBokfore(org?.rolle);
 
   const handling = async (sti: string, kropp?: unknown) => {
@@ -570,6 +574,18 @@ export function Innbetalinger() {
       bank.last();
     }
   };
+
+  // Be AI-en om et forslag. Finner den en faktura, blir det et forslag som må bekreftes.
+  async function foreslaMedAi(id: string) {
+    settSpor(id);
+    const r = await h.kjor(() => api<{ transaksjon: any | null; grunn: string }>("POST", `/org/${org!.id}/banktransaksjoner/${id}/ai`));
+    settSpor(null);
+    if (!r) return;
+    if (r.transaksjon) {
+      last();
+      bank.last();
+    } else settAiSvar((x) => ({ ...x, [id]: r.grunn }));
+  }
 
   async function hentNa() {
     settHenter(true);
@@ -647,7 +663,16 @@ export function Innbetalinger() {
       ) : (
         <div className="kort liste innbetalinger">
           {data.transaksjoner.map((t) => (
-            <Innbetaling key={t.id} t={t} konto={kontoNavn?.get(t.konto) ?? null} bokfore={bokfore} opptatt={h.opptatt} handling={handling} velg={() => settVelg(t)} />
+            <Innbetaling
+              key={t.id}
+              t={t}
+              konto={kontoNavn?.get(t.konto) ?? null}
+              bokfore={bokfore}
+              opptatt={h.opptatt}
+              handling={handling}
+              velg={() => settVelg(t)}
+              ai={bank.data?.ai && t.valuta === "NOK" ? { spor: () => foreslaMedAi(t.id), sporres: spor === t.id, svar: aiSvar[t.id] ?? null } : null}
+            />
           ))}
         </div>
       )}
@@ -673,6 +698,7 @@ function Innbetaling({
   opptatt,
   handling,
   velg,
+  ai,
 }: {
   t: any;
   konto: string | null;
@@ -680,7 +706,9 @@ function Innbetaling({
   opptatt: boolean;
   handling: (sti: string, kropp?: unknown) => void;
   velg: () => void;
+  ai: { spor: () => void; sporres: boolean; svar: string | null } | null; // AI kan foreslå fakturaen
 }) {
+  const grunn = aiGrunn(t.grunn);
   const faktura = t.faktura_id ? (
     <Link to={`/fakturaer/${t.faktura_id}`}>
       Faktura {t.fakturanummer}
@@ -707,8 +735,8 @@ function Innbetaling({
       {t.status === "forslag" && (
         <div className="forslag">
           <span>
-            Trolig {faktura}
-            {t.grunn ? <span className="dempet"> – {t.grunn}</span> : null}
+            {grunn.ai && <AiMerke usikker={grunn.usikker} />} {grunn.usikker ? "Kanskje" : "Trolig"} {faktura}
+            {grunn.tekst ? <span className="dempet"> – {grunn.tekst}</span> : null}
           </span>
           {bokfore && (
             <span className="knapper">
@@ -727,12 +755,25 @@ function Innbetaling({
       )}
       {t.status === "uavklart" && (
         <div className="forslag uavklart">
-          <span className="dempet">{t.grunn ?? "Fant ingen faktura med dette beløpet eller fakturanummeret."}</span>
+          <span className="dempet">
+            {ai?.svar ? (
+              <>
+                <AiMerke /> {ai.svar}
+              </>
+            ) : (
+              t.grunn ?? "Fant ingen faktura med dette beløpet eller fakturanummeret."
+            )}
+          </span>
           {bokfore && (
             <span className="knapper">
               <button className="primar" disabled={opptatt} onClick={velg}>
                 Velg faktura
               </button>
+              {ai && !ai.svar && (
+                <button disabled={opptatt} onClick={ai.spor}>
+                  {ai.sporres ? <span className="spinner" /> : <IkonGnist storrelse={15} />} {ai.sporres ? "Spør AI …" : "Foreslå med AI"}
+                </button>
+              )}
               <button disabled={opptatt} onClick={() => handling(`${t.id}/ignorer`, { ignorer: true })}>
                 Ikke en faktura
               </button>
@@ -746,7 +787,7 @@ function Innbetaling({
             <span className="merke merke-ok">Registrert</span> på {faktura}
             <span className="dempet liten">
               {" "}
-              · {t.grunn}
+              · {grunn.ai ? `AI: ${grunn.tekst}` : t.grunn}
               {t.behandlet_av ? ` (${t.behandlet_av})` : " (automatisk)"}
             </span>
           </span>

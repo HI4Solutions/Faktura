@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apnePdf, hent, lastNed, type Vedlegg } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
@@ -10,6 +10,7 @@ import { IkonBinders, IkonKopier, IkonPluss } from "../ikoner";
 import { gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { kundeValg, Sokefelt } from "../sokefelt";
 import { VedleggFelt, VedleggListe } from "../vedlegg";
+import { AiFaktura, type AiUtkast } from "../ai";
 
 // Binders etter kundenavnet i lista når fakturaen har vedlegg.
 const HarVedlegg = ({ antall }: { antall?: number }) =>
@@ -321,6 +322,8 @@ export function FakturaSkjema() {
   const [kopi, settKopi] = useState("");
   const [vedlegg, settVedlegg] = useState<Vedlegg[]>([]);
   const [lasterOpp, settLasterOpp] = useState(false); // vedlegg som lastes opp
+  const [aiKunde, settAiKunde] = useState<string | null>(null); // kunden AI-en ikke fant i registeret
+  const aiFylt = useRef<Set<string>>(new Set()); // feltene forrige AI-utkast fylte ut
   const { opptatt, feil, settFeil, kjor } = useHandling();
 
   // Fyll inn eksisterende utkast, eller fakturaen som kopieres. En kopi får dagens dato og
@@ -401,6 +404,37 @@ export function FakturaSkjema() {
   // Produkter med fast avsender eller konto velger dem når de legges på.
   const ulikeFasteValg = useFasteValg(linjer, produkter.data, lastet, (v) => settF((x: any) => ({ ...x, ...v })));
 
+  // Utkastet fra AI-en fyller skjemaet. Det som ikke ble sagt, blir stående, men felt et
+  // tidligere utkast fylte ut, settes tilbake (et nytt utkast er en ny beskrivelse). Linjene
+  // erstattes. Uten forfallsdato regnes standard frist fra fakturadatoen. En kunde som ikke
+  // finnes i registeret, må velges eller legges til.
+  function brukAi(u: AiUtkast) {
+    const forrige = aiFylt.current;
+    const felt: Record<string, string | null> = {
+      fakturadato: u.fakturadato,
+      forfallsdato: u.forfallsdato,
+      periode_fra: u.periode_fra,
+      periode_til: u.periode_til,
+      deres_referanse: u.deres_referanse,
+      kommentar: u.kommentar,
+    };
+    settF((x: any) => {
+      const y = { ...x, kunde_id: u.kunde_id ?? (u.kunde_navn ? "" : x.kunde_id) };
+      for (const [navn, verdi] of Object.entries(felt)) {
+        if (verdi != null) y[navn] = verdi;
+        else if (forrige.has(navn)) y[navn] = navn === "fakturadato" ? iDag() : "";
+      }
+      if (!u.forfallsdato && (u.fakturadato || forrige.has("fakturadato") || forrige.has("forfallsdato")) && orgData.data)
+        y.forfallsdato = leggTilDager(y.fakturadato, orgData.data.standard_forfall_dager);
+      return y;
+    });
+    aiFylt.current = new Set(Object.keys(felt).filter((k) => felt[k] != null));
+    if (u.linjer.length) settLinjer(u.linjer.map((l) => tilUtkast({ ...l, rabatt_belop: null })));
+    if (u.linjer.some((l) => l.rabatt_prosent)) settRabattValgt(true);
+    settAiKunde(!u.kunde_id && u.kunde_navn ? u.kunde_navn : null);
+    settFeil(null);
+  }
+
   // Et produkt laget fra skjemaet havner på linjen det ble laget fra, ellers på første
   // tomme linje (eller en ny linje).
   function brukNyttProdukt(p: any, hvor: number | "ny") {
@@ -476,6 +510,7 @@ export function FakturaSkjema() {
           Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
         </div>
       )}
+      {!id && !kopiId && orgData.data.ai_tilgjengelig && orgData.data.ai_aktiv && <AiFaktura orgId={org!.id} bruk={brukAi} />}
       <div className="kort">
         <div className="rad">
           <label className="hel">
@@ -485,7 +520,10 @@ export function FakturaSkjema() {
                 etikett="Kunde"
                 valg={kundeValg(kunder.data)}
                 verdi={f.kunde_id || null}
-                velg={(id) => settF({ ...f, kunde_id: id ?? "" })}
+                velg={(id) => {
+                  settF({ ...f, kunde_id: id ?? "" });
+                  if (id) settAiKunde(null);
+                }}
                 plassholder="Søk kunde"
                 ny={{ tekst: "+ Ny kunde", handling: (navn) => settNyKunde({ navn }) }}
               />
@@ -503,6 +541,15 @@ export function FakturaSkjema() {
             <input type="date" value={f.forfallsdato} onChange={(e) => settF({ ...f, forfallsdato: e.target.value })} />
           </label>
         </div>
+        {aiKunde && !f.kunde_id && (
+          <div className="melding info ai-kunde">
+            Fant ikke «{aiKunde}» i kunderegisteret. Velg kunden over, eller{" "}
+            <button type="button" className="lenke" onClick={() => settNyKunde({ navn: aiKunde })}>
+              legg til {aiKunde} som ny kunde
+            </button>
+            .
+          </div>
+        )}
         {kunde && ehf.data?.tilkoblet && kunde.ehf && kunde.orgnr ? (
           <div className="melding info">Sendes som EHF til {kunde.navn} (org.nr. {orgnr(kunde.orgnr)}). Kopimottakerne får en kopi på e-post.</div>
         ) : (
@@ -633,6 +680,7 @@ export function FakturaSkjema() {
           kunde={{ type: "firma", aktiv: true, navn: nyKunde?.navn ?? "" }}
           lagret={async (k) => {
             settNyKunde(null);
+            settAiKunde(null);
             await kunder.last();
             settF((x: any) => ({ ...x, kunde_id: k.id }));
           }}

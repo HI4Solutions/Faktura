@@ -25,6 +25,14 @@ locals {
     TZ                     = "Europe/Oslo"
     NODE_ENV               = "production"
   }
+
+  # AI: Gemini på Vertex AI i EU (fakturautkast i API-et, forslag på innbetalinger i
+  # workeren). Uten AI_PROSJEKT (ai_aktiv = false) er AI-funksjonene skjult.
+  ai_env = merge({ for k, v in { AI_PROSJEKT = var.project_id } : k => v if var.ai_aktiv }, {
+    AI_REGION = var.ai_region
+    AI_MODELL = var.ai_modell
+    AI_GRENSE = tostring(var.ai_grense)
+  })
 }
 
 resource "google_cloud_run_v2_service" "api" {
@@ -53,7 +61,7 @@ resource "google_cloud_run_v2_service" "api" {
       image = var.placeholder_image
 
       dynamic "env" {
-        for_each = merge(local.db_env, {
+        for_each = merge(local.db_env, local.ai_env, {
           ROLLE         = "api"
           ADMIN_EPOSTER = var.admin_eposter
           DB_USER       = google_sql_user.api.name
@@ -141,7 +149,7 @@ resource "google_cloud_run_v2_service" "worker" {
       image = var.placeholder_image
 
       dynamic "env" {
-        for_each = merge(local.db_env, { ROLLE = "worker", DB_USER = google_sql_user.worker.name })
+        for_each = merge(local.db_env, local.ai_env, { ROLLE = "worker", DB_USER = google_sql_user.worker.name })
         content {
           name  = env.key
           value = env.value

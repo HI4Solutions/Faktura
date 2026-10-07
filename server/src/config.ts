@@ -51,6 +51,14 @@ export const config = {
   // Banking. Hver organisasjon bruker sin egen applikasjon der.
   enableBankingUrl: valgfri("ENABLE_BANKING_URL") ?? "https://api.enablebanking.com",
 
+  // AI: Gemini på Vertex AI i prosjektet (uten prosjekt er AI-funksjonene skjult), i EU.
+  // Regionen kan også være multiregionen «eu» eller «global».
+  aiProsjekt: valgfri("AI_PROSJEKT"),
+  aiRegion: valgfri("AI_REGION") ?? "europe-west3",
+  aiModell: valgfri("AI_MODELL") ?? "gemini-3.5-flash",
+  // Høyst så mange AI-forespørsler per organisasjon per måned (tak på kostnaden).
+  aiGrense: Number(valgfri("AI_GRENSE") ?? 1000),
+
   // Plattformadministratorer (e-post, kommaseparert). Kan verifisere og sperre organisasjoner.
   adminEposter: (valgfri("ADMIN_EPOSTER") ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
 

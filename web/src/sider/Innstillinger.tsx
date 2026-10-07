@@ -140,6 +140,7 @@ function Organisasjon({ del }: { del: OrgDel }) {
       innehaver: o.innehaver?.trim() || null,
       standard_avsender: o.innehaver?.trim() ? o.standard_avsender : "firma",
     };
+    if (data.ai_tilgjengelig) kropp.ai_aktiv = o.ai_aktiv;
     if (data.mva_registrert && !o.mva_registrert && !confirm("Fakturere uten mva fremover? Alle produkter, utkast og gjentakende fakturaer settes til 0 % mva.")) return;
     if (o.type === "privatperson") {
       delete kropp.mva_registrert;
@@ -244,6 +245,20 @@ function Organisasjon({ del }: { del: OrgDel }) {
               </label>
               <label>
                 <input type="checkbox" {...avkryss("foretaksregisteret")} /> Registrert i Foretaksregisteret
+              </label>
+            </>
+          )}
+          {o.ai_tilgjengelig && (
+            <>
+              <h2>AI</h2>
+              <label>
+                <input type="checkbox" {...avkryss("ai_aktiv")} /> Bruk AI (Google Gemini)
+                <span className="liten" style={{ display: "block", marginLeft: 24 }}>
+                  Lag fakturaer fra tekst eller tale, og få forslag om hvilken faktura en innbetaling gjelder. Teksten eller opptaket, og det
+                  som trengs fra registrene (kunder, produkter, ubetalte fakturaer og innbetalingen), sendes til Gemini hos Google Cloud i EU.
+                  Google bruker ikke dataene til å trene modellene. AI-en lager bare utkast og forslag: du ser over før noe sendes eller
+                  registreres.
+                </span>
               </label>
             </>
           )}

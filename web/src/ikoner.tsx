@@ -187,3 +187,16 @@ export const IkonOyeAv = (p: P) => (
     <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3.5 3.5l17 17" />
   </Ikon>
 );
+// AI: gnister.
+export const IkonGnist = (p: P) => (
+  <Ikon {...p}>
+    <path d="M10 3.5c.5 3.6 2.4 5.5 6 6-3.6.5-5.5 2.4-6 6-.5-3.6-2.4-5.5-6-6 3.6-.5 5.5-2.4 6-6z" />
+    <path d="M18 13.5c.3 1.9 1.1 2.7 3 3-1.9.3-2.7 1.1-3 3-.3-1.9-1.1-2.7-3-3 1.9-.3 2.7-1.1 3-3z" />
+  </Ikon>
+);
+export const IkonMikrofon = (p: P) => (
+  <Ikon {...p}>
+    <rect x="9" y="2.5" width="6" height="11.5" rx="3" />
+    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v4M8.5 21.5h7" />
+  </Ikon>
+);

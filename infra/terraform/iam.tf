@@ -106,6 +106,14 @@ resource "google_project_iam_member" "api_firebase_auth" {
   member  = "serviceAccount:${google_service_account.api.email}"
 }
 
+# AI: Gemini på Vertex AI (API-et lager fakturautkast, workeren forslag på innbetalinger).
+resource "google_project_iam_member" "ai_bruker" {
+  for_each = { api = local.run_sas.api, worker = local.run_sas.worker }
+  project  = var.project_id
+  role     = "roles/aiplatform.user"
+  member   = "serviceAccount:${each.value}"
+}
+
 resource "google_project_iam_member" "api_recaptcha" {
   project = var.project_id
   role    = "roles/recaptchaenterprise.agent"

@@ -125,7 +125,16 @@ export function adminRuter() {
 
   // Tellinger for oversikten, og driftsstatus.
   r.get("/oversikt", async (c) => c.json((await somBetrodd(c.get("bruker").id, (db) => en(db, "select faktura.admin_oversikt() as d")))!.d));
-  r.get("/drift", async (c) => c.json((await somBetrodd(c.get("bruker").id, (db) => en(db, "select faktura.admin_drift() as d")))!.d));
+  // Med AI-bruken denne måneden (modellen og regionen fra konfigurasjonen).
+  r.get("/drift", async (c) =>
+    c.json(
+      (await somBetrodd(c.get("bruker").id, (db) =>
+        en(db, "select faktura.admin_drift() || jsonb_build_object('ai', faktura.admin_ai() || $1::jsonb) as d", [
+          JSON.stringify({ satt_opp: Boolean(config.aiProsjekt), modell: config.aiModell, region: config.aiRegion, grense: config.aiGrense }),
+        ]),
+      ))!.d,
+    ),
+  );
 
   r.get("/organisasjoner", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_organisasjoner()"))));
 

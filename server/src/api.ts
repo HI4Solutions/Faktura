@@ -21,6 +21,8 @@ import { kundenokler, kundeSjekk, planlegg, produktnokler } from "./importer.js"
 import { MAKS_ANTALL, skrivVedlegg, vedleggFiler, vedleggRuter } from "./vedlegg.js";
 import { ehfRuter } from "./ehfRuter.js";
 import { bankRuter } from "./bankRuter.js";
+import { aiRuter } from "./aiFaktura.js";
+import { aiPaa } from "./ai.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -82,6 +84,7 @@ const orgSkjema = z.object({
   innehaver: valgfriTekst(200).optional(),
   standard_avsender: z.enum(["firma", "innehaver"]).optional(),
   kopi_til: epostliste(5).optional(), // fast blindkopi av alle fakturaer
+  ai_aktiv: z.boolean().optional(), // AI (Gemini): fakturautkast og forslag på innbetalinger
 });
 
 const kundeSkjema = z.object({
@@ -282,7 +285,8 @@ export function lagApi() {
       if (!o) throw new ApiFeil(404, "Fant ikke organisasjonen");
       const direkte = await en(db, "select 1 from faktura.medlemmer where org_id = $1 and bruker_id = faktura.bruker_id()", [orgId(c)]);
       if (!direkte) await db.query("select faktura.logg_oppslag($1, 'organisasjon')", [orgId(c)]);
-      return { ...o, rolle: (await en(db, "select faktura.rolle($1) as r", [orgId(c)]))!.r };
+      // ai_tilgjengelig: AI er satt opp for plattformen (og ai_aktiv: slått på for organisasjonen).
+      return { ...o, rolle: (await en(db, "select faktura.rolle($1) as r", [orgId(c)]))!.r, ai_tilgjengelig: aiPaa() };
     });
     return c.json(o);
   });
@@ -311,6 +315,7 @@ export function lagApi() {
   org.route("/", vedleggRuter());
   org.route("/", ehfRuter());
   org.route("/", bankRuter());
+  org.route("/", aiRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting

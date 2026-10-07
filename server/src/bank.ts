@@ -6,7 +6,8 @@
 //   ordet «faktura»/«nr»: registreres som betaling med en gang.
 //   Samme beløp og betaler (eller bare samme beløp på én faktura): forslag som brukeren
 //   bekrefter.
-//   Resten: uavklart, og brukeren velger faktura selv eller ignorerer den.
+//   Resten: AI-en (Gemini, se aiInnbetaling.ts) foreslår fakturaen når den er rimelig
+//   sikker. Ellers uavklart, og brukeren velger faktura selv eller ignorerer den.
 //
 // Applikasjonen hos Enable Banking og den krypterte nøkkelen ligger i faktura.integrasjoner
 // (type 'bank'); bare workeren kan dekryptere nøkkelen. Hver bank (DNB, Storebrand …) har
@@ -33,6 +34,8 @@ import {
 import { sendVarsel } from "./push.js";
 import { kr } from "./regler.js";
 import { leggIKo } from "./tjenester.js";
+import { aiPaa } from "./ai.js";
+import { foreslaFaktura } from "./aiInnbetaling.js";
 
 const logg = (severity: string, message: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ severity, message, ...data }));
 
@@ -295,9 +298,13 @@ const utloptFeil = (f: BankFeil) =>
   f.status === 401 || f.status === 403 || /(EXPIRED|REVOKED|CLOSED|INVALID)_?SESSION|SESSION_?(EXPIRED|REVOKED|CLOSED|INVALID)|CONSENT/i.test(f.kode ?? "");
 
 type Resultat = { nye: number; koblet: number; forslag: number };
+// Hvor mange innbetalinger AI-en kan se på i én henting (tak på kostnaden, og den første
+// hentingen kan ha mange). feil: feil på rad; etter to prøves det ikke mer denne gangen.
+type AiBudsjett = { igjen: number; feil: number };
+const AI_PER_HENTING = 20;
 
 // Lagrer innbetalingen (én gang) og kobler den til en faktura om det går.
-async function lagreOgKoble(orgId: string, kontonummer: string, t: Innbetaling, r: Resultat) {
+async function lagreOgKoble(orgId: string, kontonummer: string, t: Innbetaling, r: Resultat, ai: AiBudsjett) {
   const ny = await somSystem((db) =>
     en<{ id: string }>(
       db,
@@ -310,7 +317,7 @@ async function lagreOgKoble(orgId: string, kontonummer: string, t: Innbetaling, 
   if (!ny) return;
   r.nye++;
   if (t.valuta !== "NOK") return;
-  const treff = finnFaktura(t, await somSystem((db) => apneFakturaer(db, orgId)));
+  let treff = finnFaktura(t, await somSystem((db) => apneFakturaer(db, orgId)));
   if (treff.status === "koblet") {
     try {
       await somSystem((db) => db.query("select faktura.koble_banktransaksjon($1, $2, $3)", [ny.id, treff.faktura_id, treff.grunn]));
@@ -321,6 +328,7 @@ async function lagreOgKoble(orgId: string, kontonummer: string, t: Innbetaling, 
       treff.status = "forslag";
     }
   }
+  if (treff.status === "uavklart" && ai.igjen > 0) treff = await medAi(orgId, ny.id, t, treff, ai);
   if (treff.status === "forslag") r.forslag++;
   await somSystem((db) =>
     db.query("update faktura.banktransaksjoner set status = $2, faktura_id = $3, grunn = $4 where id = $1", [
@@ -330,6 +338,22 @@ async function lagreOgKoble(orgId: string, kontonummer: string, t: Innbetaling, 
       treff.grunn,
     ]),
   );
+}
+
+// Reglene fant ingen faktura: et forslag fra AI-en når den er rimelig sikker (alltid
+// bare et forslag som brukeren bekrefter). Går det galt, blir innbetalingen uavklart.
+async function medAi(orgId: string, id: string, t: Innbetaling, treff: Treff, ai: AiBudsjett): Promise<Treff> {
+  ai.igjen--;
+  try {
+    const f = await foreslaFaktura(somSystem, orgId, { id, ...t });
+    ai.feil = 0;
+    if (f.faktura && f.sikkerhet !== "lav") return { status: "forslag", faktura_id: f.faktura.id, grunn: `AI: ${f.grunn}` };
+  } catch (e) {
+    // Kvoten for måneden er brukt opp: ikke flere forsøk denne gangen.
+    if ((e as { status?: number }).status === 429 || ++ai.feil >= 2) ai.igjen = 0;
+    logg("WARNING", "AI-forslaget for innbetalingen feilet", { org_id: orgId, id, feil: (e as Error).message });
+  }
+  return treff;
 }
 
 // Neste henting fra kontoene starter her, uten å røre resten av koblingen: en fornyelse
@@ -351,7 +375,7 @@ const merkHentet = (id: string, kontonr: string[], fra: string) =>
 // bankene, og kobler dem til fakturaene.
 export async function hentInnbetalinger(orgId: string, valg: { koblingId?: string; psu?: Psu } = {}): Promise<Resultat> {
   const resultat: Resultat = { nye: 0, koblet: 0, forslag: 0 };
-  const [app, koblinger, egne, start] = await somSystem(
+  const [app, koblinger, egne, start, aiAktiv] = await somSystem(
     async (db) =>
       [
         await bankApp(db, orgId),
@@ -362,9 +386,11 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
         ),
         await egneKontoer(db, orgId),
         (await en<{ fra: string | null }>(db, "select faktura.bank_fra($1)::text as fra", [orgId]))?.fra ?? null,
+        Boolean((await en<{ ai_aktiv: boolean }>(db, "select ai_aktiv from faktura.organisasjoner where id = $1", [orgId]))?.ai_aktiv),
       ] as const,
   );
   if (!app) return resultat;
+  const ai: AiBudsjett = { igjen: aiPaa() && aiAktiv ? AI_PER_HENTING : 0, feil: 0 };
   // Innbetalinger fra før startdatoen (som standard dagen organisasjonen begynte med HI4
   // Faktura) hentes ikke, og de som er hentet fra før, ryddes bort.
   const startdato = start ?? iDag(-60);
@@ -381,7 +407,7 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
       for (const konto of kontoer) {
         const fra = senest(hentesFra(k, konto) ?? iDag(-60), startdato);
         for (const t of tilInnbetalinger(await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu)))
-          if (t.dato >= startdato) await lagreOgKoble(orgId, konto.kontonr, t, resultat);
+          if (t.dato >= startdato) await lagreOgKoble(orgId, konto.kontonr, t, resultat, ai);
       }
       // Neste gang hentes de siste dagene på nytt: banker kan bokføre noen dager etter.
       await merkHentet(k.id, kontoer.map((x) => x.kontonr), iDag(-5));

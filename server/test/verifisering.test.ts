@@ -105,7 +105,9 @@ describe.skipIf(!harDb)("verifisering", () => {
     expect((await kall("GET", "/api/admin/organisasjoner/00000000-0000-4000-8000-000000000000", admin)).status).toBe(404);
     expect((await kall("GET", "/api/admin/organisasjoner/ikke-en-id", admin)).status).toBe(400);
     const drift = (await kall("GET", "/api/admin/drift", admin)).data;
-    expect(Object.keys(drift).sort()).toEqual(["banker", "ehf", "ehf_problemer", "epost", "epost_problemer", "integrasjoner", "utboks"]);
+    expect(Object.keys(drift).sort()).toEqual(["ai", "banker", "ehf", "ehf_problemer", "epost", "epost_problemer", "integrasjoner", "utboks"]);
+    expect(drift.ai).toMatchObject({ satt_opp: false, modell: "gemini-3.5-flash", region: "europe-west3", grense: 1000 });
+    expect(Object.keys(drift.ai.sum).sort()).toEqual(["antall", "tokens_inn", "tokens_ut"]);
 
     expect((await kall("POST", `/api/admin/organisasjoner/${org}/status`, admin, { status: "sperret" })).status).toBe(400);
     expect((await kall("POST", `/api/admin/organisasjoner/${org}/status`, admin, { status: "verifisert" })).data.verifisering).toBe("verifisert");

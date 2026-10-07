@@ -31,6 +31,7 @@
 | Bygg og utrulling | GitHub Actions med Workload Identity Federation, Artifact Registry, Terraform |
 | Overvåking | Cloud Logging, oppetidssjekk og varsler i Cloud Monitoring |
 | E-post | Resend (EU) bak et eget grensesnitt. Google har ingen transaksjonell e-posttjeneste |
+| AI | Gemini på Vertex AI i EU (europe-west3, Frankfurt): fakturautkast fra tekst og tale, forslag på innbetalinger. Tjenestekontoene har `roles/aiplatform.user`, uten nøkler |
 
 ## Datamodell
 
@@ -66,6 +67,14 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `kontoer`) vises og leses, hver fra sin egen dato. Appen legger til og fjerner banker;
   workeren lager BankID-adressen, fullfører økten og henter, og appen venter på svaret ved
   å spørre etter statusen
+- `ai_bruk`: AI-forespørsler og tokens per organisasjon, måned og funksjon. Hver organisasjon
+  har et tak per måned (`AI_GRENSE`), og en administrator kan slå AI av
+  (`organisasjoner.ai_aktiv`). Fakturautkast: teksten eller lydopptaket sendes til Gemini
+  sammen med kundene og produktene (med korte id-er, så modellen bare kan velge fra
+  registrene), og svaret (JSON etter et fast skjema) sjekkes før skjemaet fylles ut; ingenting
+  lagres. Innbetalinger reglene ikke fant noen faktura for, får et forslag fra Gemini når den
+  er rimelig sikker (`foresla_banktransaksjon`); forslag registreres aldri uten at en person
+  bekrefter
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
