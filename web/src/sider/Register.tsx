@@ -457,6 +457,12 @@ export function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagre
         <input type="checkbox" checked={Boolean(p.variabel)} onChange={(e) => settP({ ...p, variabel: e.target.checked })} />
         Variabel pris (fylles inn når produktet brukes på en faktura)
       </label>
+      {p.variabel && p.id && produkt?.enhetspris == null && (
+        <p className="liten dempet" style={{ marginTop: -6 }}>
+          Fakturerer du dette jevnlig? <Link to={`/gjentakende?fane=paaminnelser&produkt=${p.id}`}>Lag en påminnelse</Link>, så får du et varsel når
+          fakturaen skal lages, med produktet fylt inn.
+        </p>
+      )}
       <AvsenderKonto org={orgData.data} verdi={p} endre={(v) => settP({ ...p, ...v })} forProdukt />
       <label>
         <input type="checkbox" checked={p.aktiv !== false} onChange={(e) => settP({ ...p, aktiv: e.target.checked })} />

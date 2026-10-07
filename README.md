@@ -21,6 +21,7 @@ klienter, Google Disk og et adapterlag for bank og regnskapssystemer.
 | Innlogging: passord, TOTP-MFA og passkeys | Ferdig |
 | Verifisering av organisasjoner og adminside | Ferdig (admin via GitHub-variabelen `ADMIN_EPOSTER`) |
 | Gjentakende fakturaer, purring og inkassovarsel | Ferdig |
+| Påminnelser om å lage fakturaer (push og e-post), for beløp som varierer | Ferdig |
 | Rapporter (reskontro, mva, salg) og CSV-eksport | Ferdig |
 | E-postsporing (Resend-webhook) | Ferdig, krever webhook i Resend |
 | Google Disk | Ferdig, krever OAuth-klient (`GOOGLE_OAUTH_CLIENT_ID`) |

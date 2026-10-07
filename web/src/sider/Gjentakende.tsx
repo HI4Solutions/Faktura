@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 import { fraProdukt, harRabatt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
@@ -7,10 +7,33 @@ import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEpos
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { kanSkrive, useKonto } from "../konto";
 import { dato, iDag, kr, summer } from "../format";
+import { Paaminnelser } from "./Paaminnelser";
 
 const intervallTekst: Record<string, string> = { maaned: "Hver måned", kvartal: "Hvert kvartal", aar: "Hvert år" };
 
+// To faner: gjentakende fakturaer (sendes av seg selv) og påminnelser (for fakturaer man lager
+// selv, for eksempel når beløpet varierer). Fanen står i adressen (?fane=paaminnelser).
 export function Gjentakende() {
+  const [sok, settSok] = useSearchParams();
+  const fane = sok.get("fane") === "paaminnelser" ? "paaminnelser" : "fakturaer";
+  const faner = (
+    <div className="faner" role="tablist">
+      {(
+        [
+          ["fakturaer", "Fakturaer"],
+          ["paaminnelser", "Påminnelser"],
+        ] as const
+      ).map(([v, t]) => (
+        <button key={v} role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : ""} onClick={() => settSok(v === "fakturaer" ? {} : { fane: v }, { replace: true })}>
+          {t}
+        </button>
+      ))}
+    </div>
+  );
+  return fane === "paaminnelser" ? <Paaminnelser faner={faner} /> : <GjentakendeFakturaer faner={faner} />;
+}
+
+function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
   const { org } = useKonto();
   const nav = useNavigate();
   const { data, feil, last } = useData(() => hent<any[]>(`/org/${org!.id}/gjentakelser`), [org?.id]);
@@ -18,21 +41,31 @@ export function Gjentakende() {
   const h = useHandling();
   const smal = useSmal();
 
-  if (feil) return <Feil melding={feil} />;
-  if (!data) return <Laster />;
+  if (feil || !data)
+    return (
+      <>
+        <div className="topp">
+          <h1>Gjentakende</h1>
+        </div>
+        {faner}
+        {feil ? <Feil melding={feil} /> : <Laster />}
+      </>
+    );
 
   return (
     <>
       <div className="topp">
-        <h1>Gjentakende fakturaer</h1>
+        <h1>Gjentakende</h1>
         {kanSkrive(org?.rolle) && (
           <button className="primar" onClick={() => settRedigerer({})}>
             Ny gjentakelse
           </button>
         )}
       </div>
+      {faner}
       <p className="dempet">
-        Fakturaene lages og sendes automatisk hver morgen, så mange dager før forfall som du velger.
+        Fakturaene lages og sendes automatisk hver morgen, så mange dager før forfall som du velger. Varierer beløpet fra gang til gang? Lag en{" "}
+        <Link to="/gjentakende?fane=paaminnelser">påminnelse</Link> i stedet.
       </p>
       <Feil melding={h.feil} />
       {smal ? (

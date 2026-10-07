@@ -7,7 +7,7 @@ import { dagerMellom, dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag,
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 import { IkonBinders, IkonKopier, IkonKroner, IkonPluss } from "../ikoner";
-import { gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
+import { fraProdukt, gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { kundeValg, Sokefelt } from "../sokefelt";
 import { VedleggFelt, VedleggListe } from "../vedlegg";
 import { AiFaktura, type AiUtkast } from "../ai";
@@ -391,6 +391,7 @@ export function FakturaSkjema() {
   const produkter = useData(() => hent(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
   const ehf = useData(() => hent(`/org/${org!.id}/ehf`), [org?.id]);
   const kopiId = id ? null : sporring.get("kopi"); // ny faktura som kopi av en tidligere
+  const paaminnelseId = id || kopiId ? null : sporring.get("paaminnelse"); // ny faktura fra en påminnelse
   const [f, settF] = useState<any>({ kunde_id: (!id && sporring.get("kunde")) || "", fakturadato: iDag(), forfallsdato: "", periode_fra: "", periode_til: "", deres_referanse: "", var_referanse: "", notat: "", kommentar: "" });
   const [linjer, settLinjer] = useState<LinjeUtkast[]>([tomLinje()]);
   const [lastet, settLastet] = useState(!id && !kopiId); // utkastet som endres, eller fakturaen som kopieres, er hentet
@@ -408,6 +409,7 @@ export function FakturaSkjema() {
   const [vedlegg, settVedlegg] = useState<Vedlegg[]>([]);
   const [lasterOpp, settLasterOpp] = useState(false); // vedlegg som lastes opp
   const [aiKunde, settAiKunde] = useState<string | null>(null); // kunden AI-en ikke fant i registeret
+  const [fraPaaminnelse, settFraPaaminnelse] = useState<{ tekst: string; manglerPris: boolean } | null>(null);
   const aiFylt = useRef<Set<string>>(new Set()); // feltene forrige AI-utkast fylte ut
   const { opptatt, feil, settFeil, kjor } = useHandling();
 
@@ -531,6 +533,24 @@ export function FakturaSkjema() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sted.key, Boolean(orgData.data)]);
 
+  // Åpnet fra en påminnelse: kunden og produktene fylles inn (én gang). Produkter uten fast
+  // pris får tom pris, som brukeren fyller inn; produkter og kunder som er tatt bort, hoppes over.
+  const paaminnelseBrukt = useRef<string | null>(null);
+  useEffect(() => {
+    if (!paaminnelseId || !kunder.data || !produkter.data || paaminnelseBrukt.current === paaminnelseId) return;
+    paaminnelseBrukt.current = paaminnelseId;
+    hent<{ tekst: string; kunde_id: string | null; produkter: string[] }>(`/org/${org!.id}/paaminnelser/${paaminnelseId}`).then(
+      (p) => {
+        if (p.kunde_id && kunder.data!.some((k: any) => k.id === p.kunde_id)) settF((x: any) => ({ ...x, kunde_id: p.kunde_id }));
+        const valgte = p.produkter.map((pid) => produkter.data!.find((x: any) => x.id === pid)).filter(Boolean);
+        if (valgte.length) settLinjer(valgte.map((x: any) => ({ ...tomLinje(), ...fraProdukt(x) })));
+        settFraPaaminnelse({ tekst: p.tekst, manglerPris: valgte.some((x: any) => x.enhetspris == null) });
+      },
+      () => undefined,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paaminnelseId, Boolean(kunder.data), Boolean(produkter.data)]);
+
   // Et produkt laget fra skjemaet havner på linjen det ble laget fra, ellers på første
   // tomme linje (eller en ny linje).
   function brukNyttProdukt(p: any, hvor: number | "ny") {
@@ -607,7 +627,13 @@ export function FakturaSkjema() {
         </div>
       )}
       {fraAssistent && <div className="melding info">Fylt ut av AI-assistenten. Se over kunde, linjer og datoer før du sender.</div>}
-      {!id && !kopiId && orgData.data.ai_tilgjengelig && orgData.data.ai_aktiv && <AiFaktura orgId={org!.id} bruk={brukAi} />}
+      {fraPaaminnelse && (
+        <div className="melding info">
+          Fra påminnelsen «{fraPaaminnelse.tekst}».{" "}
+          {fraPaaminnelse.manglerPris ? "Fyll inn beløpet, og se over resten før du sender." : "Se over beløp og datoer før du sender."}
+        </div>
+      )}
+      {!id && !kopiId && !paaminnelseId && orgData.data.ai_tilgjengelig && orgData.data.ai_aktiv && <AiFaktura orgId={org!.id} bruk={brukAi} />}
       <div className="kort">
         <div className="rad">
           <label className="hel">

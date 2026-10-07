@@ -1136,3 +1136,20 @@ dialog.assistent > .melding { margin: 0 16px 8px; flex: none; }
   }
   .boble { max-width: 92%; }
 }
+
+/* Påminnelser om å lage fakturaer (Gjentakende → Påminnelser) */
+.paaminnelse-varsel { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
+.paaminnelse-varsel > .melding { flex-basis: 100%; margin: 0; }
+.paaminnelse-skjema .felt { margin-bottom: 14px; }
+.paaminnelse-skjema .etikett { display: block; font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); margin-bottom: 5px; }
+.paaminnelse-produkter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.produkt-brikke {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px;
+  background: var(--aksent-lys); color: var(--tekst); font-size: 0.86rem; font-weight: 500;
+}
+.produkt-brikke .dempet { font-weight: 450; }
+.produkt-brikke button.ikon { width: 24px; height: 24px; min-height: 0; padding: 0; border-radius: 999px; }
+.paaminnelse-oppsummering { margin: -6px 0 14px; }
+.valg-rad { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 14px 0; }
+.valg-rad legend { font-size: 0.83rem; font-weight: 600; color: var(--tekst-2); padding: 0 4px; }
+.valg-rad label { margin-bottom: 10px; }

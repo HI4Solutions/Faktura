@@ -44,6 +44,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `medlemmer`, `invitasjoner`: brukere og roller
 - `org_tilgang`: regnskapsbyrå ↔ klient (les eller bokfør), alltid med klientens samtykke
 - `kunder`, `produkter`, `gjentakelser`
+- `paaminnelser`: påminnelser om fakturaer man lager selv (når beløpet varierer og en
+  gjentakende faktura ikke passer): hver måned, kvartal, år, uke eller én gang, på et
+  klokkeslett. Workeren tar dem hvert minutt (`ta_paaminnelser` flytter hver til neste dato
+  før varselet sendes, så ingen sendes to ganger) og sender push-varsel til den som lagde
+  dem eller alle som kan fakturere, og e-post om det er valgt. Varselet åpner en ny faktura
+  med kunden og produktene fylt inn
 - `fakturaer`, `faktura_linjer`, `betalinger`
 - `vedlegg`: filer på fakturaer (PDF, bilder, CSV og regneark, typene EHF godtar).
   Lastes opp før utkastet lagres, låses ved utstedelse, og workeren legger en kopi i

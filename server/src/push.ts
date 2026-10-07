@@ -20,6 +20,7 @@ export const VARSELTYPER = {
   gjentakende: "Gjentakende fakturaer sendt",
   indeksregulering: "Indeksregulering planlagt",
   bank: "Innbetalinger fra banken",
+  paaminnelse: "Påminnelser om å lage fakturaer",
 } as const;
 export type Varseltype = keyof typeof VARSELTYPER;
 
@@ -27,6 +28,7 @@ export interface Varsel {
   hendelse: Varseltype | "test";
   org_id?: string; // alle direkte medlemmer av organisasjonen som vil ha denne typen varsel
   bruker_id?: string; // eller én bestemt bruker
+  bruker_ider?: string[]; // eller bare disse brukerne (med org_id: de som fortsatt er med i organisasjonen)
   unntatt?: string; // brukeren som selv utløste hendelsen, trenger ikke varsel
   tittel: string;
   tekst: string;
@@ -101,11 +103,11 @@ export async function sendVarsel(v: Varsel): Promise<{ sendt: number; fjernet: n
               (select count(*) from faktura.medlemmer mm where mm.bruker_id = a.bruker_id)::int as antall_org
          from faktura.push_abonnementer a
          left join faktura.push_valg pv on pv.bruker_id = a.bruker_id
-        where ($1::uuid is null or a.bruker_id = $1)
+        where ($1::uuid[] is null or a.bruker_id = any($1::uuid[]))
           and ($2::uuid is null or exists (select 1 from faktura.medlemmer m where m.org_id = $2 and m.bruker_id = a.bruker_id))
           and a.bruker_id is distinct from $3::uuid
           and ($4 = 'test' or coalesce((pv.valg ->> $4)::boolean, true))`,
-      [v.bruker_id ?? null, v.org_id ?? null, v.unntatt ?? null, v.hendelse],
+      [v.bruker_ider ?? (v.bruker_id ? [v.bruker_id] : null), v.org_id ?? null, v.unntatt ?? null, v.hendelse],
     );
     if (!mottakere.length) return null;
     // Nøkkelen dekrypteres først når det faktisk er noen å sende til.

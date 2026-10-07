@@ -23,6 +23,7 @@ import { ehfRuter } from "./ehfRuter.js";
 import { bankRuter } from "./bankRuter.js";
 import { aiRuter } from "./aiFaktura.js";
 import { assistentRuter } from "./aiAssistent.js";
+import { paaminnelseRuter } from "./paaminnelser.js";
 import { aiPaa } from "./ai.js";
 
 const uuid = z.string().uuid();
@@ -318,6 +319,7 @@ export function lagApi() {
   org.route("/", bankRuter());
   org.route("/", aiRuter());
   org.route("/", assistentRuter());
+  org.route("/", paaminnelseRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting
