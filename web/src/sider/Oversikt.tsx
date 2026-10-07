@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { hent } from "../api";
 import { Feil, Laster, Tom, useData } from "../felles";
-import { kanSkrive, useKonto } from "../konto";
+import { kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { IkonFaktura, IkonHake, IkonKlokke, IkonKroner, IkonKunder, IkonPluss, IkonUtkast, IkonVarsel } from "../ikoner";
 import { Fakturatabell } from "./Fakturaer";
@@ -208,6 +208,7 @@ export function Oversikt() {
           rader={data.slice(0, 8)}
           klikk={(id) => nav(`/fakturaer/${id}`)}
           kopier={kanSkrive(org?.rolle) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined}
+          betaling={kanBokfore(org?.rolle)}
         />
       ) : (
         <div className="kort">

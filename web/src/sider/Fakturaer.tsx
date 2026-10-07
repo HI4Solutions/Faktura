@@ -1,12 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apnePdf, hent, lastNed, type Vedlegg } from "../api";
-import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
+import { dataEndret, Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dagerMellom, dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, orgnr, summer } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
-import { IkonBinders, IkonKopier, IkonPluss } from "../ikoner";
+import { IkonBinders, IkonKopier, IkonKroner, IkonPluss } from "../ikoner";
 import { gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { kundeValg, Sokefelt } from "../sokefelt";
 import { VedleggFelt, VedleggListe } from "../vedlegg";
@@ -76,7 +76,12 @@ export function Fakturaliste() {
       {laster && !data ? (
         <Laster />
       ) : (
-        <Fakturatabell rader={data ?? []} klikk={(id) => nav(`/fakturaer/${id}`)} kopier={kanSkrive(org?.rolle) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined} />
+        <Fakturatabell
+          rader={data ?? []}
+          klikk={(id) => nav(`/fakturaer/${id}`)}
+          kopier={kanSkrive(org?.rolle) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined}
+          betaling={kanBokfore(org?.rolle)}
+        />
       )}
       <Dialog apen={sendUtkast} lukk={() => settSendUtkast(false)} tittel="Send utkast">
         <SendUtkast
@@ -179,16 +184,31 @@ function SendUtkast({ utkast, ferdig }: { utkast: any[]; ferdig: () => void }) {
 }
 
 // Med `kopier` får hver faktura (ikke kreditnotaer) en knapp som lager en ny faktura med samme
-// innhold, med ett trykk.
-export function Fakturatabell({ rader, klikk, kopier }: { rader: any[]; klikk: (id: string) => void; kopier?: (id: string) => void }) {
+// innhold, med ett trykk. Med `betaling` får ubetalte fakturaer en knapp ved siden av for å
+// registrere en betaling rett fra lista (beløpet som gjenstår er fylt inn).
+export function Fakturatabell({ rader, klikk, kopier, betaling }: { rader: any[]; klikk: (id: string) => void; kopier?: (id: string) => void; betaling?: boolean }) {
+  const { org } = useKonto();
   const smal = useSmal();
+  const [betaler, settBetaler] = useState<any | null>(null);
+  const [kvittering, settKvittering] = useState<string | null>(null);
+  useEffect(() => {
+    if (!kvittering) return;
+    const t = window.setTimeout(() => settKvittering(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [kvittering]);
+  const gjenstar = (f: any) => Math.max(0, Number(f.sum_inkl_mva ?? 0) - Number(f.kreditert_belop ?? 0) - Number(f.betalt_belop ?? 0));
+  const kanBetales = (f: any) => Boolean(betaling) && f.type === "faktura" && f.status === "utstedt";
+  const medBetal = rader.some(kanBetales);
+  const knapper = Boolean(kopier) || medBetal;
+  const nr = (f: any) => (f.fakturanummer ? `faktura ${f.fakturanummer}` : "utkastet");
+
   const kopiKnapp = (f: any) =>
     kopier && f.type === "faktura" ? (
       <button
         type="button"
         className="kopier"
         title="Kopier til ny faktura"
-        aria-label={`Kopier ${f.fakturanummer ? `faktura ${f.fakturanummer}` : "utkastet"} til ny faktura`}
+        aria-label={`Kopier ${nr(f)} til ny faktura`}
         onClick={(e) => {
           e.stopPropagation();
           kopier(f.id);
@@ -197,87 +217,151 @@ export function Fakturatabell({ rader, klikk, kopier }: { rader: any[]; klikk: (
         <IkonKopier storrelse={18} />
       </button>
     ) : null;
+  const betalKnapp = (f: any) =>
+    kanBetales(f) ? (
+      <button
+        type="button"
+        className="kopier betal"
+        title="Registrer betaling"
+        aria-label={`Registrer betaling på ${nr(f)}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          settKvittering(null);
+          settBetaler(f);
+        }}
+      >
+        <IkonKroner storrelse={18} />
+      </button>
+    ) : null;
+  // Tomme plasser for knappene en faktura ikke har, så beløpene står likt i lista.
+  const tom = <span className="kopier" aria-hidden="true" />;
+
+  const dialog = (
+    <Dialog apen={betaler !== null} lukk={() => settBetaler(null)} tittel="Registrer betaling">
+      {betaler && (
+        <>
+          <p className="dempet">
+            Faktura {betaler.fakturanummer} til {betaler.kunde_navn}: {kr(gjenstar(betaler))} kr gjenstår
+            {betaler.forfallsdato ? `, forfall ${dato(betaler.forfallsdato)}` : ""}.
+          </p>
+          <BelopSkjema
+            key={betaler.id}
+            forslag={gjenstar(betaler)}
+            knapp="Registrer betaling"
+            send={async (belop, d, notat) => {
+              await api("POST", `/org/${org!.id}/fakturaer/${betaler.id}/betalinger`, { belop, dato: d, notat });
+              settKvittering(`Betalingen på ${kr(belop)} kr er registrert på faktura ${betaler.fakturanummer}.`);
+              settBetaler(null);
+              dataEndret();
+            }}
+          />
+        </>
+      )}
+    </Dialog>
+  );
+  const melding = kvittering && (
+    <div className="melding ok" role="status">
+      {kvittering}
+    </div>
+  );
+
   if (smal) {
     return (
-      <div className="kort liste">
-        {rader.map((f) => {
-          const m = fakturaMerke(f);
-          const rad = (
-            <button type="button" className="liste-rad" onClick={() => klikk(f.id)}>
-              <span className="linje">
-                <span className="tittel">
-                  {f.kunde_navn}
-                  <HarVedlegg antall={f.antall_vedlegg} />
+      <>
+        {melding}
+        <div className="kort liste">
+          {rader.map((f) => {
+            const m = fakturaMerke(f);
+            const rad = (
+              <button type="button" className="liste-rad" onClick={() => klikk(f.id)}>
+                <span className="linje">
+                  <span className="tittel">
+                    {f.kunde_navn}
+                    <HarVedlegg antall={f.antall_vedlegg} />
+                  </span>
+                  <span className="belop">{f.sum_inkl_mva == null ? "" : kr(f.sum_inkl_mva)}</span>
                 </span>
-                <span className="belop">{f.sum_inkl_mva == null ? "" : kr(f.sum_inkl_mva)}</span>
-              </span>
-              <span className="linje">
-                <span className="under">
-                  {f.fakturanummer ? `Nr. ${f.fakturanummer}` : "Utkast"}
-                  {f.type === "kreditnota" ? " · kreditnota" : f.forfallsdato ? ` · forfall ${dato(f.forfallsdato)}` : ""}
+                <span className="linje">
+                  <span className="under">
+                    {f.fakturanummer ? `Nr. ${f.fakturanummer}` : "Utkast"}
+                    {f.type === "kreditnota" ? " · kreditnota" : f.forfallsdato ? ` · forfall ${dato(f.forfallsdato)}` : ""}
+                  </span>
+                  <span className={`merke ${m.klasse}`}>{m.tekst}</span>
                 </span>
-                <span className={`merke ${m.klasse}`}>{m.tekst}</span>
-              </span>
-            </button>
-          );
-          // Knappen ligger ved siden av raden (ikke inni), og kreditnotaer får en tom plass så beløpene står likt.
-          return kopier ? (
-            <div key={f.id} className="liste-rad-ramme">
-              {rad}
-              {kopiKnapp(f) ?? <span className="kopier" aria-hidden="true" />}
-            </div>
-          ) : (
-            <Fragment key={f.id}>{rad}</Fragment>
-          );
-        })}
-        {rader.length === 0 && <p className="dempet" style={{ padding: "16px" }}>Ingen fakturaer her.</p>}
-      </div>
+              </button>
+            );
+            // Knappene ligger ved siden av raden (ikke inni).
+            return knapper ? (
+              <div key={f.id} className="liste-rad-ramme">
+                {rad}
+                {medBetal && (betalKnapp(f) ?? tom)}
+                {kopier && (kopiKnapp(f) ?? tom)}
+              </div>
+            ) : (
+              <Fragment key={f.id}>{rad}</Fragment>
+            );
+          })}
+          {rader.length === 0 && <p className="dempet" style={{ padding: "16px" }}>Ingen fakturaer her.</p>}
+        </div>
+        {dialog}
+      </>
     );
   }
   return (
-    <div className="kort tabell">
-      <table>
-        <thead>
-          <tr>
-            <th>Nr.</th>
-            <th>Kunde</th>
-            <th>Dato</th>
-            <th>Forfall</th>
-            <th className="hoyre">Beløp</th>
-            <th>Status</th>
-            {kopier && <th className="kopier-celle" aria-label="Kopier" />}
-          </tr>
-        </thead>
-        <tbody>
-          {rader.map((f) => {
-            const m = fakturaMerke(f);
-            return (
-              <tr key={f.id} className="klikkbar" onClick={() => klikk(f.id)}>
-                <td>{f.fakturanummer ?? "–"}</td>
-                <td>
-                  {f.kunde_navn}
-                  <HarVedlegg antall={f.antall_vedlegg} />
-                </td>
-                <td>{dato(f.fakturadato)}</td>
-                <td>{f.type === "faktura" ? dato(f.forfallsdato) : ""}</td>
-                <td className="tall">{f.sum_inkl_mva == null ? "" : kr(f.sum_inkl_mva)}</td>
-                <td>
-                  <span className={`merke ${m.klasse}`}>{m.tekst}</span>
-                </td>
-                {kopier && <td className="kopier-celle">{kopiKnapp(f)}</td>}
-              </tr>
-            );
-          })}
-          {rader.length === 0 && (
+    <>
+      {melding}
+      <div className="kort tabell">
+        <table>
+          <thead>
             <tr>
-              <td colSpan={kopier ? 7 : 6} className="dempet">
-                Ingen fakturaer her.
-              </td>
+              <th>Nr.</th>
+              <th>Kunde</th>
+              <th>Dato</th>
+              <th>Forfall</th>
+              <th className="hoyre">Beløp</th>
+              <th>Status</th>
+              {knapper && <th className="kopier-celle" aria-label="Handlinger" />}
             </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rader.map((f) => {
+              const m = fakturaMerke(f);
+              return (
+                <tr key={f.id} className="klikkbar" onClick={() => klikk(f.id)}>
+                  <td>{f.fakturanummer ?? "–"}</td>
+                  <td>
+                    {f.kunde_navn}
+                    <HarVedlegg antall={f.antall_vedlegg} />
+                  </td>
+                  <td>{dato(f.fakturadato)}</td>
+                  <td>{f.type === "faktura" ? dato(f.forfallsdato) : ""}</td>
+                  <td className="tall">{f.sum_inkl_mva == null ? "" : kr(f.sum_inkl_mva)}</td>
+                  <td>
+                    <span className={`merke ${m.klasse}`}>{m.tekst}</span>
+                  </td>
+                  {knapper && (
+                    <td className="kopier-celle">
+                      <span className="radknapper">
+                        {medBetal && (betalKnapp(f) ?? tom)}
+                        {kopier && (kopiKnapp(f) ?? tom)}
+                      </span>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+            {rader.length === 0 && (
+              <tr>
+                <td colSpan={knapper ? 7 : 6} className="dempet">
+                  Ingen fakturaer her.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {dialog}
+    </>
   );
 }
 

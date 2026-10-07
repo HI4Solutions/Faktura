@@ -627,11 +627,13 @@ ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 .bank-app { margin: 14px 0 0; }
 @media (max-width: 700px) { .ny-bank .rad, .bank-skjema .rad { grid-template-columns: minmax(0, 1fr); } }
 
-/* Kopier med ett trykk i fakturalistene: knappen står ved siden av raden. */
+/* Registrer betaling og kopier med ett trykk i fakturalistene: knappene står ved siden av raden. */
 .liste-rad-ramme { display: flex; align-items: center; border-bottom: 1px solid var(--kant); }
 .liste-rad-ramme:last-child { border-bottom: 0; }
 .liste-rad-ramme > .liste-rad { flex: 1; min-width: 0; border-bottom: 0; padding-right: 6px; }
-.liste-rad-ramme > .kopier { margin-right: 8px; }
+.liste-rad-ramme > .kopier { margin-right: 2px; }
+.liste-rad-ramme > .kopier:last-child { margin-right: 8px; }
+.radknapper { display: inline-flex; gap: 2px; vertical-align: middle; }
 .kopier { flex: none; width: 34px; height: 34px; }
 button.kopier {
   min-height: 34px; padding: 0; justify-content: center; border: 0; border-radius: 9px; background: none; box-shadow: none;
