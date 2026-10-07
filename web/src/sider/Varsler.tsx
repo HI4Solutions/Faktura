@@ -169,11 +169,14 @@ interface PushData {
 export function AppOgVarsler() {
   const { meg } = useKonto();
   const { data, last } = useData(() => hent<PushData>("/push"), []);
-  // Bare de varslene som gjelder: ansatte får bare timevarsler, og timevarsler bare der timer er slått på.
+  // Bare de varslene som gjelder: ansatte får bare varsler om timer og vakter, og de bare der
+  // ansatte og timer er slått på.
   const orgs = meg?.organisasjoner ?? [];
   const bareAnsatt = orgs.length > 0 && orgs.every((o) => o.rolle === "ansatt");
   const typer = Object.entries(data?.typer ?? {}).filter(([type]) =>
-    type === "timer" ? orgs.some((o) => o.personal && (o.rolle === "ansatt" || o.ansatt_id || ["eier", "admin"].includes(o.rolle))) : !bareAnsatt,
+    type === "timer" || type === "vakter"
+      ? orgs.some((o) => o.personal && (o.rolle === "ansatt" || o.ansatt_id || ["eier", "admin"].includes(o.rolle)))
+      : !bareAnsatt,
   );
   const { kanInstallere } = usePwa();
   const [denne, settDenne] = useState<string | null>(null); // endepunktet til denne enheten

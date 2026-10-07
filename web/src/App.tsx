@@ -21,6 +21,7 @@ import { Rapporter } from "./sider/Rapporter";
 import { BankTilbake, Innbetalinger } from "./sider/Bank";
 import { Ansatte } from "./sider/Ansatte";
 import { Timer } from "./sider/Timer";
+import { Vakter } from "./sider/Vakter";
 import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
@@ -28,7 +29,7 @@ import { TemaBryter } from "./TemaBryter";
 import { installer } from "./pwa";
 import { Assistent } from "./assistent";
 import {
-  IkonAnsatte, IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKlokke, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
+  IkonAnsatte, IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
   IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
@@ -184,10 +185,16 @@ function Ramme() {
       </header>
       <nav className="bunnmeny" aria-label="Hovedmeny">
         {ansatt ? (
-          <NavLink to="/timer">
-            <IkonKlokke storrelse={22} />
-            <span>Timer</span>
-          </NavLink>
+          <>
+            <NavLink to="/timer">
+              <IkonKlokke storrelse={22} />
+              <span>Timer</span>
+            </NavLink>
+            <NavLink to="/vakter">
+              <IkonKalender storrelse={22} />
+              <span>Vakter</span>
+            </NavLink>
+          </>
         ) : (
           <NavLink to="/" end>
             <IkonOversikt storrelse={22} />
@@ -253,10 +260,16 @@ function Ramme() {
         </div>
         <div className="meny-seksjon">Meny</div>
         {ansatt ? (
-          <NavLink to="/timer">
-            <IkonKlokke />
-            Timer
-          </NavLink>
+          <>
+            <NavLink to="/timer">
+              <IkonKlokke />
+              Timer
+            </NavLink>
+            <NavLink to="/vakter">
+              <IkonKalender />
+              Vakter
+            </NavLink>
+          </>
         ) : (
           <NavLink to="/" end>
             <IkonOversikt />
@@ -298,6 +311,12 @@ function Ramme() {
               <NavLink to="/ansatte">
                 <IkonAnsatte />
                 Ansatte
+              </NavLink>
+            )}
+            {visTimer && (
+              <NavLink to="/vakter">
+                <IkonKalender />
+                Vaktplan
               </NavLink>
             )}
             {visTimer && (
@@ -350,6 +369,7 @@ function Ramme() {
         {org && ansatt && (
           <Routes>
             <Route path="/timer" element={<Timer />} />
+            <Route path="/vakter" element={<Vakter />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
@@ -375,6 +395,7 @@ function Ramme() {
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/produkter/importer" element={<Importer key="produkter" type="produkter" />} />
             <Route path="/ansatte" element={<Ansatte />} />
+            <Route path="/vakter" element={<Vakter />} />
             <Route path="/timer" element={<Timer />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />

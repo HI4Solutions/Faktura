@@ -1256,7 +1256,9 @@ button.foring:active:not(:disabled) { transform: none; background: var(--aksent-
 fieldset.naken { border: 0; padding: 0; margin: 0; background: none; min-width: 0; }
 .faner.valg { display: flex; width: 100%; margin-bottom: 14px; }
 .faner.valg button { flex: 1; justify-content: center; }
-.rad.tre { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Fra, til og pause: klokkefeltene får mest plass (12-timersformat med «PM» skal få plass) */
+.rad.tre { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.75fr); }
+.rad.tre input[type="time"] { padding-left: 10px; padding-right: 8px; }
 .utregnet { margin: -6px 0 12px; min-height: 1.3em; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tekst-2); }
 .overtid-hjelp { margin: -8px 0 14px; }
 
@@ -1305,7 +1307,7 @@ button.lenke.fare:hover:not(:disabled) { background: none; }
   .ukesum .summer div { padding: 0; gap: 5px; }
   .ukesum .summer .tall { font-weight: 600; }
   .uke-rad > .ukesum { margin-bottom: 14px; }
-  .rad.tre { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rad.tre { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.75fr); }
   .liste-verktoy .faner { margin-bottom: 10px; }
   .faner.tett button { padding-left: 10px; padding-right: 10px; }
   /* Føringene som venter: dag, tid og timer på én linje, beskrivelse og overtid under */
@@ -1316,3 +1318,66 @@ button.lenke.fare:hover:not(:disabled) { background: none; }
   table.foringer > tbody > tr > td:nth-child(5) { grid-column: 3; }
   table.foringer > tbody > tr > td:empty { display: none; }
 }
+
+/* --------------------------------------------------------------------------
+   Vaktplan
+   -------------------------------------------------------------------------- */
+.utkast-info { margin: -4px 0 12px; }
+/* Planen på PC: én rad per ansatt, én kolonne per dag */
+.kort.tabell.vaktplan table { table-layout: fixed; min-width: 760px; }
+.vaktplan th:first-child { width: 140px; }
+.vaktplan th:last-child { width: 86px; }
+.vaktplan th.i-dag { color: var(--aksent); }
+.vaktplan td { vertical-align: top; padding: 6px 4px; }
+.vaktplan td:first-child { padding-top: 11px; font-weight: 550; overflow-wrap: anywhere; }
+.vaktplan td:last-child { padding-top: 11px; }
+.vaktplan td.ny-vakt { cursor: pointer; position: relative; height: 46px; }
+.vaktplan td.ny-vakt:hover { background: var(--aksent-lys); }
+.vaktplan td.ny-vakt:empty:hover::after {
+  content: "+"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--aksent); font-size: 1.2rem; font-weight: 600;
+}
+.vaktplan .ledige-rad td { background: var(--flate-2); }
+.vaktplan .ledige-rad td:first-child strong { display: block; font-weight: 600; }
+.vaktplan .ledige-rad td:first-child .liten { display: block; font-weight: 450; }
+button.vakt-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; min-height: 0; margin: 0 0 4px; padding: 4px 6px;
+  border: 1px solid var(--kant); border-left: 3px solid var(--aksent); border-radius: 7px; background: var(--flate); box-shadow: none;
+  color: var(--tekst); font-size: 0.78rem; font-weight: 600; line-height: 1.25; text-align: left; cursor: pointer;
+}
+button.vakt-chip:last-child { margin-bottom: 0; }
+button.vakt-chip:hover:not(:disabled) { border-color: var(--aksent); border-left-color: var(--aksent); background: var(--aksent-lys); }
+button.vakt-chip.utkast { border-style: dashed; border-left-style: solid; border-left-color: var(--kant-sterk); background: var(--flate-2); }
+button.vakt-chip.advarsel { border-left-color: var(--advarsel); }
+.vakt-chip .vakt-tid { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vakt-chip .vakt-tid svg { color: var(--advarsel); flex: none; }
+/* I tabellen er rutene smale: den gule kanten og listen under viser advarslene. */
+.vaktplan .vakt-chip .vakt-tid svg { display: none; }
+.vakt-chip .vakt-navn { font-weight: 550; }
+.vakt-chip .vakt-oppgave { color: var(--dempet); font-weight: 500; font-size: 0.74rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Dag for dag (mobil og smale skjermer) */
+.vaktdager .vakt-rad { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; padding: 0 12px 10px; }
+.vaktdager button.vakt-chip { margin: 0; padding: 7px 9px; font-size: 0.86rem; }
+.vaktdager .vakt-chip .vakt-oppgave { font-size: 0.8rem; }
+.kort.advarsler { border-color: color-mix(in srgb, var(--advarsel) 35%, var(--kant)); }
+.kort.advarsler h2 { display: flex; align-items: center; gap: 8px; color: var(--advarsel); margin-top: 0; }
+.kort.advarsler .liste-enkel li { flex-wrap: wrap; gap: 2px 12px; font-size: 0.9rem; }
+.kort.advarsler p { margin: 10px 0 0; }
+.melding.advarsel { background: var(--advarsel-lys); color: var(--advarsel); border-color: color-mix(in srgb, var(--advarsel) 25%, transparent); }
+.melding.advarsel div + div { margin-top: 4px; }
+.vakt-status { margin: 0 0 12px; padding: 8px 12px; border-radius: var(--radius-s); background: var(--ok-lys); color: var(--ok); font-weight: 550; }
+.vakt-status.utkast { background: var(--flate-2); color: var(--tekst-2); }
+/* Den ansattes vakter */
+.mine-vakter-topp { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--kant); background: var(--flate-2); }
+.mine-vakter-topp .tall { margin-left: auto; font-weight: 650; }
+.liste-rad.statisk { cursor: default; }
+.liste-rad.statisk:hover, .liste-rad.statisk:active { background: none; }
+.liste-rad.i-dag .tittel { color: var(--aksent); }
+.ledig-vakt .linje > button { flex: none; min-height: 34px; padding: 6px 14px; }
+/* Vaktene i timeføringen */
+.vakt-linje {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 12px 8px; padding: 7px 12px;
+  border: 1px dashed var(--kant-sterk); border-radius: var(--radius-s); font-size: 0.9rem; font-variant-numeric: tabular-nums;
+}
+.vakt-merke { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--aksent); margin-right: 4px; }
+.vakt-linje button.lenke { flex: none; font-size: 0.88rem; }
+.ukesum p.planlagt { margin: -4px 0 10px; }

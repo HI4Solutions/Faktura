@@ -10,7 +10,9 @@ import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag, leggTilDager } from "../format";
-import { IkonHake, IkonHoyre, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
+import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
+import { gyldigDato, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
+import type { VaktSvar } from "./Vakter";
 
 type Status = "utkast" | "levert" | "godkjent" | "avvist";
 
@@ -29,6 +31,7 @@ type Foring = {
   avvist_grunn: string | null;
   levert_at: string | null;
   godkjent_at: string | null;
+  vakt_id?: string | null;
 };
 
 type Uke = {
@@ -45,6 +48,7 @@ type Uke = {
   status: Status;
   antall: number;
   antall_status: Record<Status, number>;
+  planlagt: number | null; // publiserte vakter i uka
 };
 
 type Regler = { aktiv: boolean; daglig_grense: number; ukentlig_grense: number; overtid_prosent: number };
@@ -67,52 +71,7 @@ const statusMerke: Record<Status, { tekst: string; klasse: string }> = {
   avvist: { tekst: "Avvist", klasse: "merke-fare" },
 };
 
-const tallformat = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 });
-const timer = (n: number) => `${tallformat.format(n)} t`;
 const antallForinger = (n: number) => `${n} ${n === 1 ? "føring" : "føringer"}`;
-
-// --- Uker (ISO 8601: mandag–søndag, uke 1 er uka med 4. januar) -------------------
-
-const middag = (iso: string) => new Date(`${iso}T12:00:00Z`);
-const gyldigDato = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && middag(s).toISOString().slice(0, 10) === s;
-const mandag = (iso: string) => leggTilDager(iso, -((middag(iso).getUTCDay() + 6) % 7));
-
-function ukenr(iso: string) {
-  const man = mandag(iso);
-  const aar = middag(leggTilDager(man, 3)).getUTCFullYear(); // torsdagen bestemmer året
-  const forste = mandag(`${aar}-01-04`);
-  return { aar, uke: Math.round((middag(man).getTime() - middag(forste).getTime()) / (7 * 86_400_000)) + 1 };
-}
-
-const dagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
-const ukedagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", timeZone: "UTC" });
-const periodeFormat = new Intl.DateTimeFormat("nb-NO", { day: "numeric", month: "short", timeZone: "UTC" });
-const visDag = (iso: string) => {
-  const t = dagFormat.format(middag(iso));
-  return t.charAt(0).toUpperCase() + t.slice(1);
-};
-
-function visPeriode(fra: string, til: string) {
-  try {
-    return periodeFormat.formatRange(middag(fra), middag(til));
-  } catch {
-    return `${periodeFormat.format(middag(fra))}–${periodeFormat.format(middag(til))}`;
-  }
-}
-
-// «5.–11. okt.», med året når uka ikke er i år.
-function ukePeriode(man: string) {
-  const { aar } = ukenr(man);
-  return `${visPeriode(man, leggTilDager(man, 6))}${aar !== Number(iDag().slice(0, 4)) ? ` ${aar}` : ""}`;
-}
-
-// Timene mellom fra og til (over midnatt når til er før fra), minus pausen. Som i databasen.
-function regnTimer(fra: string, til: string, pause: number) {
-  const min = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
-  let m = min(til) - min(fra);
-  if (m <= 0) m += 24 * 60;
-  return (m - pause) / 60;
-}
 
 // Forrige føring fra denne enheten: nye føringer starter med samme tider.
 const SIST = "faktura.timer.sist";
@@ -242,29 +201,6 @@ export function Timer() {
   );
 }
 
-function Ukevelger({ uke, velgUke }: { uke: string; velgUke: (mandag: string) => void }) {
-  const denne = mandag(iDag());
-  return (
-    <div className="ukevelger">
-      <button type="button" className="ikon" aria-label="Forrige uke" title="Forrige uke" onClick={() => velgUke(leggTilDager(uke, -7))}>
-        <IkonVenstre storrelse={20} />
-      </button>
-      <div className="uke-navn" aria-live="polite">
-        <strong>Uke {ukenr(uke).uke}</strong>
-        <span>{ukePeriode(uke)}</span>
-      </div>
-      <button type="button" className="ikon" aria-label="Neste uke" title="Neste uke" onClick={() => velgUke(leggTilDager(uke, 7))}>
-        <IkonHoyre storrelse={20} />
-      </button>
-      {uke !== denne && (
-        <button type="button" className="lenke" onClick={() => velgUke(denne)}>
-          Denne uka
-        </button>
-      )}
-    </div>
-  );
-}
-
 // Delene av ukesummen: ordinære timer, overtid per tillegg og merarbeid.
 function Summer({ u }: { u?: Pick<Uke, "ordinare" | "overtid" | "merarbeid"> }) {
   return (
@@ -313,6 +249,9 @@ function Ukeside({
   const til = leggTilDager(uke, 6);
   const ansatt = useData(() => hent<Ansatt>(`/org/${org!.id}/ansatte/${ansattId}`), [org?.id, ansattId, versjon]);
   const { data, feil } = useData(() => hent<TimerSvar>(`/org/${org!.id}/timer?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
+  const vaktsvar = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
+  const vakter = (vaktsvar.data?.vakter ?? []).filter((v) => v.publisert);
+  const planlagt = vakter.reduce((s, v) => s + Number(v.timer), 0);
   const [apen, settApen] = useState<Partial<Foring> | null>(null);
   const [avviser, settAvviser] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
@@ -400,6 +339,11 @@ function Ukeside({
             <h2>Uke {nr}</h2>
             <strong>{timer(sum?.sum ?? 0)}</strong>
           </div>
+          {vakter.length > 0 && (
+            <p className="liten dempet planlagt">
+              Planlagt i vaktplanen: {timer(planlagt)} ({vakter.length} {vakter.length === 1 ? "vakt" : "vakter"})
+            </p>
+          )}
           <Summer u={sum} />
           {!ikkeLevert.length && levert.length > 0 && <p className="ukestatus info">Levert, venter på godkjenning.</p>}
           {!ikkeLevert.length && !levert.length && godkjent.length > 0 && <p className="ukestatus ok">Godkjent.</p>}
@@ -438,6 +382,35 @@ function Ukeside({
                     </button>
                   )}
                 </div>
+                {vakter
+                  .filter((v) => v.dato === d)
+                  .map((v) => {
+                    const fort = v.fort || foringer.some((f) => f.vakt_id === v.id);
+                    // Timer føres fra vakten når den har vært (eller er i dag), og ikke er ført
+                    // på annen måte samme dag.
+                    const kanForeFraVakt = kanFore && ansattDag(d) && d <= iDagIso && !dagens.some((f) => !f.vakt_id);
+                    return (
+                      <div key={v.id} className="vakt-linje">
+                        <span>
+                          <span className="vakt-merke">Vakt</span> {v.fra}–{v.til}
+                          {v.oppgave && <span className="dempet"> · {v.oppgave}</span>}
+                        </span>
+                        {fort ? (
+                          <span className="merke merke-ok">Ført</span>
+                        ) : (
+                          kanForeFraVakt && (
+                            <button
+                              type="button"
+                              className="lenke"
+                              onClick={() => settApen({ dato: v.dato, fra: v.fra, til: v.til, pause_min: v.pause_min, beskrivelse: v.oppgave, vakt_id: v.id })}
+                            >
+                              Før timer
+                            </button>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
                 {dagens.map((f) => (
                   <button key={f.id} type="button" className="foring" onClick={() => settApen(f)}>
                     <span className="linje">
@@ -516,7 +489,8 @@ function ForingSkjema({
 }) {
   const { org } = useKonto();
   const [f, settF] = useState(() => {
-    const sist = foring.id ? null : lesSist();
+    // Ny føring: tidene fra vakten den føres fra, ellers fra forrige føring.
+    const sist = foring.id || foring.fra ? null : lesSist();
     return {
       dato: foring.dato ?? iDag(),
       modus: foring.id ? (foring.fra ? "tid" : "timer") : (sist?.modus ?? "tid"),
@@ -547,7 +521,9 @@ function ForingSkjema({
       beskrivelse: f.beskrivelse.trim() || null,
     };
     const r = await h.kjor(() =>
-      foring.id ? api("PATCH", `/org/${org!.id}/timer/${foring.id}`, kropp) : api("POST", `/org/${org!.id}/timer`, { ...kropp, ansatt_id: ansatt.id }),
+      foring.id
+        ? api("PATCH", `/org/${org!.id}/timer/${foring.id}`, kropp)
+        : api("POST", `/org/${org!.id}/timer`, { ...kropp, ansatt_id: ansatt.id, ...(foring.vakt_id ? { vakt_id: foring.vakt_id } : {}) }),
     );
     if (!r) return;
     const sist = lesSist();
@@ -928,6 +904,7 @@ function Godkjenning({ svar, feil, endret, apne }: { svar?: TimerSvar; feil: str
                   <strong className="tall godkjenn-sum">{timer(u.sum)}</strong>
                 </div>
                 <p className="godkjenn-tall">
+                  {u.planlagt != null && <span>Planlagt {timer(u.planlagt)}</span>}
                   <span>Ordinære {timer(u.ordinare)}</span>
                   {u.overtid.map((o) => (
                     <span key={o.prosent}>

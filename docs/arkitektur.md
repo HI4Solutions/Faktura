@@ -123,6 +123,19 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   resten, med tillegg (arbeidsmiljøloven: 9 og 40 timer, minst 40 %; grensene kan endres for
   tariffavtaler). Føringer merket som overtid teller i sin helhet med sitt tillegg, og
   ordinære timer over avtalt arbeidstid er merarbeid
+- `vakter`: vaktplanen. Eier og administrator planlegger vakter per dag og ansatt (fra–til,
+  pause, oppgave og notat); vaktene er utkast til de publiseres (`publiser_vakter`), og da
+  får hver ansatt én push-melding om sine nye vakter. Endringer i og fjerning av publiserte
+  vakter varsles til dem det gjelder. En vakt uten ansatt er ledig: aktive ansatte ser
+  publiserte ledige vakter og kan ta en (`ta_vakt`: raden låses, så den første får den;
+  ikke passerte vakter, og ikke om den overlapper en av deres egne), og eier og administrator
+  får beskjed. En uke kan kopieres til neste (eller flere uker) som utkast, uten dobbeltvakter
+  og uten ansatte som har sluttet. Mens man planlegger, viser appen advarsler etter
+  arbeidsmiljøloven (`vaktregler.ts`): under 11 timer hvile mellom arbeidsdagene (delte vakter
+  samme dag er én arbeidsdag), under 35 timer sammenhengende fri i uka, overtid per dag og
+  uke etter grensene i oppsettet, overlappende vakter og vakter utenfor ansettelsen. Timene
+  kan føres fra vakten (`timeforinger.vakt_id`), og timelisten og godkjenningen viser hvor
+  mange timer som var planlagt
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
@@ -135,9 +148,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Utstede, sende, kreditere | ✓ | ✓ | ✓ | | | |
 | Registrere betaling og refusjon | ✓ | ✓ | ✓ | ✓ | | |
 | Innstillinger, kontonummer, medlemmer, integrasjoner, regnskapsfører | ✓ | ✓ | | | | |
-| Se ansatte og alle timer | ✓ | ✓ | | ✓ | | |
-| Endre ansatte, gi innlogging, godkjenne og avvise timer | ✓ | ✓ | | | | |
-| Føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+| Se ansatte, hele vaktplanen og alle timer | ✓ | ✓ | | ✓ | | |
+| Endre ansatte, gi innlogging, planlegge og publisere vakter, godkjenne og avvise timer | ✓ | ✓ | | | | |
+| Se egne vakter og ta ledige, føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 
@@ -146,10 +159,12 @@ tilgangen «les» får regnskapsføreren rollen `les`. Tilgangen kan ha utløpsd
 begge parter kan trekke den. Byråets ansatte med rollen `ansatt` får ikke tilgang til
 klientene.
 
-Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort
-og sine egne timer (`faktura.kan(org, 'medlem')` og `faktura.er_meg`), aldri fakturadata,
-andre medlemmer eller revisjonsloggen. Varsler til hele organisasjonen og Google Disk-kopier
-går ikke til ansatte, og appen viser dem bare Timer og Innstillinger (egen konto og app).
+Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort,
+sine egne publiserte vakter, de publiserte ledige vakter og sine egne timer
+(`faktura.kan(org, 'medlem')`, `faktura.er_meg` og `faktura.min_ansatt`), aldri fakturadata,
+andre medlemmer, andres vakter eller revisjonsloggen. Varsler til hele organisasjonen og
+Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter og
+Innstillinger (egen konto og app).
 
 ### Sikkerhet i databasen
 
@@ -213,7 +228,9 @@ og hastighetsgrenser i API-et.
 9. **Ansatte og lønn**, i steg:
    1. ~~Ansatte og timer~~ Ferdig: ansattregister, egen innlogging for ansatte, timeføring
       med overtid og merarbeid, levering og godkjenning med push-varsler
-   2. Vaktplan: vakter per uke og ansatt, som timene kan føres fra
+   2. ~~Vaktplan~~ Ferdig: vakter per uke og ansatt med publisering og varsler, ledige vakter
+      som de ansatte tar, kopiering av uker, advarsler etter arbeidsmiljøloven, og timer
+      ført fra vakten
    3. Lønnskjøring: lønnsarter, skattetrekk (tabell eller prosent fra skattekortet),
       feriepenger, OTP, arbeidsgiveravgift per sone, sykepenger og lønnsslipp som PDF
    4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og
