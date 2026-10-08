@@ -1,7 +1,7 @@
 // Innbetalinger fra banken (open banking gjennom Enable Banking): kobling under
 // Innstillinger → Faktura, siden der brukeren kommer tilbake etter BankID, og listen
 // over innbetalinger som kobles til fakturaene.
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
@@ -110,7 +110,8 @@ function useMinutt() {
 
 // Når appen henter innbetalingene av seg selv, neste gang og sist. Når en hentetid passerer
 // mens siden er åpen, hentes statusen på nytt litt etter (workeren trenger litt tid).
-export function Hentetider({ tider, sist, oppdater }: { tider: string[]; sist: string | null; oppdater?: () => void }) {
+// children: knappen for å hente nå (Innbetalinger), til høyre i boksen.
+export function Hentetider({ tider, sist, oppdater, children }: { tider: string[]; sist: string | null; oppdater?: () => void; children?: ReactNode }) {
   const naa = useMinutt();
   const neste = nesteHenting(tider, naa);
   const forrige = useRef(neste && `${neste.iDag}${neste.klokke}`);
@@ -123,19 +124,26 @@ export function Hentetider({ tider, sist, oppdater }: { tider: string[]; sist: s
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noekkel]);
-  if (!neste) return null;
+  if (!neste && !children) return null;
   return (
     <div className="hentetider">
       <IkonKlokke />
-      <div>
-        <div>
-          Neste henting <strong>{neste.iDag ? "i dag" : "i morgen"} kl.&nbsp;{neste.klokke}</strong>
-        </div>
-        <div className="liten dempet">
-          Automatisk hver dag kl.&nbsp;{navnListe(tider)}
-          {sist ? ` · sist hentet ${naarTekst(sist, naa)}` : ""}
-        </div>
+      <div className="hentetider-tekst">
+        {neste ? (
+          <>
+            <div>
+              Neste henting <strong>{neste.iDag ? "i dag" : "i morgen"} kl.&nbsp;{neste.klokke}</strong>
+            </div>
+            <div className="liten dempet">
+              Automatisk hver dag kl.&nbsp;{navnListe(tider)}
+              {sist ? ` · sist hentet ${naarTekst(sist, naa)}` : ""}
+            </div>
+          </>
+        ) : (
+          <div>{sist ? `Sist hentet ${naarTekst(sist, naa)}` : "Innbetalingene hentes når du ber om det."}</div>
+        )}
       </div>
+      {children && <div className="hentetider-handling">{children}</div>}
     </div>
   );
 }
@@ -698,11 +706,6 @@ export function Innbetalinger() {
     <>
       <div className="topp">
         <h1>Fakturaer</h1>
-        {aktive.length > 0 && bokfore && (
-          <button onClick={hentNa} disabled={henter}>
-            {henter ? "Henter …" : "Hent innbetalinger nå"}
-          </button>
-        )}
       </div>
       <Fakturafaner valgt="innbetalinger" />
       {bank.data && (
@@ -719,7 +722,13 @@ export function Innbetalinger() {
             last();
             bank.last();
           }}
-        />
+        >
+          {bokfore && (
+            <button type="button" onClick={hentNa} disabled={henter}>
+              {henter ? "Henter …" : "Hent innbetalinger nå"}
+            </button>
+          )}
+        </Hentetider>
       )}
       {bank.data?.koblinger
         .filter((k) => k.siste_feil)

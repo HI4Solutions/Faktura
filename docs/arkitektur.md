@@ -114,7 +114,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   dag (`HENTETIDER` i `bank.ts`, kl. 06, 12 og 18 norsk tid, innenfor PSD2-grensen på fire
   hentinger i døgnet uten brukeren; «Hent nå» kommer i tillegg). Hver hentetid tas én gang per
   bank (atomisk, også med flere instanser), og en som ble gått glipp av, tas igjen før neste.
-  Appen viser hentetidene, neste henting og når det sist ble hentet. Innbetalingene kobles
+  Appen viser hentetidene, neste henting og når det sist ble hentet, med «Hent innbetalinger
+  nå» i samme boks. Innbetalingene kobles
   til fakturaer: KID eller fakturanummer i meldingen
   registreres med en gang (`koble_banktransaksjon`), samme beløp og betaler blir forslag,
   resten uavklart. Uten KID-avtale med banken. Innbetalinger fra før startdatoen

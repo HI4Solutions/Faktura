@@ -629,6 +629,13 @@ ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 .hentetider strong { font-weight: 600; font-variant-numeric: tabular-nums; }
 .hentetider .liten { margin-top: 2px; }
 .kort .hentetider { margin: 12px 0; }
+/* «Hent innbetalinger nå» står til høyre i boksen (under teksten på smale skjermer). */
+.hentetider-tekst { flex: 1; min-width: 0; }
+.hentetider-handling { flex: none; align-self: center; }
+@media (max-width: 560px) {
+  .hentetider { flex-wrap: wrap; }
+  .hentetider-handling { flex-basis: 100%; padding-left: 28px; }
+}
 .bank .knapper { margin-top: 10px; }
 .ny-bank { border: 1px dashed var(--kant); border-radius: var(--radius-s); padding: 12px 14px 14px; margin: 14px 0 4px; }
 .ny-bank h3 { margin: 0 0 4px; font-size: 1rem; }
