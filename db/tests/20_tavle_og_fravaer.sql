@@ -108,10 +108,10 @@ select test.feiler(format($$insert into faktura.tavle_plasseringer (org_id, dato
 -- Flytt til en annen oppgave i samme fase.
 update faktura.tavle_plasseringer set oppgave_id = :'lab' where id = :'p1';
 select test.er((select oppgave_id from faktura.tavle_plasseringer where id = :'p1'), :'lab'::uuid, 'flyttet til lab');
--- Den ansatte ser bare sine egne plasser.
+-- Den ansatte ser hele tavla (også kollegaenes plasser, 0063), men endrer den ikke.
 insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id) values (:'org', :'d2', :'forvakt', :'telefon', :'ola');
 select set_config('app.bruker_id', :'u_ola', false);
-select test.er((select count(*) from faktura.tavle_plasseringer), 1::bigint, 'ser bare egne plasser');
+select test.er((select count(*) from faktura.tavle_plasseringer), 3::bigint, 'ser hele tavla');
 delete from faktura.tavle_plasseringer where id = :'p1';
 select set_config('app.bruker_id', :'u', false);
 select test.er((select count(*) from faktura.tavle_plasseringer where id = :'p1'), 1::bigint, 'den ansatte sletter ikke plasser');

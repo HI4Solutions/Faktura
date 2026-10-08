@@ -151,12 +151,13 @@ describe.skipIf(!process.env.DATABASE_URL)("vaktplan i appen", () => {
     );
     expect(nye(for_)).toHaveLength(4);
 
-    // Ola ser sine egne og den ledige, uten advarsler.
+    // Ola ser hele den publiserte planen (også Karis vakt, 0063), uten advarsler.
     const olas = (await kall("GET", `/api/org/${org}/vakter?fra=${d(0)}&til=${d(6)}`, undefined, ola)).data;
-    expect(olas.vakter.map((v: any) => [v.dato, v.oppgave, v.advarsler])).toEqual([
-      [d(0), "Kasse", []],
-      [d(1), null, []],
-      [d(2), "Lager", []],
+    expect(olas.vakter.map((v: any) => [v.dato, v.ansatt_navn, v.oppgave, v.advarsler])).toEqual([
+      [d(0), "Kari Nordmann", null, []],
+      [d(0), "Ola Nordmann", "Kasse", []],
+      [d(1), "Ola Nordmann", null, []],
+      [d(2), null, "Lager", []],
     ]);
     expect(olas.uker).toEqual([]);
     expect((await kall("PATCH", `/api/org/${org}/vakter/${vakter.olaMan}`, { fra: "15:00" }, ola)).status).toBe(403);

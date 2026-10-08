@@ -1,6 +1,6 @@
 -- Fast arbeidsplan (0040_arbeidsplan.sql): ukedager med klokkeslett eller hel dag, gjeldende
--- fra en dato. Eier og administrator lager planene; den ansatte ser sin egen, men ikke
--- andres, og endrer ingen. Loggen for planene vises bare for dem som ser de ansatte.
+-- fra en dato. Eier og administrator lager planene; de ansatte ser dem (de faste dagene er en del
+-- av vaktplanen, 0063), men endrer ingen. Loggen for planene vises bare for dem som ser de ansatte.
 
 \set QUIET on
 \set ON_ERROR_STOP on
@@ -50,7 +50,7 @@ select test.feiler(format($$insert into faktura.arbeidsplaner (org_id, ansatt_id
 insert into faktura.arbeidsplaner (org_id, ansatt_id, gjelder_fra) values (:'org', :'linda', faktura.i_dag()) returning id as plan2 \gset
 insert into faktura.arbeidsplan_dager (org_id, plan_id, ukedag) values (:'org', :'plan2', 2);
 
--- Den ansatte ser sin egen plan, ikke andres, og endrer ingen.
+-- Den ansatte ser planene (sin egen og kollegaenes, 0063), og endrer ingen.
 select faktura.inviter_ansatt(:'org', :'linda') as t_linda \gset
 select faktura.inviter_ansatt(:'org', :'ola') as t_ola \gset
 select id as u_linda from faktura.registrer_bruker('uid-plan-linda', 'linda-plan@test.no') \gset
@@ -63,8 +63,9 @@ select test.feiler(format($$insert into faktura.arbeidsplan_dager (org_id, plan_
 delete from faktura.arbeidsplan_dager where plan_id = :'plan';
 select set_config('app.bruker_id', :'u_ola', false);
 select faktura.aksepter_invitasjon(:'t_ola');
-select test.er((select count(*) from faktura.arbeidsplaner), 0::bigint, 'Ola ser ikke Lindas plan');
-select test.er((select count(*) from faktura.arbeidsplan_dager), 0::bigint, 'eller dagene');
+select test.er((select count(*) from faktura.arbeidsplaner), 2::bigint, 'Ola ser Lindas planer');
+select test.er((select count(*) from faktura.arbeidsplan_dager), 4::bigint, 'og dagene');
+select test.feiler(format($$insert into faktura.arbeidsplan_dager (org_id, plan_id, ukedag) values (%L, %L, 5)$$, :'org', :'plan2'), '42501');
 
 -- Loggen for planene ser eieren, ikke den som bare leser fakturaer.
 select set_config('app.bruker_id', :'u', false);

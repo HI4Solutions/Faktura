@@ -1,5 +1,5 @@
 -- Vaktplan (0036_vaktplan.sql): eier og administrator planlegger og publiserer; den ansatte ser
--- bare sine egne publiserte vakter og de ledige, og kan ta en ledig vakt (én får den, uten
+-- den publiserte planen (også kollegaenes vakter, 0063, men ikke utkast), og kan ta en ledig vakt (én får den, uten
 -- overlapp, ikke passerte); timer kan føres fra egne vakter. Datoene regnes fra i dag, så
 -- testene ikke avhenger av når de kjøres.
 
@@ -78,13 +78,13 @@ select test.er((select count(*) from faktura.vakter), 0::bigint, 'utkast vises i
 select test.feiler(format($$insert into faktura.vakter (org_id, ansatt_id, dato, fra, til) values (%L, %L, %L, '08:00', '12:00')$$, :'org', :'ola', :'d1'), '42501');
 select test.feiler(format($$select faktura.publiser_vakter(%L, %L, %L)$$, :'org', :'d0', :'d3'), 'FA403');
 
--- Publisert: Ola ser sine egne og den ledige, men ikke Karis, og endrer ingenting.
+-- Publisert: Ola ser hele den publiserte planen (sine egne, Karis og den ledige; 0063), og endrer ingenting.
 select set_config('app.bruker_id', :'u', false);
 select test.er((select count(*) from faktura.publiser_vakter(:'org', :'d0', :'d3')), 4::bigint, 'fire vakter publisert');
 select test.er((select count(*) from faktura.publiser_vakter(:'org', :'d0', :'d3')), 0::bigint, 'ingen nye å publisere');
 select test.feiler(format($$select faktura.publiser_vakter(%L, %L, %L)$$, :'org', :'d3', :'d0'), 'FA400');
 select set_config('app.bruker_id', :'u_ola', false);
-select test.er((select string_agg(coalesce(oppgave, '-'), ',' order by dato) from faktura.vakter), 'Kasse,-,Lager', 'egne og ledige');
+select test.er((select string_agg(coalesce(oppgave, '-'), ',' order by dato, fra) from faktura.vakter), 'Kasse,-,-,Lager', 'hele den publiserte planen');
 update faktura.vakter set fra = '09:00' where id = :'v1';
 select test.er((select fra from faktura.vakter where id = :'v1'), '08:00'::time, 'den ansatte endrer ikke vakten');
 delete from faktura.vakter where id = :'v1';
@@ -94,7 +94,7 @@ select test.er((select count(*) from faktura.vakter where id = :'v1'), 1::bigint
 select test.er((select ansatt_id from faktura.ta_vakt(:'org', :'v3')), :'ola'::uuid, 'Ola tok vakten');
 select set_config('app.bruker_id', :'u_kari', false);
 select test.feiler(format($$select faktura.ta_vakt(%L, %L)$$, :'org', :'v3'), 'FA409');
-select test.er((select count(*) from faktura.vakter where id = :'v3'), 0::bigint, 'Kari ser den ikke lenger');
+select test.er((select ansatt_id from faktura.vakter where id = :'v3'), :'ola'::uuid, 'Kari ser at Ola har den nå');
 
 -- Vakter som overlapper egne vakter eller er passert, kan ikke tas; utkast finnes ikke for
 -- den ansatte, og den som ikke er ansatt, kan ikke ta vakter.

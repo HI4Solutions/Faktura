@@ -207,7 +207,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `vakter`: vaktplanen. Eier og administrator planlegger vakter per dag og ansatt (fra–til,
   pause, oppgave og notat); vaktene er utkast til de publiseres (`publiser_vakter`), og da
   får hver ansatt én push-melding om sine nye vakter. Endringer i og fjerning av publiserte
-  vakter varsles til dem det gjelder. En vakt uten ansatt er ledig: aktive ansatte ser
+  vakter varsles til dem det gjelder. De aktive ansatte ser hele den publiserte planen (se
+  «De ansatte ser planen» under). En vakt uten ansatt er ledig: aktive ansatte ser
   publiserte ledige vakter og kan ta en (`ta_vakt`: raden låses, så den første får den;
   ikke passerte vakter, og ikke om den overlapper en av deres egne), og eier og administrator
   får beskjed. En uke kan kopieres til neste (eller flere uker) som utkast, uten dobbeltvakter
@@ -451,7 +452,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Utstede, sende, kreditere | ✓ | ✓ | ✓ | | | |
 | Registrere betaling og refusjon | ✓ | ✓ | ✓ | ✓ | | |
 | Innstillinger, kontonummer, medlemmer, integrasjoner, regnskapsfører | ✓ | ✓ | | | | |
-| Se ansatte, hele vaktplanen, tavla, fraværet og alle timer | ✓ | ✓ | | ✓ | | |
+| Se ansatte, hele vaktplanen (også utkast), tavla, fraværet og alle timer | ✓ | ✓ | | ✓ | | |
+| Se den publiserte vaktplanen, tavla og bemanningskalenderen (kollegaenes fravær bare som «F») | ✓ | ✓ | ✓¹ | ✓ | ✓¹ | ✓² |
 | Endre ansatte, gi innlogging, planlegge og publisere vakter, sette inn vikarer, styre tavla, registrere fravær, godkjenne og avvise timer | ✓ | ✓ | | | | |
 | Se egne vakter og plasser og ta ledige, melde seg syk, føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Legge beskjeder til rollene eller alle, og se dem som er til en selv | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -459,6 +461,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Slette andres beskjeder | ✓ | ✓ | | | | |
 
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
+² Så lenge den ansatte er aktiv (ikke etter at de har sluttet).
 
 En regnskapsfører med tilgangen «bokfør» får rollen `regnskap` hos klienten. Med
 tilgangen «les» får regnskapsføreren rollen `les`. Tilgangen kan ha utløpsdato, og
@@ -466,14 +469,30 @@ begge parter kan trekke den. Byråets ansatte med rollen `ansatt` får ikke tilg
 klientene.
 
 Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort,
-sine egne publiserte vakter, de publiserte ledige vakter, vaktbyttene de er med i og de åpne
-tilbudene fra kolleger med samme rolle (`vaktbytte_liste`), sitt eget fravær, sine egne plasser
-på tavla (og fasene og oppgavene), sine egne timer og beskjedene til rollen sin og til alle
-(`ser_beskjed`; `faktura.kan(org, 'medlem')`,
-`faktura.er_meg` og `faktura.min_ansatt`), aldri fakturadata, andre medlemmer, andres vakter
-og fravær eller revisjonsloggen. Varsler til hele organisasjonen og
-Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter, Ferie,
-Beskjeder og Innstillinger (egen konto og app).
+den publiserte vaktplanen, tavla og bemanningskalenderen (se under), vaktbyttene de er med i og
+de åpne tilbudene fra kolleger med samme rolle (`vaktbytte_liste`), sitt eget fravær (med typen),
+sine egne timer og beskjedene til rollen sin og til alle (`ser_beskjed`; `faktura.kan(org,
+'medlem')`, `faktura.kan(org, 'plan')`, `faktura.er_meg` og `faktura.min_ansatt`), aldri
+fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, notater og typen fravær,
+utkast i vaktplanen eller revisjonsloggen. Varsler til hele organisasjonen og
+Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter (Mine vakter,
+Ledige vakter, Vaktplan, Tavle, Kalender og Bytter), Ferie, Beskjeder og Innstillinger (egen
+konto og app).
+
+De ansatte ser planen (`0063_ansatte_ser_planen.sql`): `faktura.kan(org, 'plan')` er eier,
+administrator og regnskap, og de aktive ansatte med innlogging (`min_ansatt`; ikke etter at de har
+sluttet, og ikke den som bare fakturerer). De ser de publiserte vaktene (ikke utkast), de faste
+arbeidsdagene og dagene gitt bort i et vaktbytte, plassene på tavla og den faste oppgaven, og
+rollene med behovet (radsikkerheten i `vakter`, `arbeidsplaner`, `arbeidsplan_dager`,
+`arbeidsplan_fri`, `tavle_plasseringer`, `tavle_fast_oppgave` og `ansattgrupper`). Fraværet og
+ansattregisteret er låst som før; planen leser dem gjennom to view: `fravaer_plan` (hvem som er
+borte når, med typen og notatet bare for dem som ser dem, ellers «fravaer») og `ansatte_plan`
+(navn, forkortelse, rolle, ansettelsesperioden og om de er ansatt; stillingen, stillingsprosenten
+og ansettelsestypen bare for dem som ser de ansatte og for den ansatte selv). Viewene leser
+tabellene som eieren, så det er where-leddet i dem som avgjør hvem som ser hvem. API-et gir de
+ansatte personene i planen fra `/kolleger` (ikke `/ansatte`), notatet på en kollegas vakt er tomt,
+og advarslene, timene per uke og ekstratimene får bare de som ser de ansatte.
+`mine_organisasjoner.ser_planen` forteller appen om fanene Vaktplan, Tavle og Kalender skal vises.
 
 ### Sikkerhet i databasen
 

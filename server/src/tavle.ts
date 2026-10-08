@@ -4,8 +4,9 @@
 // dag er de ansatte med vakt den dagen i vaktplanen; de som er borte, er med, men merket, og
 // vaktene deres står som «mangler vikar» til en vikar er satt inn. Hvem som hører til hvilken
 // fase (vakten overlapper fasens tidsrom), finner appen ut. Eier og administrator plasserer
-// de ansatte i oppgavene, for hånd eller med rulleringen (/tavle/rullering, 0051); regnskap ser
-// tavla, og den ansatte ser sine egne plasser (/tavle/mine). De med en rolle som ikke er med på
+// de ansatte i oppgavene, for hånd eller med rulleringen (/tavle/rullering, 0051); regnskap og de
+// ansatte ser tavla (0063_ansatte_ser_planen.sql), og den ansatte sine egne plasser også under
+// «Mine vakter» (/tavle/mine). De med en rolle som ikke er med på
 // tavla (f.eks. legene, 0057_rolle_tavle.sql), står ikke der og fordeles ikke. En ansatt kan ha
 // en fast oppgave (0059_tavle_fast_oppgave.sql): rulleringen setter dem alltid der, og uten en
 // plass i fasen står de der likevel (fastePlasser, regnes ut og lagres ikke).
@@ -45,7 +46,7 @@ const UTELATT = "select oppgave_id, ansatt_id from faktura.tavle_utelatt where o
 async function utenforTavla(db: Db, org: string) {
   const rader = await alle<{ id: string }>(
     db,
-    "select a.id from faktura.ansatte a join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id where a.org_id = $1 and not g.tavle",
+    "select a.id from faktura.ansatte_plan a join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id where a.org_id = $1 and not g.tavle",
     [org],
   );
   return new Set(rader.map((x) => x.id));
@@ -199,7 +200,7 @@ export function tavleRuter() {
     const { dato } = z.object({ dato: datoS }).parse(c.req.query());
     return c.json(
       await bruk(c, async (db) => {
-        await db.query("select faktura.krev($1, 'personal_les')", [orgId(c)]);
+        await db.query("select faktura.krev($1, 'plan')", [orgId(c)]);
         const utenfor = await utenforTavla(db, orgId(c));
         const vakter = (await alle<{
           id: string;
@@ -217,9 +218,9 @@ export function tavleRuter() {
           `select v.id, v.ansatt_id, a.fornavn || ' ' || a.etternavn as navn, to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til,
                   v.oppgave, v.publisert_at is not null as publisert, v.vikar_for,
                   exists (select 1 from faktura.vakter x where x.org_id = v.org_id and x.vikar_for = v.id) as har_vikar,
-                  (select faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer
+                  (select f.type from faktura.fravaer_plan f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer
              from faktura.vakter v
-             join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id
+             join faktura.ansatte_plan a on a.org_id = v.org_id and a.id = v.ansatt_id
             where v.org_id = $1 and v.dato = $2
             order by v.fra, a.etternavn, a.fornavn`,
           [orgId(c), dato],
@@ -272,8 +273,8 @@ export function tavleRuter() {
           fravaer: (
             await alle<{ ansatt_id: string }>(
               db,
-              `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.fra, f.til
-                 from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
+              `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as navn, f.type, f.fra, f.til
+                 from faktura.fravaer_plan f join faktura.ansatte_plan a on a.org_id = f.org_id and a.id = f.ansatt_id
                 where f.org_id = $1 and $2 between f.fra and f.til order by a.etternavn, a.fornavn`,
               [orgId(c), dato],
             )

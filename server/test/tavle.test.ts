@@ -171,10 +171,10 @@ describe.skipIf(!process.env.DATABASE_URL)("tavle, fravær og vikarer", () => {
     expect(t.plasseringer).toEqual(expect.arrayContaining([expect.objectContaining({ ansatt_id: id.Vera, fase_id: id.forvakt, oppgave_id: id.telefon })]));
     expect(t.ressurser.find((r: any) => r.ansatt_id === id.Vera).vakter[0]).toMatchObject({ vikar: true });
     expect((await kall("GET", `/api/org/${org}/vakter?fra=${d(0)}&til=${d(0)}`)).data.vakter.find((x: any) => x.id === id.olaVakt).har_vikar).toBe(true);
-    // Vera ser vakten sin (men ikke hvem som er borte, utover notatet).
-    expect((await kall("GET", `/api/org/${org}/vakter?fra=${d(0)}&til=${d(0)}`, undefined, vera)).data.vakter).toEqual([
-      expect.objectContaining({ id: id.veraVakt, vikar_for_navn: null, notat: "Vikar for Ola Nordmann", fravaer: null }),
-    ]);
+    // Vera ser hele planen (0063): vakten sin som vikar for Ola, og at Ola er borte, men ikke hvorfor.
+    const veras = (await kall("GET", `/api/org/${org}/vakter?fra=${d(0)}&til=${d(0)}`, undefined, vera)).data.vakter;
+    expect(veras.find((x: any) => x.id === id.veraVakt)).toMatchObject({ vikar_for_navn: "Ola Nordmann", notat: "Vikar for Ola Nordmann", fravaer: null });
+    expect(veras.find((x: any) => x.id === id.olaVakt)).toMatchObject({ fravaer: "fravaer", har_vikar: true });
     // Vikarvakter kopieres ikke til neste uke.
     expect((await kall("POST", `/api/org/${org}/vakter/kopier`, { fra: d(0), til: d(7) })).data).toEqual({ kopiert: 2, hoppet_over: 0 });
   });

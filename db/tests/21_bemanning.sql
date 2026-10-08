@@ -1,6 +1,6 @@
 -- Bemanningskalenderen (0039_bemanning.sql): de ansatte deles i grupper (f.eks. sekretærer
 -- og leger) med hvor mange som trengs på jobb per dag. Gruppene ser de som ser de ansatte
--- (også regnskap), og bare eier og administrator endrer dem; en ansatt kan bare være i en
+-- (også regnskap) og de ansatte (0063), og bare eier og administrator endrer dem; en ansatt kan bare være i en
 -- gruppe i samme organisasjon, og slettes gruppen, står den ansatte uten. Kurs er en
 -- fraværstype som eier og administrator registrerer.
 
@@ -52,12 +52,14 @@ select test.feiler(format($$update faktura.ansatte set gruppe_id = %L where id =
 insert into faktura.fravaer (org_id, ansatt_id, type, fra, til) values (:'org', :'fahim', 'kurs', :'d0', :'d0');
 select test.er((select type from faktura.fravaer where ansatt_id = :'fahim'), 'kurs', 'kurs er registrert');
 
--- Den ansatte ser ikke gruppene, endrer dem ikke og melder ikke kurs selv.
+-- Den ansatte ser gruppene (rollene i vaktplanen og kalenderen, 0063), men endrer dem ikke og
+-- melder ikke kurs selv.
+select count(*) as n_grupper from faktura.ansattgrupper where org_id = :'org' \gset
 select faktura.inviter_ansatt(:'org', :'aase') as t_aase \gset
 select id as u_aase from faktura.registrer_bruker('uid-bem-aase', 'aase-bem@test.no') \gset
 select set_config('app.bruker_id', :'u_aase', false);
 select faktura.aksepter_invitasjon(:'t_aase');
-select test.er((select count(*) from faktura.ansattgrupper), 0::bigint, 'den ansatte ser ikke gruppene');
+select test.er((select count(*) from faktura.ansattgrupper), :'n_grupper'::bigint, 'den ansatte ser gruppene');
 select test.feiler(format($$insert into faktura.ansattgrupper (org_id, navn) values (%L, 'Egen')$$, :'org'), '42501');
 select test.feiler(format($$insert into faktura.fravaer (org_id, ansatt_id, type, fra, til) values (%L, %L, 'kurs', %L, %L)$$, :'org', :'aase', :'d0', :'d0'), 'FA403');
 

@@ -1630,6 +1630,9 @@ fieldset.arbeidsplan { padding: 12px 16px 6px; margin: 0 0 16px; }
   .dl-bar { padding: 0 3px; justify-content: center; }
 }
 
+/* Den ansatte sin egen rad i vaktplanen (de ansatte ser hele planen) */
+.vaktplan tr.meg > td:first-child { font-weight: 650; box-shadow: inset 3px 0 0 var(--aksent); }
+
 /* --------------------------------------------------------------------------
    Vaktbytte: tilbudene, svarene og godkjenningen (Vaktbytte.tsx)
    -------------------------------------------------------------------------- */

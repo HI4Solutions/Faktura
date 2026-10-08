@@ -54,8 +54,8 @@ describe.skipIf(!process.env.DATABASE_URL)("bemanningskalender", () => {
       ["Sekretærer", "Sek.", 4, 0],
       ["Leger", "Leg.", 6, 0],
     ]);
-    // Den ansatte ser ikke gruppene og endrer dem ikke.
-    expect((await kall("GET", `/api/org/${org}/ansattgrupper`, undefined, aase)).status).toBe(403);
+    // Den ansatte ser gruppene (rollene i vaktplanen og kalenderen, 0063), men endrer dem ikke.
+    expect((await kall("GET", `/api/org/${org}/ansattgrupper`, undefined, aase)).status).toBe(200);
     expect((await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Egen" }, aase)).status).toBe(403);
   });
 

@@ -19,6 +19,9 @@ export interface MinOrg {
   ansatt_id: string | null;
   // Funksjonene organisasjonen har tilgang til (funksjonene i Administrasjon).
   funksjoner?: Funksjon[];
+  // Ser vaktplanen, tavla og bemanningskalenderen (eier, administrator og regnskap, og de aktive
+  // ansatte; 0063_ansatte_ser_planen.sql).
+  ser_planen?: boolean;
 }
 
 export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan";

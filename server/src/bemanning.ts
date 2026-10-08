@@ -28,7 +28,7 @@ const skjema = z.object({
 
 const GRUPPER = `
   select g.id, g.navn, g.kort, g.behov, g.rekkefolge, g.ikke_ansatt, g.tavle,
-         (select count(*)::int from faktura.ansatte a where a.org_id = g.org_id and a.gruppe_id = g.id and a.aktiv) as antall
+         (select count(*)::int from faktura.ansatte_plan a where a.org_id = g.org_id and a.gruppe_id = g.id and a.aktiv) as antall
     from faktura.ansattgrupper g
    where g.org_id = $1
    order by g.rekkefolge, g.opprettet`;
@@ -36,10 +36,11 @@ const GRUPPER = `
 export function bemanningRuter() {
   const r = new Hono();
 
+  // Rollene: alle som ser planen (de ansatte også, til vaktplanen og kalenderen, 0063).
   r.get("/ansattgrupper", async (c) =>
     c.json(
       await bruk(c, async (db) => {
-        await db.query("select faktura.krev($1, 'personal_les')", [orgId(c)]);
+        await db.query("select faktura.krev($1, 'plan')", [orgId(c)]);
         return alle(db, GRUPPER, [orgId(c)]);
       }),
     ),

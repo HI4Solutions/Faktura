@@ -99,7 +99,8 @@ const OPPGAVEFORSLAG = ["Telefon", "Resepsjon", "Lab"];
 export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (dato: string) => void; kanEndre: boolean }) {
   const { org } = useKonto();
   const { data, feil, last, settData } = useData(() => hent<TavleSvar>(`/org/${org!.id}/tavle?dato=${dato}`), [org?.id, dato], { oppdater: true });
-  const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id]);
+  // Uten endringer (regnskap og de ansatte): personene i planen, uten resten av ansattkortet (0063).
+  const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/${kanEndre ? "ansatte" : "kolleger"}`), [org?.id, kanEndre]);
   const [oppsett, settOppsett] = useState(false);
   const [kopierer, settKopierer] = useState(false);
   const [rullerer, settRullerer] = useState(false);
@@ -221,10 +222,14 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
         {verktoy}
         <div className="kort">
           <Tom ikon={<IkonTavle storrelse={22} />} tittel={kanEndre ? "Sett opp tavla" : "Tavla er ikke satt opp ennå"}>
-            <p>
-              Del dagen i faser, for eksempel forvakt og senvakt eller før og etter lunsj, og lag oppgavene de ansatte fordeles på, for eksempel telefon,
-              resepsjon og lab. Ressursene hentes fra vaktplanen.
-            </p>
+            {kanEndre ? (
+              <p>
+                Del dagen i faser, for eksempel forvakt og senvakt eller før og etter lunsj, og lag oppgavene de ansatte fordeles på, for eksempel telefon,
+                resepsjon og lab. Ressursene hentes fra vaktplanen.
+              </p>
+            ) : (
+              <p>Når tavla er satt opp, ser du her hvem som har hvilken oppgave gjennom dagen.</p>
+            )}
             {kanEndre && (
               <div className="knapper" style={{ justifyContent: "center" }}>
                 <button type="button" className="primar" onClick={() => settOppsett(true)}>

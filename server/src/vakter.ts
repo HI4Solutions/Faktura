@@ -1,5 +1,6 @@
 // Vaktplan (0036_vaktplan.sql): eier og administrator planlegger vakter og publiserer dem;
-// den ansatte ser sine egne publiserte vakter og de ledige, og kan ta en ledig vakt. Varsler
+// den ansatte ser hele den publiserte planen (0063_ansatte_ser_planen.sql, uten utkast, notatene
+// til kollegaene og typen fravær), og kan ta en ledig vakt. Varsler
 // går ut når vakter publiseres, endres, fjernes eller tas. Advarslene etter
 // arbeidsmiljøloven (hviletid, overtid) regnes i vaktregler.ts og vises bare for dem som ser
 // hele planen. Er den ansatte borte (fravær, 0037), er vakten merket med fraværet, teller ikke
@@ -37,19 +38,22 @@ const vaktSkjema = z.object({
   notat: valgfri(tekst(500, "Notatet")),
 });
 
-// vikar_for_navn: den som er borte (bare for dem som ser hele planen); har_vikar: en annen
-// vakt dekker denne; fravaer: den ansatte er borte den dagen (typen).
+// Navnene og fraværet fra planen (ansatte_plan og fravaer_plan, 0063): de ansatte ser kollegaene
+// der, og fraværet deres bare som «fravaer». vikar_for_navn: den som er borte; har_vikar: en annen
+// vakt dekker denne; fravaer: den ansatte er borte den dagen (typen). Notatet på en kollegas vakt ser
+// bare de som ser de ansatte.
 const VAKT = `
   select v.id, v.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, v.dato,
-         to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.pause_min, v.timer,
-         v.oppgave, v.notat, v.publisert_at is not null as publisert, v.oppdatert, v.vikar_for,
-         (select o.fornavn || ' ' || o.etternavn from faktura.vakter ov join faktura.ansatte o on o.org_id = ov.org_id and o.id = ov.ansatt_id
+         to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.pause_min, v.timer, v.oppgave,
+         case when v.ansatt_id is null or faktura.kan(v.org_id, 'personal_les') or faktura.er_meg(v.org_id, v.ansatt_id) then v.notat end as notat,
+         v.publisert_at is not null as publisert, v.oppdatert, v.vikar_for,
+         (select o.fornavn || ' ' || o.etternavn from faktura.vakter ov join faktura.ansatte_plan o on o.org_id = ov.org_id and o.id = ov.ansatt_id
            where ov.org_id = v.org_id and ov.id = v.vikar_for) as vikar_for_navn,
          exists (select 1 from faktura.vakter x where x.org_id = v.org_id and x.vikar_for = v.id) as har_vikar,
-         (select faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer,
+         (select f.type from faktura.fravaer_plan f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer,
          exists (select 1 from faktura.timeforinger t where t.org_id = v.org_id and t.vakt_id = v.id) as fort
     from faktura.vakter v
-    left join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id`;
+    left join faktura.ansatte_plan a on a.org_id = v.org_id and a.id = v.ansatt_id`;
 
 type Vakt = {
   id: string;
@@ -98,9 +102,32 @@ const aktiveMedInnlogging = (db: Db, org: string) =>
 export function vaktRuter() {
   const r = new Hono();
 
+  // Personene i planen (navn, forkortelse, rolle og ansettelsesperioden), for alle som ser planen;
+  // de ansatte får ikke stillingen, stillingsprosenten eller ansettelsestypen til kollegaene
+  // (ansatte_plan, 0063).
+  r.get("/kolleger", async (c) =>
+    c.json(
+      await bruk(c, async (db) => {
+        await db.query("select faktura.krev($1, 'plan')", [orgId(c)]);
+        return alle(
+          db,
+          `select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.forkortelse, a.gruppe_id, a.aktiv, a.ansatt_fra, a.ansatt_til, a.arbeidstaker,
+                  a.ukentlig_arbeidstid, a.stilling, a.stillingsprosent, a.ansettelsestype, a.meg,
+                  g.navn as rolle, coalesce(g.tavle, true) as tavle
+             from faktura.ansatte_plan a left join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id
+            where a.org_id = $1
+            order by a.aktiv desc, a.etternavn, a.fornavn`,
+          [orgId(c)],
+        );
+      }),
+    ),
+  );
+
   // Vaktene i perioden. Den som ser hele planen, får også advarslene og summen per ansatt og uke.
+  // ansatt: bare den ansatte (vaktene, de faste dagene og fraværet), og med ledige=1 også de ledige
+  // vaktene («Mine vakter»).
   r.get("/vakter", async (c) => {
-    const q = z.object({ fra: datoS, til: datoS, ansatt: uuid.optional() }).parse(c.req.query());
+    const q = z.object({ fra: datoS, til: datoS, ansatt: uuid.optional(), ledige: z.literal("1").optional() }).parse(c.req.query());
     if (q.til < q.fra) throw new ApiFeil(400, "Slutten er før starten");
     if (dagerMellom(q.fra, q.til) > 93) throw new ApiFeil(400, "Velg en periode på høyst tre måneder");
     return c.json(
@@ -112,20 +139,19 @@ export function vaktRuter() {
         const til = leggTilDager(uke(q.til).til, 1);
         const vakter = await alle<Vakt>(
           db,
-          `${VAKT} where v.org_id = $1 and v.dato between $2 and $3 and ($4::uuid is null or v.ansatt_id = $4)
+          `${VAKT} where v.org_id = $1 and v.dato between $2 and $3 and ($4::uuid is null or v.ansatt_id = $4 or ($5 and v.ansatt_id is null))
             order by v.dato, v.fra, a.etternavn nulls first, a.fornavn`,
-          [orgId(c), fra, til, q.ansatt ?? null],
+          [orgId(c), fra, til, q.ansatt ?? null, q.ledige === "1"],
         );
         const iPerioden = vakter.filter((v) => v.dato >= q.fra && v.dato <= q.til);
         // Faste dager fra arbeidsplanene (dager i planen uten vakt) og ekstratimene.
         const bemanning = await beregnBemanning(db, orgId(c), fra, til, q.ansatt ?? null);
         const faste = bemanning.faste.filter((f) => f.dato >= q.fra && f.dato <= q.til);
-        // Fraværet i perioden (den ansatte ser bare sitt eget).
+        // Fraværet i perioden (de ansatte ser typen og notatet bare for seg selv).
         const fravaer = await alle(
           db,
-          `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.fra, f.til,
-                  case when faktura.ser_fravaertype(f.org_id, f.ansatt_id) then f.notat end as notat
-             from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
+          `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, f.type, f.fra, f.til, f.notat
+             from faktura.fravaer_plan f join faktura.ansatte_plan a on a.org_id = f.org_id and a.id = f.ansatt_id
             where f.org_id = $1 and f.til >= $2 and f.fra <= $3 and ($4::uuid is null or f.ansatt_id = $4)
             order by f.fra`,
           [orgId(c), q.fra, q.til, q.ansatt ?? null],

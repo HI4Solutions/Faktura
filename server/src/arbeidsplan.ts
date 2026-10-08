@@ -151,11 +151,13 @@ export function beregnEkstra(
 export async function beregnBemanning(db: Db, org: string, fra: string, til: string, ansatt?: string | null) {
   const ufra = uke(fra).fra;
   const util = uke(til).til;
+  // Personene og fraværet fra planen (0063): de ansatte ser kollegaene, men ikke stillingen eller
+  // typen fravær.
   const ansatte = await alle<Ansatt>(
     db,
     `select a.id, a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, a.stilling, g.navn as gruppe, a.ansatt_fra, a.ansatt_til, a.aktiv,
             a.ukentlig_arbeidstid, a.stillingsprosent, a.ansettelsestype, a.arbeidstaker
-       from faktura.ansatte a left join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id
+       from faktura.ansatte_plan a left join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id
       where a.org_id = $1 and ($2::uuid is null or a.id = $2)`,
     [org, ansatt ?? null],
   );
@@ -163,7 +165,7 @@ export async function beregnBemanning(db: Db, org: string, fra: string, til: str
   const vakter = await alle<Vakt>(
     db,
     `select v.ansatt_id, v.dato, to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.timer,
-            exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til) as borte
+            exists (select 1 from faktura.fravaer_plan f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til) as borte
        from faktura.vakter v
       where v.org_id = $1 and v.dato between $2 and $3 and v.ansatt_id is not null and ($4::uuid is null or v.ansatt_id = $4)`,
     [org, ufra, util, ansatt ?? null],
@@ -171,7 +173,7 @@ export async function beregnBemanning(db: Db, org: string, fra: string, til: str
   const fravaer = await alle<{ ansatt_id: string; fra: string; til: string; type: string }>(
     db,
     // Typen bare for dem som ser den (0047_fravaer_skjult.sql); ellers «fravaer».
-    "select ansatt_id, fra, til, faktura.fravaer_type(org_id, ansatt_id, type) as type from faktura.fravaer where org_id = $1 and til >= $2 and fra <= $3 and ($4::uuid is null or ansatt_id = $4)",
+    "select ansatt_id, fra, til, type from faktura.fravaer_plan where org_id = $1 and til >= $2 and fra <= $3 and ($4::uuid is null or ansatt_id = $4)",
     [org, ufra, util, ansatt ?? null],
   );
   const borte = (a: string, d: string) => fravaer.find((f) => f.ansatt_id === a && f.fra <= d && f.til >= d)?.type ?? null;

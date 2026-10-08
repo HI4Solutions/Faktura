@@ -117,10 +117,10 @@ export function Vakter() {
   const seHelePlanen = kanSePersonal(org?.rolle);
   const egen = org?.ansatt_id ?? null;
 
-  // Egne og ledige vakter de neste åtte ukene (for ansatte).
+  // Egne og ledige vakter de neste åtte ukene (for ansatte; hele planen står under Vaktplan).
   const fra = iDag();
   const egne = useData(
-    () => (egen && org?.personal ? hent<VaktSvar>(`/org/${org.id}/vakter?fra=${fra}&til=${leggTilDager(fra, 55)}`) : Promise.resolve(null)),
+    () => (egen && org?.personal ? hent<VaktSvar>(`/org/${org.id}/vakter?fra=${fra}&til=${leggTilDager(fra, 55)}&ansatt=${egen}&ledige=1`) : Promise.resolve(null)),
     [org?.id, org?.personal, egen, versjon],
   );
   const plasser = useData(
@@ -153,6 +153,10 @@ export function Vakter() {
         </>,
       ],
     );
+  // De ansatte ser hele den publiserte planen, tavla og kalenderen, bare til lesing (0063); ikke en
+  // som har sluttet (ser_planen).
+  const ansattSerPlanen = !seHelePlanen && !!egen && org?.ser_planen !== false;
+  if (ansattSerPlanen) faner.push(["plan", "Vaktplan"], ["tavle", "Tavle"], ["kalender", "Kalender"]);
   if (bytter.data && (bytter.data.innstilling !== "av" || (bytter.data.bytter?.length ?? 0) > 0))
     faner.push([
       "bytter",
@@ -229,6 +233,7 @@ export function Vakter() {
           uke={uke}
           velgUke={(u) => ga({ uke: u === mandag(iDag()) ? null : u })}
           kanPlanlegge={kanPersonal(org.rolle)}
+          seAlle={seHelePlanen}
           versjon={versjon}
           endret={endret}
           tilGodkjenning={tilGodkjenning}
@@ -241,6 +246,7 @@ export function Vakter() {
           maaned={maaned}
           velgMaaned={(m) => ga({ maaned: m === iDag().slice(0, 7) ? null : m })}
           kanEndre={kanPersonal(org.rolle)}
+          seAlle={seHelePlanen}
           tilTavle={(d) => ga({ fane: "tavle", dato: d === iDag() ? null : d })}
           tilUke={(m) => ga({ fane: "plan", uke: m === mandag(iDag()) ? null : m })}
         />
@@ -270,7 +276,7 @@ export function Vakter() {
   );
 }
 
-// --- Planen (eier, administrator og regnskap) -----------------------------------------
+// --- Planen (eier og administrator planlegger; regnskap og de ansatte ser den) ----------
 
 const DAGNAVN = ["Ma", "Ti", "On", "To", "Fr", "Lø", "Sø"];
 
@@ -287,6 +293,7 @@ function Vaktplan({
   uke,
   velgUke,
   kanPlanlegge,
+  seAlle,
   versjon,
   endret,
   tilGodkjenning,
@@ -301,6 +308,8 @@ function Vaktplan({
   uke: string;
   velgUke: (mandag: string) => void;
   kanPlanlegge: boolean;
+  // false: en ansatt, som ser den publiserte planen uten timene per uke til kollegaene (0063).
+  seAlle: boolean;
   versjon: number;
   endret: () => void;
   tilGodkjenning: number;
@@ -312,7 +321,7 @@ function Vaktplan({
   const sisteIMnd = leggTilDager(leggTilMaaneder(forsteIMnd, 1), -1);
   const [fra, til] =
     visning === "dag" ? [dato, dato] : visning === "maaned" ? [mandag(forsteIMnd), leggTilDager(mandag(sisteIMnd), 6)] : [uke, leggTilDager(uke, 6)];
-  const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon]);
+  const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/${seAlle ? "ansatte" : "kolleger"}`), [org?.id, seAlle, versjon]);
   // Rollene (rekkefølgen og fargene) i dags- og månedsvisningen.
   const grupper = useData(() => (visning === "uke" ? Promise.resolve([]) : hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`)), [org?.id, visning === "uke", versjon]);
   const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${fra}&til=${til}`), [org?.id, fra, til, versjon]);
@@ -688,7 +697,7 @@ function Vaktplan({
                     {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
                   </th>
                 ))}
-                <th className="tall">Timer</th>
+                {seAlle && <th className="tall">Timer</th>}
               </tr>
             </thead>
             <tbody>
@@ -703,13 +712,13 @@ function Vaktplan({
                       {ledige.filter((v) => v.dato === d).map((v) => chip(v))}
                     </td>
                   ))}
-                  <td className="tall dempet">{ledige.length ? timer(ledige.reduce((s, v) => s + Number(v.timer), 0)) : ""}</td>
+                  {seAlle && <td className="tall dempet">{ledige.length ? timer(ledige.reduce((s, v) => s + Number(v.timer), 0)) : ""}</td>}
                 </tr>
               )}
               {rader.map((a) => {
                 const u = sum(a.id);
                 return (
-                  <tr key={a.id}>
+                  <tr key={a.id} className={a.id === org?.ansatt_id ? "meg" : undefined}>
                     <td>
                       {a.fornavn} {a.etternavn}
                     </td>
@@ -729,10 +738,12 @@ function Vaktplan({
                         </td>
                       );
                     })}
-                    <td className={`tall${u?.advarsler.length ? " advarsel-tekst" : ""}`} title={u?.advarsler.join("\n") || undefined}>
-                      {u ? tallformat.format(u.planlagt) : "–"}
-                      {u?.avtalt != null && <span className="dempet"> / {tallformat.format(u.avtalt)}</span>}
-                    </td>
+                    {seAlle && (
+                      <td className={`tall${u?.advarsler.length ? " advarsel-tekst" : ""}`} title={u?.advarsler.join("\n") || undefined}>
+                        {u ? tallformat.format(u.planlagt) : "–"}
+                        {u?.avtalt != null && <span className="dempet"> / {tallformat.format(u.avtalt)}</span>}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -746,7 +757,7 @@ function Vaktplan({
                     {manglerVikar(d) > 0 && <span className="mangler-tekst">{manglerVikar(d)} mangler vikar</span>}
                   </td>
                 ))}
-                <td></td>
+                {seAlle && <td></td>}
               </tr>
             </tfoot>
           </table>
@@ -754,8 +765,8 @@ function Vaktplan({
       )}
       {visning === "uke" && data.vakter.length + alleFaste.length > 0 && (
         <p className="liten dempet">
-          {alleFaste.length > 0 && "«Fast» er en fast arbeidsdag etter arbeidsplanen til den ansatte (under Ansatte); en vakt samme dag gjelder i stedet. "}
-          {!smal && "Timer: planlagt / avtalt arbeidstid i uka. "}
+          {alleFaste.length > 0 && `«Fast» er en fast arbeidsdag etter arbeidsplanen til den ansatte${seAlle ? " (under Ansatte)" : ""}; en vakt samme dag gjelder i stedet. `}
+          {!smal && seAlle && "Timer: planlagt / avtalt arbeidstid i uka. "}
           {kanPlanlegge ? "Trykk i en rute for å legge inn en vakt." : ""}
         </p>
       )}
@@ -1334,7 +1345,7 @@ function VaktSkjema({
       )}
       {vakt.id && (
         <p className={`liten vakt-status${vakt.publisert ? "" : " utkast"}`}>
-          {vakt.publisert ? "Publisert. Endringer varsles til den ansatte." : "Ikke publisert ennå. Den ansatte ser vakten når uka publiseres."}
+          {vakt.publisert ? (kanEndre ? "Publisert. Endringer varsles til den ansatte." : "Publisert.") : "Ikke publisert ennå. Den ansatte ser vakten når uka publiseres."}
           {vakt.fort ? " Timene er ført fra vakten." : ""}
           {vakt.vikar_for_navn ? ` Vikar for ${vakt.vikar_for_navn}.` : ""}
         </p>

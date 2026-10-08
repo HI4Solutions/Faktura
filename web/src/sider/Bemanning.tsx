@@ -59,12 +59,16 @@ export function Bemanning({
   maaned,
   velgMaaned,
   kanEndre,
+  seAlle = true,
   tilTavle,
   tilUke,
 }: {
   maaned: string; // «2026-10»
   velgMaaned: (maaned: string) => void;
   kanEndre: boolean;
+  // false: en ansatt (0063_ansatte_ser_planen.sql), som ser kalenderen uten stillingsprosenten og
+  // ekstratimene til kollegaene.
+  seAlle?: boolean;
   tilTavle: (dato: string) => void;
   tilUke: (mandag: string) => void;
 }) {
@@ -80,7 +84,7 @@ export function Bemanning({
   const [versjon, settVersjon] = useState(0);
   const [oppsettVersjon, settOppsettVersjon] = useState(0);
   const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${fra}&til=${til}`), [org?.id, fra, til, versjon], { oppdater: true });
-  const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon, oppsettVersjon]);
+  const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/${seAlle ? "ansatte" : "kolleger"}`), [org?.id, seAlle, versjon, oppsettVersjon]);
   const grupper = useData(() => hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`), [org?.id, oppsettVersjon]);
   const [rute, settRute] = useState<{ a: Ansatt; d: string } | null>(null);
   const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
@@ -120,9 +124,11 @@ export function Bemanning({
         )}
       </div>
       <div className="knapper bm-knapper">
-        <button type="button" onClick={() => settRapport(true)}>
-          <IkonRapport storrelse={17} /> Ekstratimer
-        </button>
+        {seAlle && (
+          <button type="button" onClick={() => settRapport(true)}>
+            <IkonRapport storrelse={17} /> Ekstratimer
+          </button>
+        )}
         {kanEndre && (
           <>
             <button type="button" onClick={() => settOppsett(true)}>
@@ -285,9 +291,11 @@ export function Bemanning({
           <span className={`bm-tegn fravaer-${t}`}>{fravaerKode[t]}</span> {t === "annet" ? "Annet" : fravaerTekst[t]}
         </span>
       ))}
-      <span>
-        <span className="bm-tegn ekstra">2t</span> Ekstratimer
-      </span>
+      {seAlle && (
+        <span>
+          <span className="bm-tegn ekstra">2t</span> Ekstratimer
+        </span>
+      )}
       <span>
         <span className={`bm-tegn uten-vikar fravaer-${serType ? "syk" : "fravaer"}`}>{serType ? "S" : "F"}</span> Vakten mangler vikar
       </span>
@@ -306,9 +314,10 @@ export function Bemanning({
   );
   const forklaringTekst = (
     <p className="liten dempet">
-      På jobb kommer fra de faste arbeidsdagene til de ansatte (under Ansatte) og vaktplanen; en vakt gjelder i stedet for den faste dagen. Ekstratimer er timene utover den
-      faste planen den dagen (uten fast plan: utover avtalt arbeidstid i uka, og alle timene for tilkallingsvikarer). Trykk på en dag for tavla, eller på en rute for å
-      registrere fravær og sette inn vikar.
+      På jobb kommer fra de faste arbeidsdagene til de ansatte{seAlle ? " (under Ansatte)" : ""} og vaktplanen; en vakt gjelder i stedet for den faste dagen.
+      {seAlle &&
+        " Ekstratimer er timene utover den faste planen den dagen (uten fast plan: utover avtalt arbeidstid i uka, og alle timene for tilkallingsvikarer)."}{" "}
+      {kanEndre ? "Trykk på en dag for tavla, eller på en rute for å registrere fravær og sette inn vikar." : "Trykk på en dag for tavla, eller på en rute for detaljene."}
     </p>
   );
 
@@ -397,7 +406,7 @@ export function Bemanning({
                         ) : (
                           <>
                             <span className="bm-navn">{visNavn(a)}</span>
-                            <span className="bm-prosent">{a.ansettelsestype === "tilkalling" ? "Tilk." : `${tallformat.format(Number(a.stillingsprosent))}%`}</span>
+                            {seAlle && <span className="bm-prosent">{a.ansettelsestype === "tilkalling" ? "Tilk." : `${tallformat.format(Number(a.stillingsprosent))}%`}</span>}
                           </>
                         )}
                       </th>
@@ -452,6 +461,7 @@ export function Bemanning({
                   );
                 })}
               </tbody>
+              {seAlle && (
               <tfoot>
                 <tr className="bm-fot">
                   <th scope="row" className="bm-dag" title={`Ekstratimer i ${navn}`}>
@@ -488,6 +498,7 @@ export function Bemanning({
                   {visLedige && <td className="bm-sum bm-ekstra-sum null" style={hoyre(seksjoner.length + (visUtenVikar ? 1 : 0))} />}
                 </tr>
               </tfoot>
+              )}
             </table>
           </div>
           {!smal && forklaringTekst}
