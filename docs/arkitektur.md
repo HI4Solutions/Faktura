@@ -216,7 +216,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   samme dag er én arbeidsdag), under 35 timer sammenhengende fri i uka, overtid per dag og
   uke etter grensene i oppsettet, overlappende vakter og vakter utenfor ansettelsen. Timene
   kan føres fra vakten (`timeforinger.vakt_id`), og timelisten og godkjenningen viser hvor
-  mange timer som var planlagt
+  mange timer som var planlagt. Vaktplanen vises per dag, uke eller måned (`?visning=dag`,
+  `uke` eller `maaned`, på samme side som kalenderen): dagen som en tidslinje rolle for rolle
+  (vaktene og de faste dagene som streker, hvem som har vakt ledig og hvem som er borte; trykk på
+  en strek åpner vakten, og på en tom linje legges en vakt inn), uka som før, og måneden som en
+  kalender med forkortelsene i rollens farge (på mobil en liste dag for dag); trykk på en dag i
+  måneden åpner dagen. «Publiser» gjelder perioden som vises
 - `vaktbytter` (`0060_vaktbytte.sql`, `server/src/vaktbytte.ts`): den ansatte gir bort en
   publisert vakt eller en fast arbeidsdag (den blir en vakt med de samme tidene,
   `vakt_fra_plan`), til en bestemt kollega eller til alle med samme rolle (uten rolle: alle), eller
@@ -324,6 +329,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   bemanningskalenderen, vaktplanen, på tavla og i timelisten (med «Før timer»), og teller som
   planlagt arbeid. Vikar for en fast dag gir en vakt etter planen (`POST /vakter/fra-plan`) som
   vikaren dekker. En fast dag som er gitt bort i et vaktbytte, gjelder ikke (`arbeidsplan_fri`).
+  En hel dag (det vanligste) står bare med navnet, uten «hel dag» eller klokkeslett, i
+  vaktplanen, på tavla, i kalenderen, i timelista og hos AI-assistenten.
   Ekstratimer (`server/src/arbeidsplan.ts`): med plan timene utover planen den dagen (en dag
   med fri har ingen timer i planen, og timene fra en fast dag som er byttet, er flyttet til
   dagen den ansatte fikk igjen); uten plan timene utover avtalt arbeidstid i uka (alle timene
@@ -352,7 +359,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med engelsk språk, der nettleserens eget klokkeslettfelt ville vist AM og PM. Feltet
   (`Klokkeslett` i `web/src/uke.tsx`) tar også «730», «7.30» og «1530» og retter dem til 07:30
   og 15:30
-- Personalmodulen på mobil (Ansatte, Vaktplan, Timer og Ferie; `main[data-modul="personal"]` i
+- Personalmodulen på mobil (Ansatte, Vaktplan, Timer, Ferie og Beskjeder; `main[data-modul="personal"]` i
   `web/src/styles.css`) er tettere enn resten av appen, så det blir mindre å rulle: mindre knapper,
   felt og rader (fortsatt 16 px tekst i feltene, så iPhone ikke zoomer), vaktplanen én dag om
   gangen med en dagvelger (ukedagene med hvor mange som er på jobb, og «!» når en vakt mangler
@@ -373,6 +380,24 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   Roller kan lages fra stillingene, og kunder hentes inn som rollehavere (se over).
   AI-assistenten svarer med det samme når man spør hvem som jobber («Lege 6 av 7 (mangler 1),
   Sekretær 4 av 4»)
+- `ansatte.forkortelse` (`0061_forkortelser.sql`): en kort forkortelse for hver person, brukt der
+  plassen er liten (kolonnene i bemanningskalenderen og månedsvisningen i vaktplanen). Den lages
+  av navnet når den mangler (`ny_forkortelse`: forbokstavene i fornavn og etternavn, så to
+  bokstaver fra etternavnet eller fornavnet, så et tall; «KN», «KNO», «KAN», «KN2»), er unik i
+  organisasjonen uten hensyn til store og små bokstaver, og kan endres i ansattskjemaet (1–6
+  tegn: bokstaver, tall og bindestrek). Tømmes den, lages en ny; de som fantes, fikk en da
+  kolonnen kom
+- `beskjeder` og `beskjed_lest` (`0062_beskjeder.sql`, `server/src/beskjeder.ts`, siden
+  «Beskjeder»): alle i organisasjonen kan legge en beskjed til én eller flere roller (f.eks.
+  legene) eller til alle, eventuelt med push-varsel (varseltypen `beskjed`) til de aktive med
+  rollene, eller til alle medlemmene, men ikke til den som skrev den. En beskjed til roller ses
+  av de aktive med rollene, av den som skrev den, og av eier, administrator og regnskap (som ser
+  de ansatte; `ser_beskjed`); en beskjed til alle ses av alle i organisasjonen. Navnet til den
+  som skrev den, kommer fra ansattregisteret (ellers fra innloggingen), og beskjeden kan ikke
+  endres; den som skrev den, og eier og administrator, kan slette den. `beskjed_lest` har når
+  hver bruker sist så beskjedene: nye er andres beskjeder etter det, høyst 14 dager gamle. De
+  står merket på siden, og tallet på dem står i menyen (i bunnmenyen for de ansatte, ellers som
+  en prikk på «Mer»); siden henter nye beskjeder hvert minutt mens den er åpen
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
   bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
   Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer),
@@ -429,6 +454,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Se ansatte, hele vaktplanen, tavla, fraværet og alle timer | ✓ | ✓ | | ✓ | | |
 | Endre ansatte, gi innlogging, planlegge og publisere vakter, sette inn vikarer, styre tavla, registrere fravær, godkjenne og avvise timer | ✓ | ✓ | | | | |
 | Se egne vakter og plasser og ta ledige, melde seg syk, føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+| Legge beskjeder til rollene eller alle, og se dem som er til en selv | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Se alle beskjedene | ✓ | ✓ | | ✓ | | |
+| Slette andres beskjeder | ✓ | ✓ | | | | |
 
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 
@@ -440,11 +468,12 @@ klientene.
 Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort,
 sine egne publiserte vakter, de publiserte ledige vakter, vaktbyttene de er med i og de åpne
 tilbudene fra kolleger med samme rolle (`vaktbytte_liste`), sitt eget fravær, sine egne plasser
-på tavla (og fasene og oppgavene) og sine egne timer (`faktura.kan(org, 'medlem')`,
+på tavla (og fasene og oppgavene), sine egne timer og beskjedene til rollen sin og til alle
+(`ser_beskjed`; `faktura.kan(org, 'medlem')`,
 `faktura.er_meg` og `faktura.min_ansatt`), aldri fakturadata, andre medlemmer, andres vakter
 og fravær eller revisjonsloggen. Varsler til hele organisasjonen og
-Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter og
-Innstillinger (egen konto og app).
+Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter, Ferie,
+Beskjeder og Innstillinger (egen konto og app).
 
 ### Sikkerhet i databasen
 

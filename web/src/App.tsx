@@ -23,6 +23,7 @@ import { Ansatte } from "./sider/Ansatte";
 import { Timer } from "./sider/Timer";
 import { Vakter } from "./sider/Vakter";
 import { Ferie } from "./sider/Ferie";
+import { Beskjeder, useUlesteBeskjeder } from "./sider/Beskjeder";
 import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
@@ -31,7 +32,7 @@ import { installer } from "./pwa";
 import { Assistent } from "./assistent";
 import { iFakturadelen } from "./fakturameny";
 import {
-  IkonAnsatte, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
+  IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
   IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
@@ -44,6 +45,8 @@ const initialer = (navn: string) =>
     .join("");
 
 const orgType: Record<string, string> = { foretak: "Foretak", regnskapsbyraa: "Regnskapsbyrå", privatperson: "Privatperson" };
+// Antall nye beskjeder (99+ over det).
+const UlesteTall = ({ n }: { n: number }) => (n > 0 ? <span className="ulest-tall" aria-label={`${n} nye`}>{n > 99 ? "99+" : n}</span> : null);
 
 // En side som hører til en funksjon organisasjonen ikke har (funksjonene i Administrasjon).
 function Krever({ kode, navn, children }: { kode: Funksjon | Funksjon[]; navn: string; children: ReactNode }) {
@@ -169,10 +172,15 @@ function Ramme() {
   const visVakter = harFunksjon(org, "vaktplan");
   // Feriebanken: eier og administrator ser alle, den ansatte seg selv (regnskap ser den ikke).
   const visFerie = visVakter && !!org?.personal && (ansatt || erAdmin(org.rolle));
-  // Personalmodulen (Ansatte, Vaktplan, Timer og Ferie): tettere på mobil (styles.css), og
-  // bunnmenyen viser personaldelen i stedet for fakturadelen der.
-  const iPersonal = /^\/(ansatte|vakter|timer|ferie)(\/|$)/.test(sted.pathname);
-  const personalmeny = !ansatt && iPersonal && (visAnsatte || visTimer);
+  // Beskjeder til rollene: alle i organisasjonen, når Ansatte og timer er slått på. Telleren viser
+  // de nye (ikke mens man er på siden).
+  const visBeskjeder = !!org?.personal;
+  const uleste = useUlesteBeskjeder(org?.id, visBeskjeder);
+  const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
+  // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
+  // og bunnmenyen viser personaldelen i stedet for fakturadelen der.
+  const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder)(\/|$)/.test(sted.pathname);
+  const personalmeny = !ansatt && iPersonal && (visAnsatte || visTimer || visBeskjeder);
 
   if (ny || orgs.length === 0) {
     return (
@@ -226,6 +234,15 @@ function Ramme() {
               <NavLink to="/vakter">
                 <IkonKalender storrelse={22} />
                 <span>Vakter</span>
+              </NavLink>
+            )}
+            {visBeskjeder && (
+              <NavLink to="/beskjeder">
+                <span className="bunn-ikon">
+                  <IkonBjelle storrelse={22} />
+                  <UlesteTall n={nyeBeskjeder} />
+                </span>
+                <span>Beskjeder</span>
               </NavLink>
             )}
           </>
@@ -282,8 +299,11 @@ function Ramme() {
             <span>Innstillinger</span>
           </NavLink>
         )}
-        <button type="button" className={menyApen ? "aktiv" : ""} onClick={() => settMenyApen(true)}>
-          <IkonMeny storrelse={22} />
+        <button type="button" className={menyApen ? "aktiv" : ""} onClick={() => settMenyApen(true)} aria-label={!ansatt && nyeBeskjeder ? `Mer (${nyeBeskjeder} nye beskjeder)` : undefined}>
+          <span className="bunn-ikon">
+            <IkonMeny storrelse={22} />
+            {!ansatt && nyeBeskjeder > 0 && <span className="ulest-prikk" />}
+          </span>
           <span>Mer</span>
         </button>
       </nav>
@@ -340,6 +360,13 @@ function Ramme() {
                 Ferie
               </NavLink>
             )}
+            {visBeskjeder && (
+              <NavLink to="/beskjeder">
+                <IkonBjelle />
+                Beskjeder
+                <UlesteTall n={nyeBeskjeder} />
+              </NavLink>
+            )}
           </>
         ) : (
           <NavLink to="/" end>
@@ -370,7 +397,7 @@ function Ramme() {
             )}
           </>
         )}
-        {!ansatt && (visAnsatte || visTimer) && (
+        {!ansatt && (visAnsatte || visTimer || visBeskjeder) && (
           <>
             <div className="meny-seksjon">Personal</div>
             {visAnsatte && (
@@ -395,6 +422,13 @@ function Ramme() {
               <NavLink to="/ferie">
                 <IkonFerie />
                 Ferie
+              </NavLink>
+            )}
+            {visBeskjeder && (
+              <NavLink to="/beskjeder">
+                <IkonBjelle />
+                Beskjeder
+                <UlesteTall n={nyeBeskjeder} />
               </NavLink>
             )}
           </>
@@ -443,6 +477,7 @@ function Ramme() {
             <Route path="/timer" element={<Timer />} />
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vakter"><Vakter /></Krever>} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
+            <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
@@ -471,6 +506,7 @@ function Ramme() {
             <Route path="/ansatte/importer" element={<Krever kode="import" navn="Importer ansatte"><Importer key="ansatte" type="ansatte" /></Krever>} />
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vaktplan"><Vakter /></Krever>} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
+            <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
             <Route path="/timer" element={<Timer />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />

@@ -482,8 +482,7 @@ function Ukeside({
                     // for en hel dag), med mindre noe allerede er ført den dagen.
                     <div key={`fast-${d}`} className="vakt-linje">
                       <span>
-                        <span className="vakt-merke">Fast</span> {fastTid(x)}
-                        {!x.fra && <span className="dempet"> · {timer(x.timer)}</span>}
+                        <span className="vakt-merke">Fast</span> {x.fra ? fastTid(x) : <span className="dempet">{timer(x.timer)}</span>}
                       </span>
                       {dagens.length > 0 ? (
                         <span className="merke merke-ok">Ført</span>

@@ -25,6 +25,7 @@ export const VARSELTYPER = {
   vakter: "Vaktplan: nye, endrede og ledige vakter og vaktbytter",
   fravaer: "Sykdom og fravær",
   bursdag: "Bursdager i organisasjonen",
+  beskjed: "Beskjeder til rollene dine",
 } as const;
 export type Varseltype = keyof typeof VARSELTYPER;
 

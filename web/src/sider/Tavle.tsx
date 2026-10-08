@@ -57,8 +57,9 @@ export function iFasen(v: { fra: string | null; til: string | null }, f: Fase) {
 }
 // «07–15» eller «07:30–15»
 const kortTid = (s: string) => (s.endsWith(":00") ? s.slice(0, 2) : s);
-const tidKort = (v: { fra: string | null; til: string | null }) => (v.fra && v.til ? `${kortTid(v.fra)}–${kortTid(v.til)}` : "hel dag");
-const vaktTid = (v: { fra: string | null; til: string | null }) => (v.fra && v.til ? `${v.fra}–${v.til}` : "hel dag");
+// En hel dag (fast arbeidsdag uten klokkeslett) har ingen tid: navnet holder.
+const tidKort = (v: { fra: string | null; til: string | null }) => (v.fra && v.til ? `${kortTid(v.fra)}–${kortTid(v.til)}` : "");
+const vaktTid = (v: { fra: string | null; til: string | null }) => (v.fra && v.til ? `${v.fra}–${v.til}` : "");
 const fasetid = (f: Fase) => (f.fra && f.til ? `${f.fra}–${f.til}` : "Hele dagen");
 // Hvor mange som trengs i oppgaven i fasen: satt for fasen, ellers på oppgaven (null: ikke satt).
 const trengs = (behov: Behov[], fase: string, o: Oppgave) => behov.find((b) => b.fase_id === fase && b.oppgave_id === o.id)?.antall ?? o.behov;
@@ -281,7 +282,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
     const innhold = (
       <>
         <span className="ressurs-navn">{navn.get(a) ?? "Ukjent"}</span>
-        {vakter.length > 0 && <span className="ressurs-tid">{vakter.map(tidKort).join(", ")}</span>}
+        {vakter.some((v) => v.fra) && <span className="ressurs-tid">{vakter.map(tidKort).filter(Boolean).join(", ")}</span>}
         {vakter.some((v) => v.vikar) && <span className="ressurs-merke">Vikar</span>}
         {fast && <span className="ressurs-merke">Fast</span>}
         {borte && <span className="ressurs-merke fare">{fravaerTekst[borte]}</span>}
@@ -633,7 +634,7 @@ function Flytt({
   const na = data.plasseringer.find((p) => p.fase_id === fase.id && p.ansatt_id === ansatt)?.oppgave_id ?? null;
   const mangler = data.mangler_vikar.find((m) => m.ansatt_id === ansatt);
   const faser = alle ? [fase.id, ...andre.map((x) => x.id)] : [fase.id];
-  const vakter = (r?.vakter ?? []).map(vaktTid).join(", ");
+  const vakter = (r?.vakter ?? []).map(vaktTid).filter(Boolean).join(", ");
   // En fast arbeidsdag (uten vakt) den ansatte er borte fra: vikaren får en vakt etter planen.
   const fast = r?.fravaer ? r.vakter.find((v) => v.fast) : undefined;
   const vikarFast: ManglerVikar | undefined =
@@ -642,7 +643,8 @@ function Flytt({
   return (
     <div className="flytt">
       <p className="dempet" style={{ marginTop: 0 }}>
-        {fase.navn} ({fasetid(fase).toLowerCase()}){vakter ? ` · ${r?.vakter.some((v) => v.fast) ? "fast arbeidsdag" : "vakt"} ${vakter}` : " · ingen vakt denne dagen"}
+        {fase.navn} ({fasetid(fase).toLowerCase()})
+        {r?.vakter.length ? ` · ${r.vakter.some((v) => v.fast) ? "fast arbeidsdag" : "vakt"}${vakter ? ` ${vakter}` : ""}` : " · ingen vakt denne dagen"}
       </p>
       {r?.fravaer ? (
         <>

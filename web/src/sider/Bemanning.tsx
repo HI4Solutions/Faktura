@@ -183,7 +183,8 @@ export function Bemanning({
   const synlige = ansatte.data.filter(iMaaneden).sort((x, y) => x.fornavn.localeCompare(y.fornavn, "nb") || x.etternavn.localeCompare(y.etternavn, "nb"));
   const fornavn = new Map<string, number>();
   for (const a of synlige) fornavn.set(a.fornavn, (fornavn.get(a.fornavn) ?? 0) + 1);
-  const visNavn = (a: Ansatt) => ((fornavn.get(a.fornavn) ?? 0) > 1 ? `${a.fornavn} ${a.etternavn.charAt(0)}.` : a.fornavn);
+  // Forkortelsen (f.eks. «AB») sparer plass; uten: fornavnet (med etternavnets forbokstav når flere heter det samme).
+  const visNavn = (a: Ansatt) => a.forkortelse || ((fornavn.get(a.fornavn) ?? 0) > 1 ? `${a.fornavn} ${a.etternavn.charAt(0)}.` : a.fornavn);
   const kjente = new Set(grupper.data.map((g) => g.id));
   const seksjoner: Seksjon[] = [
     ...grupper.data.map((g, i) => ({ id: g.id, navn: g.navn, kort: kortNavn(g), behov: g.behov, farge: i % FARGER, ansatte: synlige.filter((a) => a.gruppe_id === g.id) })),
@@ -230,11 +231,11 @@ export function Bemanning({
       r.art === "borte"
         ? [
             `${fravaerTekst[r.fravaer.type]} ${fravaerPeriode(r.fravaer)}`,
-            r.fast ? `Fast arbeidsdag ${fastTid(r.fast).toLowerCase()}` : "",
+            r.fast ? `Fast arbeidsdag ${fastTid(r.fast)}`.trim() : "",
             r.utenVikar.length ? "Vakten mangler vikar" : r.vakter.length ? "Vikar er satt inn" : "",
           ]
         : [
-            r.fast ? `Fast arbeidsdag ${fastTid(r.fast).toLowerCase()}` : "",
+            r.fast ? `Fast arbeidsdag ${fastTid(r.fast)}`.trim() : "",
             ...r.vakter.map((v) => `${v.fra}–${v.til}${v.oppgave ? ` ${v.oppgave}` : ""}${v.publisert ? "" : " (ikke publisert)"}`),
             r.ekstra ? `${timer(rund(r.ekstra))} ekstra` : "",
           ];
@@ -513,7 +514,11 @@ export function Bemanning({
               <ul className="liste-enkel">
                 <li>
                   <span>
-                    <span className="tittel">{fastTid(valgt.r.fast)}</span> <span className="dempet">Fast arbeidsdag · {timer(valgt.r.fast.timer)}</span>
+                    <span className="tittel">{fastTid(valgt.r.fast) || "Fast arbeidsdag"}</span>{" "}
+                    <span className="dempet">
+                      {fastTid(valgt.r.fast) ? "Fast arbeidsdag · " : ""}
+                      {timer(valgt.r.fast.timer)}
+                    </span>
                   </span>
                   {kanEndre && valgt.r.art === "borte" && (
                     <button
@@ -633,7 +638,7 @@ export function Bemanning({
             fravaer={data.fravaer}
             opptatt={
               new Map([
-                ...(data.faste ?? []).filter((f) => f.dato === vikar.dato && !f.fravaer).map((f) => [f.ansatt_id, fastTid(f).toLowerCase()] as const),
+                ...(data.faste ?? []).filter((f) => f.dato === vikar.dato && !f.fravaer).map((f) => [f.ansatt_id, fastTid(f)] as const),
                 ...data.vakter.filter((v) => v.dato === vikar.dato && v.ansatt_id).map((v) => [v.ansatt_id!, `${v.fra}–${v.til}`] as const),
               ])
             }

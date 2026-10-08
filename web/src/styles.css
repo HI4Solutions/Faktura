@@ -1324,6 +1324,16 @@ fieldset.naken { border: 0; padding: 0; margin: 0; background: none; min-width: 
 /* Fra, til og pause: klokkefeltene får mest plass */
 .rad.tre { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.75fr); }
 .rad.tre input.klokkeslett { padding-left: 10px; padding-right: 8px; font-variant-numeric: tabular-nums; }
+/* Fornavn, etternavn og forkortelsen (smal) på én rad */
+.rad.navn-rad { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 96px; }
+.rad.navn-rad input[maxlength="6"] { text-transform: uppercase; }
+.rad.navn-rad input[maxlength="6"]::placeholder { text-transform: none; }
+/* Forkortelsen ved navnet (lista over ansatte, dagsvisningen) */
+.fork-merke {
+  display: inline-block; min-width: 30px; margin-right: 7px; padding: 1px 5px; border-radius: 6px;
+  background: var(--flate-2); box-shadow: inset 0 0 0 1px var(--kant); color: var(--tekst-2);
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; line-height: 1.5; text-align: center; vertical-align: 1px;
+}
 .utregnet { margin: -6px 0 12px; min-height: 1.3em; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tekst-2); }
 .overtid-hjelp { margin: -8px 0 14px; }
 
@@ -1522,6 +1532,105 @@ fieldset.arbeidsplan { padding: 12px 16px 6px; margin: 0 0 16px; }
 }
 
 /* --------------------------------------------------------------------------
+   Vaktplanen per dag og måned (Vakter.tsx): visningsvalget, tidslinja og månedskalenderen
+   -------------------------------------------------------------------------- */
+.faner.valg.visningsvalg { width: auto; margin-bottom: 0; flex: none; }
+.faner.valg.visningsvalg button { min-width: 64px; }
+
+/* Dagen: én rad per person, rolle for rolle, med vaktene som streker på en tidslinje */
+.dagsvisning { padding: 12px 16px 14px; }
+.dl-oppsummering { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-bottom: 8px; font-size: 0.9rem; color: var(--tekst-2); }
+.dl-oppsummering strong { color: var(--tekst); }
+.dl-oppsummering .helligdag-navn { margin-left: 0; }
+.dl-akse, .dl-rad { display: grid; grid-template-columns: minmax(150px, 240px) minmax(0, 1fr); gap: 0 12px; align-items: center; }
+.dl-akse .dl-spor { height: 18px; background: none; }
+.dl-akse .dl-spor span { position: absolute; top: 0; transform: translateX(-50%); font-size: 0.7rem; color: var(--dempet); font-variant-numeric: tabular-nums; }
+.dl-akse .dl-spor span:first-child { transform: none; }
+.dl-akse .dl-spor span:last-child { transform: translateX(-100%); }
+.dl-gruppe { margin-top: 10px; }
+.dl-gruppe h3 { margin: 0 0 2px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--g, var(--tekst-2)); }
+.dl-gruppe h3 .dempet { margin-left: 4px; font-weight: 600; letter-spacing: 0; }
+.dl-rad { padding: 4px 0; border-top: 1px solid var(--kant); }
+.dl-person { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-width: 0; line-height: 1.3; }
+.dl-person .fork-merke { grid-row: 1 / span 2; background: var(--g-lys); color: var(--g); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g) 35%, transparent); }
+.dl-person .fork-merke.ledig { background: var(--flate-2); color: var(--dempet); box-shadow: inset 0 0 0 1px var(--kant); }
+.dl-navn { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-tid { font-size: 0.76rem; color: var(--dempet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-tid:empty { display: none; }
+.dl-spor {
+  position: relative; height: 30px; border-radius: 6px; background-color: var(--flate-2);
+  background-image: repeating-linear-gradient(to right, var(--kant) 0 1px, transparent 1px calc(100% / var(--timer, 10)));
+}
+.dl-spor.klikkbar { cursor: copy; }
+.dl-bar {
+  position: absolute; top: 3px; bottom: 3px; display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 0; margin: 0;
+  padding: 0 6px; border: 0; border-radius: 6px; background: var(--g); color: var(--g-lys); box-shadow: none;
+  font: inherit; font-size: 0.74rem; font-weight: 650; overflow: hidden; white-space: nowrap; cursor: pointer;
+}
+.dl-bar:hover:not(:disabled) { filter: brightness(1.08); background: var(--g); }
+.dl-bar:active:not(:disabled) { transform: none; }
+.dl-bar:disabled { cursor: default; opacity: 1; }
+.dl-bar span { overflow: hidden; text-overflow: ellipsis; }
+.dl-bar svg { flex: none; }
+.dl-bar.fast { background: color-mix(in srgb, var(--g) 62%, var(--flate)); }
+.dl-bar.utkast { background: var(--flate); color: var(--g); box-shadow: inset 0 0 0 1.5px var(--g); }
+.dl-bar.vikar { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--flate) 70%, transparent); }
+.dl-bar.borte { background: repeating-linear-gradient(135deg, var(--fv-lys) 0 6px, var(--flate) 6px 12px); color: var(--fv); box-shadow: inset 0 0 0 1px var(--fv); }
+.dl-bar.mangler { color: var(--fare); box-shadow: inset 0 0 0 2px var(--fare); }
+.dl-bar.advarsel:not(.borte) { box-shadow: inset 0 0 0 2px var(--advarsel); }
+.dl-naa { position: absolute; top: -2px; bottom: -2px; z-index: 1; width: 2px; margin-left: -1px; border-radius: 2px; background: var(--fare); pointer-events: none; }
+.dl-tom, .dl-borte { margin: 12px 0 0; font-size: 0.88rem; }
+.dl-borte { color: var(--tekst-2); }
+
+/* Måneden: forkortelsene i rollens farge per dag */
+.mnd-roller { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -2px 0 10px; font-size: 0.82rem; color: var(--tekst-2); }
+.mnd-rolle i { display: inline-block; width: 10px; height: 10px; margin-right: 2px; border-radius: 3px; background: var(--g); vertical-align: -1px; }
+.mnd-kalender { padding: 0; overflow: hidden; }
+.mnd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mnd-hode span { padding: 6px 8px; border-bottom: 1px solid var(--kant); background: var(--flate-2); color: var(--dempet); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.mnd-dag {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; min-width: 0; min-height: 96px; margin: 0; padding: 6px;
+  border: 0; border-right: 1px solid var(--kant); border-bottom: 1px solid var(--kant); border-radius: 0; background: var(--flate); box-shadow: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.mnd-dag:nth-child(7n) { border-right: 0; }
+.mnd-dag:hover:not(:disabled) { background: var(--flate-2); }
+.mnd-dag:active:not(:disabled) { transform: none; }
+.mnd-dag.utenfor { background: var(--flate-2); }
+.mnd-dag.utenfor > * { opacity: 0.55; }
+.mnd-topp { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 0.82rem; }
+.mnd-dato { min-width: 22px; padding: 0 5px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+.mnd-dag.i-dag .mnd-dato { background: var(--aksent); color: var(--aksent-tekst); }
+.mnd-dag.helligdag .mnd-dato { color: var(--fare); }
+.mnd-topp .helligdag-navn { min-width: 0; margin-left: 0; padding: 0 5px; overflow: hidden; text-overflow: ellipsis; font-size: 0.64rem; }
+.mnd-antall { margin-left: auto; color: var(--dempet); font-size: 0.72rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.mnd-folk { display: flex; flex-wrap: wrap; gap: 3px; }
+.mnd-fork {
+  display: inline-block; min-width: 24px; padding: 0 4px; border-radius: 5px; background: var(--g-lys); color: var(--g);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g) 30%, transparent);
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; line-height: 1.6; text-align: center;
+}
+.mnd-fork.borte { opacity: 0.55; text-decoration: line-through; }
+.mnd-fork.mangler { opacity: 1; color: var(--fare); box-shadow: inset 0 0 0 1.5px var(--fare); }
+.mnd-fork.utkast { background: transparent; box-shadow: inset 0 0 0 1px var(--g); border: 0; outline: 1px dashed var(--g); outline-offset: -1px; }
+.mnd-fork.ledig { background: transparent; color: var(--aksent); box-shadow: inset 0 0 0 1px var(--aksent); }
+.mnd-liste .mnd-rad { gap: 6px; }
+.mnd-liste .mnd-folk { gap: 4px; }
+.mnd-rad.helligdag .tittel { color: var(--fare); }
+.mnd-rad .helligdag-navn { font-size: 0.66rem; }
+@media (max-width: 700px) {
+  .faner.valg.visningsvalg { width: 100%; }
+  .faner.valg.visningsvalg button { flex: 1; }
+  .dagsvisning { padding: 10px 12px 12px; }
+  .dl-akse, .dl-rad { grid-template-columns: 118px minmax(0, 1fr); gap: 0 8px; }
+  .dl-navn { font-size: 0.84rem; }
+  .dl-spor { height: 26px; }
+  /* Tidene står under navnet; strekene er for smale til tekst */
+  .dl-bar span { display: none; }
+  .dl-bar { padding: 0 3px; justify-content: center; }
+}
+
+/* --------------------------------------------------------------------------
    Vaktbytte: tilbudene, svarene og godkjenningen (Vaktbytte.tsx)
    -------------------------------------------------------------------------- */
 h2.bytte-overskrift { margin: 1.1rem 0 0.5rem; }
@@ -1538,6 +1647,44 @@ h2.bytte-overskrift:first-child { margin-top: 0.25rem; }
 .bytte-avvis { margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--kant); }
 .bytte-avvis label { margin-bottom: 8px; }
 p.bytte-vakt { margin: 0 0 12px; }
+
+/* --------------------------------------------------------------------------
+   Beskjeder (Beskjeder.tsx): skjemaet øverst, beskjedene dag for dag med rollene i rollens
+   farge, og tallet på de nye i menyene
+   -------------------------------------------------------------------------- */
+.beskjed-ny textarea { resize: vertical; min-height: 74px; line-height: 1.45; }
+.beskjed-ny .melding { margin: 10px 0 0; }
+.beskjed-til { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.beskjed-til > span { font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); margin-right: 2px; }
+.beskjed-til button { border-radius: 999px; font-size: 0.86rem; padding: 5px 12px; min-height: 0; }
+.beskjed-til button[aria-pressed="true"] { background: var(--aksent-lys); border-color: var(--aksent); color: var(--aksent); }
+.beskjed-send { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; margin-top: 12px; }
+.beskjed-send label { margin: 0; }
+.beskjed-dag h2 { font-size: 0.76rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.07em; color: var(--dempet); margin: 18px 0 6px; }
+.beskjed { padding: 11px 16px 10px; border-bottom: 1px solid var(--kant); }
+.beskjed:last-child { border-bottom: 0; }
+.beskjed.ny { background: color-mix(in srgb, var(--aksent-lys) 55%, transparent); box-shadow: inset 3px 0 0 var(--aksent); }
+.beskjed-topp { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 0.86rem; }
+.beskjed-topp strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.beskjed-topp time { flex: none; color: var(--dempet); font-variant-numeric: tabular-nums; }
+.beskjed-push { flex: none; display: inline-flex; color: var(--dempet); }
+.beskjed-topp .merke { flex: none; padding: 1px 8px 1px 6px; font-size: 0.7rem; }
+.beskjed-tekst { margin: 3px 0 7px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.beskjed-bunn { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.beskjed-mottakere { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.beskjed-rolle { padding: 1px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 650; line-height: 1.5; background: var(--g-lys); color: var(--g); }
+.beskjed-rolle.alle { background: var(--flate-2); color: var(--tekst-2); box-shadow: inset 0 0 0 1px var(--kant); }
+.beskjed-bunn button.lenke { flex: none; font-size: 0.82rem; color: var(--dempet); }
+.beskjed-bunn button.lenke:hover:not(:disabled) { color: var(--fare); }
+/* Tallet på de nye: til høyre i sidemenyen, oppå ikonet i bunnmenyen (og en prikk på «Mer») */
+.ulest-tall {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--fare); color: var(--flate); font-size: 0.68rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.meny a .ulest-tall { margin-left: auto; }
+.bunn-ikon { position: relative; display: inline-flex; }
+.bunnmeny .ulest-tall { position: absolute; top: -6px; left: calc(100% - 9px); box-shadow: 0 0 0 2px var(--flate); }
+.ulest-prikk { position: absolute; top: -1px; right: -3px; width: 9px; height: 9px; border-radius: 999px; background: var(--fare); box-shadow: 0 0 0 2px var(--flate); }
 
 /* --------------------------------------------------------------------------
    Tavle (ressursfordeling)
@@ -1773,7 +1920,7 @@ table.bemanning { width: max-content; min-width: 100%; border-collapse: separate
 }
 /* Gruppenavnet følger med når tabellen rulles sidelengs */
 .bm-gruppe-navn { position: sticky; left: calc(var(--bm-dag-b) + 10px); }
-.bemanning th.bm-ansatt { min-width: 46px; padding: 5px 4px 4px; background: var(--g-lys); color: var(--tekst); box-shadow: inset 0 3px 0 var(--g); }
+.bemanning th.bm-ansatt { min-width: 40px; padding: 5px 4px 4px; background: var(--g-lys); color: var(--tekst); box-shadow: inset 0 3px 0 var(--g); }
 .bemanning th.bm-ansatt.forste { box-shadow: inset 0 3px 0 var(--g), inset 2px 0 0 var(--g); }
 .bm-navn { display: block; font-size: 0.78rem; font-weight: 650; }
 .bm-prosent { display: block; margin-top: 1px; font-size: 0.68rem; font-weight: 500; color: var(--dempet); font-variant-numeric: tabular-nums; }
@@ -1869,7 +2016,7 @@ table.bemanning { width: max-content; min-width: 100%; border-collapse: separate
   .bemanning th.bm-ekstra-sum { right: auto; }
   .bemanning td.bm-ekstra-sum { position: static; }
   .bemanning th.bm-sum-hode { font-size: 0.7rem; }
-  .bemanning th.bm-ansatt { min-width: 46px; padding: 5px 3px 4px; }
+  .bemanning th.bm-ansatt { min-width: 38px; padding: 5px 3px 4px; }
   .bm-navn { font-size: 0.74rem; }
   .bemanning td.bm-rute button { height: 36px; }
   .bm-forklaring { gap: 5px 10px; font-size: 0.8rem; }
@@ -2017,6 +2164,14 @@ th.tall .helligdag-navn { margin-left: auto; }
   [data-modul="personal"] .ukevelger .uke-navn span { font-size: 0.75rem; }
   [data-modul="personal"] .knapper.bm-knapper { flex-wrap: nowrap; }
   [data-modul="personal"] .knapper.bm-knapper > button, [data-modul="personal"] .knapper.bm-knapper > button.primar { flex: 1 1 auto; padding-left: 8px; padding-right: 8px; gap: 5px; }
+
+  /* Beskjeder */
+  [data-modul="personal"] .beskjed { padding: 8px 12px; }
+  [data-modul="personal"] .beskjed-tekst { margin: 2px 0 5px; font-size: 0.92rem; line-height: 1.4; }
+  [data-modul="personal"] .beskjed-dag h2 { margin: 12px 0 5px; font-size: 0.72rem; }
+  [data-modul="personal"] .beskjed-til { margin-top: 8px; gap: 5px; }
+  [data-modul="personal"] .beskjed-til button { padding: 4px 11px; font-size: 0.84rem; }
+  [data-modul="personal"] .beskjed-send { margin-top: 10px; }
 
   /* Lister */
   [data-modul="personal"] .liste-rad { padding: 7px 12px; gap: 1px; line-height: 1.3; }

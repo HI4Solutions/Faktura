@@ -25,8 +25,9 @@ export type PlanUtkast = {
 
 export const UKEDAGER_KORT = ["", "Ma", "Ti", "On", "To", "Fr", "Lø", "Sø"];
 
-// En fast dag i kalenderen, vaktplanen og på tavla: «08:00–13:00» eller «Hel dag».
-export const fastTid = (f: { fra: string | null; til: string | null }) => (f.fra && f.til ? `${f.fra}–${f.til}` : "Hel dag");
+// En fast dag i kalenderen, vaktplanen og på tavla: «08:00–13:00», og ingenting for en hel dag
+// (det vanligste: da holder navnet).
+export const fastTid = (f: { fra: string | null; til: string | null }) => (f.fra && f.til ? `${f.fra}–${f.til}` : "");
 // Vakten en fast dag blir til (f.eks. når det settes inn vikar): klokkeslettene, eller fra
 // kl. 08 og like lenge som dagen (som POST /vakter/fra-plan).
 export function fastTider(f: { fra: string | null; til: string | null; timer: number }) {

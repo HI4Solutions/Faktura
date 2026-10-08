@@ -17,7 +17,16 @@ import { visDag } from "../uke";
 // er (0047_fravaer_skjult.sql); andre ser bare at den ansatte er borte (F).
 export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "kurs" | "annet" | "fravaer";
 export type Fravaer = { id: string; ansatt_id: string; ansatt_navn: string; type: FravaerType; fra: string; til: string; notat?: string | null };
-export type Ansatt = { id: string; fornavn: string; etternavn: string; ansatt_fra: string; ansatt_til: string | null; aktiv: boolean; tavle?: boolean };
+export type Ansatt = {
+  id: string;
+  fornavn: string;
+  etternavn: string;
+  forkortelse?: string | null; // f.eks. «AB» (0061_forkortelser.sql)
+  ansatt_fra: string;
+  ansatt_til: string | null;
+  aktiv: boolean;
+  tavle?: boolean;
+};
 type BerortVakt = { id: string; dato: string; fra: string; til: string; oppgave: string | null };
 
 export const FRAVAERTYPER: FravaerType[] = ["ferie", "syk", "sykt_barn", "permisjon", "kurs", "annet"];
@@ -180,7 +189,7 @@ export function VikarSkjema({
   vakt: { id: string; dato: string; fra: string; til: string; oppgave: string | null; ansatt_id: string | null; ansatt_navn: string | null };
   ansatte: Ansatt[];
   fravaer: Pick<Fravaer, "ansatt_id" | "fra" | "til" | "type">[];
-  opptatt?: Map<string, string>; // ansatte som har vakt samme dag: id → tid
+  opptatt?: Map<string, string>; // ansatte som er på jobb samme dag: id → tiden (tom for en hel dag)
   // For en fast arbeidsdag uten vakt: lager vakten (fra planen) når vikaren settes inn.
   hentVaktId?: () => Promise<string>;
   ferdig: (melding: string) => void;
@@ -195,7 +204,7 @@ export function VikarSkjema({
   // De som er i arbeid og ikke borte den dagen; de uten vakt den dagen først.
   const kandidater = [...ansatte, ...lagt]
     .filter((a) => a.id !== vakt.ansatt_id && iArbeid(a, vakt.dato) && !borte(fravaer, a.id, vakt.dato))
-    .sort((a, b) => Number(!!opptatt?.get(a.id)) - Number(!!opptatt?.get(b.id)));
+    .sort((a, b) => Number(!!opptatt?.has(a.id)) - Number(!!opptatt?.has(b.id)));
 
   async function settInn(e: FormEvent) {
     e.preventDefault();
@@ -257,7 +266,7 @@ export function VikarSkjema({
             {kandidater.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.fornavn} {a.etternavn}
-                {opptatt?.get(a.id) ? ` (har vakt ${opptatt.get(a.id)})` : ""}
+                {opptatt?.has(a.id) ? (opptatt.get(a.id) ? ` (har vakt ${opptatt.get(a.id)})` : " (på jobb)") : ""}
               </option>
             ))}
           </select>

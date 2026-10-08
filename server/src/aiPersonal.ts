@@ -362,7 +362,7 @@ async function fravaer(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSv
   const faste = k.p.kan.personal ? (await beregnBemanning(k.db, k.orgId, fra, til, h.a.id)).faste.filter((f) => f.dato >= fra && f.dato <= til && !f.fravaer) : [];
   const navn = h.selv ? "deg" : h.a.navn;
   const deler = [`${FRAVAERTYPER[type]} for ${navn} ${naarPeriode(fra, til, k.iDag)}.`];
-  const dager = [...vakter.map((v) => vaktTekst(v)), ...faste.map((f) => `${dag(f.dato)}${f.fra ? ` ${f.fra}–${f.til}` : " (hel dag)"}`)];
+  const dager = [...vakter.map((v) => vaktTekst(v)), ...faste.map((f) => `${dag(f.dato)}${f.fra ? ` ${f.fra}–${f.til}` : ""}`)];
   if (dager.length) {
     deler.push(`${h.selv ? "Du" : h.a.navn} har ${flertall(dager.length, "vakt", "vakter")} i perioden: ${liste(forkort(dager, 6))}.`);
     deler.push(vikar.a ? `${vikar.a.navn} settes inn som vikar.` : h.selv ? "Lederen din får beskjed." : "De står som «mangler vikar» på tavla til en vikar er satt inn.");
@@ -844,7 +844,7 @@ async function hvemJobber(k: PKontekst, ai: Partial<PersonalKommando>): Promise<
     });
     const paJobb = [
       ...vakter_.filter((v) => v.dato === d && v.ansatt_id && !v.fravaer).map((v) => `${v.navn} ${v.fra}–${v.til}${v.oppgave ? ` (${v.oppgave})` : ""}${v.publisert ? "" : " (utkast)"}`),
-      ...b.faste.filter((f) => f.dato === d && !f.fravaer).map((f) => `${navn.get(f.ansatt_id) ?? "?"}${f.fra ? ` ${f.fra}–${f.til}` : " (hel dag)"}`),
+      ...b.faste.filter((f) => f.dato === d && !f.fravaer).map((f) => `${navn.get(f.ansatt_id) ?? "?"}${f.fra ? ` ${f.fra}–${f.til}` : ""}`),
     ];
     const borte = fravaer.filter((f) => f.fra <= d && f.til >= d).map((f) => `${f.navn} (${typeTekst(f.type)})`);
     const mangler = vakter_.filter((v) => v.dato === d && v.fravaer && !v.har_vikar).map((v) => `${v.navn} ${v.fra}–${v.til}`);
@@ -898,7 +898,7 @@ async function vakter(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSva
   };
   const linjer = [
     ...egne.map((v) => ({ dato: v.dato, t: `${vaktTekst(v, k.iDag)}${v.fravaer ? ` (borte: ${typeTekst(v.fravaer)})` : ""}${v.publisert ? "" : " (utkast)"}${tavle(v.dato)}` })),
-    ...faste.map((f) => ({ dato: f.dato, t: `${naar(f.dato, k.iDag)}${f.fra ? ` ${f.fra}–${f.til}` : " (hel dag)"}${f.fravaer ? ` (borte: ${typeTekst(f.fravaer)})` : ""}${tavle(f.dato)}` })),
+    ...faste.map((f) => ({ dato: f.dato, t: `${naar(f.dato, k.iDag)}${f.fra ? ` ${f.fra}–${f.til}` : ""}${f.fravaer ? ` (borte: ${typeTekst(f.fravaer)})` : ""}${tavle(f.dato)}` })),
   ].sort((x, y) => x.dato.localeCompare(y.dato));
   const hvemTekst = h.selv ? "Du" : h.a.navn;
   const deler = [

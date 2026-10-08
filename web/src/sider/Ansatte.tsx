@@ -24,6 +24,7 @@ type Ansatt = {
   ansattnummer: number;
   fornavn: string;
   etternavn: string;
+  forkortelse: string | null; // f.eks. «AB», der plassen er trang (lages av initialene)
   epost: string | null;
   telefon: string | null;
   adresse: string | null;
@@ -208,6 +209,7 @@ export function Ansatte() {
             <button key={a.id} type="button" className="liste-rad" onClick={() => settApen(a)}>
               <span className="linje">
                 <span className="tittel">
+                  {a.forkortelse && <span className="fork-merke">{a.forkortelse}</span>}
                   {a.fornavn} {a.etternavn}
                 </span>
                 <span className="under">Nr. {a.ansattnummer}</span>
@@ -244,6 +246,7 @@ export function Ansatte() {
                 <tr key={a.id} className="klikkbar" onClick={() => settApen(a)}>
                   <td>{a.ansattnummer}</td>
                   <td>
+                    {a.forkortelse && <span className="fork-merke">{a.forkortelse}</span>}
                     {a.fornavn} {a.etternavn}
                     {a.meg && <span className="dempet"> (deg)</span>}
                   </td>
@@ -301,6 +304,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   const [a, settA] = useState(() => ({
     fornavn: ansatt.fornavn ?? "",
     etternavn: ansatt.etternavn ?? "",
+    forkortelse: ansatt.forkortelse ?? "",
     epost: ansatt.epost ?? "",
     telefon: ansatt.telefon ?? "",
     adresse: ansatt.adresse ?? "",
@@ -494,6 +498,9 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       aktiv: a.aktiv,
     };
     if (bursdager) kropp.bursdag_varsel = a.bursdag_varsel;
+    // Forkortelsen sendes når den er endret (tom: lages av initialene).
+    const fork = a.forkortelse.trim().toUpperCase();
+    if (fork !== (ansatt.forkortelse ?? "")) kropp.forkortelse = fork || null;
     if (roller.data?.length) kropp.gruppe_id = a.gruppe_id || null;
     if (a.kunde_id !== (ansatt.kunde_id ?? "")) kropp.kunde_id = a.kunde_id || null;
     const nyttNavn = nyRolle?.navn.trim() ?? "";
@@ -583,7 +590,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
         </div>
       )}
       <fieldset className="naken" disabled={!kanEndre}>
-        <div className="rad">
+        <div className="rad navn-rad">
           <label>
             Fornavn
             <input required autoComplete="off" {...felt("fornavn")} />
@@ -591,6 +598,15 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           <label>
             Etternavn
             <input required autoComplete="off" {...felt("etternavn")} />
+          </label>
+          <label title="Vises i vaktplanen og kalenderen der plassen er trang. Tom: lages av initialene.">
+            Forkortelse
+            <input
+              autoComplete="off"
+              maxLength={6}
+              placeholder={(a.fornavn.trim().charAt(0) + a.etternavn.trim().charAt(0)).toUpperCase() || "AB"}
+              {...felt("forkortelse")}
+            />
           </label>
         </div>
         <div className="rad">

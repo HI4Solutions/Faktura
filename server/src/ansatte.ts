@@ -61,6 +61,14 @@ type Tillegg = z.infer<typeof tilleggSkjema>;
 const ansattSkjema = z.object({
   fornavn: z.string({ error: "Skriv fornavnet" }).trim().min(1, "Skriv fornavnet").max(100, "Fornavnet kan ha høyst 100 tegn"),
   etternavn: z.string({ error: "Skriv etternavnet" }).trim().min(1, "Skriv etternavnet").max(100, "Etternavnet kan ha høyst 100 tegn"),
+  // Forkortelsen der plassen er trang (0061_forkortelser.sql; tom: lages av initialene).
+  forkortelse: valgfri(
+    z
+      .string()
+      .trim()
+      .max(6, "Forkortelsen kan ha høyst 6 tegn")
+      .regex(/^[\p{L}\p{N}-]+$/u, "Forkortelsen kan bare ha bokstaver, tall og bindestrek"),
+  ),
   epost: valgfri(tekst(254, "E-postadressen").regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/, "Ugyldig e-postadresse")),
   telefon: valgfri(tekst(30, "Telefonnummeret")),
   adresse: valgfri(tekst(200, "Adressen")),
@@ -124,7 +132,7 @@ const foringSkjema = z.object({
 // --- Utvalg -------------------------------------------------------------------
 
 const ANSATT = `
-  select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
+  select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.forkortelse, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
          a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).

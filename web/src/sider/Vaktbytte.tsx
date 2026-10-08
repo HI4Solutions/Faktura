@@ -55,7 +55,8 @@ export const aapentPaa = (bytter: Bytte[] | undefined, vakt: string) => bytter?.
 export const fraKolleger = (bytter: Bytte[] | undefined, egen: string | null) =>
   (bytter ?? []).filter((b) => b.status === "tilbudt" && !b.til_ansatt && b.fra_ansatt !== egen);
 
-const vaktTekst = (dato: string, fra: string | null, til: string | null) => `${visDag(dato)} ${fra && til ? `${fra}–${til}` : "hel dag"}`;
+// En hel dag (fast arbeidsdag uten klokkeslett): bare datoen.
+const vaktTekst = (dato: string, fra: string | null, til: string | null) => `${visDag(dato)}${fra && til ? ` ${fra}–${til}` : ""}`;
 // Midt i en setning: «mot tir. 13. okt. 08:00–16:00».
 const liten = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 const motTekst = (b: Bytte) => (b.mot_dato ? liten(vaktTekst(b.mot_dato, b.mot_fra, b.mot_til)) : "");
