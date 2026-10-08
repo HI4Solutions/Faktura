@@ -70,6 +70,8 @@ const oppsettSkjema = z.object({
   overtid_prosent: z.number().int().min(40, "Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)").max(200).optional(),
   // Bursdagsvarsler til de andre i organisasjonen (0045_bursdager.sql).
   bursdag_varsel: z.enum(["av", "push", "epost", "begge"]).optional(),
+  // Arbeidstiden i full stilling, standarden for nye ansatte (0048_full_stilling.sql).
+  full_stilling: z.number().gt(0, "Arbeidstiden må være over 0").max(60, "Høyst 60 timer i uka").optional(),
 });
 
 const foringSkjema = z.object({
@@ -113,13 +115,14 @@ const FORING = `
 type Foringsrad = { id: string; ansatt_id: string; ansatt_navn: string; dato: string; timer: number; overtid_prosent: number | null; status: string };
 
 export type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
-export async function regler(db: Db, org: string): Promise<Regler & { aktiv: boolean; bursdag_varsel: Bursdagsvarsel }> {
-  const r = await en<Regler & { aktiv: boolean; bursdag_varsel: Bursdagsvarsel }>(
+type Oppsett = Regler & { aktiv: boolean; bursdag_varsel: Bursdagsvarsel; full_stilling: number };
+export async function regler(db: Db, org: string): Promise<Oppsett> {
+  const r = await en<Oppsett>(
     db,
-    "select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel from faktura.lonn_oppsett where org_id = $1",
+    "select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling from faktura.lonn_oppsett where org_id = $1",
     [org],
   );
-  return r ?? { aktiv: false, ...AML, bursdag_varsel: "av" };
+  return r ?? { aktiv: false, ...AML, bursdag_varsel: "av", full_stilling: 37.5 };
 }
 
 // Den innloggedes egen ansattrad i organisasjonen (eller null).
@@ -182,10 +185,12 @@ export function ansattRuter() {
         const naa = await regler(db, orgId(c));
         const ny = { ...naa, ...Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined)) };
         await db.query(
-          `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel) values ($1, $2, $3, $4, $5, $6)
+          `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling)
+           values ($1, $2, $3, $4, $5, $6, $7)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
-             ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel`,
-          [orgId(c), ny.aktiv, ny.daglig_grense, ny.ukentlig_grense, ny.overtid_prosent, ny.bursdag_varsel],
+             ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
+             full_stilling = excluded.full_stilling`,
+          [orgId(c), ny.aktiv, ny.daglig_grense, ny.ukentlig_grense, ny.overtid_prosent, ny.bursdag_varsel, ny.full_stilling],
         );
         return regler(db, orgId(c));
       }),
@@ -236,9 +241,11 @@ export function ansattRuter() {
 
   r.post("/ansatte", async (c) => {
     const f = await felter(ansattSkjema.parse(await c.req.json().catch(() => ({}))));
-    const navn = Object.keys(f);
     const a = await bruk(c, async (db) => {
       await sjekkGruppe(db, orgId(c), f);
+      // Uten arbeidstid får den nye ansatte organisasjonens arbeidstid i full stilling.
+      if (f.ukentlig_arbeidstid === undefined) f.ukentlig_arbeidstid = (await regler(db, orgId(c))).full_stilling;
+      const navn = Object.keys(f);
       const ny = await en<{ id: string }>(
         db,
         `insert into faktura.ansatte (org_id, ${navn.join(", ")}) values ($1, ${navn.map((_, i) => `$${i + 2}`).join(", ")}) returning id`,

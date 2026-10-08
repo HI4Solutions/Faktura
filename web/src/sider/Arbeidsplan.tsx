@@ -2,8 +2,13 @@
 // som hel dag (en femtedel av arbeidstiden i full stilling, vanligvis 7,5 timer). Planen gjelder
 // fra en dato (server/src/arbeidsplan.ts), så en endring ikke endrer tidligere måneder. De
 // faste dagene vises i bemanningskalenderen, vaktplanen og på tavla, og timer utover planen
-// blir ekstratimer.
+// blir ekstratimer. Stillingsprosenten følger dagene (den kan endres etterpå), og arbeidstiden
+// og dagene kan også endres fra vaktplanen, tavla, kalenderen og timelista (ArbeidsplanDialog).
+import { useEffect, useState, type FormEvent } from "react";
+import { api, hent } from "../api";
+import { Dialog, Feil, Laster, tall, useData, useHandling } from "../felles";
 import { dato, iDag } from "../format";
+import { useKonto } from "../konto";
 import { Klokkeslett, regnTimer, tallformat, timer } from "../uke";
 
 export type PlanDag = { ukedag: number; fra: string | null; til: string | null; pause_min: number };
@@ -91,6 +96,16 @@ export function tilLagring(u: PlanUtkast): { gjelder_fra: string; dager: PlanDag
 const dagTimer = (d: DagUtkast, ukentlig: number) =>
   d.hel ? ukentlig / 5 : klokke(d.fra) && klokke(d.til) && d.fra !== d.til ? regnTimer(d.fra, d.til, Number(d.pause.replace(",", ".")) || 0) : null;
 const rund = (t: number) => Math.round(t * 100) / 100;
+const valgteDager = (u: PlanUtkast) => [1, 2, 3, 4, 5, 6, 7].filter((x) => u.dager[x]);
+const ukesum = (u: PlanUtkast, ukentlig: number) => rund(valgteDager(u).reduce((s, x) => s + (dagTimer(u.dager[x]!, ukentlig) ?? 0), 0));
+
+// Stillingsprosenten de faste dagene gir (timene i uka av arbeidstiden i full stilling), eller
+// null uten dager. Høyst 100 %.
+export function planProsent(u: PlanUtkast, ukentlig: number): number | null {
+  if (!valgteDager(u).length || !(ukentlig > 0)) return null;
+  const p = Math.round((ukesum(u, ukentlig) / ukentlig) * 1000) / 10;
+  return p > 0 ? Math.min(100, p) : null;
+}
 
 export function ArbeidsplanFelt({
   utkast,
@@ -109,12 +124,18 @@ export function ArbeidsplanFelt({
   ny: boolean;
   kanEndre: boolean;
 }) {
-  const sett = (ukedag: number, d: DagUtkast | undefined) => endre({ ...utkast, dager: { ...utkast.dager, [ukedag]: d } });
-  const valgte = [1, 2, 3, 4, 5, 6, 7].filter((u) => utkast.dager[u]);
+  // Stillingsprosenten følger dagene når de endres (den kan endres etterpå).
+  const sett = (ukedag: number, d: DagUtkast | undefined) => {
+    const ny = { ...utkast, dager: { ...utkast.dager, [ukedag]: d } };
+    endre(ny);
+    const p = planProsent(ny, ukentlig);
+    if (p !== null) settProsent(p);
+  };
+  const valgte = valgteDager(utkast);
   const gyldigUke = Number.isFinite(ukentlig) && ukentlig > 0;
-  const sum = rund(valgte.reduce((s, u) => s + (dagTimer(utkast.dager[u]!, ukentlig) ?? 0), 0));
-  const planProsent = gyldigUke ? Math.round((sum / ukentlig) * 1000) / 10 : 0;
-  const avvik = gyldigUke && valgte.length > 0 && Number.isFinite(prosent) && Math.abs(planProsent - prosent) >= 0.1;
+  const sum = ukesum(utkast, ukentlig);
+  const prosentPlan = gyldigUke ? Math.round((sum / ukentlig) * 1000) / 10 : 0;
+  const avvik = gyldigUke && valgte.length > 0 && Number.isFinite(prosent) && Math.abs(Math.min(100, prosentPlan) - prosent) >= 0.1;
 
   // En ny dag får samme tid som den forrige valgte dagen (eller hel dag).
   const slaPa = (u: number) => {
@@ -179,12 +200,12 @@ export function ArbeidsplanFelt({
       {valgte.length > 0 && (
         <p className="arbeidsplan-sum" aria-live="polite">
           <strong>{timer(sum)} i uka</strong>
-          {gyldigUke && <span> = {tallformat.format(planProsent)} % av {timer(ukentlig)}</span>}
+          {gyldigUke && <span> = {tallformat.format(prosentPlan)} % av {timer(ukentlig)}</span>}
           {avvik && kanEndre && (
             <>
               <span className="dempet"> · stillingen er {tallformat.format(prosent)} %</span>{" "}
-              <button type="button" className="lenke" onClick={() => settProsent(planProsent)}>
-                Sett stillingen til {tallformat.format(planProsent)} %
+              <button type="button" className="lenke" onClick={() => settProsent(Math.min(100, prosentPlan))}>
+                Sett stillingen til {tallformat.format(Math.min(100, prosentPlan))} %
               </button>
             </>
           )}
@@ -208,5 +229,96 @@ export function ArbeidsplanFelt({
         </label>
       )}
     </fieldset>
+  );
+}
+
+// --- Arbeidstid og faste dager fra de andre modulene ------------------------------------------
+
+type AnsattArbeidstid = { id: string; fornavn: string; etternavn: string; stilling: string | null; stillingsprosent: number; ukentlig_arbeidstid: number; ansatt_fra: string };
+const tallTekst = (n: number) => String(n).replace(".", ",");
+
+// Stillingsprosenten, arbeidstiden i full stilling og de faste dagene til én ansatt, som i
+// ansattkortet (samme data), fra vaktplanen, tavla, bemanningskalenderen og timelista.
+export function ArbeidsplanDialog({ ansattId, lukk, lagret }: { ansattId: string | null; lukk: () => void; lagret: (melding: string) => void }) {
+  return (
+    <Dialog apen={!!ansattId} lukk={lukk} tittel="Arbeidstid og faste dager">
+      {ansattId && <ArbeidsplanSkjema ansattId={ansattId} lukk={lukk} lagret={lagret} />}
+    </Dialog>
+  );
+}
+
+function ArbeidsplanSkjema({ ansattId, lukk, lagret }: { ansattId: string; lukk: () => void; lagret: (melding: string) => void }) {
+  const { org } = useKonto();
+  const ansatt = useData(() => hent<AnsattArbeidstid>(`/org/${org!.id}/ansatte/${ansattId}`), [org?.id, ansattId]);
+  const planer = useData(() => hent<Plan[]>(`/org/${org!.id}/ansatte/${ansattId}/arbeidsplan`), [org?.id, ansattId]);
+  const [prosent, settProsent] = useState("");
+  const [ukentlig, settUkentlig] = useState("");
+  const [utkast, settUtkast] = useState<PlanUtkast | null>(null);
+  const h = useHandling();
+  useEffect(() => {
+    if (!ansatt.data || !planer.data) return;
+    settProsent(tallTekst(Number(ansatt.data.stillingsprosent)));
+    settUkentlig(tallTekst(Number(ansatt.data.ukentlig_arbeidstid)));
+    settUtkast(lagUtkast(planer.data, ansatt.data.ansatt_fra));
+  }, [ansatt.data, planer.data]);
+  const a = ansatt.data;
+  if (ansatt.feil || planer.feil) return <Feil melding={ansatt.feil ?? planer.feil} />;
+  if (!a || !utkast) return <Laster />;
+  const uke = ukentlig.trim() ? tall(ukentlig) : NaN;
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    const p = tall(prosent);
+    if (!(p > 0 && p <= 100)) return h.settFeil("Stillingsprosenten må være mellom 0 og 100");
+    if (!(uke > 0 && uke <= 60)) return h.settFeil("Arbeidstiden i full stilling må være mellom 0 og 60 timer i uka");
+    const nyPlan = endret(utkast!) ? tilLagring(utkast!) : null;
+    if (typeof nyPlan === "string") return h.settFeil(nyPlan);
+    const ok = await h.kjor(async () => {
+      if (p !== Number(a!.stillingsprosent) || uke !== Number(a!.ukentlig_arbeidstid))
+        await api("PATCH", `/org/${org!.id}/ansatte/${ansattId}`, { stillingsprosent: p, ukentlig_arbeidstid: uke });
+      if (nyPlan) await api("PUT", `/org/${org!.id}/ansatte/${ansattId}/arbeidsplan`, nyPlan);
+      return true;
+    });
+    if (ok) lagret(`Arbeidstiden til ${a!.fornavn} er lagret.`);
+  }
+
+  return (
+    <form className="arbeidsplan-skjema" onSubmit={lagre}>
+      <p className="dempet" style={{ marginTop: 0 }}>
+        <strong>
+          {a.fornavn} {a.etternavn}
+        </strong>
+        {a.stilling ? ` · ${a.stilling}` : ""} · det samme som i ansattkortet.
+      </p>
+      <div className="rad">
+        <label>
+          Stillingsprosent
+          <input inputMode="decimal" required value={prosent} onChange={(e) => settProsent(e.target.value)} />
+        </label>
+        <label>
+          Arbeidstid i full stilling
+          <input inputMode="decimal" required value={ukentlig} onChange={(e) => settUkentlig(e.target.value)} />
+          <span className="felt-hjelp">Timer per uke.</span>
+        </label>
+      </div>
+      <ArbeidsplanFelt
+        utkast={utkast}
+        endre={settUtkast}
+        ukentlig={uke > 0 ? uke : 37.5}
+        prosent={prosent.trim() ? tall(prosent) : 100}
+        settProsent={(x) => settProsent(tallTekst(x))}
+        ny={false}
+        kanEndre
+      />
+      <Feil melding={h.feil} />
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt}>
+          Lagre
+        </button>
+        <button type="button" onClick={lukk}>
+          Avbryt
+        </button>
+      </div>
+    </form>
   );
 }

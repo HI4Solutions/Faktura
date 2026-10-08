@@ -1,6 +1,9 @@
 // Fravær og vikarer: registrere fravær (eier og administrator), melde seg syk (den ansatte),
 // listen over fravær, og vikar for en vakt når den som har den, er borte. Fravær er
-// helseopplysninger og vises bare for eier, administrator, regnskap og den ansatte selv.
+// helseopplysninger og vises bare for eier, administrator, regnskap og den ansatte selv; hva
+// slags fravær det er, ser bare eier, administrator og den ansatte selv (andre ser «F»). Fraværet
+// registreres ett sted og vises i vaktplanen, på tavla, i bemanningskalenderen, i timelista og
+// i ansattkortet, og kan registreres og endres fra alle (FravaerDialog).
 import { useState, type FormEvent } from "react";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
@@ -354,7 +357,10 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
           ))}
         </div>
       )}
-      <p className="liten dempet">Fravær er helseopplysninger: bare eier, administrator, regnskap og den ansatte selv ser det.</p>
+      <p className="liten dempet">
+        Fravær er helseopplysninger: bare eier, administrator, regnskap og den ansatte selv ser det, og hva slags fravær det er, ser bare eier, administrator og
+        den ansatte selv.
+      </p>
       <Dialog apen={!!apen} lukk={() => settApen(null)} tittel={apen?.id ? "Endre fravær" : "Registrer fravær"}>
         {apen && (
           <FravaerSkjema
@@ -418,5 +424,86 @@ export function MittFravaer({ fravaer, endret }: { fravaer: Fravaer[]; endret: (
         )}
       </Dialog>
     </>
+  );
+}
+
+// Meldingen etter at fraværet er lagret, med vaktene i perioden som mangler vikar.
+export const fravaerMelding = (m: string, berort?: BerortVakt[]) =>
+  berort?.length
+    ? `${m} ${berort.length === 1 ? "Én vakt" : `${berort.length} vakter`} i perioden mangler vikar: ${berort.map((v) => `${visDag(v.dato)} ${v.fra}–${v.til}`).join(", ")}.`
+    : m;
+
+// Registrer eller endre fravær fra hvor som helst: ansattkortet, vaktplanen, tavla, bemannings-
+// kalenderen og timelista (samme fravær som i fraværslista). Uten liste over ansatte hentes den.
+export function FravaerDialog({
+  fravaer,
+  ansatte,
+  lukk,
+  ferdig,
+}: {
+  fravaer: Partial<Fravaer> | null;
+  ansatte?: Ansatt[];
+  lukk: () => void;
+  ferdig: (melding: string) => void;
+}) {
+  const { org } = useKonto();
+  const apen = !!fravaer;
+  const liste = useData(() => (ansatte || !apen ? Promise.resolve(ansatte ?? null) : hent<Ansatt[]>(`/org/${org!.id}/ansatte`)), [org?.id, apen, ansatte]);
+  return (
+    <Dialog apen={apen} lukk={lukk} tittel={fravaer?.id ? "Endre fravær" : "Registrer fravær"}>
+      {fravaer &&
+        (liste.feil ? (
+          <Feil melding={liste.feil} />
+        ) : !liste.data ? (
+          <Laster />
+        ) : (
+          <FravaerSkjema fravaer={fravaer} ansatte={liste.data} ferdig={(m, berort) => ferdig(fravaerMelding(m, berort))} avbryt={lukk} />
+        ))}
+    </Dialog>
+  );
+}
+
+// Fraværet og ferien til én ansatt i år og det som kommer (i ansattkortet). Registrering og
+// endring går gjennom FravaerDialog utenfor ansattskjemaet (apne).
+export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId: string; versjon: number; kanEndre: boolean; apne: (f: Partial<Fravaer>) => void }) {
+  const { org } = useKonto();
+  const aar = Number(iDag().slice(0, 4));
+  const { data, feil } = useData(
+    () => hent<Fravaer[]>(`/org/${org!.id}/fravaer?fra=${aar}-01-01&til=${aar + 1}-12-31&ansatt=${ansattId}`),
+    [org?.id, ansattId, versjon],
+  );
+  return (
+    <section className="ansatt-fravaer">
+      <h3>Fravær og ferie</h3>
+      <p className="felt-hjelp" style={{ marginTop: 0 }}>
+        Vises i vaktplanen, på tavla, i bemanningskalenderen og i timelista, og kan registreres og endres der også.
+      </p>
+      {feil ? (
+        <Feil melding={feil} />
+      ) : !data ? (
+        <Laster />
+      ) : !data.length ? (
+        <p className="dempet liten">Ikke noe fravær registrert i {aar}.</p>
+      ) : (
+        <ul className="ansatt-fravaer-liste">
+          {data.map((f) => (
+            <li key={f.id}>
+              <button type="button" className="fravaer-rad" disabled={!kanEndre} onClick={() => apne(f)} title={kanEndre ? "Endre fraværet" : undefined}>
+                <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerTekst[f.type]}</span>
+                <span>
+                  {fravaerPeriode(f)} · {dager(f) === 1 ? "1 dag" : `${dager(f)} dager`}
+                </span>
+                {f.fra <= iDag() && f.til >= iDag() && <span className="merke merke-advarsel">Nå</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {kanEndre && (
+        <button type="button" onClick={() => apne({ ansatt_id: ansattId, fra: iDag(), til: iDag() })}>
+          Registrer fravær
+        </button>
+      )}
+    </section>
   );
 }

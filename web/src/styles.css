@@ -1829,3 +1829,16 @@ button.fare-fylt:hover:not(:disabled) { background: color-mix(in srgb, var(--far
 .kort.slettede-org { margin-top: 16px; }
 .kort.slettede-org summary { cursor: pointer; font-weight: 600; }
 .kort.slettede-org .admin-rader { margin-top: 10px; }
+
+/* Fravær og arbeidstid rett fra vaktplanen, tavla og kalenderen, og fraværet i ansattkortet. */
+.vakt-lenker { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 12px; }
+.ansatt-fravaer { margin: 8px 0 18px; padding-top: 14px; border-top: 1px solid var(--kant); }
+.ansatt-fravaer h3 { margin-top: 0; }
+.ansatt-fravaer-liste { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.ansatt-fravaer-liste .fravaer-rad { width: 100%; display: flex; align-items: center; gap: 10px; justify-content: flex-start; text-align: left; font-weight: 450; }
+.ansatt-fravaer-liste .fravaer-rad:disabled { opacity: 1; cursor: default; }
+.ansatt-fravaer-liste .fravaer-rad .merke-advarsel { margin-left: auto; }
+.bm-ansatt-knapp { all: unset; display: flex; flex-direction: column; align-items: center; gap: 1px; cursor: pointer; width: 100%; border-radius: 6px; }
+.bm-ansatt-knapp:hover .bm-navn { text-decoration: underline; }
+.bm-ansatt-knapp:focus-visible { outline: 2px solid var(--aksent); outline-offset: 2px; }
+

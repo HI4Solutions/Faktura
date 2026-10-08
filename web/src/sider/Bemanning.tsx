@@ -25,7 +25,7 @@ import {
   type Fravaer,
 } from "./Fravaer";
 import { visLangDag } from "./Tavle";
-import { fastTid, fastTider } from "./Arbeidsplan";
+import { ArbeidsplanDialog, fastTid, fastTider } from "./Arbeidsplan";
 import type { Fast, Vakt, VaktSvar, VikarVakt } from "./Vakter";
 
 type Ansatt = Grunnansatt & {
@@ -83,6 +83,8 @@ export function Bemanning({
   const [rute, settRute] = useState<{ a: Ansatt; d: string } | null>(null);
   const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
   const [vikar, settVikar] = useState<VikarVakt | null>(null);
+  // Stillingsprosent, arbeidstid og faste dager for en ansatt (samme som i ansattkortet).
+  const [planFor, settPlanFor] = useState<string | null>(null);
   const [oppsett, settOppsett] = useState(false);
   const [rapport, settRapport] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
@@ -351,8 +353,18 @@ export function Bemanning({
                   {seksjoner.flatMap((s) =>
                     s.ansatte.map((a, j) => (
                       <th key={a.id} className={`bm-ansatt g${s.farge}${j === 0 ? " forste" : ""}`} title={`${a.fornavn} ${a.etternavn}${a.stilling ? ` · ${a.stilling}` : ""}`}>
-                        <span className="bm-navn">{visNavn(a)}</span>
-                        <span className="bm-prosent">{a.ansettelsestype === "tilkalling" ? "Tilk." : `${tallformat.format(Number(a.stillingsprosent))}%`}</span>
+                        {kanEndre ? (
+                          // Trykk på navnet: stillingsprosent, arbeidstid og faste dager.
+                          <button type="button" className="bm-ansatt-knapp" aria-label={`Arbeidstid og faste dager for ${a.fornavn} ${a.etternavn}`} onClick={() => settPlanFor(a.id)}>
+                            <span className="bm-navn">{visNavn(a)}</span>
+                            <span className="bm-prosent">{a.ansettelsestype === "tilkalling" ? "Tilk." : `${tallformat.format(Number(a.stillingsprosent))}%`}</span>
+                          </button>
+                        ) : (
+                          <>
+                            <span className="bm-navn">{visNavn(a)}</span>
+                            <span className="bm-prosent">{a.ansettelsestype === "tilkalling" ? "Tilk." : `${tallformat.format(Number(a.stillingsprosent))}%`}</span>
+                          </>
+                        )}
                       </th>
                     )),
                   )}
@@ -535,6 +547,18 @@ export function Bemanning({
                   {valgt.r.art === "borte" ? "Endre fraværet" : "Registrer fravær"}
                 </button>
               )}
+              {kanEndre && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const a = valgt.a;
+                    settRute(null);
+                    settPlanFor(a.id);
+                  }}
+                >
+                  Arbeidstid og faste dager
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -586,6 +610,14 @@ export function Bemanning({
           />
         )}
       </Dialog>
+      <ArbeidsplanDialog
+        ansattId={planFor}
+        lukk={() => settPlanFor(null)}
+        lagret={(m) => {
+          settPlanFor(null);
+          endret(m);
+        }}
+      />
       <Dialog apen={oppsett} lukk={() => settOppsett(false)} tittel="Grupper og behov" bred>
         {oppsett && <GrupperOppsett grupper={grupper.data} ansatte={ansatte.data} endret={() => settOppsettVersjon((x) => x + 1)} lukk={() => settOppsett(false)} />}
       </Dialog>

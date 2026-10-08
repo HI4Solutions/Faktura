@@ -36,6 +36,7 @@ bank og regnskapssystemer.
 | Vaktplan: planlegging og publisering med varsler, ledige vakter, kopiering av uker, advarsler etter arbeidsmiljøloven | Ferdig |
 | Tavle (ressursfordeling i faser og oppgaver), fravær (sykdom, ferie, permisjon, kurs), vikarer og bemanningskalender med grupper (f.eks. sekretærer og leger) mot behovet | Ferdig |
 | Faste arbeidsdager per ansatt (ukedager med klokkeslett eller hel dag) i kalenderen, vaktplanen og på tavla, og ekstratimer per ansatt med rapport som PDF og CSV | Ferdig |
+| Bemanningsdata ett sted: stillingsprosent (følger de faste dagene), arbeidstid, faste dager, fravær og ferie registreres én gang, vises i alle bemanningsmodulene og kan endres fra hver av dem | Ferdig |
 | Bursdagsvarsler: når en ansatt har bursdag, får alle de andre push-varsel og/eller e-post kl. 08 | Ferdig (slås på under Innstillinger → Ansatte og timer) |
 | Lønnskjøring, a-melding og utbetaling | Planlagt (se veikartet) |
 | Regnskapssystemer | Ikke startet |

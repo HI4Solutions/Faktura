@@ -9,7 +9,9 @@ import { harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag } from "../format";
 import { fnrGyldig, fodselsdato, kontonrGyldig, visKontonr } from "../personnummer";
 import { IkonAnsatte } from "../ikoner";
+import { tallformat } from "../uke";
 import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
+import { AnsattFravaer, FravaerDialog, type Fravaer } from "./Fravaer";
 
 type Ansatt = {
   id: string;
@@ -245,8 +247,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     bursdag_varsel: ansatt.bursdag_varsel ?? true,
   }));
   // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
-  const oppsett = useData(() => hent<{ bursdag_varsel: string }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
+  const oppsett = useData(() => hent<{ bursdag_varsel: string; full_stilling: number }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
   const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
+  // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Ansatte og timer).
+  const fullStilling = Number(oppsett.data?.full_stilling ?? 37.5);
   // Med vaktplanen (Administrasjon → Funksjoner): gruppene i bemanningskalenderen (f.eks.
   // sekretærer og leger), hvis noen er laget, og den faste arbeidsplanen (ukedagene den ansatte
   // jobber), som et utkast til den lagres.
@@ -263,6 +267,13 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   }, [planer.data]);
   const [forlatt, settForlatt] = useState<Record<string, boolean>>({});
   const [melding, settMelding] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ansatt.id && oppsett.data && !forlatt.ukentlig_arbeidstid) settA((x) => ({ ...x, ukentlig_arbeidstid: tekstTall(Number(oppsett.data!.full_stilling ?? 37.5)) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oppsett.data]);
+  // Fravær og ferie registreres i en egen dialog utenfor skjemaet (FravaerDialog har sitt eget).
+  const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
+  const [fravaerVersjon, settFravaerVersjon] = useState(0);
   const h = useHandling();
   const sett = (e: Partial<typeof a>) => settA({ ...a, ...e });
   const felt = (navn: keyof typeof a) => ({
@@ -336,6 +347,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   }
 
   return (
+    <>
     <form onSubmit={lagre}>
       {melding && (
         <div className="melding ok" role="status">
@@ -475,11 +487,12 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           <label>
             Stillingsprosent
             <input inputMode="decimal" {...felt("stillingsprosent")} />
+            {vaktplan && <span className="felt-hjelp">Følger de faste arbeidsdagene, og kan endres.</span>}
           </label>
           <label>
             Arbeidstid i full stilling
             <input inputMode="decimal" {...felt("ukentlig_arbeidstid")} />
-            <span className="felt-hjelp">Timer per uke, vanligvis 37,5.</span>
+            <span className="felt-hjelp">Timer per uke. Standarden ({tallformat.format(fullStilling)}) står under Innstillinger → Ansatte og timer.</span>
           </label>
         </div>
       </fieldset>
@@ -487,7 +500,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
         <ArbeidsplanFelt
           utkast={plan}
           endre={settPlan}
-          ukentlig={a.ukentlig_arbeidstid.trim() ? tall(a.ukentlig_arbeidstid) : 37.5}
+          ukentlig={a.ukentlig_arbeidstid.trim() ? tall(a.ukentlig_arbeidstid) : fullStilling}
           prosent={a.stillingsprosent.trim() ? tall(a.stillingsprosent) : 100}
           settProsent={(p) => sett({ stillingsprosent: tekstTall(p) })}
           ny={!ansatt.id}
@@ -542,6 +555,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           </label>
         )}
       </fieldset>
+      {ansatt.id && vaktplan && <AnsattFravaer ansattId={ansatt.id} versjon={fravaerVersjon} kanEndre={kanEndre} apne={settFravaer} />}
       {ansatt.id && <Tilgang ansatt={ansatt as Ansatt} kanEndre={kanEndre} epostEndret={(a.epost.trim().toLowerCase() || null) !== (ansatt.epost ?? null)} oppdatert={oppdatert} />}
       <Feil melding={h.feil} />
       <div className="knapper">
@@ -560,6 +574,19 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
         )}
       </div>
     </form>
+    {ansatt.id && (
+      <FravaerDialog
+        fravaer={fravaer}
+        ansatte={[ansatt as Ansatt]}
+        lukk={() => settFravaer(null)}
+        ferdig={(m) => {
+          settFravaer(null);
+          settMelding(m);
+          settFravaerVersjon((v) => v + 1);
+        }}
+      />
+    )}
+    </>
   );
 }
 

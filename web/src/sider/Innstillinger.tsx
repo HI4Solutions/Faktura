@@ -110,7 +110,14 @@ type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
 function PersonalOppsett() {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
-  const [o, settO] = useState<{ aktiv: boolean; daglig_grense: string; ukentlig_grense: string; overtid_prosent: string; bursdag_varsel: Bursdagsvarsel } | null>(null);
+  const [o, settO] = useState<{
+    aktiv: boolean;
+    daglig_grense: string;
+    ukentlig_grense: string;
+    overtid_prosent: string;
+    bursdag_varsel: Bursdagsvarsel;
+    full_stilling: string;
+  } | null>(null);
   const [lagret, settLagret] = useState(false);
   const h = useHandling();
   const tekst = (n: number) => String(n).replace(".", ",");
@@ -122,6 +129,7 @@ function PersonalOppsett() {
         ukentlig_grense: tekst(data.ukentlig_grense),
         overtid_prosent: String(data.overtid_prosent),
         bursdag_varsel: data.bursdag_varsel ?? "av",
+        full_stilling: tekst(data.full_stilling ?? 37.5),
       });
   }, [data]);
   if (!o) return <Laster />;
@@ -136,6 +144,7 @@ function PersonalOppsett() {
         ukentlig_grense: tall(o!.ukentlig_grense),
         overtid_prosent: tall(o!.overtid_prosent),
         bursdag_varsel: o!.bursdag_varsel,
+        full_stilling: tall(o!.full_stilling),
       }),
     );
     if (!r) return;
@@ -152,6 +161,15 @@ function PersonalOppsett() {
       <label>
         <input type="checkbox" checked={o.aktiv} onChange={(e) => settO({ ...o, aktiv: e.target.checked })} />
         Bruk ansatte og timer i {org?.navn}
+      </label>
+      <h3>Arbeidstid</h3>
+      <label>
+        Full stilling (timer per uke)
+        <input inputMode="decimal" required value={o.full_stilling} onChange={(e) => settO({ ...o, full_stilling: e.target.value })} />
+        <span className="felt-hjelp">
+          Det nye ansatte får, så det ikke må skrives inn hver gang (vanligvis 37,5; 35,5 eller 33,6 med turnus eller skift). Hver ansatt kan ha sin egen, og
+          stillingsprosenten regnes av den.
+        </span>
       </label>
       <h3>Overtid</h3>
       <div className="rad">

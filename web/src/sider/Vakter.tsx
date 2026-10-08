@@ -14,10 +14,10 @@ import { erAdmin, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
 import { IkonKalender, IkonPluss, IkonVarsel } from "../ikoner";
 import { gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
-import { borteTekst, fravaerKlasse, fravaerTekst, FravaerListe, MittFravaer, VikarSkjema, type Fravaer, type FravaerType } from "./Fravaer";
+import { borteTekst, FravaerDialog, fravaerKlasse, fravaerTekst, FravaerListe, MittFravaer, VikarSkjema, type Fravaer, type FravaerType } from "./Fravaer";
 import { iFasen, Tavle } from "./Tavle";
 import { Bemanning, gyldigMaaned } from "./Bemanning";
-import { fastTid, fastTider } from "./Arbeidsplan";
+import { ArbeidsplanDialog, fastTid, fastTider } from "./Arbeidsplan";
 
 export type Vakt = {
   id: string;
@@ -203,6 +203,9 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
   const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${uke}&til=${til}`), [org?.id, uke, versjon]);
   const [apen, settApen] = useState<(Partial<Vakt> & { fraPlan?: boolean }) | null>(null);
   const [vikarFor, settVikarFor] = useState<VikarVakt | null>(null);
+  // Fravær og arbeidstid for en ansatt, rett fra vaktplanen (samme som i ansattkortet).
+  const [fravaerFor, settFravaerFor] = useState<Partial<Fravaer> | null>(null);
+  const [planFor, settPlanFor] = useState<string | null>(null);
   const [kopierer, settKopierer] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
   const h = useHandling();
@@ -571,9 +574,37 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
               settApen(null);
               settVikarFor(v);
             }}
+            registrerFravaer={(ansatt_id, dato) => {
+              settApen(null);
+              // Er den ansatte borte den dagen, endres fraværet som gjelder.
+              settFravaerFor(data.fravaer.find((f) => f.ansatt_id === ansatt_id && f.fra <= dato && f.til >= dato) ?? { ansatt_id, fra: dato, til: dato });
+            }}
+            endrePlan={(ansatt_id) => {
+              settApen(null);
+              settPlanFor(ansatt_id);
+            }}
           />
         )}
       </Dialog>
+      <FravaerDialog
+        fravaer={fravaerFor}
+        ansatte={ansatte.data}
+        lukk={() => settFravaerFor(null)}
+        ferdig={(m) => {
+          settFravaerFor(null);
+          settMelding(m);
+          endret();
+        }}
+      />
+      <ArbeidsplanDialog
+        ansattId={planFor}
+        lukk={() => settPlanFor(null)}
+        lagret={(m) => {
+          settPlanFor(null);
+          settMelding(m);
+          endret();
+        }}
+      />
       <Dialog apen={!!vikarFor} lukk={() => settVikarFor(null)} tittel="Sett inn vikar">
         {vikarFor && (
           <VikarSkjema
@@ -659,6 +690,8 @@ function VaktSkjema({
   ferdig,
   avbryt,
   settInnVikar,
+  registrerFravaer,
+  endrePlan,
 }: {
   vakt: Partial<Vakt> & { fraPlan?: boolean };
   ansatte: Ansatt[];
@@ -667,6 +700,9 @@ function VaktSkjema({
   ferdig: (melding?: string) => void;
   avbryt: () => void;
   settInnVikar: (v: Vakt) => void;
+  // Fravær og faste dager for den ansatte på vakten (samme som i ansattkortet).
+  registrerFravaer?: (ansattId: string, dato: string) => void;
+  endrePlan?: (ansattId: string) => void;
 }) {
   const { org } = useKonto();
   const [v, settV] = useState(() => {
@@ -799,6 +835,20 @@ function VaktSkjema({
           <textarea rows={2} maxLength={500} value={v.notat} onChange={(e) => sett({ notat: e.target.value })} />
         </label>
       </fieldset>
+      {kanEndre && v.ansatt_id && (registrerFravaer || endrePlan) && (
+        <p className="vakt-lenker liten">
+          {registrerFravaer && (
+            <button type="button" className="lenke" onClick={() => registrerFravaer(v.ansatt_id, v.dato)}>
+              {vakt.fravaer && v.ansatt_id === vakt.ansatt_id ? "Endre fraværet" : `Registrer fravær for ${ansatte.find((a) => a.id === v.ansatt_id)?.fornavn ?? "den ansatte"}`}
+            </button>
+          )}
+          {endrePlan && (
+            <button type="button" className="lenke" onClick={() => endrePlan(v.ansatt_id)}>
+              Arbeidstid og faste dager
+            </button>
+          )}
+        </p>
+      )}
       <Feil melding={h.feil} />
       <div className="knapper">
         {kanEndre && (

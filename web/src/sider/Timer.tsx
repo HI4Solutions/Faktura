@@ -13,8 +13,8 @@ import { dato, iDag, leggTilDager } from "../format";
 import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
 import { gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import type { VaktSvar } from "./Vakter";
-import { fastTid } from "./Arbeidsplan";
-import { fravaerKlasse, fravaerTekst } from "./Fravaer";
+import { ArbeidsplanDialog, fastTid } from "./Arbeidsplan";
+import { FravaerDialog, fravaerKlasse, fravaerTekst, type Fravaer } from "./Fravaer";
 
 type Status = "utkast" | "levert" | "godkjent" | "avvist";
 
@@ -267,6 +267,9 @@ function Ukeside({
   const [apen, settApen] = useState<Partial<Foring> | null>(null);
   const [avviser, settAvviser] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
+  // Fravær og arbeidstid for den ansatte, rett fra timelista (samme som i ansattkortet).
+  const [fravaerFor, settFravaerFor] = useState<Partial<Fravaer> | null>(null);
+  const [planFor, settPlanFor] = useState<string | null>(null);
   const h = useHandling();
   useEffect(() => {
     settMelding(null);
@@ -332,7 +335,42 @@ function Ukeside({
             <IkonPluss storrelse={18} /> Før timer
           </button>
         )}
+        {personal && !egen && harFunksjon(org, "vaktplan") && (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                // I dag om det er i uka, ellers mandag; er den ansatte borte da, endres det fraværet.
+                const d = iDag() >= uke && iDag() <= til ? iDag() : uke;
+                settFravaerFor(fravaer.find((f) => f.ansatt_id === ansattId && f.fra <= d && f.til >= d) ?? { ansatt_id: ansattId, fra: d, til: d });
+              }}
+            >
+              Registrer fravær
+            </button>
+            <button type="button" onClick={() => settPlanFor(ansattId)}>
+              Arbeidstid og faste dager
+            </button>
+          </>
+        )}
       </div>
+      <FravaerDialog
+        fravaer={fravaerFor}
+        lukk={() => settFravaerFor(null)}
+        ferdig={(m) => {
+          settFravaerFor(null);
+          settMelding(m);
+          endret();
+        }}
+      />
+      <ArbeidsplanDialog
+        ansattId={planFor}
+        lukk={() => settPlanFor(null)}
+        lagret={(m) => {
+          settPlanFor(null);
+          settMelding(m);
+          endret();
+        }}
+      />
       {egen && !a.aktiv && <div className="melding info">Du er ikke lenger registrert som aktiv ansatt og kan ikke føre nye timer.</div>}
       {avvist && (
         <div className="melding feil" role="status">

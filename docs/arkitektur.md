@@ -195,6 +195,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   den dagen; uten plan timene utover avtalt arbeidstid i uka (alle timene for
   tilkallingsvikarer); vakter den ansatte er borte fra, teller ikke. Rapporten over
   ekstratimer per ansatt i en periode tas ut som PDF eller CSV (`/ekstratimer.pdf|.csv`)
+- Bemanningsdataene registreres ett sted og brukes overalt: stillingsprosenten, arbeidstiden og
+  de faste dagene ligger på den ansatte (`ansatte`, `arbeidsplaner`), og fraværet og ferien i
+  `fravaer`. De vises i vaktplanen, på tavla, i bemanningskalenderen, i timelista og i
+  ansattkortet, og kan endres fra alle: «Registrer fravær» og «Arbeidstid og faste dager» åpner
+  de samme skjemaene som i ansattkortet (fra en vakt, en plass på tavla, en dag eller et navn i
+  kalenderen og en ansatts uke i timelista), og ansattkortet viser fraværet og ferien til den
+  ansatte. Stillingsprosenten følger de faste dagene når de endres (timene i uka av arbeidstiden
+  i full stilling), og kan endres etterpå. `lonn_oppsett.full_stilling` er organisasjonens
+  arbeidstid i full stilling (vanligvis 37,5), som nye ansatte får (`0048_full_stilling.sql`)
 - `lonn_oppsett.bursdag_varsel` og `ansatte.bursdag_varsel`: bursdagsvarsler. Eier og
   administrator slår dem på under Innstillinger → Ansatte og timer (de ansatte har ikke tilgang
   dit) og velger push-varsel, e-post eller begge. Når en aktiv ansatt har bursdag (fødselsdatoen
