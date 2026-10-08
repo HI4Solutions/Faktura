@@ -39,6 +39,7 @@ type Ansatt = {
   notat: string | null;
   gruppe_id: string | null;
   bursdag_varsel: boolean; // varsle de andre på bursdagen (når organisasjonen har slått på bursdagsvarsler)
+  ferie_dager: number | null; // feriedager per år for denne ansatte (null: organisasjonens)
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -245,9 +246,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     notat: ansatt.notat ?? "",
     gruppe_id: ansatt.gruppe_id ?? "",
     bursdag_varsel: ansatt.bursdag_varsel ?? true,
+    ferie_dager: tekstTall(ansatt.ferie_dager),
   }));
   // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
-  const oppsett = useData(() => hent<{ bursdag_varsel: string; full_stilling: number }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
+  const oppsett = useData(() => hent<{ bursdag_varsel: string; full_stilling: number; ferie_dager: number }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
   const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
   // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Ansatte og timer).
   const fullStilling = Number(oppsett.data?.full_stilling ?? 37.5);
@@ -315,6 +317,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     if (grupper.data?.length) kropp.gruppe_id = a.gruppe_id || null;
     if (a.stillingsprosent.trim()) kropp.stillingsprosent = tall(a.stillingsprosent);
     if (a.ukentlig_arbeidstid.trim()) kropp.ukentlig_arbeidstid = tall(a.ukentlig_arbeidstid);
+    if (vaktplan) kropp.ferie_dager = a.ferie_dager.trim() ? tall(a.ferie_dager) : null;
     // Fødselsnummeret sendes bare når det er skrevet inn eller skal fjernes; ellers fødselsdatoen.
     if (a.fjernFnr) kropp.fnr = null;
     else if (a.endreFnr && fnr) kropp.fnr = fnr;
@@ -521,6 +524,15 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             <span className="felt-hjelp">Tom hvis den ansatte fortsatt jobber her.</span>
           </label>
         </div>
+        {vaktplan && (
+          <label>
+            Feriedager per år
+            <input inputMode="decimal" placeholder={`Organisasjonens (${tallformat.format(Number(oppsett.data?.ferie_dager ?? 25))} med fem dager i uka)`} {...felt("ferie_dager")} />
+            <span className="felt-hjelp">
+              Tom: organisasjonens feriedager, regnet om etter dagene den ansatte jobber, med en uke ekstra fra året den ansatte fyller 60. Fyll inn for en egen avtale.
+            </span>
+          </label>
+        )}
 
         <h3>Lønn</h3>
         <div className="rad">

@@ -5,6 +5,7 @@
 // registreres ett sted og vises i vaktplanen, på tavla, i bemanningskalenderen, i timelista og
 // i ansattkortet, og kan registreres og endres fra alle (FravaerDialog).
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
 import { kanPersonal, useKonto } from "../konto";
@@ -139,6 +140,7 @@ export function FravaerSkjema({
           <input type="date" required min={f.fra} value={f.til} onChange={(e) => sett({ til: e.target.value })} />
         </label>
       </div>
+      {!selv && f.type === "ferie" && f.ansatt_id && /^\d{4}/.test(f.fra) && <FerieSaldo ansattId={f.ansatt_id} aar={Number(f.fra.slice(0, 4))} />}
       {!bareSlutt && (
         <label>
           Notat
@@ -435,6 +437,29 @@ export const fravaerMelding = (m: string, berort?: BerortVakt[]) =>
 
 // Registrer eller endre fravær fra hvor som helst: ansattkortet, vaktplanen, tavla, bemannings-
 // kalenderen og timelista (samme fravær som i fraværslista). Uten liste over ansatte hentes den.
+// Hvor mange feriedager den ansatte har igjen det året (feriebanken, Ferie.tsx), når ferie registreres.
+function FerieSaldo({ ansattId, aar, lenke }: { ansattId: string; aar: number; lenke?: boolean }) {
+  const { org } = useKonto();
+  const { data } = useData(
+    () => hent<{ saldo: { rett: number; overfort_inn: number; overfort_ut: number; avviklet: number; planlagt: number; igjen: number } }>(
+      `/org/${org!.id}/feriebank/${ansattId}?aar=${aar}`,
+    ).catch(() => null),
+    [org?.id, ansattId, aar],
+  );
+  if (!data) return null;
+  const s = data.saldo;
+  const tekst = (n: number) => String(Math.round(n * 10) / 10).replace(".", ",");
+  return (
+    <p className="felt-hjelp ferie-saldo-hint">
+      Feriebank {aar}: {tekst(s.rett + s.overfort_inn - s.overfort_ut)} dager, {tekst(s.avviklet + s.planlagt)} avviklet eller planlagt{lenke ? "" : " fra før"},{" "}
+      <strong>
+        {tekst(s.igjen)} {Math.abs(s.igjen) === 1 ? "dag" : "dager"} igjen
+      </strong>
+      .{lenke && <> <Link to={`/ferie?aar=${aar}`}>Se feriebanken</Link></>}
+    </p>
+  );
+}
+
 export function FravaerDialog({
   fravaer,
   ansatte,
@@ -478,6 +503,7 @@ export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId:
       <p className="felt-hjelp" style={{ marginTop: 0 }}>
         Vises i vaktplanen, på tavla, i bemanningskalenderen og i timelista, og kan registreres og endres der også.
       </p>
+      {kanEndre && <FerieSaldo key={versjon} ansattId={ansattId} aar={aar} lenke />}
       {feil ? (
         <Feil melding={feil} />
       ) : !data ? (

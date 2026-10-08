@@ -117,6 +117,7 @@ function PersonalOppsett() {
     overtid_prosent: string;
     bursdag_varsel: Bursdagsvarsel;
     full_stilling: string;
+    ferie_dager: string;
   } | null>(null);
   const [lagret, settLagret] = useState(false);
   const h = useHandling();
@@ -130,6 +131,7 @@ function PersonalOppsett() {
         overtid_prosent: String(data.overtid_prosent),
         bursdag_varsel: data.bursdag_varsel ?? "av",
         full_stilling: tekst(data.full_stilling ?? 37.5),
+        ferie_dager: tekst(data.ferie_dager ?? 25),
       });
   }, [data]);
   if (!o) return <Laster />;
@@ -145,6 +147,7 @@ function PersonalOppsett() {
         overtid_prosent: tall(o!.overtid_prosent),
         bursdag_varsel: o!.bursdag_varsel,
         full_stilling: tall(o!.full_stilling),
+        ferie_dager: tall(o!.ferie_dager),
       }),
     );
     if (!r) return;
@@ -171,6 +174,19 @@ function PersonalOppsett() {
           stillingsprosenten regnes av den.
         </span>
       </label>
+      {harFunksjon(org, "vaktplan") && (
+        <>
+          <h3>Ferie</h3>
+          <label>
+            Feriedager per år (med fem arbeidsdager i uka)
+            <input inputMode="decimal" required value={o.ferie_dager} onChange={(e) => settO({ ...o, ferie_dager: e.target.value })} />
+            <span className="felt-hjelp">
+              Feriebanken regnes av dette: 25 er fem uker, 21 er lovens fire uker og én dag. Ansatte som jobber færre dager i uka får like mange uker, regnet i
+              dagene de jobber, og fra året de fyller 60 en uke ekstra. Hver ansatt kan ha sin egen avtale.
+            </span>
+          </label>
+        </>
+      )}
       <h3>Overtid</h3>
       <div className="rad">
         <label>

@@ -4,7 +4,7 @@ import { hentAuth } from "./firebase";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster, Tom } from "./felles";
-import { KontoProvider, erAnsatt, harFunksjon, kanSePersonal, kanSkrive, useKonto, type Funksjon } from "./konto";
+import { KontoProvider, erAdmin, erAnsatt, harFunksjon, kanSePersonal, kanSkrive, useKonto, type Funksjon } from "./konto";
 import { BekreftEpost, Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
@@ -22,6 +22,7 @@ import { BankTilbake, Innbetalinger } from "./sider/Bank";
 import { Ansatte } from "./sider/Ansatte";
 import { Timer } from "./sider/Timer";
 import { Vakter } from "./sider/Vakter";
+import { Ferie } from "./sider/Ferie";
 import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
@@ -29,7 +30,7 @@ import { TemaBryter } from "./TemaBryter";
 import { installer } from "./pwa";
 import { Assistent } from "./assistent";
 import {
-  IkonAnsatte, IkonFaktura, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
+  IkonAnsatte, IkonFaktura, IkonFerie, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
   IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
@@ -165,6 +166,8 @@ function Ramme() {
   const visAnsatte = !ansatt && !!org?.personal && kanSePersonal(org.rolle);
   const visTimer = ansatt || (!!org?.personal && (kanSePersonal(org.rolle) || !!org.ansatt_id));
   const visVakter = harFunksjon(org, "vaktplan");
+  // Feriebanken: eier og administrator ser alle, den ansatte seg selv (regnskap ser den ikke).
+  const visFerie = visVakter && !!org?.personal && (ansatt || erAdmin(org.rolle));
 
   if (ny || orgs.length === 0) {
     return (
@@ -297,6 +300,12 @@ function Ramme() {
                 Vakter
               </NavLink>
             )}
+            {visFerie && (
+              <NavLink to="/ferie">
+                <IkonFerie />
+                Ferie
+              </NavLink>
+            )}
           </>
         ) : (
           <NavLink to="/" end>
@@ -359,6 +368,12 @@ function Ramme() {
                 Timer
               </NavLink>
             )}
+            {visFerie && (
+              <NavLink to="/ferie">
+                <IkonFerie />
+                Ferie
+              </NavLink>
+            )}
           </>
         )}
         <div className="meny-seksjon">Konto</div>
@@ -404,6 +419,7 @@ function Ramme() {
           <Routes>
             <Route path="/timer" element={<Timer />} />
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vakter"><Vakter /></Krever>} />
+            <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
@@ -430,6 +446,7 @@ function Ramme() {
             <Route path="/produkter/importer" element={<Krever kode="import" navn="Importer produkter"><Importer key="produkter" type="produkter" /></Krever>} />
             <Route path="/ansatte" element={<Ansatte />} />
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vaktplan"><Vakter /></Krever>} />
+            <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/timer" element={<Timer />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />

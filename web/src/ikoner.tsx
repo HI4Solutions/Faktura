@@ -245,3 +245,9 @@ export const IkonNed = (p: P) => (
     <path d="m6 9.5 6 6 6-6" />
   </Ikon>
 );
+export const IkonFerie = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3.5" y="7.5" width="17" height="12" rx="2.2" />
+    <path d="M9 7.5V5.6A1.6 1.6 0 0 1 10.6 4h2.8A1.6 1.6 0 0 1 15 5.6v1.9M8 7.5v12M16 7.5v12" />
+  </Ikon>
+);

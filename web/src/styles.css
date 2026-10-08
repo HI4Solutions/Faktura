@@ -1851,3 +1851,33 @@ button.fare-fylt:hover:not(:disabled) { background: color-mix(in srgb, var(--far
 .bm-ansatt-knapp:hover .bm-navn { text-decoration: underline; }
 .bm-ansatt-knapp:focus-visible { outline: 2px solid var(--aksent); outline-offset: 2px; }
 
+
+/* Feriebank: saldoen som ruter, søknadene om overføring og ferien i året. */
+.ferie-saldo { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; margin: 4px 0 18px; }
+.ferie-saldo > div { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; background: var(--flate-2); border: 1px solid var(--kant); border-radius: var(--radius-s); }
+.ferie-saldo span { color: var(--tekst-2); font-size: 0.83rem; font-weight: 550; }
+.ferie-saldo strong { font-size: 1.45rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.ferie-saldo small { color: var(--dempet); font-size: 0.78rem; line-height: 1.3; }
+.ferie-saldo .ferie-igjen { border-color: color-mix(in srgb, var(--ok) 45%, var(--kant)); background: color-mix(in srgb, var(--ok) 8%, var(--flate-2)); }
+.ferie-saldo .ferie-igjen strong { color: var(--ok); }
+.ferie-saldo .ferie-igjen.ferie-minus { border-color: color-mix(in srgb, var(--fare) 45%, var(--kant)); background: color-mix(in srgb, var(--fare) 7%, var(--flate-2)); }
+.ferie-minus, .ferie-saldo .ferie-igjen.ferie-minus strong { color: var(--fare); }
+.ansatt-ferie h3 { margin: 18px 0 8px; }
+.ferie-perioder, .ferie-overforinger { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.ferie-perioder li, .ferie-overforinger li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.ferie-overforinger li .lenke { margin-left: auto; }
+.ferie-overforinger li .melding { flex-basis: 100%; }
+.ferie-overfor { margin-top: 6px; padding: 14px; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate-2); }
+.ferie-merke { margin-left: 8px; }
+.kort.tabell td.sterk { font-weight: 650; }
+.kort.ferie-soknader { margin-bottom: 16px; border-color: color-mix(in srgb, var(--advarsel) 40%, var(--kant)); }
+.kort.ferie-soknader h2 { margin-top: 0; }
+.ferie-soknader ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 12px; }
+.ferie-soknader li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 240px) auto; align-items: center; gap: 8px 12px; padding-bottom: 12px; border-bottom: 1px solid var(--kant); }
+.ferie-soknader li:last-child { border-bottom: 0; padding-bottom: 0; }
+.ferie-soknader li .knapper { margin: 0; flex-wrap: nowrap; }
+.ferie-saldo-hint { display: block; margin: -4px 0 12px; }
+@media (max-width: 700px) {
+  .ferie-soknader li { grid-template-columns: 1fr; }
+  .ferie-saldo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

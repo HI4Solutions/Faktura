@@ -95,7 +95,7 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
   });
 
   it("slås på i oppsettet, med arbeidsmiljølovens grenser som standard", async () => {
-    expect((await kall("GET", `/api/org/${org}/lonn-oppsett`)).data).toEqual({ aktiv: false, daglig_grense: 9, ukentlig_grense: 40, overtid_prosent: 40, bursdag_varsel: "av", full_stilling: 37.5 });
+    expect((await kall("GET", `/api/org/${org}/lonn-oppsett`)).data).toEqual({ aktiv: false, daglig_grense: 9, ukentlig_grense: 40, overtid_prosent: 40, bursdag_varsel: "av", full_stilling: 37.5, ferie_dager: 25 });
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { overtid_prosent: 30 })).data.error).toBe("Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).data).toMatchObject({ aktiv: true, daglig_grense: 9 });
     expect((await kall("GET", "/api/meg")).data.organisasjoner.find((o: any) => o.id === org)).toMatchObject({ rolle: "eier", personal: true });

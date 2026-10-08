@@ -36,6 +36,13 @@ const siffer = (navn: string, antall: number, sjekk?: (s: string) => boolean, me
     .pipe(z.string().regex(new RegExp(`^\\d{${antall}}$`), `${navn} må ha ${antall} siffer`))
     .refine((v) => !sjekk || sjekk(v), melding ?? `Ugyldig ${navn.toLowerCase()}`);
 
+// Hele og halve feriedager.
+const feriedager = z
+  .number()
+  .min(0, "Feriedagene kan ikke være negative")
+  .max(60, "Høyst 60 feriedager i året")
+  .refine((n) => Number.isInteger(n * 2), "Skriv hele eller halve dager");
+
 const ansattSkjema = z.object({
   fornavn: z.string({ error: "Skriv fornavnet" }).trim().min(1, "Skriv fornavnet").max(100, "Fornavnet kan ha høyst 100 tegn"),
   etternavn: z.string({ error: "Skriv etternavnet" }).trim().min(1, "Skriv etternavnet").max(100, "Etternavnet kan ha høyst 100 tegn"),
@@ -61,6 +68,8 @@ const ansattSkjema = z.object({
   notat: valgfri(tekst(2000, "Notatet")),
   gruppe_id: uuid.nullable().optional(), // gruppen i bemanningskalenderen (0039_bemanning.sql)
   bursdag_varsel: z.boolean().optional(), // varsle de andre på bursdagen (0045_bursdager.sql)
+  // Feriedager per år for denne ansatte (null: organisasjonens, regnet om etter arbeidsdagene; 0050_feriebank.sql).
+  ferie_dager: valgfri(feriedager),
 });
 
 const oppsettSkjema = z.object({
@@ -72,6 +81,8 @@ const oppsettSkjema = z.object({
   bursdag_varsel: z.enum(["av", "push", "epost", "begge"]).optional(),
   // Arbeidstiden i full stilling, standarden for nye ansatte (0048_full_stilling.sql).
   full_stilling: z.number().gt(0, "Arbeidstiden må være over 0").max(60, "Høyst 60 timer i uka").optional(),
+  // Feriedager per år med fem arbeidsdager i uka (0050_feriebank.sql).
+  ferie_dager: feriedager.optional(),
 });
 
 const foringSkjema = z.object({
@@ -91,7 +102,7 @@ const foringSkjema = z.object({
 const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
-         a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.opprettet, a.oppdatert,
+         a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
          -- Ukedagene i den faste arbeidsplanen som gjelder i dag (1 = mandag).
          (select coalesce(array_agg(d.ukedag order by d.ukedag), '{}') from faktura.arbeidsplan_dager d
            where d.org_id = a.org_id
@@ -115,14 +126,14 @@ const FORING = `
 type Foringsrad = { id: string; ansatt_id: string; ansatt_navn: string; dato: string; timer: number; overtid_prosent: number | null; status: string };
 
 export type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
-type Oppsett = Regler & { aktiv: boolean; bursdag_varsel: Bursdagsvarsel; full_stilling: number };
+type Oppsett = Regler & { aktiv: boolean; bursdag_varsel: Bursdagsvarsel; full_stilling: number; ferie_dager: number };
 export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
-    "select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling from faktura.lonn_oppsett where org_id = $1",
+    "select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager from faktura.lonn_oppsett where org_id = $1",
     [org],
   );
-  return r ?? { aktiv: false, ...AML, bursdag_varsel: "av", full_stilling: 37.5 };
+  return r ?? { aktiv: false, ...AML, bursdag_varsel: "av", full_stilling: 37.5, ferie_dager: 25 };
 }
 
 // Den innloggedes egen ansattrad i organisasjonen (eller null).
@@ -185,12 +196,12 @@ export function ansattRuter() {
         const naa = await regler(db, orgId(c));
         const ny = { ...naa, ...Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined)) };
         await db.query(
-          `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling)
-           values ($1, $2, $3, $4, $5, $6, $7)
+          `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
-             full_stilling = excluded.full_stilling`,
-          [orgId(c), ny.aktiv, ny.daglig_grense, ny.ukentlig_grense, ny.overtid_prosent, ny.bursdag_varsel, ny.full_stilling],
+             full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager`,
+          [orgId(c), ny.aktiv, ny.daglig_grense, ny.ukentlig_grense, ny.overtid_prosent, ny.bursdag_varsel, ny.full_stilling, ny.ferie_dager],
         );
         return regler(db, orgId(c));
       }),

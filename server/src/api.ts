@@ -28,6 +28,7 @@ import { ansattRuter } from "./ansatte.js";
 import { vaktRuter } from "./vakter.js";
 import { tavleRuter } from "./tavle.js";
 import { fravaerRuter } from "./fravaer.js";
+import { ferieRuter } from "./ferie.js";
 import { bemanningRuter } from "./bemanning.js";
 import { arbeidsplanRuter } from "./arbeidsplan.js";
 import { krevFunksjoner } from "./funksjoner.js";
@@ -407,6 +408,7 @@ export function lagApi() {
   org.route("/", vaktRuter());
   org.route("/", tavleRuter());
   org.route("/", fravaerRuter());
+  org.route("/", ferieRuter());
   org.route("/", bemanningRuter());
   org.route("/", arbeidsplanRuter());
 

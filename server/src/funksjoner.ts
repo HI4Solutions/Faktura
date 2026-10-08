@@ -24,7 +24,7 @@ const RUTER: [RegExp, string][] = [
   [/^\/(kunder|produkter)\/importer$/, "import"],
   [/^\/ansatte\/[^/]+\/arbeidsplan(\/|$)/, "vaktplan"],
   [/^\/(ansatte|timer|lonn-oppsett)(\/|$)/, "ansatte"],
-  [/^\/(vakter|tavle|fravaer|ansattgrupper)(\/|$)/, "vaktplan"],
+  [/^\/(vakter|tavle|fravaer|ansattgrupper|feriebank|ferie)(\/|$)/, "vaktplan"],
   [/^\/ekstratimer(\.csv|\.pdf)?$/, "vaktplan"],
 ];
 
