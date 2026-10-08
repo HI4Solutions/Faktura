@@ -5,6 +5,7 @@ import { lagApi } from "../src/api.js";
 import { uke } from "../src/arbeidstid.js";
 import { iDag } from "../src/regler.js";
 import { settLokalOppgavekjorer } from "../src/tjenester.js";
+import { helligdag } from "../src/helligdager.js";
 import { rullere, tilordne, type RDag, type RFase, type RInn, type ROppgave, type RPlass, type RTid } from "../src/rullering.js";
 
 const pluss = (iso: string, n: number) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -176,8 +177,9 @@ describe.skipIf(!process.env.DATABASE_URL)("rullering i API-et", () => {
   const ola = "Bearer test:uid-rull-ola:ola.rull@server.test";
   let org: string;
   const id: Record<string, string> = {};
-  // Neste uke: mandag til fredag.
-  const M = uke(pluss(iDag(), 7)).fra;
+  // Neste uke uten helligdager, mandag til fredag (på en helligdag gjelder ikke de faste dagene).
+  let M = uke(pluss(iDag(), 7)).fra;
+  while ([0, 1, 2, 3, 4].map((i) => pluss(M, i)).some(helligdag)) M = pluss(M, 7);
   const d = (n: number) => pluss(M, n);
   const kall = async (m: string, sti: string, k?: unknown, hvem = eier) => {
     const r = await app.request(sti, { method: m, headers: { authorization: hvem, "content-type": "application/json" }, body: k === undefined ? undefined : JSON.stringify(k) });

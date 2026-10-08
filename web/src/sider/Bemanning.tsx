@@ -27,6 +27,7 @@ import {
 import { visLangDag } from "./Tavle";
 import { ArbeidsplanDialog, fastTid, fastTider } from "./Arbeidsplan";
 import type { Fast, Vakt, VaktSvar, VikarVakt } from "./Vakter";
+import { helligdag } from "../helligdager";
 
 type Ansatt = Grunnansatt & {
   stilling: string | null;
@@ -213,6 +214,8 @@ export function Bemanning({
   const visUtenVikar = dager.some((d) => utenVikar(d) > 0);
   const visLedige = dager.some((d) => ledige(d) > 0);
   const harUtkast = data.vakter.some((v) => v.ansatt_id && !v.publisert && v.dato >= forste && v.dato <= siste);
+  // Helligdagene i måneden (de faste arbeidsdagene gjelder ikke da, og behovet regnes ikke).
+  const helligdager = dager.filter((d) => helligdag(d));
   // Ekstratimene i måneden per ansatt (raden nederst).
   const ekstraMaaned = (a: string) => rund((data.ekstra ?? []).filter((e) => e.ansatt_id === a && e.dato >= forste && e.dato <= siste).reduce((sum, e) => sum + Number(e.timer), 0));
   // Oppsummeringen står fast til høyre når tabellen rulles sidelengs (på mobil bare gruppene).
@@ -313,6 +316,12 @@ export function Bemanning({
                 <span className="bm-tegn utkast">✓</span> Ikke publisert
               </span>
             )}
+            {helligdager.length > 0 && (
+              <span className="bm-helligdager">
+                <span className="bm-tegn helligdag">{Number(helligdager[0]!.slice(8))}</span> Helligdag:{" "}
+                {helligdager.map((d) => `${helligdag(d)} (${Number(d.slice(8))}.)`).join(", ")}
+              </span>
+            )}
           </div>
           <div className="kort bemanning-ramme">
             <table className="bemanning">
@@ -376,9 +385,15 @@ export function Bemanning({
                   const uv = utenVikar(d);
                   const lv = ledige(d);
                   return (
-                    <tr key={d} className={`${nyUke ? "ny-uke" : ""}${d === iDag() ? " i-dag" : ""}`}>
+                    <tr key={d} className={`${nyUke ? "ny-uke" : ""}${d === iDag() ? " i-dag" : ""}${helligdag(d) ? " helligdag" : ""}`}>
                       <th scope="row" className="bm-dag">
-                        <button type="button" className="lenke" title={`Åpne tavla for ${visDag(d).toLowerCase()}`} onClick={() => tilTavle(d)}>
+                        <button
+                          type="button"
+                          className="lenke"
+                          title={`${helligdag(d) ? `${helligdag(d)}. ` : ""}Åpne tavla for ${visDag(d).toLowerCase()}`}
+                          aria-label={helligdag(d) ? `${visDag(d)}, ${helligdag(d)}` : undefined}
+                          onClick={() => tilTavle(d)}
+                        >
                           {UKEDAG[middag(d).getUTCDay()]} <span>{Number(d.slice(8))}.</span>
                         </button>
                       </th>
@@ -388,7 +403,7 @@ export function Bemanning({
                         return (
                           <td
                             key={`sum-${s.id ?? "uten"}`}
-                            className={`bm-sum${k === 0 ? " bm-sum-forste" : ""}${s.behov != null && n < s.behov ? " under" : ""}`}
+                            className={`bm-sum${k === 0 ? " bm-sum-forste" : ""}${s.behov != null && n < s.behov && !helligdag(d) ? " under" : ""}`}
                             style={hoyre(k)}
                             title={s.behov != null ? `${n} av ${s.behov} ${s.navn.toLowerCase()} på jobb` : `${n} på jobb`}
                           >

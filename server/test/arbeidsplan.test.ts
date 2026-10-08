@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { lagApi } from "../src/api.js";
 import { uke } from "../src/arbeidstid.js";
 import { iDag } from "../src/regler.js";
+import { helligdag } from "../src/helligdager.js";
 
 const pluss = (iso: string, n: number) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
@@ -15,8 +16,10 @@ describe.skipIf(!process.env.DATABASE_URL)("fast arbeidsplan og ekstratimer", ()
   const linda = "Bearer test:uid-plan-api-linda:linda.plan@server.test";
   let org: string;
   const id: Record<string, string> = {};
-  // Neste uke (alltid fram i tid): mandag til søndag.
-  const M = uke(pluss(iDag(), 7)).fra;
+  // Neste uke (alltid fram i tid), mandag til søndag, og uka etter, uten helligdager: da gjelder
+  // ikke de faste dagene, og testene skal gi det samme hver gang de kjøres.
+  let M = uke(pluss(iDag(), 7)).fra;
+  while (Array.from({ length: 14 }, (_, i) => pluss(M, i)).some(helligdag)) M = pluss(M, 7);
   const d = (n: number) => pluss(M, n);
 
   const kall = async (m: string, sti: string, k?: unknown, hvem = eier) => {

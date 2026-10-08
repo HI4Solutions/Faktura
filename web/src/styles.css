@@ -1904,3 +1904,16 @@ button.fare-fylt:hover:not(:disabled) { background: color-mix(in srgb, var(--far
 .kort.brukere-uten-org .admin-rader { margin-top: 10px; }
 .funksjoner-nye section { margin-top: 12px; }
 .funksjoner-nye h3 { font-size: 0.9rem; margin: 0 0 4px; }
+
+/* --------------------------------------------------------------------------
+   Helligdager i kalenderne (helligdager.ts): rød dato og navnet på dagen
+   -------------------------------------------------------------------------- */
+.helligdag-navn { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 650; line-height: 1.5; color: var(--fare); background: var(--fare-lys); text-transform: none; letter-spacing: 0; vertical-align: 1px; white-space: nowrap; }
+.dag.helligdag .dag-navn { color: var(--fare); }
+th.helligdag { color: var(--fare); }
+th .helligdag-navn { display: block; width: fit-content; margin: 3px 0 0; font-size: 0.66rem; white-space: normal; }
+th.tall .helligdag-navn { margin-left: auto; }
+.helligdag-dato { color: var(--fare); }
+.bm-tegn.helligdag { --fv: var(--fare); --fv-lys: var(--fare-lys); }
+.bemanning tr.helligdag th.bm-dag button.lenke, .bemanning tr.helligdag th.bm-dag button.lenke span { color: var(--fare); }
+.bemanning tr.helligdag td.bm-rute { background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--fare-lys) 70%, transparent) 6px 8px); }

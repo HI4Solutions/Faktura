@@ -212,6 +212,13 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   dra og slipp på PC, trykk på mobil) og kan kopiere plassene fra en annen dag. Den som er
   borte, kan ikke plasseres, og plassene den har, teller ikke. Regnskap ser tavla, og den
   ansatte ser sine egne plasser under Mine vakter
+- Norske helligdager (`server/src/helligdager.ts`, `web/src/helligdager.ts` og
+  `faktura.helligdager` i databasen, likt regnet): 1. nyttårsdag, skjærtorsdag, langfredag,
+  1. og 2. påskedag, 1. mai, 17. mai, Kristi himmelfartsdag, 1. og 2. pinsedag og 1. og 2.
+  juledag (påsken etter den gregorianske kalenderen). De faste arbeidsdagene gjelder ikke da,
+  så de er ikke med i bemanningen, på tavla, i rulleringen eller som planlagt arbeid;
+  feriebanken teller dem ikke som feriedager. Bemanningskalenderen viser dem med rød dato og
+  navn, uten å varsle om behovet, og vaktplanen, timene og tavla viser navnet på dagen
 - Rullering på tavla (`server/src/rullering.ts`, `POST /tavle/rullering`): de som er på jobb
   i en periode (høyst 31 dager), fordeles på oppgavene så alle får gjøre alt etter tur. Hver
   dag og fase for seg, i rekkefølge: behovet fylles først (én i hver oppgave før noen får to,
@@ -233,7 +240,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   pause) eller som hel dag (en femtedel av arbeidstiden i full stilling, vanligvis 7,5 timer),
   gjeldende fra en dato. En endring blir en ny plan fra en dato, så tidligere måneder beholder
   planen som gjaldt da; en plan uten dager betyr ingen faste dager fra da. En fast dag er en
-  dag i planen uten vakt (en vakt samme dag gjelder i stedet), og den vises i
+  dag i planen uten vakt (en vakt samme dag gjelder i stedet) og ikke en helligdag (da har den
+  ansatte fri, og timene en vakt gir den dagen, er ekstra), og den vises i
   bemanningskalenderen, vaktplanen, på tavla og i timelisten (med «Før timer»), og teller som
   planlagt arbeid. Vikar for en fast dag gir en vakt etter planen (`POST /vakter/fra-plan`) som
   vikaren dekker. Ekstratimer (`server/src/arbeidsplan.ts`): med plan timene utover planen

@@ -15,6 +15,7 @@ import { gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, 
 import type { VaktSvar } from "./Vakter";
 import { ArbeidsplanDialog, fastTid } from "./Arbeidsplan";
 import { FravaerDialog, fravaerKlasse, fravaerTekst, type Fravaer } from "./Fravaer";
+import { helligdag } from "../helligdager";
 
 type Status = "utkast" | "levert" | "godkjent" | "avvist";
 
@@ -430,9 +431,12 @@ function Ukeside({
             const sumDag = dagens.reduce((s, f) => s + Number(f.timer), 0);
             const borte = fravaer.find((f) => f.ansatt_id === ansattId && f.fra <= d && f.til >= d)?.type;
             return (
-              <section key={d} className={`dag${d === iDagIso ? " i-dag" : ""}`} aria-label={visDag(d)}>
+              <section key={d} className={`dag${d === iDagIso ? " i-dag" : ""}${helligdag(d) ? " helligdag" : ""}`} aria-label={visDag(d)}>
                 <div className="dag-topp">
-                  <span className="dag-navn">{visDag(d)}</span>
+                  <span className="dag-navn">
+                    {visDag(d)}
+                    {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
+                  </span>
                   {borte && <span className={`merke ${fravaerKlasse[borte]}`}>{fravaerTekst[borte]}</span>}
                   {sumDag > 0 && <span className="dag-sum">{timer(sumDag)}</span>}
                   {kanFore && ansattDag(d) && (
@@ -877,8 +881,9 @@ function Ukeoversikt({
               <tr>
                 <th>Ansatt</th>
                 {dager.map((d) => (
-                  <th key={d} className={`tall${d === iDag() ? " i-dag" : ""}`}>
+                  <th key={d} className={`tall${d === iDag() ? " i-dag" : ""}${helligdag(d) ? " helligdag" : ""}`} title={helligdag(d) ?? undefined}>
                     {ukedagFormat.format(middag(d))} {Number(d.slice(8))}.
+                    {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
                   </th>
                 ))}
                 <th className="tall">Sum</th>

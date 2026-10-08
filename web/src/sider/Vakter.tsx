@@ -18,6 +18,7 @@ import { borteTekst, FravaerDialog, fravaerKlasse, fravaerTekst, FravaerListe, M
 import { iFasen, Tavle } from "./Tavle";
 import { Bemanning, gyldigMaaned } from "./Bemanning";
 import { ArbeidsplanDialog, fastTid, fastTider } from "./Arbeidsplan";
+import { helligdag } from "../helligdager";
 
 export type Vakt = {
   id: string;
@@ -424,9 +425,12 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
             const borte = data.fravaer.filter((f) => f.fra <= d && f.til >= d);
             const mangler = manglerVikar(d);
             return (
-              <section key={d} className={`dag${d === iDag() ? " i-dag" : ""}`} aria-label={visDag(d)}>
+              <section key={d} className={`dag${d === iDag() ? " i-dag" : ""}${helligdag(d) ? " helligdag" : ""}`} aria-label={visDag(d)}>
                 <div className="dag-topp">
-                  <span className="dag-navn">{visDag(d)}</span>
+                  <span className="dag-navn">
+                    {visDag(d)}
+                    {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
+                  </span>
                   {dagens.length + faste.length > 0 && <span className="dag-sum">{paJobb(d)} på jobb</span>}
                   {kanPlanlegge && (
                     <button type="button" className="kopier" aria-label={`Ny vakt ${visDag(d)}`} title="Ny vakt" onClick={() => nyVakt(d, null)}>
@@ -461,8 +465,9 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
               <tr>
                 <th>Ansatt</th>
                 {dager.map((d) => (
-                  <th key={d} className={d === iDag() ? "i-dag" : undefined}>
+                  <th key={d} className={[d === iDag() ? "i-dag" : "", helligdag(d) ? "helligdag" : ""].filter(Boolean).join(" ") || undefined} title={helligdag(d) ?? undefined}>
                     {ukedagFormat.format(middag(d))} {Number(d.slice(8))}.
+                    {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
                   </th>
                 ))}
                 <th className="tall">Timer</th>
@@ -957,6 +962,7 @@ function MineVakter({
                   <span className="linje">
                     <span className="tittel">
                       {visDag(v.dato)} · <span className="vakt-tid-tekst">{tid(v)}</span>
+                      {helligdag(v.dato) && <span className="helligdag-navn">{helligdag(v.dato)}</span>}
                     </span>
                     {v.fravaer ? <span className={`merke ${fravaerKlasse[v.fravaer]}`}>{fravaerTekst[v.fravaer]}</span> : <span className="belop">{timer(v.timer)}</span>}
                   </span>

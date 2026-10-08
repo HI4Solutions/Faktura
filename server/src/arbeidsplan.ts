@@ -3,7 +3,8 @@
 // lagres planene, og her regnes de faste dagene og ekstratimene ut, som bemanningskalenderen,
 // vaktplanen, tavla, timelisten og rapporten over ekstratimer bygger på:
 //
-// - En fast dag er en dag i planen uten en vakt i vaktplanen (vakten gjelder da i stedet).
+// - En fast dag er en dag i planen uten en vakt i vaktplanen (vakten gjelder da i stedet), og
+//   aldri en helligdag (helligdager.ts): da har den ansatte fri, og timene den dagen er ekstra.
 // - Ekstratimer: med plan timene utover planen den dagen; uten plan timene utover avtalt
 //   arbeidstid i uka (alle timene for tilkallingsvikarer). Vakter den ansatte er borte fra,
 //   teller ikke.
@@ -16,6 +17,7 @@ import { uke } from "./arbeidstid.js";
 import { csv } from "./rapporter.js";
 import { rensTekst } from "./pdf.js";
 import { dato as visDato } from "./regler.js";
+import { helligdag } from "./helligdager.js";
 
 const uuid = z.string().uuid();
 // Som i ansatte.ts (som bruker denne modulen, så den kan ikke importeres herfra).
@@ -105,7 +107,8 @@ export function beregnEkstra(ansatte: Pick<Ansatt, "id" | "ukentlig_arbeidstid" 
       else utenPlan.push(v);
     }
     for (const [d, t] of perDag) {
-      const dag = planFor(p, d)!.dager.find((x) => x.ukedag === ukedag(d));
+      // På en helligdag gjelder ikke planen: alle timene er ekstra.
+      const dag = helligdag(d) ? undefined : planFor(p, d)!.dager.find((x) => x.ukedag === ukedag(d));
       legg(`${a.id}|${d}`, t - (dag ? dagTimer(dag, a.ukentlig_arbeidstid) : 0));
     }
     // Uten plan: timene utover avtalt arbeidstid i uka, i rekkefølge.
@@ -158,7 +161,8 @@ export async function beregnBemanning(db: Db, org: string, fra: string, til: str
     const p = planer.get(a.id);
     if (!p || !a.aktiv) continue;
     for (let d = ufra; d <= util; d = leggTil(d, 1)) {
-      if (d < a.ansatt_fra || (a.ansatt_til && d > a.ansatt_til) || harVakt.has(`${a.id}|${d}`)) continue;
+      // Ingen fast dag på en helligdag (helligdager.ts).
+      if (d < a.ansatt_fra || (a.ansatt_til && d > a.ansatt_til) || harVakt.has(`${a.id}|${d}`) || helligdag(d)) continue;
       const dag = planFor(p, d)?.dager.find((x) => x.ukedag === ukedag(d));
       if (dag) faste.push({ ansatt_id: a.id, dato: d, fra: dag.fra, til: dag.til, pause_min: dag.pause_min, timer: dagTimer(dag, a.ukentlig_arbeidstid), fravaer: borte(a.id, d) });
     }

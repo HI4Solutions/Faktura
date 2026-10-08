@@ -17,6 +17,7 @@ import { Klokkeslett, mandag, middag, ukenr, visDag } from "../uke";
 import { borteTekst, FravaerDialog, fravaerKlasse, fravaerPeriode, fravaerTekst, VikarSkjema, type Ansatt, type Fravaer, type FravaerType } from "./Fravaer";
 import { ArbeidsplanDialog, fastTider } from "./Arbeidsplan";
 import { HvemKan, Rullering } from "./Rullering";
+import { helligdag } from "../helligdager";
 
 type Fase = { id: string; navn: string; fra: string | null; til: string | null };
 type Oppgave = { id: string; navn: string; behov: number | null };
@@ -142,8 +143,11 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
           <IkonVenstre storrelse={20} />
         </button>
         <div className="uke-navn dag-navn-lang" aria-live="polite">
-          <strong>{visLangDag(dato)}</strong>
-          <span>Uke {ukenr(dato).uke}</span>
+          <strong className={helligdag(dato) ? "helligdag-dato" : undefined}>{visLangDag(dato)}</strong>
+          <span>
+            Uke {ukenr(dato).uke}
+            {helligdag(dato) ? ` · ${helligdag(dato)}` : ""}
+          </span>
         </div>
         <button type="button" className="ikon" aria-label="Neste dag" title="Neste dag" onClick={() => velgDato(leggTilDager(dato, 1))}>
           <IkonHoyre storrelse={20} />
@@ -407,7 +411,11 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
       )}
       {!data.ressurser.length && (
         <div className="melding info venter">
-          <span>Ingen har vakt {dato === iDag() ? "i dag" : "denne dagen"}. Ressursene på tavla hentes fra vaktplanen og de faste arbeidsdagene.</span>
+          <span>
+            Ingen har vakt {dato === iDag() ? "i dag" : "denne dagen"}
+            {helligdag(dato) ? ` (${helligdag(dato)}: de faste arbeidsdagene gjelder ikke på helligdager)` : ""}. Ressursene på tavla hentes fra vaktplanen og de faste
+            arbeidsdagene.
+          </span>
           <Link to={`/vakter?fane=plan&uke=${mandag(dato)}`}>Åpne vaktplanen</Link>
         </div>
       )}

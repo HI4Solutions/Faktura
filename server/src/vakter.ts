@@ -13,6 +13,7 @@ import { advarsler, type Ansettelse } from "./vaktregler.js";
 import { datoS, klokke, regler, tekst, valgfri, varslePersonal } from "./ansatte.js";
 import { beregnBemanning, dagTimer, hentPlaner, planFor, ukedag } from "./arbeidsplan.js";
 import { leggIKo } from "./tjenester.js";
+import { helligdag } from "./helligdager.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -380,7 +381,7 @@ export function vaktRuter() {
       const finnes = await en<Vakt>(db, `${VAKT} where v.org_id = $1 and v.ansatt_id = $2 and v.dato = $3 order by v.fra limit 1`, [orgId(c), b.ansatt_id, b.dato]);
       if (finnes) return finnes;
       const a = await en<{ ukentlig_arbeidstid: number }>(db, "select ukentlig_arbeidstid from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), b.ansatt_id]);
-      const dag = planFor((await hentPlaner(db, orgId(c), b.ansatt_id)).get(b.ansatt_id), b.dato)?.dager.find((d) => d.ukedag === ukedag(b.dato));
+      const dag = helligdag(b.dato) ? undefined : planFor((await hentPlaner(db, orgId(c), b.ansatt_id)).get(b.ansatt_id), b.dato)?.dager.find((d) => d.ukedag === ukedag(b.dato));
       if (!a || !dag) throw new ApiFeil(400, "Den ansatte har ingen fast arbeidsdag denne dagen");
       const slutt = 8 * 60 + Math.round(dagTimer(dag, a.ukentlig_arbeidstid) * 60);
       const kl = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
