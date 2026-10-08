@@ -82,18 +82,18 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); }
 /* iOS 26 (feil i WebKit): i installert app med «black-translucent» tegnes siden fra toppen av
-   skjermen, men 100 %, 100dvh og innerHeight er for korte med statuslinjens høyde. Da stopper
-   alt som er festet til bunnen (bunnmeny, låseskjerm, ark), like langt over bunnen av skjermen.
-   Bare 100lvh er riktig. --under-bunn er forskjellen (negativ), og flytter bunnkanten ned dit
-   skjermen faktisk slutter. Den er 0 i nettleseren, på andre enheter og når feilen er rettet. */
-:root { --under-bunn: 0px; }
+   skjermen, men 100 %, 100dvh og innerHeight er for korte med statuslinjens høyde, og de
+   endrer seg mens man ruller. Det som er festet til bunnen med bottom (bunnmeny, låseskjerm,
+   ark), stoppet derfor over bunnen av skjermen og hoppet opp når man rullet. Bare 100lvh er
+   riktig og ligger fast. I installert app plasseres disse elementene derfor fra toppen (se
+   «Installert app» nederst): toppen på 100lvh, flyttet opp med sin egen høyde, eller høyden
+   100lvh. I nettleseren og på andre enheter gjelder vanlig bottom. */
 @media (display-mode: standalone) {
-  :root { --under-bunn: calc(100dvh - 100lvh); }
   /* Siden må også være minst like høy som skjermen. Er den kortere (som når låseskjermen er
      alt som vises), tegner iOS ingenting under 100dvh, heller ikke faste elementer som går
      dit, og det blir en stripe nederst. */
   html { min-height: 100lvh; }
-  dialog::backdrop { bottom: calc(100dvh - 100lvh); }
+  dialog::backdrop { bottom: auto; height: 100lvh; }
 }
 /* Låseskjermen dekker hele skjermen, og bunnen av den har én farge. Det iOS viser utenfor
    siden får fargen til body (body vinner over html), så begge får den samme fargen. */
@@ -233,7 +233,7 @@ strong { font-weight: 650; }
   .mobiltopp button.ikon:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.4); }
 
   .bunnmeny {
-    display: flex; align-items: stretch; position: fixed; left: 0; right: 0; bottom: var(--under-bunn); z-index: 30;
+    display: flex; align-items: stretch; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     padding: 4px max(6px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
     background: color-mix(in srgb, var(--flate) 90%, transparent);
     -webkit-backdrop-filter: saturate(1.8) blur(16px); backdrop-filter: saturate(1.8) blur(16px);
@@ -258,14 +258,14 @@ strong { font-weight: 650; }
   .meny {
     /* Fra topp til bunn av skjermen (ikke 100vh, som er høyere enn skjermen på iPhone),
        med plass til statuslinjen øverst og hjemlinjen nederst. */
-    position: fixed; inset: 0 auto var(--under-bunn) 0; height: auto; width: min(300px, 86vw); z-index: 40;
+    position: fixed; inset: 0 auto 0 0; height: auto; width: min(300px, 86vw); z-index: 40;
     padding-top: calc(18px + env(safe-area-inset-top)); padding-bottom: calc(18px + env(safe-area-inset-bottom));
     transform: translateX(-100%); visibility: hidden; transition: transform .22s ease, visibility .22s;
   }
   .meny.apen { transform: none; visibility: visible; box-shadow: var(--skygge-3); }
   .meny { overscroll-behavior: contain; }
   body.skriver .bunnmeny { display: none; }
-  .meny-skygge.apen { display: block; position: fixed; inset: 0 0 var(--under-bunn) 0; background: rgba(5, 10, 25, 0.5); z-index: 39; }
+  .meny-skygge.apen { display: block; position: fixed; inset: 0; background: rgba(5, 10, 25, 0.5); z-index: 39; }
   @media (max-width: 359px) {
     .mobiltopp { gap: 8px; }
     .mobiltopp .logo-knapp { padding-right: 0; }
@@ -276,7 +276,7 @@ strong { font-weight: 650; }
   .innhold {
     padding: 18px max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
-  .bannere { bottom: calc(76px + env(safe-area-inset-bottom) + var(--under-bunn)); }
+  .bannere { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
 
 /* --------------------------------------------------------------------------
@@ -377,7 +377,7 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 
 /* Bannere nederst: ny versjon og frakoblet */
 .bannere {
-  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom) + var(--under-bunn));
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 8px; z-index: 50; width: min(520px, calc(100vw - 24px)); pointer-events: none;
 }
 .banner {
@@ -745,7 +745,7 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
 
   /* Dialoger som ark nederst på skjermen */
   dialog {
-    width: 100%; max-width: 100%; margin: auto 0 var(--under-bunn); border-radius: 20px 20px 0 0; border-bottom: 0;
+    width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 20px 20px 0 0; border-bottom: 0;
     max-height: calc(100dvh - 20px - env(safe-area-inset-top));
   }
   dialog[open] { animation: ark-inn .24s cubic-bezier(.2, .8, .2, 1); }
@@ -763,7 +763,7 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
    Låseskjerm (applås med Face ID / Touch ID)
    -------------------------------------------------------------------------- */
 .laas {
-  position: fixed; inset: 0 0 var(--under-bunn) 0; z-index: 200; display: grid; place-items: center; color: #fff; cursor: pointer;
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; color: #fff; cursor: pointer;
   -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
   padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
   /* Nederst går fargene over i én farge (--laas-bunn), så det ikke blir noen kant mot
@@ -1073,7 +1073,7 @@ button.ai-stopp:hover:not(:disabled) { border-color: var(--fare); }
 body.med-assistent .innhold { padding-bottom: 112px; }
 @media (max-width: 860px) {
   .assistent-knapp {
-    right: max(14px, env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom) + var(--under-bunn));
+    right: max(14px, env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom));
     width: 52px; height: 52px; border-radius: 17px;
   }
   body.skriver .assistent-knapp { display: none; }
@@ -1138,7 +1138,7 @@ dialog.assistent > .melding { margin: 0 16px 8px; flex: none; }
 .assistent-niva { display: block; height: 4px; border-radius: 999px; background: var(--fare); transform-origin: left; transition: transform 0.1s linear; }
 @media (prefers-reduced-motion: reduce) { .assistent-mik.tar { animation: none; } }
 @media (max-width: 700px) {
-  dialog.assistent { width: 100%; height: min(88dvh, calc(100dvh - 20px - env(safe-area-inset-top))); margin: auto 0 var(--under-bunn); }
+  dialog.assistent { width: 100%; height: min(88dvh, calc(100dvh - 20px - env(safe-area-inset-top))); margin: auto 0 0; }
   .assistent-topp { padding-top: 20px; position: relative; }
   .assistent-topp::before {
     content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px;
@@ -1669,4 +1669,23 @@ table.bemanning { width: max-content; min-width: 100%; border-collapse: separate
   .bemanning td.bm-rute button { height: 36px; }
   .bm-forklaring { gap: 5px 10px; font-size: 0.8rem; }
   .bm-ansattliste select { min-width: 0; max-width: 46%; }
+}
+
+/* --------------------------------------------------------------------------
+   Installert app (iOS 26, se øverst): det som står fast nederst, plasseres fra toppen med
+   100lvh (bunnen av skjermen), ikke med bottom, så det ikke flytter seg når man ruller.
+   -------------------------------------------------------------------------- */
+@media (display-mode: standalone) {
+  .laas { bottom: auto; height: 100lvh; }
+  .bannere { bottom: auto; top: calc(100lvh - 16px - env(safe-area-inset-bottom)); translate: 0 -100%; }
+}
+@media (display-mode: standalone) and (max-width: 860px) {
+  .bunnmeny { bottom: auto; top: 100lvh; translate: 0 -100%; }
+  .meny, .meny-skygge.apen { bottom: auto; height: 100lvh; }
+  .bannere { top: calc(100lvh - 76px - env(safe-area-inset-bottom)); }
+  .assistent-knapp { bottom: auto; top: calc(100lvh - 76px - env(safe-area-inset-bottom)); translate: 0 -100%; }
+}
+@media (display-mode: standalone) and (max-width: 700px) {
+  /* Arkene (dialogene) står på bunnen av skjermen */
+  dialog, dialog.assistent { margin: 0; top: 100lvh; bottom: auto; translate: 0 -100%; }
 }
