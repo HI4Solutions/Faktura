@@ -274,119 +274,13 @@ export function tavleRuter() {
   });
 
   // Rulleringen (server/src/rullering.ts): fordel de som er på jobb på oppgavene i perioden, så
-  // alle får gjøre alt etter tur. Uten lagre er det en forhåndsvisning. Plassene rulleringen satt
+  // alle får gjøre alt etter tur. Uten lagre er det en forhåndsvisning. Plassene rulleringen satte
   // før i perioden, byttes ut; de som er satt for hånd, står (med behold: false fordeles også de).
   r.post("/tavle/rullering", async (c) => {
     const b = z
       .object({ fra: datoS, til: datoS, behold: z.boolean().optional(), samme_hele_dagen: z.boolean().optional(), lagre: z.boolean().optional() })
       .parse(await c.req.json().catch(() => ({})));
-    if (b.til < b.fra) throw new ApiFeil(400, "Slutten er før starten");
-    if (dagerMellom(b.fra, b.til) > 30) throw new ApiFeil(400, "Velg en periode på høyst 31 dager");
-    const behold = b.behold !== false;
-    return c.json(
-      await bruk(c, async (db) => {
-        await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
-        const org = orgId(c);
-        const faser = await alle<RTid & { id: string; navn: string }>(db, FASER, [org]);
-        const oppgaver = await alle<{ id: string; navn: string; behov: number | null }>(db, OPPGAVER, [org]);
-        if (!faser.length || !oppgaver.length) throw new ApiFeil(400, "Sett opp fasene og oppgavene på tavla først");
-        const start = leggTilDager(b.fra, -HISTORIKK_DAGER);
-        const plasser = await alle<{ dato: string; fase_id: string; oppgave_id: string; ansatt_id: string; rullert: boolean }>(
-          db,
-          "select dato, fase_id, oppgave_id, ansatt_id, rullert from faktura.tavle_plasseringer where org_id = $1 and dato between $2 and $3",
-          [org, start, b.til],
-        );
-        // Plassene før perioden er historikken, uten dem den ansatte var borte fra.
-        const borte = await alle<{ ansatt_id: string; fra: string; til: string }>(db, "select ansatt_id, fra, til from faktura.fravaer where org_id = $1 and til >= $2 and fra < $3", [
-          org,
-          start,
-          b.fra,
-        ]);
-        const historikk = plasser.filter((p) => p.dato < b.fra && !borte.some((f) => f.ansatt_id === p.ansatt_id && f.fra <= p.dato && f.til >= p.dato));
-        const iPerioden = plasser.filter((p) => p.dato >= b.fra);
-        const staar = behold ? iPerioden.filter((p) => !p.rullert) : [];
-
-        // De som er på jobb hver dag (som på tavla): vaktene og de faste arbeidsdagene, uten dem
-        // som er borte eller ikke ansatt den dagen.
-        const bem = await beregnBemanning(db, org, b.fra, b.til);
-        const ansatt = new Map(bem.ansatte.map((a) => [a.id, a]));
-        const ansattDag = (a: string, d: string) => {
-          const x = ansatt.get(a);
-          return !!x && x.aktiv && d >= x.ansatt_fra && (!x.ansatt_til || d <= x.ansatt_til);
-        };
-        const dager: RDag[] = [];
-        for (let d = b.fra; d <= b.til; d = leggTilDager(d, 1)) {
-          const folk = new Map<string, RTid[]>();
-          const leggTil = (a: string, v: RTid) => folk.set(a, [...(folk.get(a) ?? []), v]);
-          for (const v of bem.vakter) if (v.dato === d && !v.borte && ansattDag(v.ansatt_id, d)) leggTil(v.ansatt_id, { fra: v.fra, til: v.til });
-          for (const f of bem.faste) if (f.dato === d && !f.fravaer && ansattDag(f.ansatt_id, d)) leggTil(f.ansatt_id, { fra: f.fra, til: f.til });
-          dager.push({
-            dato: d,
-            folk: [...folk].map(([ansatt_id, vakter]) => ({ ansatt_id, vakter })),
-            faste: staar.filter((p) => p.dato === d),
-          });
-        }
-
-        const r = rullere({
-          faser,
-          oppgaver,
-          behov: await alle(db, BEHOV, [org]),
-          utelatt: await alle(db, UTELATT, [org]),
-          dager,
-          historikk,
-          sammeHeleDagen: !!b.samme_hele_dagen,
-        });
-
-        // Hvor mange plasser som blir annerledes enn før (nye, flyttet eller tatt bort).
-        const nokkel = (p: { dato: string; fase_id: string; ansatt_id: string }) => `${p.dato}|${p.fase_id}|${p.ansatt_id}`;
-        const foer = new Map(iPerioden.map((p) => [nokkel(p), p.oppgave_id]));
-        const etter = new Map([...staar, ...r.plasser].map((p) => [nokkel(p), p.oppgave_id]));
-        const endret = [...new Set([...foer.keys(), ...etter.keys()])].filter((k) => foer.get(k) !== etter.get(k)).length;
-
-        if (b.lagre) {
-          await db.query("delete from faktura.tavle_plasseringer where org_id = $1 and dato between $2 and $3 and (rullert or not $4)", [org, b.fra, b.til, behold]);
-          if (r.plasser.length)
-            await db.query(
-              `insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id, rullert)
-               select $1, x.dato, x.fase_id, x.oppgave_id, x.ansatt_id, true
-                 from jsonb_to_recordset($2::jsonb) as x(dato date, fase_id uuid, oppgave_id uuid, ansatt_id uuid)`,
-              [org, JSON.stringify(r.plasser)],
-            );
-        }
-
-        // Dagene slik de blir: plassene som teller (de som er på jobb i fasen), de som står uten
-        // plass, og behovet som ikke er dekket.
-        const fase = new Map(faser.map((f) => [f.id, f]));
-        const navn = new Set<string>();
-        const svarDager = dager.map((d) => {
-          const vakter = new Map(d.folk.map((p) => [p.ansatt_id, p.vakter]));
-          const teller = (p: { fase_id: string; ansatt_id: string }) => !!vakter.get(p.ansatt_id)?.some((v) => iFasen(v, fase.get(p.fase_id)!));
-          const dagens = [
-            ...d.faste.filter(teller).map((p) => ({ fase_id: p.fase_id, oppgave_id: p.oppgave_id, ansatt_id: p.ansatt_id, rullert: false })),
-            ...r.plasser.filter((p) => p.dato === d.dato).map((p) => ({ fase_id: p.fase_id, oppgave_id: p.oppgave_id, ansatt_id: p.ansatt_id, rullert: true })),
-          ];
-          const ikke = r.ikkePlassert.filter((p) => p.dato === d.dato).map(({ fase_id, ansatt_id }) => ({ fase_id, ansatt_id }));
-          for (const p of [...dagens, ...ikke]) navn.add(p.ansatt_id);
-          return {
-            dato: d.dato,
-            plasser: dagens,
-            ikke_plassert: ikke,
-            mangler: r.mangler.filter((m) => m.dato === d.dato).map(({ fase_id, oppgave_id, antall }) => ({ fase_id, oppgave_id, antall })),
-          };
-        });
-        return {
-          fra: b.fra,
-          til: b.til,
-          lagret: !!b.lagre,
-          plasser: r.plasser.length,
-          endret,
-          faser: faser.map(({ id, navn }) => ({ id, navn })),
-          oppgaver: oppgaver.map(({ id, navn }) => ({ id, navn })),
-          ansatte: [...navn].map((a) => ({ id: a, navn: ansatt.get(a)?.navn ?? "" })).sort((x, y) => x.navn.localeCompare(y.navn, "nb")),
-          dager: svarDager,
-        };
-      }),
-    );
+    return c.json(await bruk(c, (db) => kjorRullering(db, orgId(c), b)));
   });
 
   // Kopier plassene fra en annen dag (f.eks. samme dag forrige uke), for dem som er på jobb og
@@ -418,4 +312,112 @@ export function tavleRuter() {
   });
 
   return r;
+}
+
+export type RulleringValg = { fra: string; til: string; behold?: boolean; samme_hele_dagen?: boolean; lagre?: boolean };
+
+// Rulleringen for perioden (også for AI-assistenten, som viser et sammendrag før den lagres).
+export async function kjorRullering(db: Db, org: string, b: RulleringValg) {
+  if (b.til < b.fra) throw new ApiFeil(400, "Slutten er før starten");
+  if (dagerMellom(b.fra, b.til) > 30) throw new ApiFeil(400, "Velg en periode på høyst 31 dager");
+  const behold = b.behold !== false;
+  await db.query("select faktura.krev($1, 'personal')", [org]);
+  const faser = await alle<RTid & { id: string; navn: string }>(db, FASER, [org]);
+  const oppgaver = await alle<{ id: string; navn: string; behov: number | null }>(db, OPPGAVER, [org]);
+  if (!faser.length || !oppgaver.length) throw new ApiFeil(400, "Sett opp fasene og oppgavene på tavla først");
+  const start = leggTilDager(b.fra, -HISTORIKK_DAGER);
+  const plasser = await alle<{ dato: string; fase_id: string; oppgave_id: string; ansatt_id: string; rullert: boolean }>(
+    db,
+    "select dato, fase_id, oppgave_id, ansatt_id, rullert from faktura.tavle_plasseringer where org_id = $1 and dato between $2 and $3",
+    [org, start, b.til],
+  );
+  // Plassene før perioden er historikken, uten dem den ansatte var borte fra.
+  const borte = await alle<{ ansatt_id: string; fra: string; til: string }>(db, "select ansatt_id, fra, til from faktura.fravaer where org_id = $1 and til >= $2 and fra < $3", [
+    org,
+    start,
+    b.fra,
+  ]);
+  const historikk = plasser.filter((p) => p.dato < b.fra && !borte.some((f) => f.ansatt_id === p.ansatt_id && f.fra <= p.dato && f.til >= p.dato));
+  const iPerioden = plasser.filter((p) => p.dato >= b.fra);
+  const staar = behold ? iPerioden.filter((p) => !p.rullert) : [];
+
+  // De som er på jobb hver dag (som på tavla): vaktene og de faste arbeidsdagene, uten dem
+  // som er borte eller ikke ansatt den dagen.
+  const bem = await beregnBemanning(db, org, b.fra, b.til);
+  const ansatt = new Map(bem.ansatte.map((a) => [a.id, a]));
+  const ansattDag = (a: string, d: string) => {
+    const x = ansatt.get(a);
+    return !!x && x.aktiv && d >= x.ansatt_fra && (!x.ansatt_til || d <= x.ansatt_til);
+  };
+  const dager: RDag[] = [];
+  for (let d = b.fra; d <= b.til; d = leggTilDager(d, 1)) {
+    const folk = new Map<string, RTid[]>();
+    const leggTil = (a: string, v: RTid) => folk.set(a, [...(folk.get(a) ?? []), v]);
+    for (const v of bem.vakter) if (v.dato === d && !v.borte && ansattDag(v.ansatt_id, d)) leggTil(v.ansatt_id, { fra: v.fra, til: v.til });
+    for (const f of bem.faste) if (f.dato === d && !f.fravaer && ansattDag(f.ansatt_id, d)) leggTil(f.ansatt_id, { fra: f.fra, til: f.til });
+    dager.push({
+      dato: d,
+      folk: [...folk].map(([ansatt_id, vakter]) => ({ ansatt_id, vakter })),
+      faste: staar.filter((p) => p.dato === d),
+    });
+  }
+
+  const r = rullere({
+    faser,
+    oppgaver,
+    behov: await alle(db, BEHOV, [org]),
+    utelatt: await alle(db, UTELATT, [org]),
+    dager,
+    historikk,
+    sammeHeleDagen: !!b.samme_hele_dagen,
+  });
+
+  // Hvor mange plasser som blir annerledes enn før (nye, flyttet eller tatt bort).
+  const nokkel = (p: { dato: string; fase_id: string; ansatt_id: string }) => `${p.dato}|${p.fase_id}|${p.ansatt_id}`;
+  const foer = new Map(iPerioden.map((p) => [nokkel(p), p.oppgave_id]));
+  const etter = new Map([...staar, ...r.plasser].map((p) => [nokkel(p), p.oppgave_id]));
+  const endret = [...new Set([...foer.keys(), ...etter.keys()])].filter((k) => foer.get(k) !== etter.get(k)).length;
+
+  if (b.lagre) {
+    await db.query("delete from faktura.tavle_plasseringer where org_id = $1 and dato between $2 and $3 and (rullert or not $4)", [org, b.fra, b.til, behold]);
+    if (r.plasser.length)
+      await db.query(
+        `insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id, rullert)
+         select $1, x.dato, x.fase_id, x.oppgave_id, x.ansatt_id, true
+           from jsonb_to_recordset($2::jsonb) as x(dato date, fase_id uuid, oppgave_id uuid, ansatt_id uuid)`,
+        [org, JSON.stringify(r.plasser)],
+      );
+  }
+
+  // Dagene slik de blir: plassene som teller (de som er på jobb i fasen), de som står uten
+  // plass, og behovet som ikke er dekket.
+  const fase = new Map(faser.map((f) => [f.id, f]));
+  const navn = new Set<string>();
+  const svarDager = dager.map((d) => {
+    const vakter = new Map(d.folk.map((p) => [p.ansatt_id, p.vakter]));
+    const teller = (p: { fase_id: string; ansatt_id: string }) => !!vakter.get(p.ansatt_id)?.some((v) => iFasen(v, fase.get(p.fase_id)!));
+    const dagens = [
+      ...d.faste.filter(teller).map((p) => ({ fase_id: p.fase_id, oppgave_id: p.oppgave_id, ansatt_id: p.ansatt_id, rullert: false })),
+      ...r.plasser.filter((p) => p.dato === d.dato).map((p) => ({ fase_id: p.fase_id, oppgave_id: p.oppgave_id, ansatt_id: p.ansatt_id, rullert: true })),
+    ];
+    const ikke = r.ikkePlassert.filter((p) => p.dato === d.dato).map(({ fase_id, ansatt_id }) => ({ fase_id, ansatt_id }));
+    for (const p of [...dagens, ...ikke]) navn.add(p.ansatt_id);
+    return {
+      dato: d.dato,
+      plasser: dagens,
+      ikke_plassert: ikke,
+      mangler: r.mangler.filter((m) => m.dato === d.dato).map(({ fase_id, oppgave_id, antall }) => ({ fase_id, oppgave_id, antall })),
+    };
+  });
+  return {
+    fra: b.fra,
+    til: b.til,
+    lagret: !!b.lagre,
+    plasser: r.plasser.length,
+    endret,
+    faser: faser.map(({ id, navn }) => ({ id, navn })),
+    oppgaver: oppgaver.map(({ id, navn }) => ({ id, navn })),
+    ansatte: [...navn].map((a) => ({ id: a, navn: ansatt.get(a)?.navn ?? "" })).sort((x, y) => x.navn.localeCompare(y.navn, "nb")),
+    dager: svarDager,
+  };
 }
