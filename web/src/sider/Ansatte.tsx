@@ -46,6 +46,8 @@ type Ansatt = {
   aktiv: boolean;
   notat: string | null;
   gruppe_id: string | null; // rollen
+  kunde_id: string | null; // kunden personen er hentet inn fra (Roller → Hent fra kunder)
+  kunde: string | null; // navnet på kunden
   bursdag_varsel: boolean; // varsle de andre på bursdagen (når organisasjonen har slått på bursdagsvarsler)
   ferie_dager: number | null; // feriedager per år for denne ansatte (null: organisasjonens)
   tillegg: Tillegg[]; // faste tillegg på lønnen
@@ -103,6 +105,8 @@ export function Ansatte() {
   const [roller, settRoller] = useState(false);
   const [rolleVersjon, settRolleVersjon] = useState(0);
   const rolleliste = useData(() => (roller ? hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`) : Promise.resolve(null)), [org?.id, roller, rolleVersjon]);
+  // Alle, også de som har sluttet (de som er hentet inn fra en kunde, hentes ikke inn igjen).
+  const allePersoner = useData(() => (roller ? hent<Ansatt[]>(`/org/${org!.id}/ansatte`) : Promise.resolve(null)), [org?.id, roller, rolleVersjon]);
 
   if (!kanSePersonal(org?.rolle) || !org?.personal)
     return (
@@ -152,7 +156,7 @@ export function Ansatte() {
         {roller && rolleliste.data && (
           <RollerOppsett
             roller={rolleliste.data}
-            personer={data ?? []}
+            personer={allePersoner.data ?? data ?? []}
             kalender={vaktplan}
             endret={() => (settRolleVersjon((x) => x + 1), last())}
             lukk={() => (settRoller(false), last())}
@@ -319,6 +323,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     aktiv: ansatt.aktiv ?? true,
     notat: ansatt.notat ?? "",
     gruppe_id: ansatt.gruppe_id ?? "",
+    kunde_id: ansatt.kunde_id ?? "",
     bursdag_varsel: ansatt.bursdag_varsel ?? true,
     ferie_dager: tekstTall(ansatt.ferie_dager),
   }));
@@ -490,6 +495,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     };
     if (bursdager) kropp.bursdag_varsel = a.bursdag_varsel;
     if (roller.data?.length) kropp.gruppe_id = a.gruppe_id || null;
+    if (a.kunde_id !== (ansatt.kunde_id ?? "")) kropp.kunde_id = a.kunde_id || null;
     const nyttNavn = nyRolle?.navn.trim() ?? "";
     if (nyRolle && !nyttNavn) return h.settFeil("Skriv navnet på den nye rollen, eller velg en annen.");
     if (a.stillingsprosent.trim()) kropp.stillingsprosent = tall(a.stillingsprosent);
@@ -702,6 +708,32 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                 {kanEndre && <option value={NY_ROLLE}>+ Ny rolle …</option>}
               </select>
               <span className="felt-hjelp">{rolleHjelp}</span>
+              {/* Hentet inn fra en kunde (Roller → Hent fra kunder); navnet bare for dem som ser kundene. */}
+              {ansatt.kunde_id && (
+                <span className="felt-hjelp">
+                  {a.kunde_id ? (
+                    <>
+                      Hentet inn fra kunden{" "}
+                      {ansatt.kunde ? <Link to={`/kunder?sok=${encodeURIComponent(ansatt.kunde)}`}>{ansatt.kunde}</Link> : "i kunderegisteret"}.
+                      {kanEndre && (
+                        <>
+                          {" "}
+                          <button type="button" className="lenke" onClick={() => sett({ kunde_id: "" })}>
+                            Fjern koblingen
+                          </button>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      Koblingen til kunden fjernes når du lagrer.{" "}
+                      <button type="button" className="lenke" onClick={() => sett({ kunde_id: ansatt.kunde_id ?? "" })}>
+                        Angre
+                      </button>
+                    </>
+                  )}
+                </span>
+              )}
             </label>
             {nyRolle && (
               <>

@@ -1,6 +1,6 @@
 // Kunder og produkter: liste og skjema i dialog.
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
 import { harFunksjon, kanSkrive, useKonto } from "../konto";
@@ -10,7 +10,9 @@ import { lesMakstak, tallTekst } from "../linjer";
 
 export function Kunder() {
   const { org } = useKonto();
-  const [sok, settSok] = useState("");
+  // Søket kan komme fra adressen (?sok=), f.eks. fra kunden en person er hentet inn fra (Ansatte).
+  const [adresse] = useSearchParams();
+  const [sok, settSok] = useState(() => adresse.get("sok") ?? "");
   const [redigerer, settRedigerer] = useState<any | null>(null);
   const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/kunder${sok ? `?sok=${encodeURIComponent(sok)}` : ""}`), [org?.id, sok]);
   const smal = useSmal();

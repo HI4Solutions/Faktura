@@ -85,6 +85,8 @@ const ansattSkjema = z.object({
   // ansatt, følger rollen. rolle: navnet i stedet for id-en (en ny rolle lages om den ikke finnes).
   gruppe_id: uuid.nullable().optional(),
   rolle: valgfri(tekst(40, "Rollen")),
+  // Kunden personen er hentet inn fra (f.eks. en lege kontoret fakturerer; 0058; null: koblingen fjernes).
+  kunde_id: uuid.nullable().optional(),
   bursdag_varsel: z.boolean().optional(), // varsle de andre på bursdagen (0045_bursdager.sql)
   // Feriedager per år for denne ansatte (null: organisasjonens, regnet om etter arbeidsdagene; 0050_feriebank.sql).
   ferie_dager: valgfri(feriedager),
@@ -126,6 +128,8 @@ const ANSATT = `
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
          coalesce((select g.tavle from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id), true) as tavle,
+         -- Kunden personen er hentet inn fra (0058; navnet bare for dem som ser kundene).
+         a.kunde_id, (select k.navn from faktura.kunder k where k.org_id = a.org_id and k.id = a.kunde_id) as kunde,
          -- Ukedagene i den faste arbeidsplanen som gjelder i dag (1 = mandag).
          (select coalesce(array_agg(d.ukedag order by d.ukedag), '{}') from faktura.arbeidsplan_dager d
            where d.org_id = a.org_id
@@ -272,10 +276,12 @@ export function ansattRuter() {
     return f;
   }
 
-  // Rollen må finnes i organisasjonen (databasen sjekker det også, men med en uklar melding).
+  // Rollen og kunden må finnes i organisasjonen (databasen sjekker det også, men med en uklar melding).
   async function sjekkGruppe(db: Db, org: string, f: Record<string, unknown>) {
-    if (typeof f.gruppe_id !== "string") return;
-    if (!(await en(db, "select 1 from faktura.ansattgrupper where org_id = $1 and id = $2", [org, f.gruppe_id]))) throw new ApiFeil(400, "Fant ikke rollen");
+    if (typeof f.gruppe_id === "string" && !(await en(db, "select 1 from faktura.ansattgrupper where org_id = $1 and id = $2", [org, f.gruppe_id])))
+      throw new ApiFeil(400, "Fant ikke rollen");
+    if (typeof f.kunde_id === "string" && !(await en(db, "select 1 from faktura.kunder where org_id = $1 and id = $2", [org, f.kunde_id])))
+      throw new ApiFeil(400, "Fant ikke kunden");
   }
 
   // Rollen med det navnet (store og små bokstaver teller ikke), eller en ny (for ansatte; den kan
@@ -467,6 +473,115 @@ export function ansattRuter() {
     const antall = { ny: 0, oppdater: 0, hopp: 0, feil: 0 };
     for (const p of plan) antall[p.status]++;
     return c.json({ antall, rader: plan.map(({ nr, status, grunn }) => ({ nr, status, grunn })) });
+  });
+
+  // --- Kunder som rollehavere ----------------------------------------------------
+  // Kunder (f.eks. legene på et legekontor, som kontoret fakturerer) hentes inn i registeret med
+  // en rolle, uten å skrives inn på nytt (0058_kunder_som_rollehavere.sql): navnet (som det er
+  // rettet i appen), e-posten, telefonen og adressen fra kunden. Personen kobles til kunden, så
+  // en kunde som er hentet inn, hoppes over neste gang. Finnes personen alt blant de aktive (samme
+  // e-post, ellers samme navn; appen viser hvem før det hentes), kobles den til kunden og får
+  // rollen i stedet for å legges inn to ganger, og det som mangler av e-post, telefon og adresse,
+  // fylles ut fra kunden. Er den koblet til en annen kunde, hoppes kunden over.
+  const fraKunderSkjema = z
+    .object({
+      kunder: z
+        .array(z.object({ kunde_id: uuid, fornavn: ansattSkjema.shape.fornavn, etternavn: ansattSkjema.shape.etternavn }))
+        .min(1, "Velg minst én kunde")
+        .max(500, "Høyst 500 kunder om gangen"),
+      // Rollen de får: id-en, eller navnet (den som finnes med det navnet, eller en ny).
+      gruppe_id: uuid.optional(),
+      rolle: valgfri(tekst(40, "Rollen")),
+      ansatt_fra: datoS.optional(), // fra når de er med (standard i dag)
+    })
+    .refine((b) => b.gruppe_id || b.rolle, "Velg rollen de skal ha");
+  type Person = { id: string; fornavn: string; etternavn: string; epost: string | null; kunde_id: string | null; aktiv: boolean };
+  const personNavn = (p: { fornavn: string; etternavn: string }) => `${p.fornavn} ${p.etternavn}`.trim().replace(/\s+/g, " ").toLowerCase();
+
+  r.post("/ansatte/fra-kunder", async (c) => {
+    const b = fraKunderSkjema.parse(await c.req.json().catch(() => ({})));
+    const org = orgId(c);
+    const rader = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'personal')", [org]);
+      const gruppe = b.gruppe_id ?? (await rolleId(db, org, b.rolle!));
+      await sjekkGruppe(db, org, { gruppe_id: gruppe });
+      const kunder = new Map(
+        (
+          await alle<{ id: string; navn: string; epost: string | null; telefon: string | null; adresse: string | null; postnr: string | null; poststed: string | null }>(
+            db,
+            "select id, navn, epost, telefon, adresse, postnr, poststed from faktura.kunder where org_id = $1 and id = any($2::uuid[])",
+            [org, b.kunder.map((k) => k.kunde_id)],
+          )
+        ).map((k) => [k.id, k]),
+      );
+      const personer = await alle<Person>(db, "select id, fornavn, etternavn, epost, kunde_id, aktiv from faktura.ansatte where org_id = $1 order by ansattnummer", [org]);
+      const hentet = new Map(personer.filter((p) => p.kunde_id).map((p) => [p.kunde_id!, p]));
+      const medEpost = new Map<string, Person>();
+      const medNavn = new Map<string, Person>();
+      const husk = (p: Person) => {
+        if (!p.aktiv) return;
+        if (p.epost && !medEpost.has(p.epost.toLowerCase())) medEpost.set(p.epost.toLowerCase(), p);
+        if (!medNavn.has(personNavn(p))) medNavn.set(personNavn(p), p);
+      };
+      personer.forEach(husk);
+      const full = (await regler(db, org)).full_stilling;
+      const svar: { kunde_id: string; status: "ny" | "koblet" | "hopp"; ansatt_id: string; navn: string; grunn?: string }[] = [];
+      for (const v of b.kunder) {
+        const k = kunder.get(v.kunde_id);
+        if (!k) throw new ApiFeil(404, "Fant ikke kunden");
+        const fra = hentet.get(k.id);
+        if (fra) {
+          svar.push({ kunde_id: k.id, status: "hopp", ansatt_id: fra.id, navn: `${fra.fornavn} ${fra.etternavn}`, grunn: "Hentet inn fra før" });
+          continue;
+        }
+        const epost = k.epost && k.epost.length <= 254 ? k.epost.trim().toLowerCase() : null;
+        const treff = (epost ? medEpost.get(epost) : undefined) ?? medNavn.get(personNavn(v));
+        if (treff?.kunde_id) {
+          const annen = kunder.get(treff.kunde_id)?.navn ?? (await en<{ navn: string }>(db, "select navn from faktura.kunder where org_id = $1 and id = $2", [org, treff.kunde_id]))?.navn;
+          svar.push({ kunde_id: k.id, status: "hopp", ansatt_id: treff.id, navn: `${treff.fornavn} ${treff.etternavn}`, grunn: `Koblet til kunden «${annen ?? "en annen kunde"}»` });
+          continue;
+        }
+        // Adressen på én linje, og et norsk postnummer (kunder i utlandet har andre).
+        const postnr = k.postnr?.trim() ?? "";
+        const kontakt = {
+          epost,
+          telefon: k.telefon?.trim() || null,
+          adresse: k.adresse?.replace(/\s*\n\s*/g, ", ").trim().slice(0, 200) || null,
+          postnr: /^\d{4}$/.test(postnr) ? postnr : null,
+          poststed: k.poststed?.trim() || null,
+        };
+        if (treff) {
+          // Adressen fylles bare ut når personen ikke har noen (ikke halvveis fra hver).
+          await db.query(
+            `update faktura.ansatte
+                set kunde_id = $3, gruppe_id = $4, epost = coalesce(epost, $5), telefon = coalesce(telefon, $6),
+                    adresse = case when adresse is null and postnr is null and poststed is null then $7 else adresse end,
+                    postnr = case when adresse is null and postnr is null and poststed is null then $8 else postnr end,
+                    poststed = case when adresse is null and postnr is null and poststed is null then $9 else poststed end
+              where org_id = $1 and id = $2`,
+            [org, treff.id, k.id, gruppe, kontakt.epost, kontakt.telefon, kontakt.adresse, kontakt.postnr, kontakt.poststed],
+          );
+          treff.kunde_id = k.id;
+          hentet.set(k.id, treff);
+          svar.push({ kunde_id: k.id, status: "koblet", ansatt_id: treff.id, navn: `${treff.fornavn} ${treff.etternavn}` });
+          continue;
+        }
+        const ny = await nyAnsatt(
+          db,
+          org,
+          { fornavn: v.fornavn, etternavn: v.etternavn, ...kontakt, gruppe_id: gruppe, kunde_id: k.id, ...(b.ansatt_fra ? { ansatt_fra: b.ansatt_fra } : {}) },
+          full,
+        );
+        const p = { id: ny, fornavn: v.fornavn, etternavn: v.etternavn, epost, kunde_id: k.id, aktiv: true };
+        husk(p);
+        hentet.set(k.id, p);
+        svar.push({ kunde_id: k.id, status: "ny", ansatt_id: ny, navn: `${v.fornavn} ${v.etternavn}` });
+      }
+      return svar;
+    });
+    const antall = { ny: 0, koblet: 0, hopp: 0 };
+    for (const x of rader) antall[x.status]++;
+    return c.json({ antall, rader });
   });
 
   // Bare ansatte uten timer kan slettes; ellers settes en sluttdato (og den ansatte inaktiv).

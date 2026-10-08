@@ -185,6 +185,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   ansatt, fødselsnumrene krypteres før lagringen, og et fast tillegg i fila legges til eller
   oppdaterer tillegget med samme navn, og rollen i fila (f.eks. «Lege») er rollen med det navnet,
   eller en ny (`POST /ansatte/importer`, krever Import og personal).
+  Kunder kan hentes inn som rollehavere (Roller → «Hent fra kunder», `POST /ansatte/fra-kunder`,
+  `0058_kunder_som_rollehavere.sql`; f.eks. legene på et legekontor, som kontoret fakturerer): de
+  valgte kundene legges inn med en rolle og «med fra»-dato, med navnet (foreslått fra kunden, og
+  kan rettes før det hentes), e-posten, telefonen og adressen fra kunden, og personen kobles til
+  kunden (`ansatte.kunde_id`, bare innenfor organisasjonen; slettes kunden, står personen uten
+  kobling). En kunde som er hentet inn, hoppes over neste gang. Finnes personen alt blant de
+  aktive (samme e-post, ellers samme navn; appen viser hvem før det hentes), kobles den til kunden
+  og får rollen, og det som mangler av e-post, telefon og adresse, fylles ut fra kunden.
+  Ansattkortet viser kunden (med lenke til kundelista) og kan fjerne koblingen.
   En ansatt kan få egen innlogging: invitasjonen (`inviter_ansatt`) gir rollen `ansatt` og
   kobler brukeren til ansattkortet, og er e-posten alt med i organisasjonen, kobles den med
   en gang. Timene føres med fra og til (over midnatt går fint) og pause, eller som antall
@@ -322,8 +331,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   annet; for andre bare F) eller ekstratimer, nederst ekstratimene i måneden per ansatt,
   og til høyre hvor mange med hver rolle som er på jobb mot behovet, vakter uten vikar og
   ledige vakter. Så kan f.eks. legene ses opp mot sekretærene, også leger som ikke er ansatt.
-  Roller kan lages fra stillingene. AI-assistenten svarer med det samme når man spør hvem som
-  jobber («Lege 6 av 7 (mangler 1), Sekretær 4 av 4»)
+  Roller kan lages fra stillingene, og kunder hentes inn som rollehavere (se over).
+  AI-assistenten svarer med det samme når man spør hvem som jobber («Lege 6 av 7 (mangler 1),
+  Sekretær 4 av 4»)
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
   bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
   Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer),

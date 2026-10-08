@@ -131,4 +131,95 @@ describe.skipIf(!process.env.DATABASE_URL)("Roller", () => {
     expect((await kall("PATCH", `/api/org/${org}/ansatte/${lise}`, { gruppe_id: utenfor })).status).toBe(200);
     expect((await tavla()).plasseringer).toEqual([]);
   });
+
+  it("kunder hentes inn som rollehavere, uten å legges inn to ganger", async () => {
+    const kunde = async (k: Record<string, unknown>) => {
+      const r = await kall("POST", `/api/org/${org}/kunder`, k);
+      expect(r.status, JSON.stringify(r.data)).toBe(201);
+      return r.data.id as string;
+    };
+    const kari = await kunde({ type: "person", navn: "Kari Nordmann", epost: "Kari@Legene.no", telefon: "900 00 000", adresse: "Storgata 1\nOppgang B", postnr: "0155", poststed: "Oslo" });
+    const firma = await kunde({ type: "firma", navn: "Hansen Medisinske AS", deres_referanse: "Per Hansen", postnr: "SE-123 45", poststed: "Stockholm" });
+    const olaKunde = await kunde({ type: "person", navn: "Ola Sekretær", telefon: "911 11 111", adresse: "Kirkeveien 2", postnr: "0368", poststed: "Oslo" }); // finnes alt
+    const hent = (kunder: unknown[], ekstra: Record<string, unknown> = { gruppe_id: lege }) => kall("POST", `/api/org/${org}/ansatte/fra-kunder`, { kunder, ...ekstra });
+
+    const r = await hent(
+      [
+        { kunde_id: kari, fornavn: "Kari", etternavn: "Nordmann" },
+        { kunde_id: firma, fornavn: "Per", etternavn: "Hansen" },
+        { kunde_id: olaKunde, fornavn: "Ola", etternavn: "Sekretær" },
+      ],
+      { gruppe_id: lege, ansatt_fra: "2026-01-01" },
+    );
+    expect(r.status, JSON.stringify(r.data)).toBe(200);
+    expect(r.data.antall).toEqual({ ny: 2, koblet: 1, hopp: 0 });
+    const [k, p, o] = r.data.rader;
+    expect(await person(k.ansatt_id)).toMatchObject({
+      fornavn: "Kari",
+      etternavn: "Nordmann",
+      epost: "kari@legene.no",
+      telefon: "900 00 000",
+      adresse: "Storgata 1, Oppgang B",
+      postnr: "0155",
+      poststed: "Oslo",
+      ansatt_fra: "2026-01-01",
+      rolle: "Lege",
+      arbeidstaker: false,
+      kunde_id: kari,
+      kunde: "Kari Nordmann",
+    });
+    // Et postnummer i utlandet er ikke et norsk postnummer.
+    expect(await person(p.ansatt_id)).toMatchObject({ fornavn: "Per", postnr: null, poststed: "Stockholm", kunde: "Hansen Medisinske AS", rolle: "Lege" });
+    // Ola fantes: han kobles til kunden og får rollen, i stedet for å legges inn en gang til.
+    // Det som manglet av telefon og adresse, er fylt ut fra kunden.
+    expect(o).toMatchObject({ status: "koblet", ansatt_id: ola, navn: "Ola Sekretær" });
+    expect(await person(ola)).toMatchObject({ kunde_id: olaKunde, rolle: "Lege", arbeidstaker: false, telefon: "911 11 111", adresse: "Kirkeveien 2", postnr: "0368" });
+
+    // Samme navn, men en annen e-post: den som finnes, kobles (og beholder e-posten sin). En
+    // som har sluttet, kobles ikke; da legges en ny inn.
+    const nils = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Nils", etternavn: "Lege", epost: "nils@privat.no", gruppe_id: lege })).data.id;
+    const gammel = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Gamle", etternavn: "Lege", gruppe_id: lege, aktiv: false })).data.id;
+    const nilsKunde = await kunde({ type: "person", navn: "Nils Lege", epost: "nils@klinikken.no" });
+    const gammelKunde = await kunde({ type: "person", navn: "Gamle Lege" });
+    const to = await hent([
+      { kunde_id: nilsKunde, fornavn: "Nils", etternavn: "Lege" },
+      { kunde_id: gammelKunde, fornavn: "Gamle", etternavn: "Lege" },
+    ]);
+    expect(to.data.rader.map((x: any) => [x.status, x.ansatt_id === nils, x.ansatt_id === gammel])).toEqual([
+      ["koblet", true, false],
+      ["ny", false, false],
+    ]);
+    expect(await person(nils)).toMatchObject({ epost: "nils@privat.no", kunde_id: nilsKunde });
+
+    // En gang til: hoppes over, og ingen legges inn to ganger.
+    const antall = async () => (await kall("GET", `/api/org/${org}/ansatte`)).data.length;
+    const foer = await antall();
+    const igjen = await hent([
+      { kunde_id: kari, fornavn: "Kari", etternavn: "Nordmann" },
+      { kunde_id: olaKunde, fornavn: "Ola", etternavn: "Sekretær" },
+    ]);
+    expect(igjen.data.antall).toEqual({ ny: 0, koblet: 0, hopp: 2 });
+    expect(igjen.data.rader[0]).toMatchObject({ status: "hopp", grunn: "Hentet inn fra før", navn: "Kari Nordmann" });
+    // En annen kunde med samme e-post som en som er koblet: den hoppes over.
+    const kari2 = await kunde({ type: "firma", navn: "Kari Nordmann Legetjenester", epost: "kari@legene.no" });
+    expect((await hent([{ kunde_id: kari2, fornavn: "Kari", etternavn: "Nordmann" }])).data.rader[0]).toMatchObject({
+      status: "hopp",
+      grunn: "Koblet til kunden «Kari Nordmann»",
+    });
+    expect(await antall()).toBe(foer);
+
+    // Rollen med navn (en ny lages), og feilene.
+    const syk = await kunde({ type: "person", navn: "Siri Sykepleier" });
+    const ny = await hent([{ kunde_id: syk, fornavn: "Siri", etternavn: "Sykepleier" }], { rolle: "Sykepleier" });
+    expect(await person(ny.data.rader[0].ansatt_id)).toMatchObject({ rolle: "Sykepleier", arbeidstaker: true, kunde_id: syk });
+    expect((await hent([{ kunde_id: syk, fornavn: "Siri", etternavn: "Sykepleier" }], {})).data.error).toBe("Velg rollen de skal ha");
+    expect((await hent([{ kunde_id: crypto.randomUUID(), fornavn: "Ukjent", etternavn: "Kunde" }])).data.error).toBe("Fant ikke kunden");
+    expect((await hent([])).data.error).toBe("Velg minst én kunde");
+
+    // Koblingen kan fjernes, og slettes kunden, står personen uten kobling.
+    expect((await kall("PATCH", `/api/org/${org}/ansatte/${ola}`, { kunde_id: null, gruppe_id: sekretaer })).data).toMatchObject({ kunde_id: null, kunde: null, rolle: "Sekretær" });
+    expect((await kall("PATCH", `/api/org/${org}/ansatte/${ola}`, { kunde_id: crypto.randomUUID() })).data.error).toBe("Fant ikke kunden");
+    expect((await kall("DELETE", `/api/org/${org}/kunder/${firma}`)).status).toBe(204);
+    expect(await person(p.ansatt_id)).toMatchObject({ kunde_id: null, kunde: null, fornavn: "Per" });
+  });
 });

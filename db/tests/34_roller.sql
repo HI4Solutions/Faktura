@@ -1,7 +1,7 @@
 -- Roller (0056_roller.sql): en rolle kan være for dem som ikke er ansatt (f.eks. leger som er
 -- aksjonærer). Om personen er ansatt, følger rollen: når personen får en rolle, når rollen
 -- endres, og når den slettes. De som ikke er ansatt, er i ansattregisteret, men ikke i
--- feriebanken, og API-et kan ikke sette det selv.
+-- feriebanken, og API-et kan ikke sette det selv. Kunder kan hentes inn som rollehavere (0058).
 
 \set QUIET on
 \set ON_ERROR_STOP on
@@ -72,6 +72,17 @@ insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansat
 select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 1::bigint, 'med rollen på tavla igjen kan han plasseres');
 update faktura.ansattgrupper set tavle = false where id = :'overlege';
 select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 0::bigint, 'rollen tas ut av tavla');
+
+-- Kunder som rollehavere (0058_kunder_som_rollehavere.sql): personen kobles til en kunde i samme
+-- organisasjon, og slettes kunden, står personen uten kobling.
+insert into faktura.kunder (org_id, navn) values (:'org', 'Lise Lege') returning id as kunde \gset
+update faktura.ansatte set kunde_id = :'kunde' where id = :'lise';
+select test.er((select kunde_id from faktura.ansatte where id = :'lise'), :'kunde'::uuid, 'Lise er koblet til kunden');
+select id as org2 from faktura.opprett_organisasjon('Andre Roller AS', '923609016') \gset
+insert into faktura.kunder (org_id, navn) values (:'org2', 'Kunde hos andre') returning id as kunde2 \gset
+select test.feiler(format($$update faktura.ansatte set kunde_id = %L where id = %L$$, :'kunde2', :'lise'), '23503');
+delete from faktura.kunder where id = :'kunde';
+select test.er((select kunde_id from faktura.ansatte where id = :'lise'), null::uuid, 'uten kunden er Lise uten kobling');
 
 \c :migrator
 drop schema test cascade;
