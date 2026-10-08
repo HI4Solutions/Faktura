@@ -4,7 +4,7 @@
 // faste dagene vises i bemanningskalenderen, vaktplanen og på tavla, og timer utover planen
 // blir ekstratimer.
 import { dato, iDag } from "../format";
-import { regnTimer, tallformat, timer } from "../uke";
+import { Klokkeslett, regnTimer, tallformat, timer } from "../uke";
 
 export type PlanDag = { ukedag: number; fra: string | null; til: string | null; pause_min: number };
 export type Plan = { id: string; gjelder_fra: string; dager: PlanDag[] };
@@ -156,9 +156,9 @@ export function ArbeidsplanFelt({
             </label>
             {!d.hel && (
               <span className="arbeidsdag-tid">
-                <input type="time" aria-label={`${UKEDAGER[u]} fra`} value={d.fra} onChange={(e) => sett(u, { ...d, fra: e.target.value })} />
+                <Klokkeslett aria-label={`${UKEDAGER[u]} fra`} value={d.fra} onChange={(fra) => sett(u, { ...d, fra })} />
                 <span aria-hidden="true">–</span>
-                <input type="time" aria-label={`${UKEDAGER[u]} til`} value={d.til} onChange={(e) => sett(u, { ...d, til: e.target.value })} />
+                <Klokkeslett aria-label={`${UKEDAGER[u]} til`} value={d.til} onChange={(til) => sett(u, { ...d, til })} />
                 <label className="arbeidsdag-pause">
                   Pause
                   <input

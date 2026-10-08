@@ -1,5 +1,6 @@
 // Uker og klokkeslett for timeføringen og vaktplanen: ISO-uker (mandag–søndag, uke 1 er uka
 // med 4. januar), datoer som «Man. 5. okt.», timer som «7,5 t» og ukevelgeren.
+import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import { iDag, leggTilDager } from "./format";
 import { IkonHoyre, IkonVenstre } from "./ikoner";
 
@@ -48,6 +49,79 @@ export function regnTimer(fra: string, til: string, pause: number) {
   let m = min(til) - min(fra);
   if (m <= 0) m += 24 * 60;
   return (m - pause) / 60;
+}
+
+// Klokkeslett som skrives inn: «8» og «08» → 08:00, «830» → 08:30, «1630» → 16:30, og «8.30»,
+// «8,30» og «8:30» → 08:30. null: ikke et klokkeslett.
+export function tolkKlokke(s: string): string | null {
+  const t = s.trim().replace(/[.,]/g, ":");
+  let x = /^(\d{1,2}):(\d{1,2})$/.exec(t);
+  let h: number;
+  let m: number;
+  if (x) {
+    h = Number(x[1]);
+    m = Number(x[2]);
+  } else if ((x = /^\d{1,4}$/.exec(t))) {
+    h = Number(t.length <= 2 ? t : t.slice(0, t.length - 2));
+    m = t.length <= 2 ? 0 : Number(t.slice(-2));
+  } else return null;
+  if (h > 23 || m > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// Klokkeslett i 24-timersformat (TT:MM), uansett språket på enheten (<input type="time"> viser
+// AM/PM på enheter med engelsk språk). Feltet tolker det som skrives (tolkKlokke) og gir
+// klokkeslettet videre med en gang; teksten ryddes når man går ut av feltet.
+export function Klokkeslett({
+  value,
+  onChange,
+  className,
+  placeholder,
+  ...rest
+}: { value: string; onChange: (klokke: string) => void } & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type">) {
+  const [tekst, settTekst] = useState(value);
+  const [fokus, settFokus] = useState(false);
+  const iFokus = useRef(false);
+  // Endres klokkeslettet utenfra (f.eks. fra vakten), vises det, men ikke mens man skriver.
+  useEffect(() => {
+    if (!iFokus.current) settTekst(value);
+  }, [value]);
+  const ugyldig = !fokus && tekst.trim() !== "" && tolkKlokke(tekst) === null;
+  return (
+    <input
+      {...rest}
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      spellCheck={false}
+      maxLength={5}
+      placeholder={placeholder ?? "tt:mm"}
+      className={["klokkeslett", className].filter(Boolean).join(" ")}
+      aria-invalid={ugyldig || undefined}
+      title={ugyldig ? "Skriv klokkeslettet som TT:MM, f.eks. 08:30" : rest.title}
+      value={tekst}
+      onFocus={(e) => {
+        iFokus.current = true;
+        settFokus(true);
+        rest.onFocus?.(e);
+      }}
+      onChange={(e) => {
+        const t = e.target.value.replace(/[^\d:.,]/g, "");
+        settTekst(t);
+        onChange(tolkKlokke(t) ?? t);
+      }}
+      onBlur={(e) => {
+        iFokus.current = false;
+        settFokus(false);
+        const n = tolkKlokke(tekst);
+        if (n) {
+          settTekst(n);
+          onChange(n);
+        }
+        rest.onBlur?.(e);
+      }}
+    />
+  );
 }
 
 export function Ukevelger({ uke, velgUke }: { uke: string; velgUke: (mandag: string) => void }) {

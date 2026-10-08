@@ -14,6 +14,7 @@ import { kanSkrive, useKonto } from "../konto";
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { hentAbonnement, pushStotte, slaPaVarsler } from "../pwa";
 import { IkonBjelle, IkonLukk } from "../ikoner";
+import { Klokkeslett } from "../uke";
 
 type Intervall = "maaned" | "kvartal" | "aar" | "uke" | "en_gang";
 export type Paaminnelse = {
@@ -351,7 +352,7 @@ function Skjema({ p, ferdig }: { p: Partial<Paaminnelse>; ferdig: () => void }) 
         </label>
         <label>
           Klokkeslett
-          <input type="time" required value={kl} onChange={(e) => settKl(e.target.value)} />
+          <Klokkeslett required value={kl} onChange={settKl} />
         </label>
       </div>
       <label>

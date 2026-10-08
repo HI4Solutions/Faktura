@@ -2,7 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { config } from "./config.js";
-import { somSystem, en } from "./db.js";
+import { somBetrodd, somSystem, en } from "./db.js";
 import { ApiFeil } from "./feil.js";
 
 export interface Innlogget {
@@ -11,6 +11,9 @@ export interface Innlogget {
   epost: string;
   epostBekreftet: boolean;
   mfa: boolean;
+  // Kontoen er godkjent av plattformadministratoren (0043_kontogodkjenning.sql), venter
+  // eller er avvist.
+  status: "venter" | "godkjent" | "avvist";
 }
 
 declare module "hono" {
@@ -26,9 +29,17 @@ function firebase() {
 
 async function verifiser(token: string) {
   if (config.testInnlogging && token.startsWith("test:")) {
-    // test:<uid>:<epost>[:mfa[:navn]]
-    const [, uid, epost, mfa, navn] = token.split(":");
-    return { uid, email: epost, email_verified: true, mfa: mfa === "mfa" || mfa === "passkey", navn: navn ? decodeURIComponent(navn) : (undefined as string | undefined) };
+    // test:<uid>:<epost>[:mfa[:navn[:venter]]] – testbrukere godkjennes med en gang, med mindre
+    // tokenet slutter med «venter».
+    const [, uid, epost, mfa, navn, venter] = token.split(":");
+    return {
+      uid,
+      email: epost,
+      email_verified: true,
+      mfa: mfa === "mfa" || mfa === "passkey",
+      navn: navn ? decodeURIComponent(navn) : (undefined as string | undefined),
+      godkjennTest: venter !== "venter",
+    };
   }
   const t = await firebase().verifyIdToken(token, true);
   return {
@@ -38,6 +49,7 @@ async function verifiser(token: string) {
     // Totrinn: TOTP via Identity Platform, eller innlogging med passkey (custom token med kravet «passkey»).
     mfa: Boolean(t.firebase?.sign_in_second_factor) || t.passkey === true,
     navn: t.name as string | undefined,
+    godkjennTest: false,
   };
 }
 
@@ -54,10 +66,16 @@ export const krevInnlogging: MiddlewareHandler = async (c, next) => {
   }
   if (!t.email) throw new ApiFeil(401, "Kontoen mangler e-postadresse");
   // registrer_bruker kjøres uten bruker-id; den er en betrodd funksjon for API-et.
-  const b = await somSystem((db) =>
-    en<{ id: string }>(db, "select id from faktura.registrer_bruker($1, $2, $3)", [t.uid, t.email, t.navn ?? null]),
-  );
-  c.set("bruker", { id: b!.id, eksternId: t.uid, epost: t.email, epostBekreftet: t.email_verified, mfa: t.mfa });
+  const b = (await somSystem((db) =>
+    en<{ id: string; status: Innlogget["status"] }>(db, "select id, status from faktura.registrer_bruker($1, $2, $3)", [t.uid, t.email, t.navn ?? null]),
+  ))!;
+  // Plattformadministratorene (med bekreftet e-post) trenger ingen godkjenning, og heller ikke
+  // testbrukerne.
+  if (b.status === "venter" && ((t.email_verified && config.adminEposter.includes(t.email.toLowerCase())) || t.godkjennTest)) {
+    await somBetrodd(b.id, (db) => db.query("select faktura.behandle_konto($1, true)", [b.id]));
+    b.status = "godkjent";
+  }
+  c.set("bruker", { id: b.id, eksternId: t.uid, epost: t.email, epostBekreftet: t.email_verified, mfa: t.mfa, status: b.status });
   await next();
 };
 

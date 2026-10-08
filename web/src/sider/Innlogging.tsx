@@ -14,6 +14,7 @@ import { hentAuth } from "../firebase";
 import { Feil } from "../felles";
 import { Logo } from "../Logo";
 import { IkonHake } from "../ikoner";
+import { useKonto } from "../konto";
 
 // Venstre side av innloggingen: hva tjenesten gjør.
 function Merkevarepanel() {
@@ -243,6 +244,59 @@ export function BekreftEpost({ epost, loggUt }: { epost: string; loggUt: () => v
             Jeg har bekreftet
           </button>
           <button onClick={sendIgjen}>Send på nytt</button>
+          <button className="lenke" onClick={loggUt}>
+            Logg ut
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// En ny konto som venter på godkjenning fra HI4 Faktura (eller er avvist).
+export function VenterPaaGodkjenning() {
+  const { meg, oppdater, loggUt } = useKonto();
+  const [melding, settMelding] = useState<string | null>(null);
+  const [opptatt, settOpptatt] = useState(false);
+  const avvist = meg?.bruker.status === "avvist";
+  async function sjekk() {
+    settOpptatt(true);
+    settMelding(null);
+    try {
+      await oppdater();
+      settMelding("Kontoen venter fortsatt på godkjenning.");
+    } catch (e) {
+      settMelding((e as Error).message);
+    } finally {
+      settOpptatt(false);
+    }
+  }
+  return (
+    <div className="sentrert">
+      <div className="kort venter-godkjenning">
+        <h1>{avvist ? "Kontoen er ikke godkjent" : "Kontoen venter på godkjenning"}</h1>
+        {avvist ? (
+          <>
+            <p>Kontoen din i HI4 Faktura ({meg?.bruker.epost}) ble ikke godkjent.</p>
+            {meg?.bruker.avvist_grunn && <p className="dempet">Begrunnelse: {meg.bruker.avvist_grunn}</p>}
+            <p className="dempet">Ta kontakt med HI4 Faktura hvis du mener dette er feil.</p>
+          </>
+        ) : (
+          <>
+            <p>
+              Takk, {meg?.bruker.navn?.split(" ")[0]}! E-postadressen er bekreftet, og kontoen din er sendt til HI4 Faktura for godkjenning. Du får e-post til{" "}
+              <strong>{meg?.bruker.epost}</strong> når den er godkjent.
+            </p>
+            <p className="dempet">Er du invitert av en organisasjon, åpner du lenken i invitasjonen, så kommer du inn med en gang.</p>
+          </>
+        )}
+        {melding && <div className="melding info">{melding}</div>}
+        <div className="knapper">
+          {!avvist && (
+            <button className="primar" disabled={opptatt} onClick={sjekk}>
+              Sjekk på nytt
+            </button>
+          )}
           <button className="lenke" onClick={loggUt}>
             Logg ut
           </button>

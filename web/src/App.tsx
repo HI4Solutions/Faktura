@@ -5,7 +5,7 @@ import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation, useNaviga
 import { api } from "./api";
 import { Feil, Laster, Tom } from "./felles";
 import { KontoProvider, erAnsatt, harFunksjon, kanSePersonal, kanSkrive, useKonto, type Funksjon } from "./konto";
-import { BekreftEpost, Innlogging } from "./sider/Innlogging";
+import { BekreftEpost, Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
 import { Kunder, Produkter } from "./sider/Register";
@@ -444,6 +444,14 @@ function Sider() {
   if (!bruker.emailVerified) return <BekreftEpost epost={bruker.email ?? ""} loggUt={loggUt} />;
   if (!meg) return <div className="sentrert"><Laster /></div>;
   if (!meg.bruker.navn || meg.bruker.navn.trim().length < 2) return <OppgiNavn />;
+  // Nye kontoer venter på godkjenning fra HI4 Faktura (en invitasjon godkjenner kontoen).
+  if ((meg.bruker.status ?? "godkjent") !== "godkjent")
+    return (
+      <Routes>
+        <Route path="/invitasjon/:token" element={<div className="innhold frittstaende"><Invitasjon /></div>} />
+        <Route path="*" element={<VenterPaaGodkjenning />} />
+      </Routes>
+    );
   return (
     <Routes>
       <Route path="/invitasjon/:token" element={<div className="innhold frittstaende"><Invitasjon /></div>} />

@@ -12,7 +12,7 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles
 import { useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
 import { IkonHoyre, IkonInnstillinger, IkonKopier, IkonNed, IkonOpp, IkonPluss, IkonTavle, IkonVarsel, IkonVenstre } from "../ikoner";
-import { mandag, middag, ukenr, visDag } from "../uke";
+import { Klokkeslett, mandag, middag, ukenr, visDag } from "../uke";
 import { borteTekst, fravaerKlasse, fravaerPeriode, fravaerTekst, VikarSkjema, type Ansatt, type FravaerType } from "./Fravaer";
 import { fastTider } from "./Arbeidsplan";
 
@@ -769,11 +769,11 @@ function RadSkjema({ type, rad, ferdig, avbryt }: { type: "faser" | "oppgaver"; 
           <>
             <label>
               Fra
-              <input type="time" value={v.fra} onChange={(e) => sett({ fra: e.target.value })} />
+              <Klokkeslett value={v.fra} onChange={(fra) => sett({ fra })} />
             </label>
             <label>
               Til
-              <input type="time" value={v.til} onChange={(e) => sett({ til: e.target.value })} />
+              <Klokkeslett value={v.til} onChange={(til) => sett({ til })} />
             </label>
           </>
         ) : (

@@ -31,6 +31,7 @@ import { fravaerRuter } from "./fravaer.js";
 import { bemanningRuter } from "./bemanning.js";
 import { arbeidsplanRuter } from "./arbeidsplan.js";
 import { krevFunksjoner } from "./funksjoner.js";
+import { krevGodkjentKonto, meldNyKonto } from "./kontoer.js";
 import { aiPaa } from "./ai.js";
 
 const uuid = z.string().uuid();
@@ -238,6 +239,8 @@ export function lagApi() {
   const api = new Hono();
   api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevInnlogging(c, next)));
   api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevBekreftetEpost(c, next)));
+  // Nye kontoer må godkjennes av plattformadministratoren før de kommer inn.
+  api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevGodkjentKonto(c, next)));
   api.route("/passkeys", passkeyRuter());
   api.route("/admin", adminRuter());
   api.route("/disk", diskRuter());
@@ -256,20 +259,27 @@ export function lagApi() {
     c.json(await somBruker(c.get("bruker").id, (db) => alle(db, "select maaned, verdi from faktura.kpi order by maaned desc limit 36"))),
   );
 
-  api.get("/meg", async (c) =>
-    c.json(
+  // Med status for kontoen (venter på godkjenning, godkjent eller avvist); en konto som ikke er
+  // godkjent, ser ingen organisasjoner.
+  api.get("/meg", async (c) => {
+    await meldNyKonto(c);
+    const godkjent = c.get("bruker").status === "godkjent";
+    return c.json(
       await bruk(c, async (db) => ({
-        bruker: await en(db, "select id, epost, navn from faktura.brukere where id = faktura.bruker_id()"),
+        bruker: await en(db, "select id, epost, navn, status, avvist_grunn from faktura.brukere where id = faktura.bruker_id()"),
         mfa: c.get("bruker").mfa,
         plattformadmin: erPlattformadmin(c.get("bruker").epost),
-        organisasjoner: await alle(db, "select * from faktura.mine_organisasjoner order by direkte_medlem desc, navn"),
+        organisasjoner: godkjent ? await alle(db, "select * from faktura.mine_organisasjoner order by direkte_medlem desc, navn") : [],
       })),
-    ),
-  );
+    );
+  });
 
   api.patch("/meg", async (c) => {
     const b = await kropp(c, z.object({ navn: tekstS(120).min(2, "må ha minst to tegn") }));
-    return c.json(await bruk(c, (db) => en(db, "update faktura.brukere set navn = $1 where id = faktura.bruker_id() returning id, epost, navn", [b.navn])));
+    const svar = await bruk(c, (db) => en(db, "update faktura.brukere set navn = $1 where id = faktura.bruker_id() returning id, epost, navn, status", [b.navn]));
+    // Med navnet på plass går forespørselen om godkjenning til administratorene.
+    await meldNyKonto(c);
+    return c.json(svar);
   });
 
   api.post("/organisasjoner", async (c) => {

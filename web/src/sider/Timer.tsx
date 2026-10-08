@@ -11,7 +11,7 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "
 import { erAdmin, harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag, leggTilDager } from "../format";
 import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
-import { gyldigDato, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
+import { gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import type { VaktSvar } from "./Vakter";
 import { fastTid } from "./Arbeidsplan";
 import { fravaerKlasse, fravaerTekst } from "./Fravaer";
@@ -625,11 +625,11 @@ function ForingSkjema({
             <div className="rad tre">
               <label>
                 Fra
-                <input type="time" required value={f.fra} onChange={(e) => sett({ fra: e.target.value })} />
+                <Klokkeslett required value={f.fra} onChange={(fra) => sett({ fra })} />
               </label>
               <label>
                 Til
-                <input type="time" required value={f.til} onChange={(e) => sett({ til: e.target.value })} />
+                <Klokkeslett required value={f.til} onChange={(til) => sett({ til })} />
               </label>
               <label>
                 Pause (min)

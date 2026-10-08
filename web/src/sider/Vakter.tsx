@@ -13,7 +13,7 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "
 import { erAdmin, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
 import { IkonKalender, IkonPluss, IkonVarsel } from "../ikoner";
-import { gyldigDato, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
+import { gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import { borteTekst, fravaerKlasse, fravaerTekst, FravaerListe, MittFravaer, VikarSkjema, type Fravaer, type FravaerType } from "./Fravaer";
 import { iFasen, Tavle } from "./Tavle";
 import { Bemanning, gyldigMaaned } from "./Bemanning";
@@ -765,11 +765,11 @@ function VaktSkjema({
         <div className="rad tre">
           <label>
             Fra
-            <input type="time" required value={v.fra} onChange={(e) => sett({ fra: e.target.value })} />
+            <Klokkeslett required value={v.fra} onChange={(fra) => sett({ fra })} />
           </label>
           <label>
             Til
-            <input type="time" required value={v.til} onChange={(e) => sett({ til: e.target.value })} />
+            <Klokkeslett required value={v.til} onChange={(til) => sett({ til })} />
           </label>
           <label>
             Pause (min)

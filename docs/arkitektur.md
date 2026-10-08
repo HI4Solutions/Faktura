@@ -42,6 +42,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   standard frist og gebyr, KID, verifiseringsstatus og grenser
 - `nummerserier`: neste fakturanummer og kundenummer per organisasjon, låst med radlås
 - `medlemmer`, `invitasjoner`: brukere og roller
+- `brukere.status`: en ny konto venter (`venter`) til plattformadministratoren har godkjent
+  den (`godkjent`) eller avvist den (`avvist`, med begrunnelse). Når e-postadressen er
+  bekreftet og navnet skrevet inn, går forespørselen på e-post til administratorene (én gang,
+  `varslet_at`), og de godkjenner eller avviser under Administrasjon → Venter; brukeren får
+  e-post om utfallet. Til da slipper API-et bare gjennom `/meg` og invitasjoner
+  (`server/src/kontoer.ts`), og appen viser bare at kontoen venter (eller begrunnelsen for
+  avslaget). Den som tar imot en invitasjon fra en organisasjon (sendt til e-postadressen
+  sin), godkjennes da; organisasjonen går god for den. Plattformadministratorene og de som
+  hadde konto fra før, er godkjent (`0043_kontogodkjenning.sql`)
 - `org_tilgang`: regnskapsbyrå ↔ klient (les eller bokfør), alltid med klientens samtykke
 - `kunder`, `produkter`, `gjentakelser`. `kunder.ehf`: om kunden kan motta EHF-faktura, slått
   opp i PEPPOL slik aksesspunktene gjør det (`peppol.ts`): SML-en i DNS (NAPTR) gir SMP-en,
@@ -169,6 +178,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   den dagen; uten plan timene utover avtalt arbeidstid i uka (alle timene for
   tilkallingsvikarer); vakter den ansatte er borte fra, teller ikke. Rapporten over
   ekstratimer per ansatt i en periode tas ut som PDF eller CSV (`/ekstratimer.pdf|.csv`)
+- Klokkeslett skrives og vises med 24-timersklokke (tt:mm) overalt i appen, også på enheter
+  med engelsk språk, der nettleserens eget klokkeslettfelt ville vist AM og PM. Feltet
+  (`Klokkeslett` i `web/src/uke.tsx`) tar også «730», «7.30» og «1530» og retter dem til 07:30
+  og 15:30
 - `ansattgrupper` og `ansatte.gruppe_id`: grupper av ansatte (f.eks. sekretærer og leger) med
   hvor mange som trengs på jobb per dag. Bemanningskalenderen (i appen, fra de faste
   arbeidsplanene, vaktplanen og fraværet) viser måneden med datoene nedover og de ansatte

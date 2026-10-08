@@ -21,6 +21,7 @@ bank og regnskapssystemer.
 | Nettapp (`web/`, React + Vite) på `faktura.hi4.no` | I drift |
 | Innlogging: passord, TOTP-MFA og passkeys | Ferdig |
 | Verifisering av organisasjoner og adminside | Ferdig (admin via GitHub-variabelen `ADMIN_EPOSTER`) |
+| Godkjenning av nye kontoer: forespørselen går til administratorene når e-postadressen er bekreftet, og kontoen kommer ikke inn før den er godkjent | Ferdig (Administrasjon → Venter) |
 | Funksjoner per organisasjon: administratoren velger hvilke organisasjoner som har EHF, bank, AI, ansatte og timer, vaktplan osv., og standarden for nye | Ferdig (Administrasjon → Funksjoner) |
 | Gjentakende fakturaer, purring og inkassovarsel | Ferdig |
 | Påminnelser om å lage fakturaer (push og e-post), for beløp som varierer | Ferdig |

@@ -1026,6 +1026,13 @@ table.funksjon-tabell { width: max-content; min-width: 100%; border-collapse: se
 .funksjon-forklaring { margin-top: 14px; }
 .funksjon-liste li label { display: flex; align-items: flex-start; gap: 0; margin: 0; font-weight: 450; }
 .funksjon-liste li label input { margin-top: 3px; flex: none; }
+/* Klokkeslett (24-timers, TT:MM) */
+input.klokkeslett { font-variant-numeric: tabular-nums; }
+/* Nye kontoer som venter på godkjenning */
+.kontoer-venter h2 { margin-top: 0; }
+.kontoer-venter .admin-rader li { flex-wrap: wrap; gap: 8px 12px; }
+.kontoer-venter .admin-rader li .knapper { flex: none; }
+.kort.venter-godkjenning { max-width: 480px; }
 @media (max-width: 700px) {
   .funksjon-tabell .funksjon-org { min-width: 140px; max-width: 170px; }
   .funksjon-tabell th, .funksjon-tabell td { padding: 8px 8px; }
@@ -1285,9 +1292,9 @@ fieldset.naken { border: 0; padding: 0; margin: 0; background: none; min-width: 
 .faner.valg button { flex: 1; justify-content: center; }
 /* Fraværstypene: tre og tre */
 .faner.valg.fravaertyper { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
-/* Fra, til og pause: klokkefeltene får mest plass (12-timersformat med «PM» skal få plass) */
+/* Fra, til og pause: klokkefeltene får mest plass */
 .rad.tre { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.75fr); }
-.rad.tre input[type="time"] { padding-left: 10px; padding-right: 8px; }
+.rad.tre input.klokkeslett { padding-left: 10px; padding-right: 8px; font-variant-numeric: tabular-nums; }
 .utregnet { margin: -6px 0 12px; min-height: 1.3em; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tekst-2); }
 .overtid-hjelp { margin: -8px 0 14px; }
 
@@ -1468,7 +1475,7 @@ fieldset.arbeidsplan { padding: 12px 16px 6px; margin: 0 0 16px; }
 .arbeidsdag-rad label.arbeidsdag-hel { margin: 0; white-space: nowrap; }
 .arbeidsdag-tid { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .arbeidsdag-tid input { min-width: 0; padding: 7px 8px; }
-.arbeidsdag-tid input[type="time"] { flex: 1 1 104px; }
+.arbeidsdag-tid input.klokkeslett { flex: 1 1 84px; }
 .arbeidsdag-tid label.arbeidsdag-pause { display: inline-flex; flex: none; align-items: center; gap: 6px; margin: 0 0 0 4px; font-weight: 500; color: var(--dempet); white-space: nowrap; }
 .arbeidsdag-tid label.arbeidsdag-pause > input { width: 52px; margin: 0; text-align: right; }
 .arbeidsdag-timer { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tekst-2); white-space: nowrap; grid-column: 4; }

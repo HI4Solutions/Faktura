@@ -36,7 +36,15 @@ type Bruker = {
   antall_passkeys: number;
   sist_passkey: string | null;
   sist_aktiv: string | null;
+  // Kontoen er godkjent av plattformadministratoren, venter eller er avvist.
+  status: "venter" | "godkjent" | "avvist";
+  behandlet_at: string | null;
+  avvist_grunn: string | null;
 };
+// En ny konto som venter på godkjenning.
+type KontoVenter = { id: string; epost: string; navn: string | null; opprettet: string; varslet_at: string | null };
+const kontoMerke = (s: Bruker["status"]) =>
+  s === "venter" ? <span className="merke merke-info">Venter</span> : s === "avvist" ? <span className="merke merke-fare">Avvist</span> : null;
 type Fane = "oversikt" | "venter" | "organisasjoner" | "funksjoner" | "brukere" | "drift";
 // Funksjonene organisasjonene kan ha tilgang til (0041_funksjoner.sql).
 type Funksjon = { kode: string; navn: string; beskrivelse: string; krever: string | null; standard: boolean };
@@ -90,6 +98,8 @@ export function Admin() {
   const [sok, settSok] = useSearchParams();
   const fane = (["oversikt", "venter", "organisasjoner", "funksjoner", "brukere", "drift"].includes(sok.get("fane") ?? "") ? sok.get("fane") : "oversikt") as Fane;
   const orgs = useData(() => hent<Org[]>("/admin/organisasjoner"), []);
+  // Nye kontoer som venter på godkjenning.
+  const kontoer = useData(() => hent<KontoVenter[]>("/admin/kontoer"), []);
   const [valgt, settValgt] = useState<string | null>(null);
   const velgFane = (f: Fane) => settSok(f === "oversikt" ? {} : { fane: f }, { replace: true });
 
@@ -97,7 +107,7 @@ export function Admin() {
   const venter = (orgs.data ?? []).filter((o) => o.venter_manuell);
   const faner: [Fane, string][] = [
     ["oversikt", "Oversikt"],
-    ["venter", `Venter${venter.length ? ` (${venter.length})` : ""}`],
+    ["venter", `Venter${venter.length + (kontoer.data?.length ?? 0) ? ` (${venter.length + (kontoer.data?.length ?? 0)})` : ""}`],
     ["organisasjoner", "Organisasjoner"],
     ["funksjoner", "Funksjoner"],
     ["brukere", "Brukere"],
@@ -117,17 +127,29 @@ export function Admin() {
       {!orgs.data ? (
         <Laster />
       ) : fane === "oversikt" ? (
-        <Oversikt orgs={orgs.data} apne={settValgt} velgFane={velgFane} />
+        <>
+          {!!kontoer.data?.length && <KontoerVenter kontoer={kontoer.data} endret={kontoer.last} />}
+          <Oversikt orgs={orgs.data} apne={settValgt} velgFane={velgFane} />
+        </>
       ) : fane === "venter" ? (
-        venter.length ? (
-          <OrgListe rader={venter} apne={settValgt} />
-        ) : (
-          <div className="kort">
-            <p className="dempet" style={{ margin: 0 }}>
-              Ingen organisasjoner venter på godkjenning.
-            </p>
-          </div>
-        )
+        <>
+          {kontoer.feil && <Feil melding={kontoer.feil} />}
+          {kontoer.data && <KontoerVenter kontoer={kontoer.data} endret={kontoer.last} />}
+          {venter.length ? (
+            <div className="kort tabell admin-varsel">
+              <div className="kort-topp">
+                <h2>Organisasjoner som venter på verifisering ({venter.length})</h2>
+              </div>
+              <OrgListe rader={venter} apne={settValgt} enkel />
+            </div>
+          ) : (
+            <div className="kort">
+              <p className="dempet" style={{ margin: 0 }}>
+                Ingen organisasjoner venter på verifisering.
+              </p>
+            </div>
+          )}
+        </>
       ) : fane === "organisasjoner" ? (
         <Organisasjoner orgs={orgs.data} apne={settValgt} />
       ) : fane === "funksjoner" ? (
@@ -854,6 +876,65 @@ function Behandle({ org, venter, ferdig }: { org: any; venter: boolean; ferdig: 
 }
 
 // ---------------------------------------------------------------------------
+// Nye kontoer som venter på godkjenning
+// ---------------------------------------------------------------------------
+
+function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: () => void }) {
+  const h = useHandling();
+  const [melding, settMelding] = useState<string | null>(null);
+  const behandle = (k: KontoVenter, godkjent: boolean) =>
+    h.kjor(async () => {
+      let grunn: string | undefined;
+      if (!godkjent) {
+        const svar = prompt(`Avvise kontoen til ${k.navn ?? k.epost}? Skriv eventuelt en begrunnelse (den sendes til brukeren):`, "");
+        if (svar === null) return;
+        grunn = svar.trim() || undefined;
+      }
+      await api("POST", `/admin/brukere/${k.id}/godkjenning`, { godkjent, grunn });
+      settMelding(`${k.navn ?? k.epost} er ${godkjent ? "godkjent" : "avvist"} og har fått e-post om det.`);
+      endret();
+    });
+  return (
+    <div className="kort admin-varsel kontoer-venter">
+      <h2>{kontoer.length ? `Nye kontoer som venter på godkjenning (${kontoer.length})` : "Nye kontoer"}</h2>
+      {melding && (
+        <div className="melding ok" role="status">
+          {melding}
+        </div>
+      )}
+      <Feil melding={h.feil} />
+      {!kontoer.length ? (
+        <p className="dempet" style={{ margin: 0 }}>
+          Ingen nye kontoer venter på godkjenning.
+        </p>
+      ) : (
+        <ul className="admin-rader">
+          {kontoer.map((k) => (
+            <li key={k.id}>
+              <span>
+                <strong>{k.navn ?? <span className="dempet">Uten navn ennå</span>}</strong>
+                <span className="dempet liten"> · {k.epost} · registrert {siden(k.opprettet)}</span>
+              </span>
+              <span className="knapper">
+                <button type="button" className="primar" disabled={h.opptatt} onClick={() => behandle(k, true)}>
+                  Godkjenn
+                </button>
+                <button type="button" className="fare" disabled={h.opptatt} onClick={() => behandle(k, false)}>
+                  Avvis
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="liten dempet" style={{ marginBottom: 0 }}>
+        Nye kontoer kommer ikke inn før de er godkjent. Den som blir invitert av en organisasjon, godkjennes når invitasjonen tas imot.
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Brukere
 // ---------------------------------------------------------------------------
 
@@ -868,8 +949,16 @@ function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
   const rader = data.filter((b) => !s || `${b.navn ?? ""} ${b.epost} ${b.organisasjoner.map((o) => o.navn).join(" ")}`.toLowerCase().includes(s));
   const eksporter = () =>
     lastNedCsv(`brukere-${new Date().toISOString().slice(0, 10)}.csv`, [
-      ["Navn", "E-post", "Organisasjoner", "Passkeys", "Registrert", "Sist aktiv"],
-      ...rader.map((b) => [b.navn, b.epost, b.organisasjoner.map((o) => `${o.navn} (${rolleTekst[o.rolle] ?? o.rolle})`).join(", "), b.antall_passkeys, b.opprettet.slice(0, 10), b.sist_aktiv?.slice(0, 10)]),
+      ["Navn", "E-post", "Status", "Organisasjoner", "Passkeys", "Registrert", "Sist aktiv"],
+      ...rader.map((b) => [
+        b.navn,
+        b.epost,
+        { venter: "Venter", godkjent: "Godkjent", avvist: "Avvist" }[b.status] ?? b.status,
+        b.organisasjoner.map((o) => `${o.navn} (${rolleTekst[o.rolle] ?? o.rolle})`).join(", "),
+        b.antall_passkeys,
+        b.opprettet.slice(0, 10),
+        b.sist_aktiv?.slice(0, 10),
+      ]),
     ]);
 
   return (
@@ -892,7 +981,10 @@ function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
                 <span className="under">
                   {[b.navn ? b.epost : null, b.organisasjoner.length === 1 ? b.organisasjoner[0].navn : `${b.organisasjoner.length} organisasjoner`].filter(Boolean).join(" · ")}
                 </span>
-                {b.antall_passkeys > 0 && <span className="merke merke-ok">Passkey</span>}
+                <span className="merker">
+                  {kontoMerke(b.status)}
+                  {b.antall_passkeys > 0 && <span className="merke merke-ok">Passkey</span>}
+                </span>
               </span>
             </button>
           ))}
@@ -914,7 +1006,9 @@ function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
             <tbody>
               {rader.map((b) => (
                 <tr key={b.id} className="klikkbar" onClick={() => settValgt(b)}>
-                  <td>{b.navn ?? <span className="dempet">–</span>}</td>
+                  <td>
+                    {b.navn ?? <span className="dempet">–</span>} {kontoMerke(b.status)}
+                  </td>
                   <td>{b.epost}</td>
                   <td className="liten">
                     {b.organisasjoner.length === 0 && <span className="dempet">Ingen</span>}

@@ -26,7 +26,8 @@ export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paamin
 export const harFunksjon = (org: Pick<MinOrg, "funksjoner"> | null | undefined, kode: Funksjon) => !!org && (!org.funksjoner || org.funksjoner.includes(kode));
 
 interface Meg {
-  bruker: { id: string; epost: string; navn: string | null };
+  // status: kontoen er godkjent av HI4 Faktura, venter på godkjenning eller er avvist.
+  bruker: { id: string; epost: string; navn: string | null; status?: "venter" | "godkjent" | "avvist"; avvist_grunn?: string | null };
   mfa: boolean;
   plattformadmin: boolean;
   organisasjoner: MinOrg[];
@@ -108,7 +109,8 @@ export function KontoProvider({ children }: { children: ReactNode }) {
     settMeg(null);
   };
 
-  const innlogget = meg?.bruker.id;
+  // Varsler på enheten først når kontoen er godkjent.
+  const innlogget = meg && (meg.bruker.status ?? "godkjent") === "godkjent" ? meg.bruker.id : undefined;
   useEffect(() => {
     if (innlogget) void synkAbonnement();
   }, [innlogget]);
