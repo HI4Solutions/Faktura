@@ -560,12 +560,14 @@ function Vaktplan({
     const faste = alleFaste.filter((f) => f.dato === d && vises(f.ansatt_id));
     const borte = data.fravaer.filter((f) => f.fra <= d && f.til >= d && vises(f.ansatt_id));
     const mangler = manglerVikar(d);
-    // Ledige vakter først, så rolle for rolle etter når de begynner (en hel dag fra kl. 08) og navnet.
-    const rekke = (id: string | null) => (id ? r.rekke(id) : -1);
-    const ordnet = [
-      ...dagens.map((v) => ({ k: rekke(v.ansatt_id), fra: v.fra, navn: v.ansatt_navn ?? "", el: chip(v, true) })),
-      ...faste.map((f) => ({ k: rekke(f.ansatt_id), fra: f.fra ?? "08:00", navn: navn.get(f.ansatt_id) ?? "", el: fastChip(f, true) })),
-    ].sort((a, b) => a.k - b.k || a.fra.localeCompare(b.fra) || a.navn.localeCompare(b.navn, "nb"));
+    // Etter når de begynner (en hel dag fra kl. 08) og navnet: ledige vakter over, og så rolle for
+    // rolle side om side (f.eks. sekretærene i én kolonne og legene i den neste).
+    const alle = [
+      ...dagens.map((v) => ({ id: v.ansatt_id, fra: v.fra, navn: v.ansatt_navn ?? "", borte: !!v.fravaer, el: chip(v, true) })),
+      ...faste.map((f) => ({ id: f.ansatt_id as string | null, fra: f.fra ?? "08:00", navn: navn.get(f.ansatt_id) ?? "", borte: !!f.fravaer, el: fastChip(f, true) })),
+    ].sort((a, b) => a.fra.localeCompare(b.fra) || a.navn.localeCompare(b.navn, "nb"));
+    const ledigeIDag = alle.filter((x) => !x.id);
+    const kolonner = r.seksjoner.map((s) => ({ s, liste: alle.filter((x) => x.id && r.rolle(x.id) === s.id) })).filter((k) => k.liste.length > 0);
     return (
       <section key={d} className={`dag${d === iDag() ? " i-dag" : ""}${helligdag(d) ? " helligdag" : ""}`} aria-label={visDag(d)}>
         <div className="dag-topp">
@@ -590,10 +592,24 @@ function Vaktplan({
             ))}
           </div>
         )}
-        {ordnet.length > 0 ? (
-          <div className="vakt-rad">{ordnet.map((x) => x.el)}</div>
-        ) : (
+        {!alle.length ? (
           mobil && <p className="dempet liten ingen-vakter">Ingen vakter denne dagen.</p>
+        ) : medRoller ? (
+          <>
+            {ledigeIDag.length > 0 && <div className="vakt-rad">{ledigeIDag.map((x) => x.el)}</div>}
+            <div className={`rolle-kolonner${kolonner.length === 1 ? " en" : ""}`}>
+              {kolonner.map(({ s, liste }) => (
+                <div key={s.id ?? "uten"} className={`rolle-kolonne g${s.farge}`}>
+                  <h3>
+                    {s.navn} <span className="dempet">{new Set(liste.filter((x) => !x.borte).map((x) => x.id)).size}</span>
+                  </h3>
+                  <div className="vakt-rad">{liste.map((x) => x.el)}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="vakt-rad">{alle.map((x) => x.el)}</div>
         )}
       </section>
     );

@@ -1444,6 +1444,15 @@ button.vakt-chip.advarsel { border-left-color: var(--advarsel); }
 .vaktdager .vakt-rad { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; padding: 0 12px 10px; }
 .vaktdager button.vakt-chip { margin: 0; padding: 7px 9px; font-size: 0.86rem; }
 .vaktdager .vakt-chip .vakt-oppgave { font-size: 0.8rem; }
+/* Rolle for rolle side om side (f.eks. sekretærene i én kolonne og legene i den neste) */
+.vaktdager .rolle-kolonner { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 10px; padding: 0 12px 10px; }
+.vaktdager .rolle-kolonne { min-width: 0; }
+.vaktdager .rolle-kolonne > h3 { margin: 0 0 5px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--g); }
+.vaktdager .rolle-kolonne > h3 .dempet { margin-left: 3px; font-weight: 600; letter-spacing: 0; }
+.vaktdager .rolle-kolonne .vakt-rad { padding: 0; }
+/* Kanten i rollens farge (ikke for utkast, advarsler, fravær og manglende vikar, som har sine) */
+.vaktdager .rolle-kolonne .vakt-chip:not(.utkast):not(.advarsel):not(.borte):not(.mangler) { border-left-color: var(--g); }
+.vaktdager .rolle-kolonne .vakt-chip.fast:not(.borte) { border-left-color: color-mix(in srgb, var(--g) 60%, var(--kant-sterk)); }
 .kort.advarsler { border-color: color-mix(in srgb, var(--advarsel) 35%, var(--kant)); }
 .kort.advarsler h2 { display: flex; align-items: center; gap: 8px; color: var(--advarsel); margin-top: 0; }
 .kort.advarsler .liste-enkel li { flex-wrap: wrap; gap: 2px 12px; font-size: 0.9rem; }
@@ -2200,6 +2209,10 @@ th.tall .helligdag-navn { margin-left: auto; }
   .dagvelger button.valgt .dv-dag, .dagvelger button.valgt .dv-dato, .dagvelger button.valgt .dv-antall { color: inherit; }
   .vaktdager .ingen-vakter { margin: 0; padding: 0 12px 10px; }
   [data-modul="personal"] .vaktdager .vakt-rad { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 0 10px 10px; }
+  [data-modul="personal"] .vaktdager .rolle-kolonner { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 5px; padding: 0 10px 10px; }
+  [data-modul="personal"] .vaktdager .rolle-kolonner.en { grid-template-columns: minmax(0, 1fr); }
+  [data-modul="personal"] .vaktdager .rolle-kolonne .vakt-rad { grid-template-columns: minmax(0, 1fr); padding: 0; }
+  [data-modul="personal"] .vaktdager .rolle-kolonner.en .vakt-rad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   [data-modul="personal"] .vaktdager button.vakt-chip, [data-modul="personal"] .vaktdager .vakt-chip.fast { padding: 5px 8px; font-size: 0.82rem; }
   [data-modul="personal"] .vaktdager .vakt-chip .vakt-oppgave { font-size: 0.74rem; }
   /* Tiden og oppgaven (eller «Fast») på første linje, navnet under */

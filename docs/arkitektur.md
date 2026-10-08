@@ -220,8 +220,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   mange timer som var planlagt. Vaktplanen vises per dag, uke eller måned (`?visning=dag`,
   `uke` eller `maaned`): dagen som en tidslinje rolle for rolle (vaktene og de faste dagene som
   streker, hvem som har vakt ledig og hvem som er borte; trykk på en strek åpner vakten, og på en
-  tom linje legges en vakt inn, og «Tavla for dagen» åpner tavla), uka rolle for rolle (rollen
-  over personene, i rollenes rekkefølge), og måneden som bemanningskalenderen (se under;
+  tom linje legges en vakt inn, og «Tavla for dagen» åpner tavla), uka rolle for rolle (på PC
+  rollen over personene i tabellen, i rollenes rekkefølge; på mobil og nettbrett står rollene side
+  om side i hver dag, f.eks. sekretærene i én kolonne og legene i den neste, med kanten på
+  vaktene i rollens farge), og måneden som bemanningskalenderen (se under;
   kalenderen er ikke en egen fane lenger, og gamle lenker med `fane=kalender` går til måneden).
   Trykk på en dato i måneden åpner dagen. «Publiser» gjelder dagen eller uka som vises. Over
   planen velges hvilke roller som vises («Vis: Alle | Sekretærer | Leger | Uten rolle»,
