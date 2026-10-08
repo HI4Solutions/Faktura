@@ -105,6 +105,11 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
       ferie_dager: 25,
       vaktbytte: "godkjenning",
       helg: true,
+      aga_sone: "1",
+      otp_prosent: 2,
+      feriepenger_prosent: 12,
+      lonnsdag: 20,
+      halv_skatt: "desember",
     });
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { overtid_prosent: 30 })).data.error).toBe("Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).data).toMatchObject({ aktiv: true, daglig_grense: 9 });

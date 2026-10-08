@@ -100,6 +100,14 @@ const ansattSkjema = z.object({
   ferie_dager: valgfri(feriedager),
   // Alle de faste tilleggene (de som ikke er med, fjernes). Uten: tilleggene endres ikke.
   tillegg: z.array(tilleggSkjema).max(20, "Høyst 20 faste tillegg").optional(),
+  // Skattekortet (0065_lonn.sql): tabelltrekk (tabellnummeret, og prosentsatsen som brukes i
+  // ekstra kjøringer), prosenttrekk eller frikort (beløpet), og året det gjelder. Uten
+  // skattekort trekkes det 50 %.
+  skattekort: valgfri(z.enum(["tabell", "prosent", "frikort"], { error: "Velg tabelltrekk, prosenttrekk eller frikort" })),
+  skatt_tabell: valgfri(z.number().int("Tabellnummeret har fire siffer").min(1000, "Tabellnummeret har fire siffer").max(9999, "Tabellnummeret har fire siffer")),
+  skatt_prosent: valgfri(z.number().min(0, "Prosentsatsen kan ikke være negativ").max(100, "Prosentsatsen kan være høyst 100")),
+  skatt_frikort: valgfri(z.number().min(0, "Frikortbeløpet kan ikke være negativt").max(100_000_000, "Frikortbeløpet er for stort")),
+  skattekort_aar: valgfri(z.number().int().min(2000, "Ugyldig år").max(2100, "Ugyldig år")),
 });
 
 const oppsettSkjema = z.object({
@@ -117,6 +125,16 @@ const oppsettSkjema = z.object({
   vaktbytte: z.enum(["av", "godkjenning", "fritt"]).optional(),
   // Åpent i helgene (0064_helg.sql): med stengt helg viser appen bare mandag–fredag.
   helg: z.boolean().optional(),
+  // Lønnskjøringen (0065_lonn.sql): sonen for arbeidsgiveravgift, OTP-satsen (0: uten OTP),
+  // feriepengesatsen, lønnsdagen og måneden med halvt skattetrekk.
+  aga_sone: z.enum(["1", "1a", "2", "3", "4", "4a", "5"], { error: "Velg sone for arbeidsgiveravgift" }).optional(),
+  otp_prosent: z
+    .number()
+    .refine((v) => v === 0 || (v >= 2 && v <= 25), "OTP-satsen er 0 (uten OTP) eller fra 2 til 25 %")
+    .optional(),
+  feriepenger_prosent: z.number().min(10.2, "Feriepengene er minst 10,2 %").max(20, "Feriepengene kan være høyst 20 %").optional(),
+  lonnsdag: z.number().int().min(1, "Velg en dag fra 1 til 31").max(31, "Velg en dag fra 1 til 31").optional(),
+  halv_skatt: z.enum(["november", "desember"]).optional(),
 });
 
 const foringSkjema = z.object({
@@ -137,6 +155,8 @@ const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.forkortelse, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
          a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
+         -- Skattekortet (0065_lonn.sql).
+         a.skattekort, a.skatt_tabell, a.skatt_prosent, a.skatt_frikort, a.skattekort_aar,
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
          coalesce((select g.tavle from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id), true) as tavle,
@@ -170,14 +190,44 @@ type Foringsrad = { id: string; ansatt_id: string; ansatt_navn: string; dato: st
 
 export type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
 export type Vaktbytte = "av" | "godkjenning" | "fritt";
-type Oppsett = Regler & { aktiv: boolean; bursdag_varsel: Bursdagsvarsel; full_stilling: number; ferie_dager: number; vaktbytte: Vaktbytte; helg: boolean };
+export type AgaSone = "1" | "1a" | "2" | "3" | "4" | "4a" | "5";
+type Oppsett = Regler & {
+  aktiv: boolean;
+  bursdag_varsel: Bursdagsvarsel;
+  full_stilling: number;
+  ferie_dager: number;
+  vaktbytte: Vaktbytte;
+  helg: boolean;
+  aga_sone: AgaSone;
+  otp_prosent: number;
+  feriepenger_prosent: number;
+  lonnsdag: number;
+  halv_skatt: "november" | "desember";
+};
 export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
-    "select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg from faktura.lonn_oppsett where org_id = $1",
+    `select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
+            aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt
+       from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
-  return r ?? { aktiv: false, ...AML, bursdag_varsel: "av", full_stilling: 37.5, ferie_dager: 25, vaktbytte: "godkjenning", helg: true };
+  return (
+    r ?? {
+      aktiv: false,
+      ...AML,
+      bursdag_varsel: "av",
+      full_stilling: 37.5,
+      ferie_dager: 25,
+      vaktbytte: "godkjenning",
+      helg: true,
+      aga_sone: "1",
+      otp_prosent: 2,
+      feriepenger_prosent: 12,
+      lonnsdag: 20,
+      halv_skatt: "desember",
+    }
+  );
 }
 
 // Den innloggedes egen ansattrad i organisasjonen (eller null).
@@ -240,12 +290,31 @@ export function ansattRuter() {
         const naa = await regler(db, orgId(c));
         const ny = { ...naa, ...Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined)) };
         await db.query(
-          `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
+                                             aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
-             full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg`,
-          [orgId(c), ny.aktiv, ny.daglig_grense, ny.ukentlig_grense, ny.overtid_prosent, ny.bursdag_varsel, ny.full_stilling, ny.ferie_dager, ny.vaktbytte, ny.helg],
+             full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg,
+             aga_sone = excluded.aga_sone, otp_prosent = excluded.otp_prosent, feriepenger_prosent = excluded.feriepenger_prosent,
+             lonnsdag = excluded.lonnsdag, halv_skatt = excluded.halv_skatt`,
+          [
+            orgId(c),
+            ny.aktiv,
+            ny.daglig_grense,
+            ny.ukentlig_grense,
+            ny.overtid_prosent,
+            ny.bursdag_varsel,
+            ny.full_stilling,
+            ny.ferie_dager,
+            ny.vaktbytte,
+            ny.helg,
+            ny.aga_sone,
+            ny.otp_prosent,
+            ny.feriepenger_prosent,
+            ny.lonnsdag,
+            ny.halv_skatt,
+          ],
         );
         return regler(db, orgId(c));
       }),
@@ -603,6 +672,14 @@ export function ansattRuter() {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
       const t = await en<{ n: number }>(db, "select count(*)::int as n from faktura.timeforinger where org_id = $1 and ansatt_id = $2", [orgId(c), id(c)]);
       if (t!.n > 0) throw new ApiFeil(409, `Den ansatte har ${t!.n} ${t!.n === 1 ? "timeføring" : "timeføringer"} og kan ikke slettes. Sett en sluttdato i stedet.`);
+      // Lønnsslipper i godkjente kjøringer skal oppbevares; i utkast tas de bort.
+      const l = await en<{ n: number }>(
+        db,
+        "select count(*)::int as n from faktura.lonnsslipper where org_id = $1 and ansatt_id = $2 and not faktura.lonn_utkast(kjoring_id)",
+        [orgId(c), id(c)],
+      );
+      if (l!.n > 0) throw new ApiFeil(409, "Den ansatte har lønnsslipper (som skal oppbevares) og kan ikke slettes. Sett en sluttdato i stedet.");
+      await db.query("delete from faktura.lonnsslipper where org_id = $1 and ansatt_id = $2", [orgId(c), id(c)]);
       const res = await db.query("delete from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), id(c)]);
       if (!res.rowCount) throw new ApiFeil(404, "Fant ikke den ansatte");
     });

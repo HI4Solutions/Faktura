@@ -38,8 +38,8 @@ select test.er(faktura.har_funksjon(:'org', 'vaktplan'), true, 'vaktplanen er p√
 select test.er(faktura.har_funksjon(:'org', 'finnes_ikke'), false, 'ukjent funksjon er av');
 select test.er(array_length((select funksjoner from faktura.mine_organisasjoner where id = :'org'), 1), (select count(*)::int from faktura.funksjoner), 'alle i mine_organisasjoner');
 select test.er((select personal from faktura.mine_organisasjoner where id = :'org'), true, 'ansatte og timer er p√•');
-select test.er((select count(*) from faktura.funksjoner), 11::bigint, 'medlemmet ser funksjonene');
-select test.er((select count(*) from faktura.org_funksjoner where org_id = :'org'), 11::bigint, 'og hva organisasjonen har');
+select test.er((select count(*) from faktura.funksjoner), 12::bigint, 'medlemmet ser funksjonene');
+select test.er((select count(*) from faktura.org_funksjoner where org_id = :'org'), 12::bigint, 'og hva organisasjonen har');
 
 -- Medlemmet kan ikke endre funksjonene selv.
 select test.feiler($$select faktura.admin_sett_funksjon('$$ || :'org' || $$', 'ehf', false)$$, 'FA403');

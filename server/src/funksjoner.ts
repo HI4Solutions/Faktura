@@ -29,12 +29,13 @@ const RUTER: [RegExp, string][] = [
   [/^\/(ansatte|ansattgrupper|timer|lonn-oppsett|beskjeder)(\/|$)/, "ansatte"],
   [/^\/(vakter|vaktbytter|tavle|fravaer|feriebank|ferie|kolleger)(\/|$)/, "vaktplan"],
   [/^\/ekstratimer(\.csv|\.pdf)?$/, "vaktplan"],
+  [/^\/lonn(\/|$)/, "lonn"],
 ];
 
 export const funksjonerFor = (sti: string) => [...new Set(RUTER.filter(([re]) => re.test(sti)).map(([, kode]) => kode))];
 // Funksjonene som bygger på en annen (som i funksjoner.krever): den andre sjekkes først, så
 // feilmeldingen sier hva som mangler.
-const KREVER: Record<string, string> = { vaktplan: "ansatte" };
+const KREVER: Record<string, string> = { vaktplan: "ansatte", lonn: "ansatte" };
 const medKrav = (koder: string[]) => [...new Set(koder.flatMap((k) => (KREVER[k] ? [KREVER[k]!, k] : [k])))];
 
 // Funksjonene en organisasjon har, husket en liten stund (en endring i administrasjonen tømmer
@@ -63,6 +64,7 @@ const NAVN: Record<string, string> = {
   google_disk: "Google Disk",
   ansatte: "Ansatte og timer",
   vaktplan: "Vaktplan og bemanning",
+  lonn: "Lønn",
 };
 export const ikkePaa = (kode: string) => new ApiFeil(403, `${NAVN[kode] ?? kode} er ikke slått på for organisasjonen`);
 

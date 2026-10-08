@@ -36,7 +36,7 @@ export async function makstakLinjer(db: Db, f: any) {
   }));
 }
 
-async function hentLogo(sti: string | null | undefined) {
+export async function hentLogo(sti: string | null | undefined) {
   if (!sti || !config.filerBucket) return null;
   try {
     const bytes = await lagring.hent(config.filerBucket, sti);

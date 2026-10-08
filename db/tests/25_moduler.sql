@@ -29,7 +29,7 @@ grant execute on all functions in schema test to public;
 \c :api
 -- Modulene kan alle se, og hver funksjon hører til en.
 select test.er((select array_agg(kode order by rekkefolge) from faktura.moduler), array['faktura', 'bemanning'], 'Faktura og Bemanning');
-select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'bemanning'), array['ansatte', 'vaktplan'], 'Bemanning har ansatte og vaktplan');
+select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'bemanning'), array['ansatte', 'vaktplan', 'lonn'], 'Bemanning har ansatte, vaktplan og lønn');
 select test.er((select count(*) from faktura.funksjoner where modul is null), 0::bigint, 'alle funksjonene har en modul');
 
 -- En ny bruker velger modulene (minst én, og bare kjente).
@@ -69,7 +69,7 @@ select test.feiler($$select faktura.velg_moduler(array['faktura'])$$, 'FA403');
 
 -- En organisasjon fra brukeren med bare Bemanning får bare funksjonene i Bemanning.
 select id as org from faktura.opprett_organisasjon('Bare Bemanning AS') \gset
-select test.er((select array_agg(kode order by kode) from faktura.org_funksjoner where org_id = :'org' and aktiv), array['ansatte', 'vaktplan'], 'bare Bemanning');
+select test.er((select array_agg(kode order by kode) from faktura.org_funksjoner where org_id = :'org' and aktiv), array['ansatte', 'lonn', 'vaktplan'], 'bare Bemanning');
 select test.er(faktura.har_funksjon(:'org', 'ehf'), false, 'uten EHF');
 select test.er((select personal from faktura.mine_organisasjoner where id = :'org'), true, 'ansatte og timer er slått på fra start');
 

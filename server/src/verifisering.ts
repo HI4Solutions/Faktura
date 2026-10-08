@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { alle, en, somBetrodd, somBruker } from "./db.js";
 import { funksjonAdminRuter } from "./funksjoner.js";
 import { slettAdminRuter } from "./slettOrg.js";
+import { trekktabellAdminRuter } from "./lonn.js";
 import { kontoAdminRuter } from "./kontoer.js";
 import { ApiFeil } from "./feil.js";
 import {
@@ -230,6 +231,8 @@ export function adminRuter() {
   r.route("/", kontoAdminRuter());
   // Sletting av organisasjoner, og de som er slettet.
   r.route("/", slettAdminRuter());
+  // Trekktabellene for forskuddstrekk (lastes inn fra Skatteetaten hvert år).
+  r.route("/", trekktabellAdminRuter());
 
   // Tellinger for oversikten, og driftsstatus.
   r.get("/oversikt", async (c) => c.json((await somBetrodd(c.get("bruker").id, (db) => en(db, "select faktura.admin_oversikt() as d")))!.d));

@@ -62,7 +62,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Push – abonnementer og sending", (
     expect(nokkel).toHaveLength(65);
     expect(nokkel[0]).toBe(4); // ukomprimert P-256-punkt
     expect((await kall("GET", "/api/push", kari)).data.nokkel).toBe(start.data.nokkel); // samme for alle
-    expect(start.data.valg).toEqual({ betaling: true, forfalt: true, epostfeil: true, gjentakende: true, indeksregulering: true, bank: true, paaminnelse: true, timer: true, vakter: true, fravaer: true, bursdag: true, beskjed: true });
+    expect(start.data.valg).toEqual({ betaling: true, forfalt: true, epostfeil: true, gjentakende: true, indeksregulering: true, bank: true, paaminnelse: true, timer: true, vakter: true, fravaer: true, bursdag: true, beskjed: true, lonn: true });
     expect(start.data.abonnementer).toEqual([]);
 
     expect((await kall("POST", "/api/push/abonnement", ola, { ...abonnement(1), endpoint: "https://evil.com/x" })).status).toBe(400);

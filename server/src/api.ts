@@ -34,6 +34,7 @@ import { fravaerRuter } from "./fravaer.js";
 import { ferieRuter } from "./ferie.js";
 import { bemanningRuter } from "./bemanning.js";
 import { arbeidsplanRuter } from "./arbeidsplan.js";
+import { lonnRuter } from "./lonn.js";
 import { krevFunksjoner } from "./funksjoner.js";
 import { hentModuler, krevGodkjentKonto, meldNyKonto, modulKoder } from "./kontoer.js";
 import { aiPaa } from "./ai.js";
@@ -417,6 +418,7 @@ export function lagApi() {
   org.route("/", ferieRuter());
   org.route("/", bemanningRuter());
   org.route("/", arbeidsplanRuter());
+  org.route("/", lonnRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting
