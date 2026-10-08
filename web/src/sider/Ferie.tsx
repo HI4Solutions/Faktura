@@ -140,7 +140,7 @@ function Ferieoversikt({ aar, velg }: { aar: number; velg: (aar: number) => void
             <button key={s.ansatt_id} type="button" className="liste-rad" onClick={() => settValgt(s)}>
               <span className="linje">
                 <span className="tittel">{s.navn}</span>
-                <span className={`belop${s.igjen < 0 ? " ferie-minus" : ""}`}>{dagerOrd(s.igjen)} igjen</span>
+                <span className={`belop${s.igjen < 0 ? " ferie-minus" : ""}`}>{s.igjen < 0 ? `${dagerOrd(-s.igjen)} for mye` : `${dagerOrd(s.igjen)} igjen`}</span>
               </span>
               <span className="linje">
                 <span className="under">

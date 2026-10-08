@@ -185,6 +185,20 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   regnskap) ser bare at den ansatte har fravær («F») i fraværslista, vaktplanen, på tavla og i
   bemanningskalenderen, og fraværet står ikke i revisjonsloggen for dem
   (`faktura.fravaer_type`, `0047_fravaer_skjult.sql`)
+- Feriebank (`0050_feriebank.sql`, `ferie.ts`, siden «Ferie»): feriedagene hver ansatt har i
+  ferieåret (kalenderåret), hva som er avviklet (til og med i dag) og planlagt, og hva som er
+  igjen. Avviklet og planlagt regnes av fraværet med typen ferie (`ferie_saldo`), så banken
+  justeres av seg selv når ferie registreres, endres eller slettes. Dagene telles i den
+  ansattes arbeidsdager: dagene i den faste arbeidsplanen som gjelder den dagen (ellers mandag
+  til fredag), uten helligdagene (`helligdager`, påsken regnes ut). Retten er
+  `lonn_oppsett.ferie_dager` (standard 25, fem uker) regnet om etter dagene i uka den ansatte
+  jobber, med en uke ekstra fra året den ansatte fyller 60 og én uke for den som begynner
+  etter 30. september (ferieloven § 5), eller `ansatte.ferie_dager` når den er satt. Den
+  ansatte søker om å overføre dager til neste år (`ferie_overforinger`, fra i år eller i
+  fjor); eier og administrator får varsel, godkjenner eller avslår, og den ansatte får svar.
+  Godkjente dager trekkes fra i året de overføres fra og legges til året etter, og ingen kan
+  overføre mer enn det som er igjen. Fraværsskjemaet og ansattkortet viser hva som er igjen.
+  Som fraværstypen ser bare eier, administrator og den ansatte selv feriebanken
 - `vakter.vikar_for`: en vikar settes inn som en egen vakt med samme tid og oppgave som vakten
   til den som er borte (den beholder sin). Vikarvakten publiseres med en gang med varsel til
   vikaren, tar over plassene på tavla, og kopieres ikke til neste uke. Vikaren kan være en ny
