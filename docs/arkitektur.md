@@ -158,6 +158,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (Innstillinger → Ansatte og timer). Ansattregisteret har personalia, ansettelse og lønn.
   Fødselsnummeret krypteres med KMS i API-et, som ikke kan lese det igjen (bare workeren kan,
   til lønn og a-melding senere); revisjonsloggen sier bare at det er registrert eller endret.
+  Ikke alle i registeret er ansatt: `ansatte.tilknytning` er ansatt (standard), eier eller
+  aksjonær, selvstendig næringsdrivende eller innleid (f.eks. leger på et legekontor som er
+  aksjonærer). De som ikke er ansatt, er med i vaktplanen, på tavla, i bemanningskalenderen og i
+  fraværet, men ikke i feriebanken (`feriebank`), ekstratimene eller arbeidsmiljølovens
+  advarsler (der sjekkes bare overlapp og at de er aktive), og appen viser ikke lønn,
+  fødselsnummer eller kontonummer for dem.
   Faste tillegg på lønnen (`ansatt_tillegg`: f.eks. funksjonstillegg per måned eller
   fagbrevtillegg per time, eventuelt for en periode) ligger på den ansatte og vises som lønnen
   (eier, administrator, regnskap og den ansatte selv); lønnskjøringen skal ta dem med som faste

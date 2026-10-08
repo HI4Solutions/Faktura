@@ -7,12 +7,14 @@
 //   - over grensen for alminnelig arbeidstid per dag og per uke (overtid, § 10-4), etter
 //     grensene i oppsettet
 //   - vakter som overlapper, og vakter når den ansatte ikke er aktiv eller ansatt
+// For dem som ikke er arbeidstakere (aksjonærer, selvstendige og innleide, 0054_tilknytning.sql),
+// gjelder ikke arbeidsmiljølovens grenser; der sjekkes bare overlapp og at de er aktive.
 // Klokkeslettene regnes som lokal tid uten sommertid; natten klokka stilles, kan hvilen bli en
 // time feil.
 import { uke, type Regler } from "./arbeidstid.js";
 
 export type PlanVakt = { id: string; ansatt_id: string | null; dato: string; fra: string; til: string; timer: number };
-export type Ansettelse = { ansatt_fra: string; ansatt_til: string | null; aktiv: boolean };
+export type Ansettelse = { ansatt_fra: string; ansatt_til: string | null; aktiv: boolean; arbeidstaker?: boolean };
 
 const DAG = 24 * 60;
 const minutter = (dato: string, klokke: string) => Date.parse(`${dato}T${klokke.slice(0, 5)}:00Z`) / 60_000;
@@ -52,6 +54,7 @@ export function advarsler(vakter: PlanVakt[], r: Regler, ansettelser: Map<string
         legg(perVakt, tider[i]!.v.id, "Overlapper med en annen vakt");
         legg(perVakt, tider[j]!.v.id, "Overlapper med en annen vakt");
       }
+    if (a?.arbeidstaker === false) continue;
 
     // Hvile mellom arbeidsdagene: fra slutten av den ene til starten av den neste.
     const dager = new Map<string, { start: number; slutt: number; forste: string; timer: number; vakter: string[] }>();

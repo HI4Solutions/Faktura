@@ -56,6 +56,7 @@ function bokstav(i: number) {
 }
 
 const kort = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const TILKNYTNING: Record<string, string> = { eier: "aksjonær (ikke ansatt)", selvstendig: "selvstendig (ikke ansatt)", innleid: "innleid (ikke ansatt)" };
 // Lønnen til en ansatt i forhåndsvisningen: månedslønn eller timelønn (verdier som ikke kunne
 // tolkes, vises som de står).
 const lonnTekst = (d: Record<string, any>) => {
@@ -575,7 +576,11 @@ export function Importer({ type }: { type: Importtype }) {
                       {type === "ansatte" ? (
                         <>
                           <td data-label="Stilling">
-                            {[d.stilling, typeof d.stillingsprosent === "number" ? `${String(d.stillingsprosent).replace(".", ",")} %` : d.stillingsprosent]
+                            {[
+                              d.stilling,
+                              typeof d.stillingsprosent === "number" ? `${String(d.stillingsprosent).replace(".", ",")} %` : d.stillingsprosent,
+                              d.tilknytning && d.tilknytning !== "ansatt" ? (TILKNYTNING[d.tilknytning] ?? d.tilknytning) : null,
+                            ]
                               .filter(Boolean)
                               .join(" · ")}
                           </td>

@@ -41,6 +41,7 @@ type Ansatt = {
   ukentlig_arbeidstid: number;
   stillingsprosent: number;
   ansettelsestype: string;
+  tilknytning: string; // ansatt, eier, selvstendig eller innleid (0054_tilknytning.sql)
 };
 type Vakt = { ansatt_id: string; dato: string; fra: string; til: string; timer: number; borte: boolean };
 export type Fast = { ansatt_id: string; dato: string; fra: string | null; til: string | null; pause_min: number; timer: number; fravaer: string | null };
@@ -93,10 +94,16 @@ export function planFor(planer: Plan[] | undefined, dato: string): Plan | null {
 }
 
 // Ekstratimer per ansatt og dag («ansatt|dato» → timer), fra vaktene den ansatte går.
-export function beregnEkstra(ansatte: Pick<Ansatt, "id" | "ukentlig_arbeidstid" | "stillingsprosent" | "ansettelsestype">[], planer: Map<string, Plan[]>, vakter: Vakt[]) {
+// De som ikke er ansatt (aksjonærer, selvstendige og innleide), har ingen ekstratimer.
+export function beregnEkstra(
+  ansatte: (Pick<Ansatt, "id" | "ukentlig_arbeidstid" | "stillingsprosent" | "ansettelsestype"> & { tilknytning?: string })[],
+  planer: Map<string, Plan[]>,
+  vakter: Vakt[],
+) {
   const ut = new Map<string, number>();
   const legg = (k: string, t: number) => t > 0.01 && ut.set(k, rund((ut.get(k) ?? 0) + t));
   for (const a of ansatte) {
+    if (a.tilknytning && a.tilknytning !== "ansatt") continue;
     const p = planer.get(a.id);
     const egne = vakter.filter((v) => v.ansatt_id === a.id && !v.borte).sort((x, y) => x.dato.localeCompare(y.dato) || x.fra.localeCompare(y.fra));
     // Med plan: timene utover planen den dagen.
@@ -134,7 +141,7 @@ export async function beregnBemanning(db: Db, org: string, fra: string, til: str
   const ansatte = await alle<Ansatt>(
     db,
     `select a.id, a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, a.stilling, g.navn as gruppe, a.ansatt_fra, a.ansatt_til, a.aktiv,
-            a.ukentlig_arbeidstid, a.stillingsprosent, a.ansettelsestype
+            a.ukentlig_arbeidstid, a.stillingsprosent, a.ansettelsestype, a.tilknytning
        from faktura.ansatte a left join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id
       where a.org_id = $1 and ($2::uuid is null or a.id = $2)`,
     [org, ansatt ?? null],

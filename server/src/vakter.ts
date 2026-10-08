@@ -133,7 +133,7 @@ export function vaktRuter() {
 
         const ansatte = await alle<Ansettelse & { id: string; avtalt: number }>(
           db,
-          "select id, ansatt_fra, ansatt_til, aktiv, ukentlig_arbeidstid * stillingsprosent / 100 as avtalt from faktura.ansatte where org_id = $1",
+          "select id, ansatt_fra, ansatt_til, aktiv, tilknytning = 'ansatt' as arbeidstaker, ukentlig_arbeidstid * stillingsprosent / 100 as avtalt from faktura.ansatte where org_id = $1",
           [orgId(c)],
         );
         // Vakter den ansatte ikke går (borte), teller ikke i hviletid og overtid.

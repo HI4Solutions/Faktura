@@ -76,6 +76,8 @@ const ansattSkjema = z.object({
   ansatt_fra: datoS.optional(),
   ansatt_til: valgfri(datoS),
   ansettelsestype: z.enum(["fast", "midlertidig", "tilkalling"]).optional(),
+  // Ikke ansatt: eier eller aksjonær, selvstendig næringsdrivende eller innleid (0054_tilknytning.sql).
+  tilknytning: z.enum(["ansatt", "eier", "selvstendig", "innleid"], { error: "Velg tilknytning (ansatt, eier, selvstendig eller innleid)" }).optional(),
   lonnstype: z.enum(["maaned", "time"]).optional(),
   maanedslonn: valgfri(z.number().min(0, "Lønnen kan ikke være negativ").max(10_000_000)),
   timelonn: valgfri(z.number().min(0, "Lønnen kan ikke være negativ").max(100_000)),
@@ -119,7 +121,7 @@ const foringSkjema = z.object({
 const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
-         a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
+         a.ansatt_til, a.ansettelsestype, a.tilknytning, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
          -- Ukedagene i den faste arbeidsplanen som gjelder i dag (1 = mandag).
          (select coalesce(array_agg(d.ukedag order by d.ukedag), '{}') from faktura.arbeidsplan_dager d
            where d.org_id = a.org_id

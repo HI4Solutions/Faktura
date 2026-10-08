@@ -35,6 +35,7 @@ type Ansatt = {
   ansatt_fra: string;
   ansatt_til: string | null;
   ansettelsestype: "fast" | "midlertidig" | "tilkalling";
+  tilknytning: Tilknytning; // ansatt, eller med uten å være ansatt (aksjonærer, selvstendige, innleide)
   lonnstype: "maaned" | "time";
   maanedslonn: number | null;
   timelonn: number | null;
@@ -53,6 +54,16 @@ type Ansatt = {
 type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"; fra: string | null; til: string | null };
 
 const ansettelsestype: Record<string, string> = { fast: "Fast", midlertidig: "Midlertidig", tilkalling: "Tilkalling" };
+// Tilknytning: de som ikke er ansatt (f.eks. leger som er aksjonærer), er med i vaktplanen, på tavla
+// og i kalenderen, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler.
+type Tilknytning = "ansatt" | "eier" | "selvstendig" | "innleid";
+const TILKNYTNING: Record<Tilknytning, [string, string]> = {
+  ansatt: ["Ansatt", "Ansatt"],
+  eier: ["Eier eller aksjonær (ikke ansatt)", "Aksjonær"],
+  selvstendig: ["Selvstendig næringsdrivende", "Selvstendig"],
+  innleid: ["Innleid", "Innleid"],
+};
+const erAnsatt = (a: Pick<Ansatt, "tilknytning">) => (a.tilknytning ?? "ansatt") === "ansatt";
 const belop = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 });
 const tekstTall = (n: number | null | undefined) => (n == null ? "" : belop.format(n).replace(/\s/g, " "));
 const lonn = (a: Ansatt) =>
@@ -69,6 +80,7 @@ const tilleggKort = (a: Ansatt) => {
 function Merker({ a }: { a: Ansatt }) {
   return (
     <span className="merker">
+      {!erAnsatt(a) && <span className="merke merke-info">{TILKNYTNING[a.tilknytning]?.[1] ?? a.tilknytning}</span>}
       {sluttet(a) && <span className="merke merke-noytral">{a.aktiv ? "Sluttet" : "Ikke aktiv"}</span>}
       {a.tilgang === "koblet" && <span className="merke merke-ok">Innlogging</span>}
       {a.tilgang === "invitert" && <span className="merke merke-info">Invitert</span>}
@@ -177,7 +189,9 @@ export function Ansatte() {
               </span>
               <span className="linje">
                 <span className="under">
-                  {[a.stilling, `${belop.format(a.stillingsprosent)} %`, vaktplan ? dagerTekst(a.arbeidsdager ?? []) : "", lonn(a), tilleggKort(a)].filter(Boolean).join(" · ")}
+                  {[a.stilling, `${belop.format(a.stillingsprosent)} %`, vaktplan ? dagerTekst(a.arbeidsdager ?? []) : "", erAnsatt(a) ? lonn(a) : "", erAnsatt(a) ? tilleggKort(a) : ""]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
                 <Merker a={a} />
               </span>
@@ -212,8 +226,8 @@ export function Ansatte() {
                   <td className="tall">{belop.format(a.stillingsprosent)} %</td>
                   {vaktplan && <td>{dagerTekst(a.arbeidsdager ?? []) || <span className="dempet">–</span>}</td>}
                   <td className="tall">
-                    {lonn(a)}
-                    {tilleggKort(a) && <span className="tillegg-liten">{tilleggKort(a)}</span>}
+                    {erAnsatt(a) ? lonn(a) : <span className="dempet">–</span>}
+                    {erAnsatt(a) && tilleggKort(a) && <span className="tillegg-liten">{tilleggKort(a)}</span>}
                   </td>
                   <td>{dato(a.ansatt_fra)}</td>
                   <td>
@@ -278,6 +292,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     ansatt_fra: ansatt.ansatt_fra ?? iDag(),
     ansatt_til: ansatt.ansatt_til ?? "",
     ansettelsestype: ansatt.ansettelsestype ?? "fast",
+    tilknytning: ansatt.tilknytning ?? ("ansatt" as Tilknytning),
     lonnstype: ansatt.lonnstype ?? "maaned",
     maanedslonn: tekstTall(ansatt.maanedslonn),
     timelonn: tekstTall(ansatt.timelonn),
@@ -413,6 +428,8 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   const kontonr = a.kontonr.replace(/[\s.]/g, "");
   const kontonrFeil = kontonr && forlatt.kontonr && !kontonrGyldig(kontonr) ? "Kontonummeret er ikke gyldig (sjekk sifrene)" : null;
   const maaned = a.lonnstype === "maaned" && a.maanedslonn ? tall(a.maanedslonn) : null;
+  // De som ikke er ansatt, har ikke lønn, feriebank eller fødselsnummer til a-meldingen her.
+  const arbeidstaker = a.tilknytning === "ansatt";
 
   async function lagre(e: FormEvent) {
     e.preventDefault();
@@ -431,6 +448,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       ansatt_fra: a.ansatt_fra,
       ansatt_til: a.ansatt_til,
       ansettelsestype: a.ansettelsestype,
+      tilknytning: a.tilknytning,
       lonnstype: a.lonnstype,
       maanedslonn: a.lonnstype === "maaned" ? tallEllerNull(a.maanedslonn) : null,
       timelonn: a.lonnstype === "time" ? tallEllerNull(a.timelonn) : null,
@@ -483,7 +501,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   return (
     <>
     <form onSubmit={lagre}>
-      {aiPaa && (
+      {aiPaa && arbeidstaker && (
         <div className="fra-slipp">
           <button type="button" disabled={leserSlipp || h.opptatt} onClick={() => slippFelt.current?.click()}>
             {leserSlipp ? <span className="spinner" /> : <IkonGnist storrelse={16} />} {leserSlipp ? "Leser lønnsslippen …" : "Fyll ut fra lønnsslipp"}
@@ -529,7 +547,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           <label>
             E-post
             <input type="email" autoComplete="off" {...felt("epost")} />
-            <span className="felt-hjelp">Til innloggingen og lønnsslippene.</span>
+            <span className="felt-hjelp">{arbeidstaker ? "Til innloggingen og lønnsslippene." : "Til innloggingen."}</span>
           </label>
           <label>
             Telefon
@@ -551,7 +569,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           </label>
         </div>
         <div className="rad">
-          {a.endreFnr ? (
+          {!arbeidstaker ? null : a.endreFnr ? (
             <label>
               Fødselsnummer
               <input
@@ -607,29 +625,49 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             Varsle de andre på bursdagen
           </label>
         )}
-        <label>
-          Kontonummer for lønn
-          <input inputMode="numeric" autoComplete="off" spellCheck={false} aria-invalid={!!kontonrFeil || undefined} placeholder="1234 56 78903" {...felt("kontonr")} />
-          {kontonrFeil && <span className="felt-feil">{kontonrFeil}</span>}
-        </label>
+        {arbeidstaker && (
+          <label>
+            Kontonummer for lønn
+            <input inputMode="numeric" autoComplete="off" spellCheck={false} aria-invalid={!!kontonrFeil || undefined} placeholder="1234 56 78903" {...felt("kontonr")} />
+            {kontonrFeil && <span className="felt-feil">{kontonrFeil}</span>}
+          </label>
+        )}
 
-        <h3>Ansettelse</h3>
+        <h3>{arbeidstaker ? "Ansettelse" : "Stilling og tilknytning"}</h3>
+        <label>
+          Stilling
+          <input placeholder="F.eks. butikkmedarbeider eller lege" {...felt("stilling")} />
+        </label>
         <div className="rad">
           <label>
-            Stilling
-            <input placeholder="F.eks. butikkmedarbeider" {...felt("stilling")} />
-          </label>
-          <label>
-            Ansettelse
-            <select {...felt("ansettelsestype")}>
-              {Object.entries(ansettelsestype).map(([v, t]) => (
+            Tilknytning
+            <select {...felt("tilknytning")}>
+              {Object.entries(TILKNYTNING).map(([v, [t]]) => (
                 <option key={v} value={v}>
                   {t}
                 </option>
               ))}
             </select>
           </label>
+          {arbeidstaker && (
+            <label>
+              Ansettelse
+              <select {...felt("ansettelsestype")}>
+                {Object.entries(ansettelsestype).map(([v, t]) => (
+                  <option key={v} value={v}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
+        {!arbeidstaker && (
+          <p className="felt-hjelp tilknytning-hjelp">
+            Ikke ansatt (f.eks. lege som er aksjonær): med i vaktplanen, på tavla, i kalenderen og fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens
+            advarsler.
+          </p>
+        )}
         {!!grupper.data?.length && (
           <label>
             Gruppe i bemanningskalenderen
@@ -672,16 +710,16 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       <fieldset className="naken" disabled={!kanEndre}>
         <div className="rad">
           <label>
-            Ansatt fra
+            {arbeidstaker ? "Ansatt fra" : "Jobber her fra"}
             <input type="date" required {...felt("ansatt_fra")} />
           </label>
           <label>
-            Sluttdato
+            {arbeidstaker ? "Sluttdato" : "Til"}
             <input type="date" min={a.ansatt_fra} {...felt("ansatt_til")} />
-            <span className="felt-hjelp">Tom hvis den ansatte fortsatt jobber her.</span>
+            <span className="felt-hjelp">{arbeidstaker ? "Tom hvis den ansatte fortsatt jobber her." : "Tom hvis personen fortsatt jobber her."}</span>
           </label>
         </div>
-        {vaktplan && (
+        {vaktplan && arbeidstaker && (
           <label>
             Feriedager per år
             <input inputMode="decimal" placeholder={`Organisasjonens (${tallformat.format(Number(oppsett.data?.ferie_dager ?? 25))} med fem dager i uka)`} {...felt("ferie_dager")} />
@@ -691,70 +729,74 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           </label>
         )}
 
-        <h3>Lønn</h3>
-        <div className="rad">
-          <label>
-            Lønnstype
-            <select {...felt("lonnstype")}>
-              <option value="maaned">Fast månedslønn</option>
-              <option value="time">Timelønn</option>
-            </select>
-          </label>
-          {a.lonnstype === "maaned" ? (
+        {arbeidstaker && (
+          <>
+          <h3>Lønn</h3>
+          <div className="rad">
             <label>
-              Månedslønn (kr)
-              <input inputMode="decimal" {...felt("maanedslonn")} />
-              {maaned != null && Number.isFinite(maaned) && <span className="felt-hjelp">{belop.format(maaned * 12)} kr i året</span>}
-            </label>
-          ) : (
-            <label>
-              Timelønn (kr)
-              <input inputMode="decimal" {...felt("timelonn")} />
-            </label>
-          )}
-        </div>
-        <h3>Faste tillegg</h3>
-        <p className="felt-hjelp tillegg-hjelp">
-          Betales fast i tillegg til lønnen, f.eks. funksjonstillegg per måned eller fagbrevtillegg per time. Uten datoer gjelder tillegget til det fjernes.
-        </p>
-        {tillegg.map((t, i) => (
-          <div key={i} className="tillegg-rad">
-            <label>
-              Navn
-              <input value={t.navn} placeholder="F.eks. funksjonstillegg" maxLength={100} onChange={(e) => endreTillegg(i, { navn: e.target.value })} />
-            </label>
-            <label>
-              Beløp (kr)
-              <input inputMode="decimal" value={t.belop} onChange={(e) => endreTillegg(i, { belop: e.target.value })} />
-            </label>
-            <label>
-              Per
-              <select value={t.per} onChange={(e) => endreTillegg(i, { per: e.target.value as TilleggUtkast["per"] })}>
-                <option value="maaned">måned</option>
-                <option value="time">time</option>
+              Lønnstype
+              <select {...felt("lonnstype")}>
+                <option value="maaned">Fast månedslønn</option>
+                <option value="time">Timelønn</option>
               </select>
             </label>
-            <label>
-              Fra og med
-              <input type="date" value={t.fra} onChange={(e) => endreTillegg(i, { fra: e.target.value })} />
-            </label>
-            <label>
-              Til og med
-              <input type="date" value={t.til} min={t.fra || undefined} onChange={(e) => endreTillegg(i, { til: e.target.value })} />
-            </label>
-            {kanEndre && (
-              <button type="button" className="ikon" aria-label={`Fjern ${t.navn || "tillegget"}`} title="Fjern tillegget" onClick={() => settTillegg((l) => l.filter((_, j) => j !== i))}>
-                <IkonLukk storrelse={16} />
-              </button>
+            {a.lonnstype === "maaned" ? (
+              <label>
+                Månedslønn (kr)
+                <input inputMode="decimal" {...felt("maanedslonn")} />
+                {maaned != null && Number.isFinite(maaned) && <span className="felt-hjelp">{belop.format(maaned * 12)} kr i året</span>}
+              </label>
+            ) : (
+              <label>
+                Timelønn (kr)
+                <input inputMode="decimal" {...felt("timelonn")} />
+              </label>
             )}
           </div>
-        ))}
-        {kanEndre ? (
-          <button type="button" className="lenke legg-til-tillegg" onClick={() => settTillegg((l) => [...l, { navn: "", belop: "", per: "maaned", fra: "", til: "" }])}>
-            + Legg til fast tillegg
-          </button>
-        ) : (
-          !tillegg.length && <p className="dempet liten">Ingen faste tillegg.</p>
+          <h3>Faste tillegg</h3>
+          <p className="felt-hjelp tillegg-hjelp">
+            Betales fast i tillegg til lønnen, f.eks. funksjonstillegg per måned eller fagbrevtillegg per time. Uten datoer gjelder tillegget til det fjernes.
+          </p>
+          {tillegg.map((t, i) => (
+            <div key={i} className="tillegg-rad">
+              <label>
+                Navn
+                <input value={t.navn} placeholder="F.eks. funksjonstillegg" maxLength={100} onChange={(e) => endreTillegg(i, { navn: e.target.value })} />
+              </label>
+              <label>
+                Beløp (kr)
+                <input inputMode="decimal" value={t.belop} onChange={(e) => endreTillegg(i, { belop: e.target.value })} />
+              </label>
+              <label>
+                Per
+                <select value={t.per} onChange={(e) => endreTillegg(i, { per: e.target.value as TilleggUtkast["per"] })}>
+                  <option value="maaned">måned</option>
+                  <option value="time">time</option>
+                </select>
+              </label>
+              <label>
+                Fra og med
+                <input type="date" value={t.fra} onChange={(e) => endreTillegg(i, { fra: e.target.value })} />
+              </label>
+              <label>
+                Til og med
+                <input type="date" value={t.til} min={t.fra || undefined} onChange={(e) => endreTillegg(i, { til: e.target.value })} />
+              </label>
+              {kanEndre && (
+                <button type="button" className="ikon" aria-label={`Fjern ${t.navn || "tillegget"}`} title="Fjern tillegget" onClick={() => settTillegg((l) => l.filter((_, j) => j !== i))}>
+                  <IkonLukk storrelse={16} />
+                </button>
+              )}
+            </div>
+          ))}
+          {kanEndre ? (
+            <button type="button" className="lenke legg-til-tillegg" onClick={() => settTillegg((l) => [...l, { navn: "", belop: "", per: "maaned", fra: "", til: "" }])}>
+              + Legg til fast tillegg
+            </button>
+          ) : (
+            !tillegg.length && <p className="dempet liten">Ingen faste tillegg.</p>
+          )}
+          </>
         )}
         <label>
           Notat

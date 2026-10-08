@@ -574,6 +574,12 @@ export const FELT: Record<Importtype, Felt[]> = {
       ikke: ["dato", "date", "fra", "til", "prosent", "id", "nummer"],
     },
     {
+      id: "tilknytning",
+      navn: "Tilknytning (ansatt, aksjonær, selvstendig, innleid)",
+      ord: ["tilknytning", "tilknytningsform", "arbeidstakerstatus", "ansattstatus", "affiliation"],
+      del: ["tilknytning"],
+    },
+    {
       id: "lonnstype",
       navn: "Lønnstype (måned eller time)",
       ord: ["lønnstype", "lonnstype", "lønnsform", "lonnsform", "avlønning", "avlønningsform", "paytype", "salarytype", "wagetype"],
@@ -854,6 +860,15 @@ const tolkAnsettelse = (s: string) => {
   if (/^fast|fast ansatt|permanent|ordinær/.test(t)) return "fast";
   return null;
 };
+// Tilknytning for dem som ikke er ansatt (eier eller aksjonær, selvstendig, innleid).
+export const tolkTilknytning = (s: string) => {
+  const t = s.trim().toLowerCase();
+  if (/aksjon|eier|medeier|partner|shareholder|owner/.test(t)) return "eier";
+  if (/selvstendig|næringsdriv|naeringsdriv|\benk\b|enkeltperson|frilans|freelance|self.?employed/.test(t)) return "selvstendig";
+  if (/innleid|leid inn|konsulent|bemanningsbyr|vikarbyr|contractor/.test(t)) return "innleid";
+  if (/^(ansatt|arbeidstaker|employee)$/.test(t)) return "ansatt";
+  return null;
+};
 const tolkLonnstype = (s: string) => {
   const t = s.trim().toLowerCase();
   if (/time|hour/.test(t)) return "time";
@@ -1022,7 +1037,11 @@ export function tilRader(type: Importtype, rader: string[][], kobling: (string |
       const tall = (f: string) => (v(f) ? (tolkTall(v(f), desimal[f]!) ?? v(f)) : undefined);
       if (v("stillingsprosent")) o.stillingsprosent = tolkProsent(v("stillingsprosent"), desimal.stillingsprosent!) ?? v("stillingsprosent");
       if (v("ukentlig_arbeidstid")) o.ukentlig_arbeidstid = tall("ukentlig_arbeidstid");
-      if (v("ansettelsestype")) o.ansettelsestype = tolkAnsettelse(v("ansettelsestype")) ?? v("ansettelsestype");
+      // «Aksjonær» eller «Selvstendig» i kolonnen for ansettelse er tilknytningen (ikke ansatt).
+      const fraAnsettelse = v("ansettelsestype") ? tolkTilknytning(v("ansettelsestype")) : null;
+      if (v("tilknytning")) o.tilknytning = tolkTilknytning(v("tilknytning")) ?? v("tilknytning");
+      else if (fraAnsettelse && fraAnsettelse !== "ansatt") o.tilknytning = fraAnsettelse;
+      if (v("ansettelsestype") && !(fraAnsettelse && fraAnsettelse !== "ansatt")) o.ansettelsestype = tolkAnsettelse(v("ansettelsestype")) ?? v("ansettelsestype");
       if (v("ferie_dager")) o.ferie_dager = tall("ferie_dager");
 
       // Lønn: månedslønn (eller årslønn delt på tolv) eller timelønn. Lønnstypen følger av den
