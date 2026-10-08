@@ -281,6 +281,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   halvt minutt), bakgrunnsjobbene hopper over organisasjonen (bankhenting, gjentakende
   fakturaer, EHF-sending, som da går på e-post, påminnelser og Google Disk), og appen
   skjuler det som ikke er slått på (`mine_organisasjoner.funksjoner`)
+- Menyen i appen har ett punkt for fakturaene: Fakturaer, Gjentakende og Innbetalinger er
+  faner øverst på de tre sidene (`web/src/fakturameny.tsx`), med de samme adressene som før
+  (`/gjentakende`, `/innbetalinger`), og «Fakturaer» er valgt i menyen på alle tre.
+  Innstillingene har fanene Organisasjon (opplysningene, brukerne, regnskapsføreren og
+  sletting), Faktura (fakturaoppsettet, logoen, betalingen med kontonumre, purring og banken,
+  og EHF), Ansatte og timer, Min konto og App. Hver del lagrer bare sine felt
+  (`PATCH /org/:id` tar imot deler av organisasjonen), og det som ikke er lagret, blir med
+  mellom fanene. Gamle lenker og varsler (`?fane=betaling`, `?fane=ehf`, `?fane=brukere`) går
+  til fanen og stedet der delen er nå
 - Administrasjonen har tre faner. Oversikt: bruken, og kontoer og organisasjoner som venter på
   godkjenning (antallet står på fanen). Organisasjoner: alle organisasjonene med brukerne under
   organisasjonen de er med i (søket finner også en bruker), detaljer med behandling,

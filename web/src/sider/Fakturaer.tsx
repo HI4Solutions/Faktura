@@ -12,6 +12,7 @@ import { kundeValg, Sokefelt } from "../sokefelt";
 import { VedleggFelt, VedleggListe } from "../vedlegg";
 import { AiFaktura, type AiUtkast } from "../ai";
 import type { PaaminnelseUtkast } from "./Paaminnelser";
+import { Fakturameny } from "../fakturameny";
 
 // Binders etter kundenavnet i lista når fakturaen har vedlegg.
 const HarVedlegg = ({ antall }: { antall?: number }) =>
@@ -40,6 +41,7 @@ export function Fakturaliste() {
 
   return (
     <>
+      <Fakturameny />
       <div className="topp">
         <h1>Fakturaer</h1>
         {kanSkrive(org?.rolle) && (
@@ -666,7 +668,7 @@ export function FakturaSkjema() {
       )}
       {!orgData.data.kontonr && (
         <div className="melding info">
-          Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
+          Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Faktura</Link> før du sender fakturaer.
         </div>
       )}
       {fraAssistent && <div className="melding info">Fylt ut av AI-assistenten. Se over kunde, linjer og datoer før du sender.</div>}

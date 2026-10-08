@@ -56,7 +56,7 @@ export function Oversikt() {
               {klienter.length === 0 && (
                 <tr>
                   <td colSpan={3} className="dempet">
-                    Ingen klienter ennå. Be om tilgang under <Link to="/innstillinger?fane=brukere">Innstillinger → Brukere</Link>, eller be klienten invitere byrået.
+                    Ingen klienter ennå. Be om tilgang under <Link to="/innstillinger?fane=brukere">Innstillinger → Organisasjon</Link>, eller be klienten invitere byrået.
                   </td>
                 </tr>
               )}

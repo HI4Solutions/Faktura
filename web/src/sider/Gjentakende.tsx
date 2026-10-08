@@ -8,6 +8,7 @@ import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { harFunksjon, kanSkrive, useKonto } from "../konto";
 import { dato, iDag, kr, summerMedMakstak } from "../format";
 import { Paaminnelser } from "./Paaminnelser";
+import { Fakturameny } from "../fakturameny";
 
 const intervallTekst: Record<string, string> = { maaned: "Hver måned", kvartal: "Hvert kvartal", aar: "Hvert år" };
 
@@ -19,7 +20,7 @@ export function Gjentakende() {
   // Bare fanene organisasjonen har funksjonene til (funksjonene i Administrasjon).
   const synlige = (
     [
-      ["fakturaer", "Fakturaer", harFunksjon(org, "gjentakende")],
+      ["fakturaer", "Gjentakende fakturaer", harFunksjon(org, "gjentakende")],
       ["paaminnelser", "Påminnelser", harFunksjon(org, "paaminnelser")],
     ] as const
   ).filter(([, , vis]) => vis);
@@ -33,7 +34,12 @@ export function Gjentakende() {
       ))}
     </div>
   );
-  return fane === "paaminnelser" ? <Paaminnelser faner={faner} /> : <GjentakendeFakturaer faner={faner} />;
+  return (
+    <>
+      <Fakturameny />
+      {fane === "paaminnelser" ? <Paaminnelser faner={faner} /> : <GjentakendeFakturaer faner={faner} />}
+    </>
+  );
 }
 
 function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {

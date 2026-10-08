@@ -403,6 +403,14 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 /* Også når trykket henger igjen som «hover» på telefon */
 .faner button.valgt, .faner button.valgt:hover:not(:disabled) { background: var(--aksent-lys); color: var(--aksent); }
 .faner.utseende { margin-bottom: 6px; }
+/* Delene av en side med ett punkt i menyen (Fakturaer, Gjentakende og Innbetalinger) */
+.seksjonsmeny { display: flex; gap: 2px 24px; margin: -4px 0 18px; border-bottom: 1px solid var(--kant); overflow-x: auto; scrollbar-width: none; }
+.seksjonsmeny::-webkit-scrollbar { display: none; }
+.seksjonsmeny a { flex: none; padding: 6px 1px 10px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--dempet); font-weight: 600; font-size: 0.95rem; text-decoration: none; white-space: nowrap; }
+.seksjonsmeny a:hover { color: var(--tekst); }
+.seksjonsmeny a.active { color: var(--aksent); border-bottom-color: var(--aksent); }
+/* Steder i innstillingene som lenker går rett til (under toppfeltet på mobil) */
+.innstilling-sted { scroll-margin-top: 76px; }
 
 /* Nøkkeltall */
 .nokkeltall { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px; }
@@ -614,7 +622,7 @@ ol.steg { padding-left: 20px; margin: 4px 0 16px; }
 ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 .kopier-felt { display: flex; align-items: center; gap: 10px; margin: 6px 0; flex-wrap: wrap; }
 .kopier-felt code { background: var(--flate-2); border: 1px solid var(--kant); padding: 3px 8px; border-radius: 6px; font-size: 0.85rem; overflow-wrap: anywhere; }
-/* Bankene under Innstillinger → Betaling: én boks per bank. */
+/* Bankene under Innstillinger → Faktura: én boks per bank. */
 .banker { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
 .bank { border: 1px solid var(--kant); border-radius: var(--radius-s); padding: 12px 14px; min-width: 0; }
 .bank-topp { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; }

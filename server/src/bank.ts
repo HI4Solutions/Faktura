@@ -529,7 +529,7 @@ export async function planleggBankhenting(naa = new Date()): Promise<number> {
       await varsle(
         k.org_id,
         `Tilgangen til ${k.bank} går snart ut`,
-        `Appen kan lese innbetalingene til ${new Date(utlop).toLocaleDateString("nb-NO", { timeZone: "Europe/Oslo" })}. Forny med BankID under Innstillinger → Betaling.`,
+        `Appen kan lese innbetalingene til ${new Date(utlop).toLocaleDateString("nb-NO", { timeZone: "Europe/Oslo" })}. Forny med BankID under Innstillinger → Faktura.`,
         "/innstillinger?fane=betaling",
       );
     }

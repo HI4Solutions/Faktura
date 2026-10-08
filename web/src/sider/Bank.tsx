@@ -1,5 +1,5 @@
 // Innbetalinger fra banken (open banking gjennom Enable Banking): kobling under
-// Innstillinger → Betaling, siden der brukeren kommer tilbake etter BankID, og listen
+// Innstillinger → Faktura, siden der brukeren kommer tilbake etter BankID, og listen
 // over innbetalinger som kobles til fakturaene.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -11,6 +11,7 @@ import { erAdmin, kanBokfore, useKonto } from "../konto";
 import { Sokefelt } from "../sokefelt";
 import { IkonGnist, IkonKlokke, IkonKroner } from "../ikoner";
 import { HemmeligFelt, HemmeligTekst } from "../hemmelig";
+import { Fakturameny } from "../fakturameny";
 
 // En konto i banken som er lagt inn i HI4 Faktura (bare de leses), med navnet derfra.
 export interface BankKonto {
@@ -163,7 +164,7 @@ async function ventPaHenting(orgId: string, for_: BankStatus): Promise<BankStatu
 }
 
 // ---------------------------------------------------------------------------
-// Innstillinger → Betaling
+// Innstillinger → Faktura
 // ---------------------------------------------------------------------------
 
 export function BankKobling() {
@@ -599,11 +600,11 @@ export function BankTilbake() {
         for (let i = 0; i < 45; i++) {
           await pause(1000);
           const k = (await hent<BankStatus>(`/org/${orgId}/bank`)).koblinger.find((x) => x.id === r.kobling_id);
-          if (!k) throw new Error("Banken er fjernet. Legg den til på nytt under Innstillinger → Betaling.");
+          if (!k) throw new Error("Banken er fjernet. Legg den til på nytt under Innstillinger → Faktura.");
           if (k.siste_feil) throw new Error(k.siste_feil);
           if (k.tilkoblet && k.fullfort !== r.forrige) return nav(`/innstillinger?fane=betaling&bank=ok&kobling=${k.id}`, { replace: true });
         }
-        throw new Error("Banken svarte ikke i tide. Se statusen under Innstillinger → Betaling.");
+        throw new Error("Banken svarte ikke i tide. Se statusen under Innstillinger → Faktura.");
       } catch (e) {
         settFeil((e as Error).message);
       }
@@ -618,7 +619,7 @@ export function BankTilbake() {
         <>
           <Feil melding={feil} />
           <Link className="knapp" to="/innstillinger?fane=betaling">
-            Til Innstillinger → Betaling
+            Til Innstillinger → Faktura
           </Link>
         </>
       ) : (
@@ -695,6 +696,7 @@ export function Innbetalinger() {
 
   return (
     <>
+      <Fakturameny />
       <div className="topp">
         <h1>Innbetalinger</h1>
         {aktive.length > 0 && bokfore && (
@@ -706,7 +708,7 @@ export function Innbetalinger() {
       {bank.data && (
         <p className="undertittel">
           {aktive.length ? `Fra ${navnListe(aktive.map((k) => k.bank))}.` : "Banken er ikke koblet til."}{" "}
-          {!aktive.length && erAdmin(org?.rolle) && <Link to="/innstillinger?fane=betaling">Koble til under Innstillinger → Betaling</Link>}
+          {!aktive.length && erAdmin(org?.rolle) && <Link to="/innstillinger?fane=betaling">Koble til under Innstillinger → Faktura</Link>}
         </p>
       )}
       {bank.data && aktive.some((k) => k.kontoer.length > 0) && (
@@ -727,7 +729,7 @@ export function Innbetalinger() {
             {erAdmin(org?.rolle) && (
               <>
                 {" "}
-                <Link to="/innstillinger?fane=betaling">Til Innstillinger → Betaling</Link>
+                <Link to="/innstillinger?fane=betaling">Til Innstillinger → Faktura</Link>
               </>
             )}
           </div>

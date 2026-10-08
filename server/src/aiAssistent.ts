@@ -268,7 +268,7 @@ async function nyFaktura(k: Kontekst, ai: AiKommando): Promise<Partial<Assistent
   if (utkast.deres_referanse) deler.push(`Deres ref.: ${utkast.deres_referanse}.`);
   const kanSende = ai.send === true && k.kan.utsted && Boolean(k.org.kontonr);
   if (ai.send && !k.kan.utsted) deler.push("Du har ikke tilgang til å sende fakturaer, men kan lagre den som utkast.");
-  else if (ai.send && !k.org.kontonr) deler.push("Legg inn kontonummer under Innstillinger → Betaling før du sender fakturaer.");
+  else if (ai.send && !k.org.kontonr) deler.push("Legg inn kontonummer under Innstillinger → Faktura før du sender fakturaer.");
   // Hvor fakturaen går: EHF når kunden kan ta imot det (og EHF er satt opp), ellers e-post.
   let hvor = "Lagres som utkast du kan sende senere.";
   if (kanSende) {
@@ -297,7 +297,7 @@ async function nyFaktura(k: Kontekst, ai: AiKommando): Promise<Partial<Assistent
 
 async function sendUtkast(k: Kontekst, ai: AiKommando, kunde: Kunde | null): Promise<Partial<AssistentSvar>> {
   if (!k.kan.utsted) return ingenTilgang("sende fakturaer");
-  if (!k.org.kontonr) return { tekst: "Legg inn kontonummer under Innstillinger → Betaling før du sender fakturaer." };
+  if (!k.org.kontonr) return { tekst: "Legg inn kontonummer under Innstillinger → Faktura før du sender fakturaer." };
   const utkast = await hentFakturaer(k.db, k.orgId, `and f.status = 'utkast'${kunde ? " and f.kunde_id = $2" : ""}`, kunde ? [kunde.id] : [], "f.opprettet desc", 6);
   if (!utkast.length) return { tekst: kunde ? `Fant ingen utkast til ${kunde.navn}.` : "Fant ingen utkast." };
   const forslag: Forslag[] = utkast.slice(0, 5).map((f) => ({

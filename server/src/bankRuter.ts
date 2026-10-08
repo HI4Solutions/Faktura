@@ -1,4 +1,4 @@
-// Innbetalinger fra banken (Enable Banking): koblingen under Innstillinger → Betaling, og
+// Innbetalinger fra banken (Enable Banking): koblingen under Innstillinger → Faktura, og
 // listen over innbetalinger som kobles til fakturaene.
 //
 // Koblingen: organisasjonen registrerer sin egen applikasjon hos Enable Banking og limer

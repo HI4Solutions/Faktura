@@ -13,12 +13,21 @@ import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 import { SlettOrganisasjon } from "../slettOrg";
 
-type Fane = "organisasjon" | "faktura" | "betaling" | "ehf" | "brukere" | "personal" | "konto" | "app";
+type Fane = "organisasjon" | "faktura" | "personal" | "konto" | "app";
 type OrgDel = "organisasjon" | "faktura" | "betaling";
+// Faner som er slått sammen med andre (lenker og varsler bruker dem fortsatt): fanen de nå er en
+// del av, og stedet på den.
+const SAMMENSLATT: Record<string, [Fane, string]> = {
+  betaling: ["faktura", "betaling"],
+  ehf: ["faktura", "ehf"],
+  brukere: ["organisasjon", "brukere"],
+};
 
 // Innstillingene er delt i faner. Fanen står i adressen (?fane=), så lenker kan gå rett til
-// den. Organisasjonens innstillinger vises bare for administratorer; regnskapsbyråer
-// fakturerer ikke, og EHF krever organisasjonsnummer.
+// den. Organisasjon har opplysningene, brukerne og regnskapsføreren; Faktura har oppsettet av
+// fakturaene, logoen, betalingen (kontonumre, purring og banken) og EHF. Organisasjonens
+// innstillinger vises bare for administratorer; regnskapsbyråer fakturerer ikke, og EHF krever
+// organisasjonsnummer.
 export function Innstillinger() {
   const { org } = useKonto();
   const [sok, settSok] = useSearchParams();
@@ -27,16 +36,17 @@ export function Innstillinger() {
   const faner: [Fane, string][] = [];
   if (admin) {
     faner.push(["organisasjon", "Organisasjon"]);
-    if (!byraa) faner.push(["faktura", "Faktura"], ["betaling", "Betaling"]);
-    if (!byraa && org?.type !== "privatperson" && harFunksjon(org, "ehf")) faner.push(["ehf", "EHF"]);
-    faner.push(["brukere", "Brukere"]);
+    if (!byraa) faner.push(["faktura", "Faktura"]);
     if (org?.type !== "privatperson" && harFunksjon(org, "ansatte")) faner.push(["personal", "Ansatte og timer"]);
   }
   faner.push(["konto", "Min konto"], ["app", "App"]);
   // Tilbake fra Google (Google Disk-koblingen): «Min konto».
   const onsket = sok.get("fane") ?? (sok.has("disk") ? "konto" : null);
-  const fane = faner.find(([v]) => v === onsket)?.[0] ?? faner[0][0];
-  const orgDel = fane === "organisasjon" || fane === "faktura" || fane === "betaling" ? fane : null;
+  const [tilFane, sted] = (onsket && SAMMENSLATT[onsket]) || [onsket, null];
+  const fane = faner.find(([v]) => v === tilFane)?.[0] ?? faner[0][0];
+  const ehf = !byraa && org?.type !== "privatperson" && harFunksjon(org, "ehf");
+  const skjema = useOrgSkjema(admin);
+  useRullTil(fane === tilFane ? sted : null);
 
   return (
     <>
@@ -48,21 +58,30 @@ export function Innstillinger() {
           </button>
         ))}
       </div>
-      {/* Samme skjema for de tre fanene, så endringer som ikke er lagret, blir med mellom dem. */}
-      {orgDel && <Organisasjon del={orgDel} />}
-      {fane === "organisasjon" && org?.rolle === "eier" && org.direkte_medlem && <SlettOrg />}
-      {fane === "faktura" && <Logo />}
-      {fane === "betaling" && (
+      {fane === "organisasjon" && (
         <>
-          <Kontoer />
-          {harFunksjon(org, "bank") && <BankKobling />}
+          <OrgSkjemaDel del="organisasjon" skjema={skjema} />
+          <div id="brukere" className="innstilling-sted">
+            <Medlemmer />
+            <Regnskapsforer />
+          </div>
+          {org?.rolle === "eier" && org.direkte_medlem && <SlettOrg />}
         </>
       )}
-      {fane === "ehf" && <EhfSending />}
-      {fane === "brukere" && (
+      {fane === "faktura" && (
         <>
-          <Medlemmer />
-          <Regnskapsforer />
+          <OrgSkjemaDel del="faktura" skjema={skjema} />
+          <Logo />
+          <div id="betaling" className="innstilling-sted">
+            <OrgSkjemaDel del="betaling" skjema={skjema} />
+            <Kontoer />
+            {harFunksjon(org, "bank") && <BankKobling />}
+          </div>
+          {ehf && (
+            <div id="ehf" className="innstilling-sted">
+              <EhfSending />
+            </div>
+          )}
         </>
       )}
       {fane === "personal" && <PersonalOppsett />}
@@ -70,6 +89,23 @@ export function Innstillinger() {
       {fane === "app" && <AppOgVarsler />}
     </>
   );
+}
+
+// Til et sted på fanen (f.eks. betalingen fra en lenke) når innholdet over er lastet.
+function useRullTil(id: string | null) {
+  useEffect(() => {
+    if (!id) return;
+    let n = 0;
+    const t = window.setInterval(() => {
+      const el = document.getElementById(id);
+      n++;
+      if (el && (!document.querySelector(".innhold .laster") || n > 20)) {
+        el.scrollIntoView({ block: "start" });
+        window.clearInterval(t);
+      } else if (n > 40) window.clearInterval(t);
+    }, 100);
+    return () => window.clearInterval(t);
+  }, [id]);
 }
 
 // Eieren kan slette organisasjonen, med en grunn (se slettOrg.tsx).
@@ -258,29 +294,44 @@ function MinKonto() {
   );
 }
 
-function Organisasjon({ del }: { del: OrgDel }) {
-  const { org, oppdater } = useKonto();
-  const { data, last } = useData(() => hent(`/org/${org!.id}`), [org?.id]);
+// Organisasjonens opplysninger og fakturaoppsett: hentet én gang for fanene, så det som ikke er
+// lagret, blir med mellom dem. Hver del (et kort med egen lagreknapp) lagrer bare sine felt.
+const DELFELT: Record<OrgDel, string[]> = {
+  organisasjon: ["navn", "orgnr", "innehaver", "standard_avsender", "adresse", "postnr", "poststed", "epost", "telefon", "mva_registrert", "foretaksregisteret", "ai_aktiv"],
+  faktura: ["standard_forfall_dager", "standard_gebyr", "standard_dager_foer_forfall", "kopi_til", "kopi_tekst", "farge"],
+  betaling: ["kontonr", "bruk_kid", "purring_auto", "purring_dager", "purregebyr"],
+};
+const tilSkjema = (d: any) => ({
+  ...d,
+  standard_gebyr: String(d.standard_gebyr).replace(".", ","),
+  purregebyr: String(d.purregebyr ?? 0).replace(".", ","),
+  kopi_tekst: (d.kopi_til ?? []).join(", "),
+});
+
+function useOrgSkjema(aktiv: boolean) {
+  const { org } = useKonto();
+  const { data, settData } = useData(() => (aktiv ? hent<any>(`/org/${org!.id}`) : Promise.resolve(null)), [org?.id, aktiv]);
   const [o, settO] = useState<any>(null);
+  useEffect(() => {
+    settO(data ? tilSkjema(data) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.id]);
+  // Lagret: svaret blir grunnlaget, og bare den delens felt byttes i skjemaet.
+  const lagret = (ny: any, del: OrgDel) => {
+    settData((d: any) => ({ ...d, ...ny }));
+    const s = tilSkjema(ny);
+    settO((x: any) => ({ ...x, ...Object.fromEntries(DELFELT[del].map((k) => [k, s[k]])), verifisering: s.verifisering }));
+  };
+  return { data, o, settO, lagret };
+}
+type OrgSkjema = ReturnType<typeof useOrgSkjema>;
+
+function OrgSkjemaDel({ del, skjema }: { del: OrgDel; skjema: OrgSkjema }) {
+  const { org, oppdater } = useKonto();
+  const { data, o, settO } = skjema;
   const h = useHandling();
   const [lagret, settLagret] = useState(false);
-  // Ny fane: ikke vis «Lagret» eller feil fra den forrige.
-  useEffect(() => {
-    settLagret(false);
-    h.settFeil(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [del]);
-
-  useEffect(() => {
-    if (data)
-      settO({
-        ...data,
-        standard_gebyr: String(data.standard_gebyr).replace(".", ","),
-        purregebyr: String(data.purregebyr ?? 0).replace(".", ","),
-        kopi_tekst: (data.kopi_til ?? []).join(", "),
-      });
-  }, [data]);
-  if (!o) return <Laster />;
+  if (!o || !data) return <Laster />;
 
   const felt = (navn: string) => ({ value: o[navn] ?? "", onChange: (e: any) => settO({ ...o, [navn]: e.target.value }) });
   const avkryss = (navn: string) => ({ checked: !!o[navn], onChange: (e: any) => settO({ ...o, [navn]: e.target.checked }) });
@@ -288,56 +339,64 @@ function Organisasjon({ del }: { del: OrgDel }) {
   async function lagre(ev: FormEvent) {
     ev.preventDefault();
     settLagret(false);
-    const kropp: Record<string, unknown> = {
-      navn: o.navn,
-      adresse: o.adresse || null,
-      postnr: o.postnr || null,
-      poststed: o.poststed || null,
-      epost: o.epost || null,
-      telefon: o.telefon || null,
-      mva_registrert: o.mva_registrert,
-      foretaksregisteret: o.foretaksregisteret,
-      bruk_kid: o.bruk_kid,
-      standard_forfall_dager: Number(o.standard_forfall_dager),
-      standard_gebyr: tall(String(o.standard_gebyr)),
-      standard_dager_foer_forfall: Number(o.standard_dager_foer_forfall),
-      farge: o.farge || null,
-      purring_auto: o.purring_auto,
-      purring_dager: Number(o.purring_dager),
-      purregebyr: tall(String(o.purregebyr ?? 0)),
-      innehaver: o.innehaver?.trim() || null,
-      standard_avsender: o.innehaver?.trim() ? o.standard_avsender : "firma",
-    };
-    if (data.ai_tilgjengelig) kropp.ai_aktiv = o.ai_aktiv;
-    if (data.mva_registrert && !o.mva_registrert && !confirm("Fakturere uten mva fremover? Alle produkter, utkast og gjentakende fakturaer settes til 0 % mva.")) return;
-    if (o.type === "privatperson") {
-      delete kropp.mva_registrert;
-      delete kropp.foretaksregisteret;
-      delete kropp.innehaver;
-      delete kropp.standard_avsender;
-    } else if (o.verifisering === "ny") kropp.orgnr = o.orgnr ? o.orgnr.replace(/\s/g, "") : null;
-    // Fast kopiadresse: som kontonummeret varsles alle eiere når den endres.
-    const ugyldige = ugyldigeEposter(o.kopi_tekst ?? "");
-    if (ugyldige.length) return h.settFeil(`Ugyldig e-postadresse for kopi: ${ugyldige.join(", ")}`);
-    const kopi = tilEpostliste(o.kopi_tekst ?? "");
-    if (kopi.length > 5) return h.settFeil("Kopi kan sendes til høyst fem adresser.");
-    const forrige: string[] = data.kopi_til ?? [];
-    if (kopi.join(",").toLowerCase() !== forrige.join(",").toLowerCase()) {
-      const tekst = kopi.length
-        ? `Sende kopi av alle fakturaer til ${kopi.join(", ")}? Alle eiere får beskjed på e-post.`
-        : `Slutte å sende kopi til ${forrige.join(", ")}? Kopien går da til organisasjonens e-post. Alle eiere får beskjed på e-post.`;
-      if (!confirm(tekst)) return;
-      kropp.kopi_til = kopi;
-    }
-    const ktnr = (o.kontonr ?? "").replace(/[\s.]/g, "");
-    if (ktnr !== (data.kontonr ?? "")) {
-      if (!confirm(`Endre kontonummeret til ${ktnr}? Alle eiere får beskjed på e-post.`)) return;
-      kropp.kontonr = ktnr || null;
+    const kropp: Record<string, unknown> = {};
+    if (del === "organisasjon") {
+      Object.assign(kropp, {
+        navn: o.navn,
+        adresse: o.adresse || null,
+        postnr: o.postnr || null,
+        poststed: o.poststed || null,
+        epost: o.epost || null,
+        telefon: o.telefon || null,
+      });
+      if (data.ai_tilgjengelig) kropp.ai_aktiv = o.ai_aktiv;
+      if (o.type !== "privatperson") {
+        Object.assign(kropp, {
+          mva_registrert: o.mva_registrert,
+          foretaksregisteret: o.foretaksregisteret,
+          innehaver: o.innehaver?.trim() || null,
+          standard_avsender: o.innehaver?.trim() ? o.standard_avsender : "firma",
+        });
+        if (o.verifisering === "ny") kropp.orgnr = o.orgnr ? o.orgnr.replace(/\s/g, "") : null;
+        if (data.mva_registrert && !o.mva_registrert && !confirm("Fakturere uten mva fremover? Alle produkter, utkast og gjentakende fakturaer settes til 0 % mva.")) return;
+      }
+    } else if (del === "faktura") {
+      Object.assign(kropp, {
+        standard_forfall_dager: Number(o.standard_forfall_dager),
+        standard_gebyr: tall(String(o.standard_gebyr)),
+        standard_dager_foer_forfall: Number(o.standard_dager_foer_forfall),
+        farge: o.farge || null,
+      });
+      // Fast kopiadresse: som kontonummeret varsles alle eiere når den endres.
+      const ugyldige = ugyldigeEposter(o.kopi_tekst ?? "");
+      if (ugyldige.length) return h.settFeil(`Ugyldig e-postadresse for kopi: ${ugyldige.join(", ")}`);
+      const kopi = tilEpostliste(o.kopi_tekst ?? "");
+      if (kopi.length > 5) return h.settFeil("Kopi kan sendes til høyst fem adresser.");
+      const forrige: string[] = data.kopi_til ?? [];
+      if (kopi.join(",").toLowerCase() !== forrige.join(",").toLowerCase()) {
+        const tekst = kopi.length
+          ? `Sende kopi av alle fakturaer til ${kopi.join(", ")}? Alle eiere får beskjed på e-post.`
+          : `Slutte å sende kopi til ${forrige.join(", ")}? Kopien går da til organisasjonens e-post. Alle eiere får beskjed på e-post.`;
+        if (!confirm(tekst)) return;
+        kropp.kopi_til = kopi;
+      }
+    } else {
+      Object.assign(kropp, {
+        bruk_kid: o.bruk_kid,
+        purring_auto: o.purring_auto,
+        purring_dager: Number(o.purring_dager),
+        purregebyr: tall(String(o.purregebyr ?? 0)),
+      });
+      const ktnr = (o.kontonr ?? "").replace(/[\s.]/g, "");
+      if (ktnr !== (data.kontonr ?? "")) {
+        if (!confirm(`Endre kontonummeret til ${ktnr}? Alle eiere får beskjed på e-post.`)) return;
+        kropp.kontonr = ktnr || null;
+      }
     }
     const r = await h.kjor(() => api("PATCH", `/org/${org!.id}`, kropp));
     if (r) {
       settLagret(true);
-      last();
+      skjema.lagret(r, del);
       oppdater();
       if ("kontonr" in kropp) kontoerEndret();
     }

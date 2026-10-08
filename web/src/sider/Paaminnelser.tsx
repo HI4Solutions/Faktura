@@ -553,7 +553,7 @@ export function SendFraPaaminnelse() {
     if (f.periode_fra && f.periode_til && f.periode_til < f.periode_fra) return h.settFeil("Slutten på perioden er før starten.");
     if (f.forfallsdato && f.fakturadato && f.forfallsdato < f.fakturadato) return h.settFeil("Forfallsdatoen er før fakturadatoen.");
     if (lasterOpp) return h.settFeil("Vent til vedleggene er lastet opp.");
-    if (send && !o.kontonr) return h.settFeil("Legg inn kontonummer under Innstillinger → Betaling før du sender fakturaer.");
+    if (send && !o.kontonr) return h.settFeil("Legg inn kontonummer under Innstillinger → Faktura før du sender fakturaer.");
     const r = await h.kjor(async () => {
       // Feilet sendingen etter at utkastet ble lagret, brukes samme utkast (ikke et nytt).
       if (utkastId.current) await api("PUT", `/org/${org!.id}/fakturaer/${utkastId.current}`, kropp());
@@ -773,7 +773,7 @@ export function SendFraPaaminnelse() {
         {mottaker && <p className="liten dempet">{mottaker}</p>}
         {!o.kontonr && (
           <div className="melding info">
-            Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
+            Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Faktura</Link> før du sender fakturaer.
           </div>
         )}
         <Feil melding={h.feil} />

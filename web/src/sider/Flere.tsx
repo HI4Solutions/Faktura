@@ -192,7 +192,7 @@ export function FlereFakturaer() {
       <p className="undertittel">Lag og send mange fakturaer på én gang, til forskjellige kunder med forskjellige produkter.</p>
       {!orgData.data.kontonr && (
         <div className="melding info">
-          Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Betaling</Link> før du sender fakturaer.
+          Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Faktura</Link> før du sender fakturaer.
         </div>
       )}
 

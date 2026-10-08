@@ -29,8 +29,9 @@ import { AppLaas } from "./Applaas";
 import { TemaBryter } from "./TemaBryter";
 import { installer } from "./pwa";
 import { Assistent } from "./assistent";
+import { iFakturadelen } from "./fakturameny";
 import {
-  IkonAnsatte, IkonFaktura, IkonFerie, IkonGjenta, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKroner, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
+  IkonAnsatte, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
   IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
@@ -232,7 +233,7 @@ function Ramme() {
         )}
         {!ansatt && org?.type !== "regnskapsbyraa" && (
           <>
-            <NavLink to="/fakturaer" end={false}>
+            <NavLink to="/fakturaer" end={false} className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
               <IkonFaktura storrelse={22} />
               <span>Fakturaer</span>
             </NavLink>
@@ -261,7 +262,14 @@ function Ramme() {
         </button>
       </nav>
       <div className={`meny-skygge${menyApen ? " apen" : ""}`} onClick={() => settMenyApen(false)} />
-      <nav id="hovedmeny" className={`meny${menyApen ? " apen" : ""}`}>
+      <nav
+        id="hovedmeny"
+        className={`meny${menyApen ? " apen" : ""}`}
+        onClick={(e) => {
+          // Også når man trykker på siden man er på (da endres ikke adressen).
+          if ((e.target as HTMLElement).closest("a")) settMenyApen(false);
+        }}
+      >
         <div className="logo" onClick={() => settMenyApen(false)}>
           <Logo />
         </div>
@@ -315,22 +323,11 @@ function Ramme() {
         )}
         {!ansatt && org?.type !== "regnskapsbyraa" && (
           <>
-            <NavLink to="/fakturaer">
+            {/* Gjentakende og innbetalinger ligger under Fakturaer (fakturameny.tsx). */}
+            <NavLink to="/fakturaer" className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
               <IkonFaktura />
               Fakturaer
             </NavLink>
-            {harFunksjon(org, "bank") && (
-              <NavLink to="/innbetalinger">
-                <IkonKroner />
-                Innbetalinger
-              </NavLink>
-            )}
-            {(harFunksjon(org, "gjentakende") || harFunksjon(org, "paaminnelser")) && (
-              <NavLink to="/gjentakende">
-                <IkonGjenta />
-                Gjentakende
-              </NavLink>
-            )}
             <NavLink to="/kunder">
               <IkonKunder />
               Kunder
