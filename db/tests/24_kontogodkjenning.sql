@@ -30,7 +30,8 @@ grant execute on all functions in schema test to public;
 select id as u from faktura.registrer_bruker('uid-godkj-ny', 'ny-godkj@test.no') \gset
 select set_config('app.bruker_id', :'u', false);
 select test.er((select status from faktura.brukere where id = :'u'), 'venter', 'ny bruker venter');
--- Uten navn meldes den ikke; med navn én gang.
+-- Uten navn og moduler (0044) meldes den ikke; med begge én gang.
+select faktura.velg_moduler(array['faktura']);
 select test.er(faktura.meld_konto(), false, 'ikke meldt uten navn');
 update faktura.brukere set navn = 'Nina Ny' where id = :'u';
 select test.er(faktura.meld_konto(), true, 'meldt når navnet er skrevet inn');

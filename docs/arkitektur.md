@@ -51,6 +51,19 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   avslaget). Den som tar imot en invitasjon fra en organisasjon (sendt til e-postadressen
   sin), godkjennes da; organisasjonen går god for den. Plattformadministratorene og de som
   hadde konto fra før, er godkjent (`0043_kontogodkjenning.sql`)
+- `moduler` og `bruker_moduler`: plattformens moduler (foreløpig Faktura og Bemanning), og
+  hvilke en bruker har bedt om eller fått. Hver funksjon (`funksjoner.modul`) hører til en
+  modul. Den som lager en konto, krysser av for modulene den trenger (lagres rett fra
+  registreringen, også før e-postadressen er bekreftet, eller på venteskjermen), og
+  forespørselen til administratorene går først når navn og moduler er på plass, med modulene i
+  e-posten. Administratoren godkjenner med de modulene eller andre (Administrasjon → Venter),
+  og etter godkjenningen er det bare administratoren som endrer dem. Organisasjonene brukeren
+  lager, får bare funksjonene i modulene (av standarden for nye organisasjoner), og med
+  Bemanning er ansatte og timer slått på fra start. Brukere uten moduler (fra før, eller
+  godkjent av en invitasjon uten å ha valgt) får standarden som før. En ny modul er en rad i
+  `moduler` og funksjonene dens; da kommer den med i registreringen, forespørselen,
+  godkjenningen og administrasjonen uten flere endringer (`0044_moduler.sql`,
+  `/api/offentlig/moduler`)
 - `org_tilgang`: regnskapsbyrå ↔ klient (les eller bokfør), alltid med klientens samtykke
 - `kunder`, `produkter`, `gjentakelser`. `kunder.ehf`: om kunden kan motta EHF-faktura, slått
   opp i PEPPOL slik aksesspunktene gjør det (`peppol.ts`): SML-en i DNS (NAPTR) gir SMP-en,
@@ -191,8 +204,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   vakter. Grupper kan lages fra stillingene
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
   bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
-  Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer).
-  Fakturaer, kunder og produkter har alle. Plattformadministratoren slår dem av og på under
+  Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer),
+  gruppert i modulene Faktura og Bemanning. Fakturaer, kunder og produkter har alle. Plattformadministratoren slår dem av og på under
   Administrasjon → Funksjoner (eller i detaljene for en organisasjon) og velger standarden
   for nye organisasjoner; de som fantes da funksjonene kom, beholdt alt. API-et avviser rutene
   til en funksjon organisasjonen ikke har (`server/src/funksjoner.ts`, med svaret husket et

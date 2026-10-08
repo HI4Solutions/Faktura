@@ -1021,6 +1021,11 @@ table.funksjon-tabell { width: max-content; min-width: 100%; border-collapse: se
 .funksjon-tabell tbody tr:hover > * { background: color-mix(in srgb, var(--aksent-lys) 45%, var(--flate)); }
 .funksjon-tabell tfoot th, .funksjon-tabell tfoot td { position: sticky; bottom: 0; background: var(--flate-2); border-top: 1px solid var(--kant-sterk); border-bottom: 0; font-size: 0.78rem; }
 .funksjon-tabell tfoot .funksjon-org { z-index: 3; }
+/* Modulene over funksjonene (Faktura, Bemanning, ...), med en strek mellom dem. */
+.funksjon-tabell thead tr.funksjon-moduler th { top: 0; height: 30px; padding-top: 4px; padding-bottom: 4px; font-size: 0.74rem; font-weight: 650; color: var(--tekst-2); }
+.funksjon-tabell thead tr.funksjon-moduler + tr th { top: 30px; height: 36px; }
+.funksjon-tabell thead tr.funksjon-moduler ~ tr.funksjon-standard th, .funksjon-tabell thead tr.funksjon-moduler ~ tr.funksjon-standard td { top: 66px; }
+.funksjon-tabell .modul-start { border-left: 2px solid var(--kant-sterk); }
 .funksjon-alle { display: inline-flex; gap: 8px; }
 .funksjon-alle button.lenke { font-size: 0.78rem; }
 .funksjon-forklaring { margin-top: 14px; }
@@ -1033,6 +1038,21 @@ input.klokkeslett { font-variant-numeric: tabular-nums; }
 .kontoer-venter .admin-rader li { flex-wrap: wrap; gap: 8px 12px; }
 .kontoer-venter .admin-rader li .knapper { flex: none; }
 .kort.venter-godkjenning { max-width: 480px; }
+.kontoer-venter .konto-moduler { display: block; margin-top: 4px; }
+.kontoer-venter fieldset.modul-valg.kompakt { margin-top: 6px; }
+.venter-godkjenning .valgte-moduler .lenke { margin-left: 4px; }
+
+/* Modulvalg: i registreringen, på venteskjermen og (kompakt) når kontoen godkjennes. */
+fieldset.modul-valg { display: grid; gap: 8px; padding: 10px 12px 12px; margin: 4px 0 16px; }
+fieldset.modul-valg legend { font-size: 0.83rem; font-weight: 600; color: var(--tekst-2); padding: 0 4px; }
+fieldset.modul-valg label { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate); font-weight: 450; cursor: pointer; }
+fieldset.modul-valg label.valgt { border-color: var(--aksent); box-shadow: inset 0 0 0 1px var(--aksent); }
+fieldset.modul-valg label input { margin: 2px 0 0; flex: none; }
+fieldset.modul-valg label > span { display: grid; gap: 2px; }
+fieldset.modul-valg.kompakt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 0; margin: 0; border: 0; background: none; }
+fieldset.modul-valg.kompakt legend { float: left; padding: 0; margin-right: 4px; font-size: 0.8rem; font-weight: 500; color: var(--dempet); }
+fieldset.modul-valg.kompakt label { padding: 0; border: 0; background: none; box-shadow: none; align-items: center; gap: 0; font-size: 0.85rem; }
+fieldset.modul-valg.kompakt label input { margin: 0 6px 0 0; }
 @media (max-width: 700px) {
   .funksjon-tabell .funksjon-org { min-width: 140px; max-width: 170px; }
   .funksjon-tabell th, .funksjon-tabell td { padding: 8px 8px; }

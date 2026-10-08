@@ -11,10 +11,12 @@ import {
   type MultiFactorResolver,
 } from "firebase/auth";
 import { hentAuth } from "../firebase";
-import { Feil } from "../felles";
+import { Feil, Laster } from "../felles";
 import { Logo } from "../Logo";
 import { IkonHake } from "../ikoner";
 import { useKonto } from "../konto";
+import { api } from "../api";
+import { ModulValg, modulnavn, opplisting, useModuler } from "../moduler";
 
 // Venstre side av innloggingen: hva tjenesten gjør.
 function Merkevarepanel() {
@@ -69,6 +71,9 @@ export function Innlogging() {
   const [feil, settFeil] = useState<string | null>(null);
   const [info, settInfo] = useState<string | null>(null);
   const [opptatt, settOpptatt] = useState(false);
+  // Modulene den nye brukeren trenger (Faktura, Bemanning, ...); de kommer med i forespørselen.
+  const moduler = useModuler(modus === "ny");
+  const [valgte, settValgte] = useState<string[]>([]);
 
   async function passkey() {
     settFeil(null);
@@ -98,9 +103,13 @@ export function Innlogging() {
       } else if (modus === "ny") {
         if (passord.length < 8) throw Object.assign(new Error(), { code: "auth/weak-password" });
         if (navn.trim().length < 2) throw new Error("Skriv inn fullt navn.");
+        if (moduler?.length && !valgte.length) throw new Error("Velg hva du trenger (minst én modul).");
         const { user } = await createUserWithEmailAndPassword(auth, epost, passord);
         await updateProfile(user, { displayName: navn.trim() });
         await sendEmailVerification(user, { url: window.location.origin });
+        // Navnet og modulene lagres med en gang; forespørselen går når e-postadressen er
+        // bekreftet. Feiler det, spør venteskjermen etter modulene i stedet.
+        if (valgte.length) await api("PATCH", "/meg", { navn: navn.trim(), moduler: valgte }).catch((e) => console.warn("Kunne ikke lagre modulene", e));
       } else {
         await sendPasswordResetEmail(auth, epost, { url: window.location.origin });
         settInfo("Hvis adressen har en konto, har vi sendt en lenke for å lage nytt passord.");
@@ -167,6 +176,7 @@ export function Innlogging() {
                 />
               </label>
             )}
+            {modus === "ny" && <ModulValg moduler={moduler} valgt={valgte} endre={settValgte} />}
           </>
         )}
         <Feil melding={feil} />
@@ -253,12 +263,20 @@ export function BekreftEpost({ epost, loggUt }: { epost: string; loggUt: () => v
   );
 }
 
-// En ny konto som venter på godkjenning fra HI4 Faktura (eller er avvist).
+// En ny konto som venter på godkjenning fra HI4 Faktura (eller er avvist). Har brukeren ikke valgt
+// moduler ennå (f.eks. når kontoen ble laget på en annen enhet), velges de her, og først da går
+// forespørselen. Modulene kan endres til kontoen er godkjent.
 export function VenterPaaGodkjenning() {
   const { meg, oppdater, loggUt } = useKonto();
   const [melding, settMelding] = useState<string | null>(null);
+  const [feil, settFeil] = useState<string | null>(null);
   const [opptatt, settOpptatt] = useState(false);
   const avvist = meg?.bruker.status === "avvist";
+  const moduler = useModuler(!avvist);
+  const mine = meg?.bruker.moduler ?? [];
+  const [endrer, settEndrer] = useState(false);
+  const [valgte, settValgte] = useState<string[]>(mine);
+  const velger = !avvist && !!moduler?.length && (!mine.length || endrer);
   async function sjekk() {
     settOpptatt(true);
     settMelding(null);
@@ -271,36 +289,111 @@ export function VenterPaaGodkjenning() {
       settOpptatt(false);
     }
   }
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    settFeil(null);
+    settMelding(null);
+    if (!valgte.length) return settFeil("Velg minst én modul.");
+    settOpptatt(true);
+    try {
+      await api("PATCH", "/meg", { moduler: valgte });
+      await oppdater();
+      if (endrer) settMelding("Endringen er lagret.");
+      settEndrer(false);
+    } catch (e) {
+      settFeil((e as Error).message);
+    } finally {
+      settOpptatt(false);
+    }
+  }
+  const fornavn = meg?.bruker.navn?.split(" ")[0];
+  // Uten valgte moduler avhenger skjermen av modulene; vent på dem.
+  if (!avvist && !mine.length && moduler === null)
+    return (
+      <div className="sentrert">
+        <Laster />
+      </div>
+    );
   return (
     <div className="sentrert">
       <div className="kort venter-godkjenning">
-        <h1>{avvist ? "Kontoen er ikke godkjent" : "Kontoen venter på godkjenning"}</h1>
+        <h1>{avvist ? "Kontoen er ikke godkjent" : velger && !mine.length ? "Hva trenger du?" : "Kontoen venter på godkjenning"}</h1>
         {avvist ? (
           <>
             <p>Kontoen din i HI4 Faktura ({meg?.bruker.epost}) ble ikke godkjent.</p>
             {meg?.bruker.avvist_grunn && <p className="dempet">Begrunnelse: {meg.bruker.avvist_grunn}</p>}
             <p className="dempet">Ta kontakt med HI4 Faktura hvis du mener dette er feil.</p>
           </>
+        ) : velger ? (
+          <form onSubmit={lagre}>
+            {!mine.length && (
+              <p>
+                Takk, {fornavn}! E-postadressen er bekreftet. Kryss av for det du skal bruke HI4 Faktura til, så sendes kontoen til HI4 Faktura for godkjenning.
+              </p>
+            )}
+            <ModulValg moduler={moduler} valgt={valgte} endre={settValgte} tittel={mine.length ? "Endre hva du trenger" : "Hva trenger du?"} />
+            <Feil melding={feil} />
+            <div className="knapper">
+              <button className="primar" disabled={opptatt}>
+                {mine.length ? "Lagre" : "Send til godkjenning"}
+              </button>
+              {endrer && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    settEndrer(false);
+                    settValgte(mine);
+                    settFeil(null);
+                  }}
+                >
+                  Avbryt
+                </button>
+              )}
+              <button type="button" className="lenke" onClick={loggUt}>
+                Logg ut
+              </button>
+            </div>
+          </form>
         ) : (
           <>
             <p>
-              Takk, {meg?.bruker.navn?.split(" ")[0]}! E-postadressen er bekreftet, og kontoen din er sendt til HI4 Faktura for godkjenning. Du får e-post til{" "}
+              Takk, {fornavn}! E-postadressen er bekreftet, og kontoen din er sendt til HI4 Faktura for godkjenning. Du får e-post til{" "}
               <strong>{meg?.bruker.epost}</strong> når den er godkjent.
             </p>
+            {!!mine.length && (
+              <p className="valgte-moduler">
+                Du har bedt om <strong>{opplisting(modulnavn(moduler, mine))}</strong>.{" "}
+                {!!moduler?.length && (
+                  <button
+                    type="button"
+                    className="lenke"
+                    onClick={() => {
+                      settValgte(mine);
+                      settEndrer(true);
+                      settMelding(null);
+                    }}
+                  >
+                    Endre
+                  </button>
+                )}
+              </p>
+            )}
             <p className="dempet">Er du invitert av en organisasjon, åpner du lenken i invitasjonen, så kommer du inn med en gang.</p>
           </>
         )}
         {melding && <div className="melding info">{melding}</div>}
-        <div className="knapper">
-          {!avvist && (
-            <button className="primar" disabled={opptatt} onClick={sjekk}>
-              Sjekk på nytt
+        {!velger && (
+          <div className="knapper">
+            {!avvist && (
+              <button className="primar" disabled={opptatt} onClick={sjekk}>
+                Sjekk på nytt
+              </button>
+            )}
+            <button className="lenke" onClick={loggUt}>
+              Logg ut
             </button>
-          )}
-          <button className="lenke" onClick={loggUt}>
-            Logg ut
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

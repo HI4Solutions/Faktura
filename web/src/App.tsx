@@ -170,7 +170,14 @@ function Ramme() {
     return (
       <div className="innhold frittstaende" style={{ margin: "0 auto" }}>
         <h1>{orgs.length === 0 ? "Velkommen til HI4 Faktura" : "Ny organisasjon"}</h1>
-        {orgs.length === 0 && <p className="dempet">Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt.</p>}
+        {orgs.length === 0 && (
+          <p className="dempet">
+            {/* Uten Faktura blant modulene (bare Bemanning) er det ikke fakturering det handler om. */}
+            {meg?.bruker.moduler?.length && !meg.bruker.moduler.includes("faktura")
+              ? "Start med å legge inn foretaket ditt."
+              : "Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt."}
+          </p>
+        )}
         <NyOrganisasjon avbryt={orgs.length ? () => settNy(false) : undefined} />
         <p className="liten dempet">
           Fått en invitasjon? Åpne lenken i e-posten. · <button className="lenke" onClick={loggUt}>Logg ut</button>

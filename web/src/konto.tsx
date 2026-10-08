@@ -27,7 +27,8 @@ export const harFunksjon = (org: Pick<MinOrg, "funksjoner"> | null | undefined, 
 
 interface Meg {
   // status: kontoen er godkjent av HI4 Faktura, venter på godkjenning eller er avvist.
-  bruker: { id: string; epost: string; navn: string | null; status?: "venter" | "godkjent" | "avvist"; avvist_grunn?: string | null };
+  // moduler: modulene brukeren har bedt om (eller fått godkjent), f.eks. ["faktura", "bemanning"].
+  bruker: { id: string; epost: string; navn: string | null; status?: "venter" | "godkjent" | "avvist"; avvist_grunn?: string | null; moduler?: string[] };
   mfa: boolean;
   plattformadmin: boolean;
   organisasjoner: MinOrg[];

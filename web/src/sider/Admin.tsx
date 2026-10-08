@@ -7,6 +7,7 @@ import { api, hent } from "../api";
 import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
 import { dato, orgnr } from "../format";
 import { IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
+import { ModulValg, modulnavn, opplisting, useModuler, type Modul } from "../moduler";
 
 type Org = {
   id: string;
@@ -40,15 +41,19 @@ type Bruker = {
   status: "venter" | "godkjent" | "avvist";
   behandlet_at: string | null;
   avvist_grunn: string | null;
+  // Modulene brukeren ba om, eller som ble godkjent (0044_moduler.sql).
+  moduler: string[];
 };
-// En ny konto som venter på godkjenning.
-type KontoVenter = { id: string; epost: string; navn: string | null; opprettet: string; varslet_at: string | null };
+// En ny konto som venter på godkjenning, med modulene den ber om.
+type KontoVenter = { id: string; epost: string; navn: string | null; opprettet: string; varslet_at: string | null; moduler: string[] };
 const kontoMerke = (s: Bruker["status"]) =>
   s === "venter" ? <span className="merke merke-info">Venter</span> : s === "avvist" ? <span className="merke merke-fare">Avvist</span> : null;
 type Fane = "oversikt" | "venter" | "organisasjoner" | "funksjoner" | "brukere" | "drift";
 // Funksjonene organisasjonene kan ha tilgang til (0041_funksjoner.sql).
-type Funksjon = { kode: string; navn: string; beskrivelse: string; krever: string | null; standard: boolean };
+type Funksjon = { kode: string; navn: string; beskrivelse: string; krever: string | null; standard: boolean; modul?: string };
 type Funksjonsoversikt = {
+  // Modulene (Faktura, Bemanning, ...) som funksjonene hører til, i rekkefølge.
+  moduler?: Modul[];
   funksjoner: Funksjon[];
   organisasjoner: { id: string; navn: string; orgnr: string | null; type: string; verifisering: Org["verifisering"]; aktive: string[]; endret: string | null }[];
 };
@@ -649,6 +654,15 @@ function Funksjoner({ apne }: { apne: (id: string) => void }) {
   const s = sok.trim().toLowerCase();
   const rader = data.organisasjoner.filter((o) => !s || `${o.navn} ${o.orgnr ?? ""}`.toLowerCase().includes(s) || (o.orgnr ?? "").includes(s.replace(/\s/g, "")));
   const navn = new Map(data.funksjoner.map((f) => [f.kode, f.navn]));
+  // Funksjonene kommer modul for modul: én overskrift per modul, og en strek mellom modulene.
+  const grupper: { modul: Modul; antall: number }[] = [];
+  for (const f of data.funksjoner) {
+    const siste = grupper.at(-1);
+    if (siste && siste.modul.kode === f.modul) siste.antall++;
+    else grupper.push({ modul: data.moduler?.find((m) => m.kode === f.modul) ?? { kode: f.modul ?? "", navn: "", beskrivelse: "" }, antall: 1 });
+  }
+  const modulStart = new Set(data.funksjoner.filter((f, i) => i > 0 && data.funksjoner[i - 1]!.modul !== f.modul).map((f) => f.kode));
+  const skille = (kode: string, klasse?: string) => [modulStart.has(kode) ? "modul-start" : "", klasse ?? ""].filter(Boolean).join(" ") || undefined;
 
   // Endringene vises med en gang, og rettes etter svaret (eller tilbake om det feiler).
   const medAktive = (d: Funksjonsoversikt, id: string, aktive: string[]) => ({ ...d, organisasjoner: d.organisasjoner.map((o) => (o.id === id ? { ...o, aktive } : o)) });
@@ -680,7 +694,7 @@ function Funksjoner({ apne }: { apne: (id: string) => void }) {
       <p className="dempet" style={{ marginTop: 0 }}>
         Velg hvilke organisasjoner som har tilgang til hvilke funksjoner. Fakturaer, kunder og produkter har alle. Det som ikke er slått på, vises ikke i
         appen, og bakgrunnsjobbene (bank, gjentakende fakturaer, EHF, påminnelser og Google Disk) hopper over organisasjonen. Raden øverst er standarden for nye
-        organisasjoner.
+        organisasjoner; nye kontoer får bare funksjonene i modulene de er godkjent med.
       </p>
       <div className="admin-verktoy">
         <input type="search" placeholder="Søk på navn eller org.nr." aria-label="Søk i organisasjoner" value={sok} onChange={(e) => settSok(e.target.value)} />
@@ -690,10 +704,20 @@ function Funksjoner({ apne }: { apne: (id: string) => void }) {
       <div className="kort funksjon-ramme">
         <table className="funksjon-tabell">
           <thead>
+            {grupper.length > 1 && (
+              <tr className="funksjon-moduler">
+                <th className="funksjon-org">Modul</th>
+                {grupper.map((g, i) => (
+                  <th key={g.modul.kode} colSpan={g.antall} className={i > 0 ? "modul-start" : undefined} title={g.modul.beskrivelse}>
+                    {g.modul.navn}
+                  </th>
+                ))}
+              </tr>
+            )}
             <tr>
               <th className="funksjon-org">Organisasjon</th>
               {data.funksjoner.map((f) => (
-                <th key={f.kode} title={`${f.navn}: ${f.beskrivelse}${f.krever ? ` (krever ${navn.get(f.krever)})` : ""}`}>
+                <th key={f.kode} className={skille(f.kode)} title={`${f.navn}: ${f.beskrivelse}${f.krever ? ` (krever ${navn.get(f.krever)})` : ""}`}>
                   {kortFunksjon[f.kode] ?? f.navn}
                 </th>
               ))}
@@ -703,7 +727,7 @@ function Funksjoner({ apne }: { apne: (id: string) => void }) {
                 Nye organisasjoner
               </th>
               {data.funksjoner.map((f) => (
-                <td key={f.kode}>
+                <td key={f.kode} className={skille(f.kode)}>
                   <input type="checkbox" aria-label={`${f.navn} for nye organisasjoner`} checked={f.standard} onChange={(e) => void settStandard(f.kode, e.target.checked)} />
                 </td>
               ))}
@@ -722,7 +746,7 @@ function Funksjoner({ apne }: { apne: (id: string) => void }) {
                   const pa = o.aktive.includes(f.kode);
                   const virkerIkke = pa && !!f.krever && !o.aktive.includes(f.krever);
                   return (
-                    <td key={f.kode} className={virkerIkke ? "virker-ikke" : undefined}>
+                    <td key={f.kode} className={skille(f.kode, virkerIkke ? "virker-ikke" : undefined)}>
                       <input
                         type="checkbox"
                         aria-label={`${f.navn} for ${o.navn}`}
@@ -748,7 +772,7 @@ function Funksjoner({ apne }: { apne: (id: string) => void }) {
               <tr>
                 <th className="funksjon-org">Alle som vises</th>
                 {data.funksjoner.map((f) => (
-                  <td key={f.kode}>
+                  <td key={f.kode} className={skille(f.kode)}>
                     <span className="funksjon-alle">
                       <button type="button" className="lenke" disabled={h.opptatt} title={`Slå på ${f.navn} for alle som vises`} onClick={() => alle(f, true)}>
                         På
@@ -882,16 +906,29 @@ function Behandle({ org, venter, ferdig }: { org: any; venter: boolean; ferdig: 
 function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: () => void }) {
   const h = useHandling();
   const [melding, settMelding] = useState<string | null>(null);
+  const moduler = useModuler();
+  // Modulene kontoen godkjennes med: dem brukeren ba om, til administratoren endrer dem.
+  const [endret_, settEndret] = useState<Record<string, string[]>>({});
+  const valgte = (k: KontoVenter) => endret_[k.id] ?? k.moduler;
   const behandle = (k: KontoVenter, godkjent: boolean) =>
     h.kjor(async () => {
       let grunn: string | undefined;
+      if (godkjent && moduler?.length && !valgte(k).length) throw new Error(`Velg minst én modul for ${k.navn ?? k.epost}.`);
       if (!godkjent) {
         const svar = prompt(`Avvise kontoen til ${k.navn ?? k.epost}? Skriv eventuelt en begrunnelse (den sendes til brukeren):`, "");
         if (svar === null) return;
         grunn = svar.trim() || undefined;
       }
-      await api("POST", `/admin/brukere/${k.id}/godkjenning`, { godkjent, grunn });
-      settMelding(`${k.navn ?? k.epost} er ${godkjent ? "godkjent" : "avvist"} og har fått e-post om det.`);
+      const r = await api<{ moduler?: string[] }>("POST", `/admin/brukere/${k.id}/godkjenning`, {
+        godkjent,
+        grunn,
+        moduler: godkjent && valgte(k).length ? valgte(k) : undefined,
+      });
+      settMelding(
+        godkjent
+          ? `${k.navn ?? k.epost} er godkjent${r.moduler?.length ? ` med ${opplisting(r.moduler)}` : ""} og har fått e-post om det.`
+          : `${k.navn ?? k.epost} er avvist og har fått e-post om det.`,
+      );
       endret();
     });
   return (
@@ -914,6 +951,23 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
               <span>
                 <strong>{k.navn ?? <span className="dempet">Uten navn ennå</span>}</strong>
                 <span className="dempet liten"> · {k.epost} · registrert {siden(k.opprettet)}</span>
+                <span className="liten konto-moduler">
+                  {k.moduler.length ? (
+                    <>
+                      Ber om <strong>{opplisting(modulnavn(moduler, k.moduler))}</strong>
+                    </>
+                  ) : (
+                    <span className="dempet">Har ikke valgt moduler ennå</span>
+                  )}
+                </span>
+                <ModulValg
+                  kompakt
+                  moduler={moduler}
+                  valgt={valgte(k)}
+                  endre={(m) => settEndret((e) => ({ ...e, [k.id]: m }))}
+                  tittel="Godkjennes med"
+                  navn={k.navn ?? k.epost}
+                />
               </span>
               <span className="knapper">
                 <button type="button" className="primar" disabled={h.opptatt} onClick={() => behandle(k, true)}>
@@ -928,7 +982,8 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
         </ul>
       )}
       <p className="liten dempet" style={{ marginBottom: 0 }}>
-        Nye kontoer kommer ikke inn før de er godkjent. Den som blir invitert av en organisasjon, godkjennes når invitasjonen tas imot.
+        Nye kontoer kommer ikke inn før de er godkjent. Organisasjonene de lager, får bare funksjonene i modulene de er godkjent med (du kan endre dem under
+        Funksjoner). Den som blir invitert av en organisasjon, godkjennes når invitasjonen tas imot.
       </p>
     </div>
   );
@@ -940,6 +995,7 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
 
 function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
   const { data, feil } = useData(() => hent<Bruker[]>("/admin/brukere"), []);
+  const moduler = useModuler();
   const [sok, settSok] = useState("");
   const [valgt, settValgt] = useState<Bruker | null>(null);
   const smal = useSmal();
@@ -949,11 +1005,12 @@ function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
   const rader = data.filter((b) => !s || `${b.navn ?? ""} ${b.epost} ${b.organisasjoner.map((o) => o.navn).join(" ")}`.toLowerCase().includes(s));
   const eksporter = () =>
     lastNedCsv(`brukere-${new Date().toISOString().slice(0, 10)}.csv`, [
-      ["Navn", "E-post", "Status", "Organisasjoner", "Passkeys", "Registrert", "Sist aktiv"],
+      ["Navn", "E-post", "Status", "Moduler", "Organisasjoner", "Passkeys", "Registrert", "Sist aktiv"],
       ...rader.map((b) => [
         b.navn,
         b.epost,
         { venter: "Venter", godkjent: "Godkjent", avvist: "Avvist" }[b.status] ?? b.status,
+        modulnavn(moduler, b.moduler ?? []).join(", "),
         b.organisasjoner.map((o) => `${o.navn} (${rolleTekst[o.rolle] ?? o.rolle})`).join(", "),
         b.antall_passkeys,
         b.opprettet.slice(0, 10),
@@ -998,6 +1055,7 @@ function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
                 <th>Navn</th>
                 <th>E-post</th>
                 <th>Organisasjoner</th>
+                <th>Moduler</th>
                 <th>Passkey</th>
                 <th>Sist aktiv</th>
                 <th>Registrert</th>
@@ -1019,6 +1077,7 @@ function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
                       </div>
                     ))}
                   </td>
+                  <td className="liten">{b.moduler?.length ? modulnavn(moduler, b.moduler).join(", ") : <span className="dempet">–</span>}</td>
                   <td>{b.antall_passkeys > 0 ? `${b.antall_passkeys}` : <span className="dempet">–</span>}</td>
                   <td className="liten hel-linje">{siden(b.sist_aktiv)}</td>
                   <td className="hel-linje">{dato(b.opprettet)}</td>
@@ -1026,7 +1085,7 @@ function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
               ))}
               {rader.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="dempet">
+                  <td colSpan={7} className="dempet">
                     Ingen treff.
                   </td>
                 </tr>
@@ -1042,6 +1101,7 @@ function Brukere({ apneOrg }: { apneOrg: (id: string) => void }) {
               rader={[
                 ["E-post", <a href={`mailto:${valgt.epost}`}>{valgt.epost}</a>],
                 ["Registrert", dato(valgt.opprettet)],
+                ["Moduler", valgt.moduler?.length ? opplisting(modulnavn(moduler, valgt.moduler)) : "Ikke valgt (får standarden for nye organisasjoner)"],
                 ["Sist aktiv", siden(valgt.sist_aktiv)],
                 ["Passkeys", valgt.antall_passkeys ? `${valgt.antall_passkeys} (sist brukt ${siden(valgt.sist_passkey)})` : "Ingen"],
               ]}

@@ -29,13 +29,13 @@ function firebase() {
 
 async function verifiser(token: string) {
   if (config.testInnlogging && token.startsWith("test:")) {
-    // test:<uid>:<epost>[:mfa[:navn[:venter]]] – testbrukere godkjennes med en gang, med mindre
-    // tokenet slutter med «venter».
-    const [, uid, epost, mfa, navn, venter] = token.split(":");
+    // test:<uid>:<epost>[:mfa[:navn[:venter[:ubekreftet]]]] – testbrukere godkjennes med en gang,
+    // med mindre tokenet har «venter», og e-postadressen er bekreftet uten «ubekreftet».
+    const [, uid, epost, mfa, navn, venter, ubekreftet] = token.split(":");
     return {
       uid,
       email: epost,
-      email_verified: true,
+      email_verified: ubekreftet !== "ubekreftet",
       mfa: mfa === "mfa" || mfa === "passkey",
       navn: navn ? decodeURIComponent(navn) : (undefined as string | undefined),
       godkjennTest: venter !== "venter",
@@ -79,9 +79,10 @@ export const krevInnlogging: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
-// Endringer krever bekreftet e-postadresse.
+// Endringer krever bekreftet e-postadresse, bortsett fra navnet og modulene på den nye kontoen
+// (de lagres rett fra registreringen; forespørselen går først når e-postadressen er bekreftet).
 export const krevBekreftetEpost: MiddlewareHandler = async (c, next) => {
-  if (c.req.method !== "GET" && !c.get("bruker").epostBekreftet) {
+  if (c.req.method !== "GET" && !c.get("bruker").epostBekreftet && !(c.req.method === "PATCH" && c.req.path === "/api/meg")) {
     throw new ApiFeil(403, "Bekreft e-postadressen din først");
   }
   await next();

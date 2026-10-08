@@ -31,7 +31,7 @@ import { fravaerRuter } from "./fravaer.js";
 import { bemanningRuter } from "./bemanning.js";
 import { arbeidsplanRuter } from "./arbeidsplan.js";
 import { krevFunksjoner } from "./funksjoner.js";
-import { krevGodkjentKonto, meldNyKonto } from "./kontoer.js";
+import { hentModuler, krevGodkjentKonto, meldNyKonto, modulKoder } from "./kontoer.js";
 import { aiPaa } from "./ai.js";
 
 const uuid = z.string().uuid();
@@ -235,6 +235,11 @@ export function lagApi() {
   app.route("/api/offentlig/passkey", passkeyInnlogging());
   app.route("/api/offentlig/resend", resendWebhook());
   app.route("/api/offentlig/google", googleCallback());
+  // Modulene man kan velge når man lager en konto (Faktura, Bemanning og de som kommer).
+  app.get("/api/offentlig/moduler", async (c) => {
+    c.header("cache-control", "public, max-age=300");
+    return c.json(await hentModuler());
+  });
 
   const api = new Hono();
   api.use("*", async (c, next) => (c.req.path.startsWith("/api/offentlig/") ? next() : krevInnlogging(c, next)));
@@ -259,14 +264,18 @@ export function lagApi() {
     c.json(await somBruker(c.get("bruker").id, (db) => alle(db, "select maaned, verdi from faktura.kpi order by maaned desc limit 36"))),
   );
 
-  // Med status for kontoen (venter på godkjenning, godkjent eller avvist); en konto som ikke er
-  // godkjent, ser ingen organisasjoner.
+  // Med status for kontoen (venter på godkjenning, godkjent eller avvist) og modulene brukeren
+  // har bedt om (eller fått); en konto som ikke er godkjent, ser ingen organisasjoner.
+  const megSql = `select b.id, b.epost, b.navn, b.status, b.avvist_grunn,
+                         array(select m.modul from faktura.bruker_moduler m join faktura.moduler x on x.kode = m.modul
+                                where m.bruker_id = b.id order by x.rekkefolge) as moduler
+                    from faktura.brukere b where b.id = faktura.bruker_id()`;
   api.get("/meg", async (c) => {
     await meldNyKonto(c);
     const godkjent = c.get("bruker").status === "godkjent";
     return c.json(
       await bruk(c, async (db) => ({
-        bruker: await en(db, "select id, epost, navn, status, avvist_grunn from faktura.brukere where id = faktura.bruker_id()"),
+        bruker: await en(db, megSql),
         mfa: c.get("bruker").mfa,
         plattformadmin: erPlattformadmin(c.get("bruker").epost),
         organisasjoner: godkjent ? await alle(db, "select * from faktura.mine_organisasjoner order by direkte_medlem desc, navn") : [],
@@ -274,10 +283,21 @@ export function lagApi() {
     );
   });
 
+  // Navnet, og modulene mens kontoen venter på godkjenning (også før e-postadressen er
+  // bekreftet, rett fra registreringen).
   api.patch("/meg", async (c) => {
-    const b = await kropp(c, z.object({ navn: tekstS(120).min(2, "må ha minst to tegn") }));
-    const svar = await bruk(c, (db) => en(db, "update faktura.brukere set navn = $1 where id = faktura.bruker_id() returning id, epost, navn, status", [b.navn]));
-    // Med navnet på plass går forespørselen om godkjenning til administratorene.
+    const b = await kropp(
+      c,
+      z
+        .object({ navn: tekstS(120).min(2, "må ha minst to tegn").optional(), moduler: modulKoder.optional() })
+        .refine((b) => b.navn !== undefined || b.moduler !== undefined, "Ingenting å endre"),
+    );
+    const svar = await bruk(c, async (db) => {
+      if (b.navn !== undefined) await db.query("update faktura.brukere set navn = $1 where id = faktura.bruker_id()", [b.navn]);
+      if (b.moduler) await db.query("select faktura.velg_moduler($1)", [b.moduler]);
+      return en(db, megSql);
+    });
+    // Med navnet og modulene på plass går forespørselen om godkjenning til administratorene.
     await meldNyKonto(c);
     return c.json(svar);
   });
