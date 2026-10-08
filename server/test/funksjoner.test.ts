@@ -29,6 +29,8 @@ describe("rutene og funksjonene de krever", () => {
     expect(funksjonerFor("/vakter/fra-plan")).toEqual(["vaktplan"]);
     expect(funksjonerFor("/ekstratimer.pdf")).toEqual(["vaktplan"]);
     expect(funksjonerFor("/tavle/mine")).toEqual(["vaktplan"]);
+    // Rollene hører til de ansatte (om personen er ansatt, følger rollen).
+    expect(funksjonerFor("/ansattgrupper/fra-stillinger")).toEqual(["ansatte"]);
   });
 });
 

@@ -1,8 +1,11 @@
-// Grupper av ansatte for bemanningskalenderen (0039_bemanning.sql): f.eks. sekretærer og
-// leger, hver med hvor mange som trengs på jobb per dag. Kalenderen viser måneden med
-// datoene nedover og de ansatte bortover, gruppe for gruppe, og hvor mange som er på jobb i
-// hver gruppe mot behovet. Den regnes ut i appen fra vaktplanen og fraværet; her styres
-// gruppene. Eier og administrator endrer dem; regnskap ser dem.
+// Rollene (0039_bemanning.sql og 0056_roller.sql; i databasen og API-et «ansattgrupper»):
+// rollen personen har hos dere, f.eks. lege eller sekretær, med hvor mange som trengs på jobb per
+// dag. En rolle kan være for dem som ikke er ansatt (ikke_ansatt, f.eks. leger som er aksjonærer):
+// da er de med i vaktplanen, på tavla, i kalenderen og i fraværet, men ikke i lønn, feriebank,
+// ekstratimer eller arbeidsmiljølovens advarsler. Kalenderen viser måneden med datoene nedover og
+// folkene bortover, rolle for rolle, og hvor mange som er på jobb med hver rolle mot behovet. Den
+// regnes ut i appen fra vaktplanen og fraværet; her styres rollene. Eier og administrator endrer
+// dem; regnskap ser dem.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
@@ -15,13 +18,14 @@ const id = (c: Context) => uuid.parse(c.req.param("id"));
 const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("bruker").id, fn);
 
 const skjema = z.object({
-  navn: tekst(40, "Navnet").min(1, "Skriv et navn på gruppen"),
+  navn: tekst(40, "Navnet").min(1, "Skriv et navn på rollen"),
   kort: valgfri(tekst(8, "Forkortelsen").min(1)),
   behov: valgfri(z.number().int("Skriv behovet som et helt tall").min(0, "Behovet kan ikke være negativt").max(500, "Behovet kan være høyst 500")),
+  ikke_ansatt: z.boolean().optional(), // de med rollen er ikke ansatt
 });
 
 const GRUPPER = `
-  select g.id, g.navn, g.kort, g.behov, g.rekkefolge,
+  select g.id, g.navn, g.kort, g.behov, g.rekkefolge, g.ikke_ansatt,
          (select count(*)::int from faktura.ansatte a where a.org_id = g.org_id and a.gruppe_id = g.id and a.aktiv) as antall
     from faktura.ansattgrupper g
    where g.org_id = $1
@@ -45,10 +49,10 @@ export function bemanningRuter() {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
       return en(
         db,
-        `insert into faktura.ansattgrupper (org_id, navn, kort, behov, rekkefolge)
-         values ($1, $2, $3, $4, (select coalesce(max(rekkefolge), 0) + 1 from faktura.ansattgrupper where org_id = $1))
+        `insert into faktura.ansattgrupper (org_id, navn, kort, behov, ikke_ansatt, rekkefolge)
+         values ($1, $2, $3, $4, $5, (select coalesce(max(rekkefolge), 0) + 1 from faktura.ansattgrupper where org_id = $1))
          returning id`,
-        [orgId(c), b.navn, b.kort ?? null, b.behov ?? null],
+        [orgId(c), b.navn, b.kort ?? null, b.behov ?? null, b.ikke_ansatt ?? false],
       );
     });
     return c.json(ny, 201);
@@ -56,7 +60,7 @@ export function bemanningRuter() {
 
   r.patch("/ansattgrupper/:id", async (c) => {
     const b = skjema.partial().parse(await c.req.json().catch(() => ({})));
-    const felt = (["navn", "kort", "behov"] as const).filter((k) => b[k] !== undefined);
+    const felt = (["navn", "kort", "behov", "ikke_ansatt"] as const).filter((k) => b[k] !== undefined);
     if (!felt.length) throw new ApiFeil(400, "Ingen felt å endre");
     await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
@@ -65,22 +69,22 @@ export function bemanningRuter() {
         id(c),
         ...felt.map((k) => b[k] ?? null),
       ]);
-      if (!res.rowCount) throw new ApiFeil(404, "Fant ikke gruppen");
+      if (!res.rowCount) throw new ApiFeil(404, "Fant ikke rollen");
     });
     return c.body(null, 204);
   });
 
-  // Slettes gruppen, står de ansatte i den uten gruppe.
+  // Slettes rollen, står de med den uten rolle (og er ansatt).
   r.delete("/ansattgrupper/:id", async (c) => {
     await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
       const res = await db.query("delete from faktura.ansattgrupper where org_id = $1 and id = $2", [orgId(c), id(c)]);
-      if (!res.rowCount) throw new ApiFeil(404, "Fant ikke gruppen");
+      if (!res.rowCount) throw new ApiFeil(404, "Fant ikke rollen");
     });
     return c.body(null, 204);
   });
 
-  // Ny rekkefølge: id-ene i den rekkefølgen gruppene skal stå (fra venstre).
+  // Ny rekkefølge: id-ene i den rekkefølgen rollene skal stå (fra venstre).
   r.post("/ansattgrupper/rekkefolge", async (c) => {
     const b = z.object({ ider: z.array(uuid).min(1).max(100) }).parse(await c.req.json().catch(() => ({})));
     await bruk(c, async (db) => {
@@ -95,8 +99,8 @@ export function bemanningRuter() {
     return c.body(null, 204);
   });
 
-  // Grupper fra stillingene: de aktive ansatte uten gruppe havner i en gruppe med samme navn som
-  // stillingen (en som finnes fra før, eller en ny). Store og små bokstaver teller ikke.
+  // Roller fra stillingene: de aktive uten rolle får en rolle med samme navn som stillingen (en som
+  // finnes fra før, eller en ny). Store og små bokstaver teller ikke.
   r.post("/ansattgrupper/fra-stillinger", async (c) => {
     const svar = await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);

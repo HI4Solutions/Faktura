@@ -46,7 +46,7 @@ describe.skipIf(!process.env.DATABASE_URL)("bemanningskalender", () => {
     };
     id.leger = await ny({ navn: "Leger", behov: 7 });
     id.sek = await ny({ navn: "Sekretærer", kort: "Sek.", behov: 4 });
-    expect((await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: " " })).data.error).toBe("Skriv et navn på gruppen");
+    expect((await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: " " })).data.error).toBe("Skriv et navn på rollen");
     expect((await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Feil", behov: -1 })).data.error).toBe("Behovet kan ikke være negativt");
     expect((await kall("POST", `/api/org/${org}/ansattgrupper/rekkefolge`, { ider: [id.sek, id.leger] })).status).toBe(204);
     expect((await kall("PATCH", `/api/org/${org}/ansattgrupper/${id.leger}`, { kort: "Leg.", behov: 6 })).status).toBe(204);
@@ -80,7 +80,7 @@ describe.skipIf(!process.env.DATABASE_URL)("bemanningskalender", () => {
     ]);
     // Ikke en gruppe i en annen organisasjon; null tar den ansatte ut av gruppen.
     const fremmed = (await kall("POST", `/api/org/${annenOrg}/ansattgrupper`, { navn: "Fremmed" })).data.id;
-    expect((await kall("PATCH", `/api/org/${org}/ansatte/${id.Jonas}`, { gruppe_id: fremmed })).data.error).toBe("Fant ikke gruppen");
+    expect((await kall("PATCH", `/api/org/${org}/ansatte/${id.Jonas}`, { gruppe_id: fremmed })).data.error).toBe("Fant ikke rollen");
     expect((await kall("PATCH", `/api/org/${org}/ansatte/${id.Isra}`, { gruppe_id: null })).data.gruppe_id).toBeNull();
   });
 

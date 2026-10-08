@@ -24,8 +24,9 @@ const RUTER: [RegExp, string][] = [
   [/^\/(rapporter|eksport)(\/|$)/, "rapporter"],
   [/^\/(kunder|produkter|ansatte)\/importer$/, "import"],
   [/^\/ansatte\/[^/]+\/arbeidsplan(\/|$)/, "vaktplan"],
-  [/^\/(ansatte|timer|lonn-oppsett)(\/|$)/, "ansatte"],
-  [/^\/(vakter|tavle|fravaer|ansattgrupper|feriebank|ferie)(\/|$)/, "vaktplan"],
+  // Rollene (ansattgrupper) hører til de ansatte: om personen er ansatt, følger rollen.
+  [/^\/(ansatte|ansattgrupper|timer|lonn-oppsett)(\/|$)/, "ansatte"],
+  [/^\/(vakter|tavle|fravaer|feriebank|ferie)(\/|$)/, "vaktplan"],
   [/^\/ekstratimer(\.csv|\.pdf)?$/, "vaktplan"],
 ];
 

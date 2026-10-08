@@ -76,14 +76,15 @@ const ansattSkjema = z.object({
   ansatt_fra: datoS.optional(),
   ansatt_til: valgfri(datoS),
   ansettelsestype: z.enum(["fast", "midlertidig", "tilkalling"]).optional(),
-  // Ikke ansatt: eier eller aksjonær, selvstendig næringsdrivende eller innleid (0054_tilknytning.sql).
-  tilknytning: z.enum(["ansatt", "eier", "selvstendig", "innleid"], { error: "Velg tilknytning (ansatt, eier, selvstendig eller innleid)" }).optional(),
   lonnstype: z.enum(["maaned", "time"]).optional(),
   maanedslonn: valgfri(z.number().min(0, "Lønnen kan ikke være negativ").max(10_000_000)),
   timelonn: valgfri(z.number().min(0, "Lønnen kan ikke være negativ").max(100_000)),
   aktiv: z.boolean().optional(),
   notat: valgfri(tekst(2000, "Notatet")),
-  gruppe_id: uuid.nullable().optional(), // gruppen i bemanningskalenderen (0039_bemanning.sql)
+  // Rollen (f.eks. lege eller sekretær; 0039_bemanning.sql og 0056_roller.sql). Om personen er
+  // ansatt, følger rollen. rolle: navnet i stedet for id-en (en ny rolle lages om den ikke finnes).
+  gruppe_id: uuid.nullable().optional(),
+  rolle: valgfri(tekst(40, "Rollen")),
   bursdag_varsel: z.boolean().optional(), // varsle de andre på bursdagen (0045_bursdager.sql)
   // Feriedager per år for denne ansatte (null: organisasjonens, regnet om etter arbeidsdagene; 0050_feriebank.sql).
   ferie_dager: valgfri(feriedager),
@@ -121,7 +122,9 @@ const foringSkjema = z.object({
 const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
-         a.ansatt_til, a.ansettelsestype, a.tilknytning, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
+         a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
+         -- Rollen, og om personen er ansatt (følger rollen, 0056_roller.sql).
+         (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
          -- Ukedagene i den faste arbeidsplanen som gjelder i dag (1 = mandag).
          (select coalesce(array_agg(d.ukedag order by d.ukedag), '{}') from faktura.arbeidsplan_dager d
            where d.org_id = a.org_id
@@ -258,7 +261,7 @@ export function ansattRuter() {
   // Fødselsnummeret krypteres (eller er kryptert på forhånd, i importen), og fødselsdatoen hentes
   // fra det. De faste tilleggene lagres for seg (lagreTillegg).
   async function felter(b: z.infer<typeof ansattSkjema> | Partial<z.infer<typeof ansattSkjema>>, kryptert?: Map<string, Buffer>) {
-    const { fnr, tillegg: _tillegg, ...resten } = b;
+    const { fnr, tillegg: _tillegg, rolle: _rolle, ...resten } = b;
     const f: Record<string, unknown> = Object.fromEntries(Object.entries(resten).filter(([, v]) => v !== undefined));
     if (fnr !== undefined) {
       f.fnr_kryptert = fnr ? (kryptert?.get(fnr) ?? (await krypter(fnr))) : null;
@@ -268,10 +271,31 @@ export function ansattRuter() {
     return f;
   }
 
-  // Gruppen må finnes i organisasjonen (databasen sjekker det også, men med en uklar melding).
+  // Rollen må finnes i organisasjonen (databasen sjekker det også, men med en uklar melding).
   async function sjekkGruppe(db: Db, org: string, f: Record<string, unknown>) {
     if (typeof f.gruppe_id !== "string") return;
-    if (!(await en(db, "select 1 from faktura.ansattgrupper where org_id = $1 and id = $2", [org, f.gruppe_id]))) throw new ApiFeil(400, "Fant ikke gruppen");
+    if (!(await en(db, "select 1 from faktura.ansattgrupper where org_id = $1 and id = $2", [org, f.gruppe_id]))) throw new ApiFeil(400, "Fant ikke rollen");
+  }
+
+  // Rollen med det navnet (store og små bokstaver teller ikke), eller en ny (for ansatte; den kan
+  // gjøres om til en rolle for dem som ikke er ansatt etterpå). husk: rollene som er slått opp.
+  async function rolleId(db: Db, org: string, navn: string, husk?: Map<string, string>) {
+    const n = navn.trim();
+    const kjent = husk?.get(n.toLowerCase());
+    if (kjent) return kjent;
+    const g =
+      (await en<{ id: string }>(db, "select id from faktura.ansattgrupper where org_id = $1 and lower(btrim(navn)) = lower($2) order by rekkefolge, opprettet limit 1", [
+        org,
+        n,
+      ])) ??
+      (await en<{ id: string }>(
+        db,
+        `insert into faktura.ansattgrupper (org_id, navn, rekkefolge)
+         values ($1, $2, (select coalesce(max(rekkefolge), 0) + 1 from faktura.ansattgrupper where org_id = $1)) returning id`,
+        [org, n.charAt(0).toUpperCase() + n.slice(1)],
+      ));
+    husk?.set(n.toLowerCase(), g!.id);
+    return g!.id;
   }
 
   // Ny ansatt (felt: kolonnene fra felter). Uten arbeidstid får den nye ansatte organisasjonens
@@ -335,6 +359,7 @@ export function ansattRuter() {
     const b = ansattSkjema.parse(await c.req.json().catch(() => ({})));
     const f = await felter(b);
     const a = await bruk(c, async (db) => {
+      if (b.rolle && b.gruppe_id === undefined) f.gruppe_id = await rolleId(db, orgId(c), b.rolle);
       await sjekkGruppe(db, orgId(c), f);
       const ny = await nyAnsatt(db, orgId(c), f);
       if (b.tillegg?.length) await lagreTillegg(db, orgId(c), ny, b.tillegg, true);
@@ -346,10 +371,11 @@ export function ansattRuter() {
   r.patch("/ansatte/:id", async (c) => {
     const b = ansattSkjema.partial().parse(await c.req.json().catch(() => ({})));
     const f = await felter(b);
-    const navn = Object.keys(f);
-    if (!navn.length && !b.tillegg) throw new ApiFeil(400, "Ingen felt å endre");
+    if (!Object.keys(f).length && !b.tillegg && !b.rolle) throw new ApiFeil(400, "Ingen felt å endre");
     const a = await bruk(c, async (db) => {
+      if (b.rolle && b.gruppe_id === undefined) f.gruppe_id = await rolleId(db, orgId(c), b.rolle);
       await sjekkGruppe(db, orgId(c), f);
+      const navn = Object.keys(f);
       if (navn.length) {
         const res = await db.query(`update faktura.ansatte set ${navn.map((k, i) => `${k} = $${i + 3}`).join(", ")} where org_id = $1 and id = $2`, [
           orgId(c),
@@ -406,17 +432,21 @@ export function ansattRuter() {
       plan = await bruk(c, async (db) => {
         const plan = await planleggImport(db, orgId(c), b);
         const full = (await regler(db, orgId(c))).full_stilling;
+        const roller = new Map<string, string>();
         for (const p of plan.filter(lagres)) {
           try {
             const d = p.data!;
+            const alleFelt = await felter(d, kryptert);
+            // Rollen i fila (f.eks. «Lege»): den som finnes med det navnet, eller en ny.
+            if (d.rolle) alleFelt.gruppe_id = await rolleId(db, orgId(c), d.rolle, roller);
             if (p.status === "ny") {
-              const ny = await nyAnsatt(db, orgId(c), await felter(d, kryptert), full);
+              const ny = await nyAnsatt(db, orgId(c), alleFelt, full);
               if (d.tillegg?.length) await lagreTillegg(db, orgId(c), ny, d.tillegg, false);
               continue;
             }
             // Tomme felt i fila sletter ikke det som står fra før, og et notat legges til det
             // som står der (med mindre det står der allerede).
-            const { notat, ...f } = Object.fromEntries(Object.entries(await felter(d, kryptert)).filter(([, v]) => v !== null && v !== ""));
+            const { notat, ...f } = Object.fromEntries(Object.entries(alleFelt).filter(([, v]) => v !== null && v !== ""));
             const sett = Object.keys(f).map((k, i) => `${k} = $${i + 3}`);
             const verdier = Object.values(f);
             if (notat !== undefined) {

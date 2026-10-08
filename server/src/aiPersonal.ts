@@ -814,7 +814,7 @@ async function hvemJobber(k: PKontekst, ai: Partial<PersonalKommando>): Promise<
       where f.org_id = $1 and f.til >= $2 and f.fra <= $3 order by a.fornavn`,
     [k.orgId, fra, til],
   );
-  // Gruppene i bemanningskalenderen (f.eks. leger og sekretærer, også de som ikke er ansatt):
+  // Rollene i bemanningskalenderen (f.eks. leger og sekretærer, også de som ikke er ansatt):
   // hvor mange i hver som er på jobb, mot behovet (som ikke regnes på helligdager).
   const grupper = await alle<{ navn: string; behov: number | null; ansatte: string[] }>(
     k.db,

@@ -1,17 +1,18 @@
-// Bemanningskalenderen: måneden med datoene nedover og de ansatte bortover, gruppe for
-// gruppe (f.eks. sekretærer og leger). Hver rute viser om den ansatte er på jobb (✓, fra den
-// faste arbeidsplanen eller vaktplanen), har fri (–), er borte (F ferie, S syk, SB sykt barn,
-// P permisjon, K kurs, A annet) eller jobber ekstra (timene utover planen). Til høyre står hvor
-// mange som er på jobb i hver gruppe mot behovet, så bemanningen kan ses opp mot hverandre, og
-// nederst ekstratimene i måneden per ansatt. Trykk på en rute for å registrere fravær eller
-// sette inn vikar; grupper og behov settes opp under «Grupper», og rapporten over ekstratimene
-// (PDF og CSV) under «Ekstratimer».
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+// Bemanningskalenderen: måneden med datoene nedover og folkene bortover, rolle for rolle
+// (f.eks. sekretærer og leger, også leger som ikke er ansatt). Hver rute viser om personen er på
+// jobb (✓, fra den faste arbeidsplanen eller vaktplanen), har fri (–), er borte (F ferie, S syk,
+// SB sykt barn, P permisjon, K kurs, A annet) eller jobber ekstra (timene utover planen). Til
+// høyre står hvor mange med hver rolle som er på jobb mot behovet, så bemanningen kan ses opp mot
+// hverandre, og nederst ekstratimene i måneden per ansatt. Trykk på en rute for å registrere
+// fravær eller sette inn vikar; rollene og behovet settes opp under «Roller» (Roller.tsx), og
+// rapporten over ekstratimene (PDF og CSV) under «Ekstratimer».
+import { useEffect, useState, type CSSProperties } from "react";
 import { api, hent, lastNed } from "../api";
-import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles";
+import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
+import { kortNavn, RollerOppsett, type Rolle } from "./Roller";
 import { erAdmin, useKonto } from "../konto";
 import { dato as visDato, iDag, leggTilDager, leggTilMaaneder } from "../format";
-import { IkonAnsatte, IkonHoyre, IkonNed, IkonOpp, IkonPluss, IkonRapport, IkonVenstre } from "../ikoner";
+import { IkonAnsatte, IkonHoyre, IkonRapport, IkonVenstre } from "../ikoner";
 import { gyldigDato, mandag, middag, tallformat, timer, ukenr, visDag } from "../uke";
 import {
   FRAVAERTYPER,
@@ -34,17 +35,10 @@ type Ansatt = Grunnansatt & {
   stillingsprosent: number;
   ukentlig_arbeidstid: number;
   ansettelsestype: string;
-  tilknytning?: string; // ansatt, eller med uten å være ansatt (f.eks. leger som er aksjonærer)
-  gruppe_id: string | null;
+  arbeidstaker?: boolean; // false: rollen er for dem som ikke er ansatt (f.eks. leger som er aksjonærer)
+  gruppe_id: string | null; // rollen (Roller.tsx)
 };
-const IKKE_ANSATT: Record<string, [string, string]> = {
-  eier: ["eier eller aksjonær", "eier/aksjonær"],
-  selvstendig: ["selvstendig næringsdrivende", "selvstendig"],
-  innleid: ["innleid", "innleid"],
-};
-const ikkeAnsatt = (a: Ansatt, kort = false) =>
-  a.tilknytning && a.tilknytning !== "ansatt" ? (IKKE_ANSATT[a.tilknytning]?.[kort ? 1 : 0] ?? a.tilknytning) : null;
-type Gruppe = { id: string; navn: string; kort: string | null; behov: number | null; rekkefolge: number; antall: number };
+const ikkeAnsatt = (a: Ansatt) => a.arbeidstaker === false;
 type Seksjon = { id: string | null; navn: string; kort: string; behov: number | null; farge: number; ansatte: Ansatt[] };
 type Rute =
   | { art: "utenfor" }
@@ -54,10 +48,8 @@ type Rute =
 
 const maanedFormat = new Intl.DateTimeFormat("nb-NO", { month: "long", year: "numeric", timeZone: "UTC" });
 const UKEDAG = ["Sø", "Ma", "Ti", "On", "To", "Fr", "Lø"];
-const FARGER = 5; // gruppefargene g0–g4 (g5 er for dem uten gruppe)
+const FARGER = 5; // fargene til rollene g0–g4 (g5 er for dem uten rolle)
 export const gyldigMaaned = (s: string | null): s is string => !!s && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
-// «Sekretærer» blir «Sek.» i oppsummeringen, med mindre gruppen har en egen forkortelse.
-const kortNavn = (g: Pick<Gruppe, "navn" | "kort">) => g.kort || (g.navn.length > 5 ? `${g.navn.slice(0, 3)}.` : g.navn);
 const rund = (t: number) => Math.round(t * 100) / 100;
 const timerTekst = (t: number) => `${tallformat.format(rund(t))}t`;
 const punktum = (s: string) => (s.endsWith(".") ? s : `${s}.`);
@@ -88,7 +80,7 @@ export function Bemanning({
   const [oppsettVersjon, settOppsettVersjon] = useState(0);
   const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${fra}&til=${til}`), [org?.id, fra, til, versjon], { oppdater: true });
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon, oppsettVersjon]);
-  const grupper = useData(() => hent<Gruppe[]>(`/org/${org!.id}/ansattgrupper`), [org?.id, oppsettVersjon]);
+  const grupper = useData(() => hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`), [org?.id, oppsettVersjon]);
   const [rute, settRute] = useState<{ a: Ansatt; d: string } | null>(null);
   const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
   const [vikar, settVikar] = useState<VikarVakt | null>(null);
@@ -133,7 +125,7 @@ export function Bemanning({
         {kanEndre && (
           <>
             <button type="button" onClick={() => settOppsett(true)}>
-              <IkonAnsatte storrelse={17} /> Grupper
+              <IkonAnsatte storrelse={17} /> Roller
             </button>
             <button type="button" className="primar" onClick={() => settFravaer({ fra: iDag().startsWith(maaned) ? iDag() : forste, til: iDag().startsWith(maaned) ? iDag() : forste })}>
               Registrer fravær
@@ -196,7 +188,7 @@ export function Bemanning({
     ...grupper.data.map((g, i) => ({ id: g.id, navn: g.navn, kort: kortNavn(g), behov: g.behov, farge: i % FARGER, ansatte: synlige.filter((a) => a.gruppe_id === g.id) })),
     {
       id: null,
-      navn: grupper.data.length ? "Uten gruppe" : "Ansatte",
+      navn: grupper.data.length ? "Uten rolle" : "Alle",
       kort: grupper.data.length ? "Andre" : "På jobb",
       behov: null,
       farge: 5,
@@ -287,9 +279,9 @@ export function Bemanning({
       )}
       {!grupper.data.length && kanEndre && synlige.length > 0 && (
         <div className="melding info venter">
-          <span>Del de ansatte i grupper, f.eks. sekretærer og leger, for å se hvor mange som er på jobb i hver gruppe mot behovet.</span>
+          <span>Gi folkene en rolle, f.eks. lege eller sekretær, for å se hvor mange med hver rolle som er på jobb mot behovet.</span>
           <button type="button" className="lenke" onClick={() => settOppsett(true)}>
-            Sett opp grupper
+            Sett opp roller
           </button>
         </div>
       )}
@@ -372,7 +364,7 @@ export function Bemanning({
                       <th
                         key={a.id}
                         className={`bm-ansatt g${s.farge}${j === 0 ? " forste" : ""}`}
-                        title={`${a.fornavn} ${a.etternavn}${a.stilling ? ` · ${a.stilling}` : ""}${ikkeAnsatt(a) ? ` · ${ikkeAnsatt(a)} (ikke ansatt)` : ""}`}
+                        title={`${a.fornavn} ${a.etternavn}${a.stilling && a.stilling.trim().toLowerCase() !== s.navn.toLowerCase() ? ` · ${a.stilling}` : ""}${ikkeAnsatt(a) ? ` · ${s.navn} (ikke ansatt)` : ""}`}
                       >
                         {kanEndre ? (
                           // Trykk på navnet: stillingsprosent, arbeidstid og faste dager.
@@ -645,8 +637,8 @@ export function Bemanning({
           endret(m);
         }}
       />
-      <Dialog apen={oppsett} lukk={() => settOppsett(false)} tittel="Grupper og behov" bred>
-        {oppsett && <GrupperOppsett grupper={grupper.data} ansatte={ansatte.data} endret={() => settOppsettVersjon((x) => x + 1)} lukk={() => settOppsett(false)} />}
+      <Dialog apen={oppsett} lukk={() => settOppsett(false)} tittel="Roller og behov" bred>
+        {oppsett && <RollerOppsett roller={grupper.data} personer={ansatte.data} kalender endret={() => settOppsettVersjon((x) => x + 1)} lukk={() => settOppsett(false)} />}
       </Dialog>
       {rapportDialog}
     </>
@@ -764,204 +756,5 @@ function EkstratimerRapport({ fra: start, til: slutt, lukk }: { fra: string; til
         </button>
       </div>
     </div>
-  );
-}
-
-// --- Grupper -------------------------------------------------------------------------------
-
-function GrupperOppsett({ grupper, ansatte, endret, lukk }: { grupper: Gruppe[]; ansatte: Ansatt[]; endret: () => void; lukk: () => void }) {
-  const { org } = useKonto();
-  const [rediger, settRediger] = useState<string | null>(null); // id-en, eller «ny»
-  const [melding, settMelding] = useState<string | null>(null);
-  const h = useHandling();
-  const aktive = ansatte.filter((a) => a.aktiv).sort((x, y) => x.fornavn.localeCompare(y.fornavn, "nb") || x.etternavn.localeCompare(y.etternavn, "nb"));
-  const fraStillinger = aktive.some((a) => !a.gruppe_id && a.stilling?.trim());
-
-  const flytt = (i: number, til: number) =>
-    h.kjor(async () => {
-      const ider = grupper.map((g) => g.id);
-      const [x] = ider.splice(i, 1);
-      ider.splice(til, 0, x!);
-      await api("POST", `/org/${org!.id}/ansattgrupper/rekkefolge`, { ider });
-      endret();
-    });
-  const slett = (g: Gruppe) =>
-    h.kjor(async () => {
-      if (!confirm(`Slette gruppen «${g.navn}»? De ansatte i den står uten gruppe.`)) return;
-      await api("DELETE", `/org/${org!.id}/ansattgrupper/${g.id}`);
-      endret();
-    });
-  const lagFraStillinger = () =>
-    h.kjor(async () => {
-      const r = await api<{ grupper: number; ansatte: number }>("POST", `/org/${org!.id}/ansattgrupper/fra-stillinger`);
-      settMelding(
-        r.ansatte
-          ? `${r.ansatte} ${r.ansatte === 1 ? "ansatt er satt" : "ansatte er satt"} i grupper etter stillingen${r.grupper ? ` (${r.grupper} ${r.grupper === 1 ? "ny gruppe" : "nye grupper"})` : ""}.`
-          : "Ingen å sette i grupper.",
-      );
-      endret();
-    });
-  const settGruppe = (a: Ansatt, gruppe: string) =>
-    h.kjor(async () => {
-      await api("PATCH", `/org/${org!.id}/ansatte/${a.id}`, { gruppe_id: gruppe || null });
-      endret();
-    });
-  const ferdig = () => {
-    settRediger(null);
-    endret();
-  };
-
-  return (
-    <>
-      <section className="oppsett-del">
-        <h3>Grupper</h3>
-        <p className="liten dempet">
-          Gruppene står ved siden av hverandre i kalenderen, med hvor mange som er på jobb hver dag mot behovet (hvor mange som trengs).
-        </p>
-        {melding && (
-          <div className="melding ok" role="status">
-            {melding}
-          </div>
-        )}
-        {grupper.length > 0 && (
-          <ul className="liste-enkel oppsett-liste">
-            {grupper.map((g, i) =>
-              rediger === g.id ? (
-                <li key={g.id}>
-                  <GruppeSkjema gruppe={g} ferdig={ferdig} avbryt={() => settRediger(null)} />
-                </li>
-              ) : (
-                <li key={g.id}>
-                  <span>
-                    <span className="tittel">{g.navn}</span>{" "}
-                    <span className="dempet">
-                      {[kortNavn(g), g.behov != null ? `trenger ${g.behov} per dag` : "", `${g.antall} ${g.antall === 1 ? "ansatt" : "ansatte"}`].filter(Boolean).join(" · ")}
-                    </span>
-                  </span>
-                  <span className="knapper">
-                    <button type="button" className="ikon" aria-label={`Flytt ${g.navn} opp`} title="Flytt opp (lenger til venstre i kalenderen)" disabled={i === 0 || h.opptatt} onClick={() => flytt(i, i - 1)}>
-                      <IkonOpp storrelse={16} />
-                    </button>
-                    <button
-                      type="button"
-                      className="ikon"
-                      aria-label={`Flytt ${g.navn} ned`}
-                      title="Flytt ned (lenger til høyre i kalenderen)"
-                      disabled={i === grupper.length - 1 || h.opptatt}
-                      onClick={() => flytt(i, i + 1)}
-                    >
-                      <IkonNed storrelse={16} />
-                    </button>
-                    <button type="button" onClick={() => settRediger(g.id)}>
-                      Endre
-                    </button>
-                    <button type="button" className="fare" disabled={h.opptatt} onClick={() => slett(g)}>
-                      Slett
-                    </button>
-                  </span>
-                </li>
-              ),
-            )}
-          </ul>
-        )}
-        {rediger === "ny" ? (
-          <GruppeSkjema ferdig={ferdig} avbryt={() => settRediger(null)} />
-        ) : (
-          <div className="knapper">
-            <button type="button" onClick={() => settRediger("ny")}>
-              <IkonPluss storrelse={16} /> Ny gruppe
-            </button>
-            {fraStillinger && (
-              <button type="button" disabled={h.opptatt} onClick={lagFraStillinger}>
-                Lag grupper fra stillingene
-              </button>
-            )}
-          </div>
-        )}
-        <Feil melding={h.feil} />
-      </section>
-      {grupper.length > 0 && aktive.length > 0 && (
-        <section className="oppsett-del">
-          <h3>Ansatte og andre</h3>
-          <p className="liten dempet">Velg gruppen til hver person (også under Ansatte), også dem som ikke er ansatt, som leger som er aksjonærer.</p>
-          <ul className="liste-enkel oppsett-liste bm-ansattliste">
-            {aktive.map((a) => (
-              <li key={a.id}>
-                <span>
-                  <span className="tittel">
-                    {a.fornavn} {a.etternavn}
-                  </span>{" "}
-                  <span className="dempet">
-                    {[a.stilling, ikkeAnsatt(a, true)].filter(Boolean).join(" · ")}
-                  </span>
-                </span>
-                <select key={a.gruppe_id ?? ""} defaultValue={a.gruppe_id ?? ""} aria-label={`Gruppe for ${a.fornavn} ${a.etternavn}`} onChange={(e) => settGruppe(a, e.target.value)}>
-                  <option value="">Uten gruppe</option>
-                  {grupper.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.navn}
-                    </option>
-                  ))}
-                </select>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <div className="knapper oppsett-ferdig">
-        <button type="button" className="primar" onClick={lukk}>
-          Ferdig
-        </button>
-      </div>
-    </>
-  );
-}
-
-function GruppeSkjema({ gruppe, ferdig, avbryt }: { gruppe?: Gruppe; ferdig: () => void; avbryt: () => void }) {
-  const { org } = useKonto();
-  const [v, settV] = useState({ navn: gruppe?.navn ?? "", kort: gruppe?.kort ?? "", behov: gruppe?.behov != null ? String(gruppe.behov) : "" });
-  const h = useHandling();
-  const sett = (e: Partial<typeof v>) => settV({ ...v, ...e });
-
-  async function lagre(e: FormEvent) {
-    e.preventDefault();
-    const behov = v.behov.trim() === "" ? null : tall(v.behov);
-    if (behov !== null && !(Number.isInteger(behov) && behov >= 0)) return h.settFeil("Skriv behovet som et helt tall");
-    const kropp = { navn: v.navn.trim(), kort: v.kort.trim() || null, behov };
-    const r = await h.kjor(async () => {
-      if (gruppe) await api("PATCH", `/org/${org!.id}/ansattgrupper/${gruppe.id}`, kropp);
-      else await api("POST", `/org/${org!.id}/ansattgrupper`, kropp);
-      return true;
-    });
-    if (r) ferdig();
-  }
-
-  return (
-    <form className="oppsett-skjema" onSubmit={lagre}>
-      <div className="rad fase-felt">
-        <label>
-          Navn
-          <input required autoFocus maxLength={40} placeholder="F.eks. Sekretærer" value={v.navn} onChange={(e) => sett({ navn: e.target.value })} />
-        </label>
-        <label>
-          Forkortelse
-          <input maxLength={8} placeholder={v.navn.trim() ? kortNavn({ navn: v.navn.trim(), kort: null }) : "F.eks. Sek."} value={v.kort} onChange={(e) => sett({ kort: e.target.value })} />
-        </label>
-        <label>
-          Behov per dag
-          <input inputMode="numeric" placeholder="Valgfritt" value={v.behov} onChange={(e) => sett({ behov: e.target.value })} />
-        </label>
-      </div>
-      <p className="felt-hjelp oppsett-hjelp">Behovet er hvor mange i gruppen som trengs på jobb hver dag. Forkortelsen står over oppsummeringen i kalenderen.</p>
-      <Feil melding={h.feil} />
-      <div className="knapper">
-        <button className="primar" disabled={h.opptatt}>
-          {gruppe ? "Lagre" : "Legg til"}
-        </button>
-        <button type="button" onClick={avbryt}>
-          Avbryt
-        </button>
-      </div>
-    </form>
   );
 }

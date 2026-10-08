@@ -166,12 +166,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (Innstillinger → Ansatte og timer). Ansattregisteret har personalia, ansettelse og lønn.
   Fødselsnummeret krypteres med KMS i API-et, som ikke kan lese det igjen (bare workeren kan,
   til lønn og a-melding senere); revisjonsloggen sier bare at det er registrert eller endret.
-  Ikke alle i registeret er ansatt: `ansatte.tilknytning` er ansatt (standard), eier eller
-  aksjonær, selvstendig næringsdrivende eller innleid (f.eks. leger på et legekontor som er
-  aksjonærer). De som ikke er ansatt, er med i vaktplanen, på tavla, i bemanningskalenderen og i
-  fraværet, men ikke i feriebanken (`feriebank`), ekstratimene eller arbeidsmiljølovens
-  advarsler (der sjekkes bare overlapp og at de er aktive), og appen viser ikke lønn,
-  fødselsnummer eller kontonummer for dem.
+  Hver person kan ha en rolle som organisasjonen lager selv, med det navnet rollen faktisk har
+  (f.eks. lege eller sekretær; `ansattgrupper`, se under). Ikke alle i registeret er ansatt: en
+  rolle kan være for dem som ikke er ansatt (`ansattgrupper.ikke_ansatt`, f.eks. leger på et
+  legekontor som er aksjonærer eller selvstendige), og `ansatte.arbeidstaker` følger rollen
+  (triggere når personen får en annen rolle, når rollen endres og når den slettes; API-et kan
+  ikke sette det selv). De som ikke er ansatt, er med i vaktplanen, på tavla, i
+  bemanningskalenderen og i fraværet, men ikke i feriebanken (`feriebank`), ekstratimene eller
+  arbeidsmiljølovens advarsler (der sjekkes bare overlapp og at de er aktive), og appen viser
+  ikke lønn, fødselsnummer eller kontonummer for dem. Det er rollen som vises («Lege»), ikke
+  «eier eller aksjonær» (tilknytningen per person fra 0054 er erstattet av rollene i 0056).
   Faste tillegg på lønnen (`ansatt_tillegg`: f.eks. funksjonstillegg per måned eller
   fagbrevtillegg per time, eventuelt for en periode) ligger på den ansatte og vises som lønnen
   (eier, administrator, regnskap og den ansatte selv); lønnskjøringen skal ta dem med som faste
@@ -179,7 +183,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   og produkter (Excel eller CSV, kolonnene kjennes igjen; «Etternavn, Fornavn», norske datoer,
   prosent og årslønn tolkes): samme e-post, eller samme navn når e-posten mangler, er samme
   ansatt, fødselsnumrene krypteres før lagringen, og et fast tillegg i fila legges til eller
-  oppdaterer tillegget med samme navn (`POST /ansatte/importer`, krever Import og personal).
+  oppdaterer tillegget med samme navn, og rollen i fila (f.eks. «Lege») er rollen med det navnet,
+  eller en ny (`POST /ansatte/importer`, krever Import og personal).
   En ansatt kan få egen innlogging: invitasjonen (`inviter_ansatt`) gir rollen `ansatt` og
   kobler brukeren til ansattkortet, og er e-posten alt med i organisasjonen, kobles den med
   en gang. Timene føres med fra og til (over midnatt går fint) og pause, eller som antall
@@ -301,18 +306,18 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med engelsk språk, der nettleserens eget klokkeslettfelt ville vist AM og PM. Feltet
   (`Klokkeslett` i `web/src/uke.tsx`) tar også «730», «7.30» og «1530» og retter dem til 07:30
   og 15:30
-- `ansattgrupper` og `ansatte.gruppe_id`: grupper av ansatte (f.eks. sekretærer og leger) med
-  hvor mange som trengs på jobb per dag. Bemanningskalenderen (i appen, fra de faste
-  arbeidsplanene, vaktplanen og fraværet) viser måneden med datoene nedover og de ansatte
-  bortover, gruppe for gruppe: på jobb (✓), fri (–), fravær (for eier og administrator Fe
-  ferie, S syk, SB sykt barn, P permisjon, K kurs, A annet; for andre bare F) eller
-  ekstratimer, nederst ekstratimene i måneden per ansatt,
-  og til høyre hvor mange som er på jobb i hver gruppe mot behovet, vakter uten vikar og ledige
-  vakter. Så kan f.eks. legene ses opp mot sekretærene, også leger som ikke er ansatt
-  (aksjonærer, `ansatte.tilknytning`), som telles i gruppen sin som de andre. Grupper kan lages
-  fra stillingene, eller velges og lages rett i ansattskjemaet («+ Ny gruppe»). AI-assistenten
-  svarer med det samme når man spør hvem som jobber («Leger 6 av 7 (mangler 1), Sekretærer 4
-  av 4»)
+- `ansattgrupper` og `ansatte.gruppe_id`: rollene (i appen «Roller»; f.eks. lege og sekretær),
+  med hvor mange som trengs på jobb per dag, og om de med rollen er ansatt (`ikke_ansatt`).
+  Rollene settes opp under Ansatte → Roller og i bemanningskalenderen, og velges (eller lages,
+  «+ Ny rolle») i ansattskjemaet; de hører til «Ansatte og timer», ikke bare vaktplanen.
+  Bemanningskalenderen (i appen, fra de faste arbeidsplanene, vaktplanen og fraværet) viser
+  måneden med datoene nedover og folkene bortover, rolle for rolle: på jobb (✓), fri (–),
+  fravær (for eier og administrator Fe ferie, S syk, SB sykt barn, P permisjon, K kurs, A
+  annet; for andre bare F) eller ekstratimer, nederst ekstratimene i måneden per ansatt,
+  og til høyre hvor mange med hver rolle som er på jobb mot behovet, vakter uten vikar og
+  ledige vakter. Så kan f.eks. legene ses opp mot sekretærene, også leger som ikke er ansatt.
+  Roller kan lages fra stillingene. AI-assistenten svarer med det samme når man spør hvem som
+  jobber («Lege 6 av 7 (mangler 1), Sekretær 4 av 4»)
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
   bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
   Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer),

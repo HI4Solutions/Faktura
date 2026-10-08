@@ -636,7 +636,6 @@ ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 
 /* Faste tillegg på lønnen i ansattskjemaet: én rad per tillegg (to kolonner på mobil). */
 .tillegg-hjelp { margin: -2px 0 10px; }
-.tilknytning-hjelp { margin: -6px 0 14px; }
 .tillegg-rad { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 1.25fr) 36px; gap: 0 10px; align-items: end; }
 .tillegg-rad > .ikon { margin-bottom: 18px; justify-self: center; }
 .legg-til-tillegg { display: inline-block; margin: 0 0 16px; }

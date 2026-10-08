@@ -7,7 +7,7 @@
 //   - over grensen for alminnelig arbeidstid per dag og per uke (overtid, § 10-4), etter
 //     grensene i oppsettet
 //   - vakter som overlapper, og vakter når den ansatte ikke er aktiv eller ansatt
-// For dem som ikke er arbeidstakere (aksjonærer, selvstendige og innleide, 0054_tilknytning.sql),
+// For dem som ikke er arbeidstakere (en rolle for f.eks. leger som er aksjonærer, 0056_roller.sql),
 // gjelder ikke arbeidsmiljølovens grenser; der sjekkes bare overlapp og at de er aktive.
 // Klokkeslettene regnes som lokal tid uten sommertid; natten klokka stilles, kan hvilen bli en
 // time feil.

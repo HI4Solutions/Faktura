@@ -202,10 +202,10 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten for personal", () => 
 
   it("hvem jobber: leger mot sekretærer, også leger som ikke er ansatt", async () => {
     const neste = pluss(dag, 1);
-    const leger = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Leger", behov: 2 })).data.id;
+    // Legene er ikke ansatt (rollen); Lise jobber fast den dagen. Kari er lege, Ola sekretær.
+    const leger = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Leger", behov: 2, ikke_ansatt: true })).data.id;
     const sekretaerer = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Sekretærer", behov: 1 })).data.id;
-    // Lise er aksjonær (ikke ansatt) og jobber fast den dagen; Kari er lege, Ola sekretær.
-    const lise = await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Lise", etternavn: "Lege", tilknytning: "eier", gruppe_id: leger, ansatt_fra: "2025-01-01" });
+    const lise = await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Lise", etternavn: "Lege", gruppe_id: leger, ansatt_fra: "2025-01-01" });
     expect(lise.status, JSON.stringify(lise.data)).toBe(201);
     const ukedag = ((new Date(`${neste}T12:00:00Z`).getUTCDay() + 6) % 7) + 1;
     expect((await kall("PUT", `/api/org/${org}/ansatte/${lise.data.id}/arbeidsplan`, { gjelder_fra: "2025-01-01", dager: [{ ukedag, fra: "08:00", til: "15:30" }] })).status).toBe(200);

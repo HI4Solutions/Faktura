@@ -1,7 +1,9 @@
 // Ansatte: registeret over de ansatte (personalia, ansettelse og lønn med faste tillegg) og deres
-// egen innlogging for timeføring (rollen ansatt). Eier og administrator endrer og kan importere
-// ansatte fra et annet system (Importer.tsx), eller fylle ut skjemaet fra en lønnsslipp som AI
-// leser (server/src/aiLonnsslipp.ts); regnskap ser. Fødselsnummeret lagres kryptert og vises
+// egen innlogging for timeføring (rollen ansatt). Hver person kan ha en rolle (f.eks. lege eller
+// sekretær, Roller.tsx), og en rolle kan være for dem som ikke er ansatt (f.eks. leger som er
+// aksjonærer): de har ikke lønn, feriebank eller fødselsnummer her. Eier og administrator endrer og
+// kan importere fra et annet system (Importer.tsx), eller fylle ut skjemaet fra en lønnsslipp som
+// AI leser (server/src/aiLonnsslipp.ts); regnskap ser. Fødselsnummeret lagres kryptert og vises
 // aldri igjen, bare at det er registrert.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -15,6 +17,7 @@ import { slippBlob, SLIPP_ACCEPT, type Lonnsslipper } from "../importer";
 import { tallformat } from "../uke";
 import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
 import { AnsattFravaer, FravaerDialog, type Fravaer } from "./Fravaer";
+import { IKKE_ANSATT_HJELP, RollerOppsett, type Rolle } from "./Roller";
 
 type Ansatt = {
   id: string;
@@ -35,13 +38,14 @@ type Ansatt = {
   ansatt_fra: string;
   ansatt_til: string | null;
   ansettelsestype: "fast" | "midlertidig" | "tilkalling";
-  tilknytning: Tilknytning; // ansatt, eller med uten å være ansatt (aksjonærer, selvstendige, innleide)
+  rolle: string | null; // rollen (f.eks. lege), gruppe_id er id-en
+  arbeidstaker: boolean; // false: rollen er for dem som ikke er ansatt
   lonnstype: "maaned" | "time";
   maanedslonn: number | null;
   timelonn: number | null;
   aktiv: boolean;
   notat: string | null;
-  gruppe_id: string | null;
+  gruppe_id: string | null; // rollen
   bursdag_varsel: boolean; // varsle de andre på bursdagen (når organisasjonen har slått på bursdagsvarsler)
   ferie_dager: number | null; // feriedager per år for denne ansatte (null: organisasjonens)
   tillegg: Tillegg[]; // faste tillegg på lønnen
@@ -54,17 +58,10 @@ type Ansatt = {
 type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"; fra: string | null; til: string | null };
 
 const ansettelsestype: Record<string, string> = { fast: "Fast", midlertidig: "Midlertidig", tilkalling: "Tilkalling" };
-// Tilknytning: de som ikke er ansatt (f.eks. leger som er aksjonærer), er med i vaktplanen, på tavla
-// og i kalenderen, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler.
-type Tilknytning = "ansatt" | "eier" | "selvstendig" | "innleid";
-const TILKNYTNING: Record<Tilknytning, [string, string]> = {
-  ansatt: ["Ansatt", "Ansatt"],
-  eier: ["Eier eller aksjonær (ikke ansatt)", "Aksjonær"],
-  selvstendig: ["Selvstendig næringsdrivende", "Selvstendig"],
-  innleid: ["Innleid", "Innleid"],
-};
-const erAnsatt = (a: Pick<Ansatt, "tilknytning">) => (a.tilknytning ?? "ansatt") === "ansatt";
-const NY_GRUPPE = "ny"; // valget «+ Ny gruppe …» for gruppen i bemanningskalenderen
+// De som har en rolle for dem som ikke er ansatt (f.eks. leger som er aksjonærer), er med i
+// vaktplanen, på tavla og i kalenderen, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler.
+const erAnsatt = (a: Pick<Ansatt, "arbeidstaker">) => a.arbeidstaker !== false;
+const NY_ROLLE = "ny"; // valget «+ Ny rolle …»
 const belop = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 });
 const tekstTall = (n: number | null | undefined) => (n == null ? "" : belop.format(n).replace(/\s/g, " "));
 const lonn = (a: Ansatt) =>
@@ -81,7 +78,11 @@ const tilleggKort = (a: Ansatt) => {
 function Merker({ a }: { a: Ansatt }) {
   return (
     <span className="merker">
-      {!erAnsatt(a) && <span className="merke merke-info">{TILKNYTNING[a.tilknytning]?.[1] ?? a.tilknytning}</span>}
+      {a.rolle && (
+        <span className={`merke ${erAnsatt(a) ? "merke-noytral" : "merke-info"}`} title={erAnsatt(a) ? undefined : "Ikke ansatt"}>
+          {a.rolle}
+        </span>
+      )}
       {sluttet(a) && <span className="merke merke-noytral">{a.aktiv ? "Sluttet" : "Ikke aktiv"}</span>}
       {a.tilgang === "koblet" && <span className="merke merke-ok">Innlogging</span>}
       {a.tilgang === "invitert" && <span className="merke merke-info">Invitert</span>}
@@ -98,6 +99,10 @@ export function Ansatte() {
   const smal = useSmal();
   const endre = kanPersonal(org?.rolle);
   const vaktplan = harFunksjon(org, "vaktplan");
+  // Rollene (f.eks. lege og sekretær) settes opp her og i bemanningskalenderen.
+  const [roller, settRoller] = useState(false);
+  const [rolleVersjon, settRolleVersjon] = useState(0);
+  const rolleliste = useData(() => (roller ? hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`) : Promise.resolve(null)), [org?.id, roller, rolleVersjon]);
 
   if (!kanSePersonal(org?.rolle) || !org?.personal)
     return (
@@ -128,6 +133,9 @@ export function Ansatte() {
         <h1>Ansatte</h1>
         {endre && (
           <div className="knapper">
+            <button type="button" onClick={() => settRoller(true)}>
+              Roller
+            </button>
             {harFunksjon(org, "import") && (
               <Link className="knapp" to="/ansatte/importer">
                 Importer
@@ -139,6 +147,18 @@ export function Ansatte() {
           </div>
         )}
       </div>
+      <Dialog apen={roller} lukk={() => (settRoller(false), last())} tittel={vaktplan ? "Roller og behov" : "Roller"} bred>
+        {roller && !rolleliste.data && (rolleliste.feil ? <Feil melding={rolleliste.feil} /> : <Laster />)}
+        {roller && rolleliste.data && (
+          <RollerOppsett
+            roller={rolleliste.data}
+            personer={data ?? []}
+            kalender={vaktplan}
+            endret={() => (settRolleVersjon((x) => x + 1), last())}
+            lukk={() => (settRoller(false), last())}
+          />
+        )}
+      </Dialog>
       <div className="liste-verktoy">
         <div className="faner" role="tablist">
           {(
@@ -293,7 +313,6 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     ansatt_fra: ansatt.ansatt_fra ?? iDag(),
     ansatt_til: ansatt.ansatt_til ?? "",
     ansettelsestype: ansatt.ansettelsestype ?? "fast",
-    tilknytning: ansatt.tilknytning ?? ("ansatt" as Tilknytning),
     lonnstype: ansatt.lonnstype ?? "maaned",
     maanedslonn: tekstTall(ansatt.maanedslonn),
     timelonn: tekstTall(ansatt.timelonn),
@@ -308,13 +327,12 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
   // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Ansatte og timer).
   const fullStilling = Number(oppsett.data?.full_stilling ?? 37.5);
-  // Med vaktplanen (funksjonene i Administrasjon): gruppene i bemanningskalenderen (f.eks.
-  // sekretærer og leger), og den faste arbeidsplanen (ukedagene den ansatte jobber), som et
-  // utkast til den lagres. En ny gruppe kan lages rett herfra (nyGruppe: navnet), når den
-  // ansatte lagres.
+  // Rollene (f.eks. lege og sekretær, Roller.tsx); en ny kan lages rett herfra (nyRolle) når
+  // personen lagres. Med vaktplanen (funksjonene i Administrasjon) også den faste arbeidsplanen
+  // (ukedagene personen jobber), som et utkast til den lagres.
   const vaktplan = harFunksjon(org, "vaktplan");
-  const grupper = useData(() => (vaktplan ? hent<{ id: string; navn: string }[]>(`/org/${org!.id}/ansattgrupper`) : Promise.resolve([])), [org?.id]);
-  const [nyGruppe, settNyGruppe] = useState<string | null>(null);
+  const roller = useData(() => hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`), [org?.id]);
+  const [nyRolle, settNyRolle] = useState<{ navn: string; ikke_ansatt: boolean } | null>(null);
   const planer = useData(
     () => (ansatt.id && vaktplan ? hent<Plan[]>(`/org/${org!.id}/ansatte/${ansatt.id}/arbeidsplan`) : Promise.resolve([] as Plan[])),
     [org?.id, ansatt.id],
@@ -431,8 +449,20 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   const kontonr = a.kontonr.replace(/[\s.]/g, "");
   const kontonrFeil = kontonr && forlatt.kontonr && !kontonrGyldig(kontonr) ? "Kontonummeret er ikke gyldig (sjekk sifrene)" : null;
   const maaned = a.lonnstype === "maaned" && a.maanedslonn ? tall(a.maanedslonn) : null;
-  // De som ikke er ansatt, har ikke lønn, feriebank eller fødselsnummer til a-meldingen her.
-  const arbeidstaker = a.tilknytning === "ansatt";
+  // De med en rolle for dem som ikke er ansatt, har ikke lønn, feriebank eller fødselsnummer til
+  // a-meldingen her. Før rollene er hentet: det som er lagret.
+  const valgtRolle = roller.data?.find((g) => g.id === a.gruppe_id);
+  const arbeidstaker = nyRolle
+    ? !nyRolle.ikke_ansatt
+    : valgtRolle
+      ? !valgtRolle.ikke_ansatt
+      : !(a.gruppe_id && a.gruppe_id === (ansatt.gruppe_id ?? "") && ansatt.arbeidstaker === false);
+  const rollenavn = nyRolle?.navn.trim() || valgtRolle?.navn;
+  const rolleHjelp = !arbeidstaker
+    ? `${rollenavn ? `«${rollenavn}»` : "Rollen"} er for dem som ikke er ansatt: ${IKKE_ANSATT_HJELP}.`
+    : vaktplan
+      ? "F.eks. lege eller sekretær. Bemanningskalenderen viser hvor mange med hver rolle som er på jobb, mot behovet."
+      : "F.eks. lege eller sekretær.";
 
   async function lagre(e: FormEvent) {
     e.preventDefault();
@@ -451,7 +481,6 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       ansatt_fra: a.ansatt_fra,
       ansatt_til: a.ansatt_til,
       ansettelsestype: a.ansettelsestype,
-      tilknytning: a.tilknytning,
       lonnstype: a.lonnstype,
       maanedslonn: a.lonnstype === "maaned" ? tallEllerNull(a.maanedslonn) : null,
       timelonn: a.lonnstype === "time" ? tallEllerNull(a.timelonn) : null,
@@ -459,9 +488,9 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       aktiv: a.aktiv,
     };
     if (bursdager) kropp.bursdag_varsel = a.bursdag_varsel;
-    if (grupper.data?.length) kropp.gruppe_id = a.gruppe_id || null;
-    const gruppenavn = nyGruppe?.trim() ?? "";
-    if (nyGruppe !== null && !gruppenavn) return h.settFeil("Skriv navnet på den nye gruppen, eller velg en annen.");
+    if (roller.data?.length) kropp.gruppe_id = a.gruppe_id || null;
+    const nyttNavn = nyRolle?.navn.trim() ?? "";
+    if (nyRolle && !nyttNavn) return h.settFeil("Skriv navnet på den nye rollen, eller velg en annen.");
     if (a.stillingsprosent.trim()) kropp.stillingsprosent = tall(a.stillingsprosent);
     if (a.ukentlig_arbeidstid.trim()) kropp.ukentlig_arbeidstid = tall(a.ukentlig_arbeidstid);
     if (vaktplan) kropp.ferie_dager = a.ferie_dager.trim() ? tall(a.ferie_dager) : null;
@@ -478,14 +507,14 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     const nyPlan = plan && endret(plan) ? tilLagring(plan) : null;
     if (typeof nyPlan === "string") return h.settFeil(nyPlan);
     const r = await h.kjor(async () => {
-      // Den nye gruppen lages først (en med samme navn brukes heller, om den finnes).
-      if (gruppenavn) {
-        const finnes = grupper.data?.find((g) => g.navn.trim().toLowerCase() === gruppenavn.toLowerCase());
-        const gruppe = finnes?.id ?? (await api<{ id: string }>("POST", `/org/${org!.id}/ansattgrupper`, { navn: gruppenavn })).id;
-        kropp.gruppe_id = gruppe;
-        settNyGruppe(null);
-        settA((x) => ({ ...x, gruppe_id: gruppe }));
-        void grupper.last();
+      // Den nye rollen lages først (en med samme navn brukes heller, om den finnes).
+      if (nyRolle && nyttNavn) {
+        const finnes = roller.data?.find((g) => g.navn.trim().toLowerCase() === nyttNavn.toLowerCase());
+        const rolle = finnes?.id ?? (await api<{ id: string }>("POST", `/org/${org!.id}/ansattgrupper`, { navn: nyttNavn, ikke_ansatt: nyRolle.ikke_ansatt })).id;
+        kropp.gruppe_id = rolle;
+        settNyRolle(null);
+        settA((x) => ({ ...x, gruppe_id: rolle }));
+        void roller.last();
       }
       const lagret = await (ny ? api<Ansatt>("POST", `/org/${org!.id}/ansatte`, kropp) : api<Ansatt>("PATCH", `/org/${org!.id}/ansatte/${ansatt.id}`, kropp));
       // Planen for en ny ansatt gjelder fra den ansatte begynner.
@@ -647,21 +676,51 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           </label>
         )}
 
-        <h3>{arbeidstaker ? "Ansettelse" : "Stilling og tilknytning"}</h3>
-        <label>
-          Stilling
-          <input placeholder="F.eks. butikkmedarbeider eller lege" {...felt("stilling")} />
-        </label>
+        <h3>{arbeidstaker ? "Rolle og ansettelse" : "Rolle og stilling"}</h3>
+        {(!!roller.data?.length || kanEndre) && (
+          <div className="rad">
+            <label className="hel">
+              Rolle
+              <select
+                value={nyRolle ? NY_ROLLE : a.gruppe_id}
+                onChange={(e) => {
+                  if (e.target.value === NY_ROLLE) settNyRolle({ navn: "", ikke_ansatt: false });
+                  else {
+                    settNyRolle(null);
+                    sett({ gruppe_id: e.target.value });
+                  }
+                }}
+              >
+                <option value="">Ingen rolle</option>
+                {(roller.data ?? []).map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.navn}
+                    {g.ikke_ansatt ? " (ikke ansatt)" : ""}
+                  </option>
+                ))}
+                {kanEndre && <option value={NY_ROLLE}>+ Ny rolle …</option>}
+              </select>
+              <span className="felt-hjelp">{rolleHjelp}</span>
+            </label>
+            {nyRolle && (
+              <>
+                <label className="hel">
+                  Navn på den nye rollen
+                  <input value={nyRolle.navn} maxLength={40} placeholder="F.eks. Lege" autoFocus onChange={(e) => settNyRolle({ ...nyRolle, navn: e.target.value })} />
+                  <span className="felt-hjelp">Lages når du lagrer.{vaktplan ? " Hvor mange som trengs per dag, setter du under Roller." : ""}</span>
+                </label>
+                <label className="hel">
+                  <input type="checkbox" checked={nyRolle.ikke_ansatt} onChange={(e) => settNyRolle({ ...nyRolle, ikke_ansatt: e.target.checked })} /> De med rollen er ikke ansatt (f.eks.
+                  leger som er aksjonærer eller selvstendige)
+                </label>
+              </>
+            )}
+          </div>
+        )}
         <div className="rad">
           <label className={arbeidstaker ? undefined : "hel"}>
-            Tilknytning
-            <select {...felt("tilknytning")}>
-              {Object.entries(TILKNYTNING).map(([v, [t]]) => (
-                <option key={v} value={v}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            Stilling
+            <input placeholder="F.eks. butikkmedarbeider eller lege" {...felt("stilling")} />
           </label>
           {arbeidstaker && (
             <label>
@@ -676,45 +735,6 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             </label>
           )}
         </div>
-        {!arbeidstaker && (
-          <p className="felt-hjelp tilknytning-hjelp">
-            Ikke ansatt (f.eks. lege som er aksjonær): med i vaktplanen, på tavla, i kalenderen og fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens
-            advarsler.
-          </p>
-        )}
-        {vaktplan && (!!grupper.data?.length || kanEndre) && (
-          <div className="rad">
-            <label className="hel">
-              Gruppe i bemanningskalenderen
-              <select
-                value={nyGruppe !== null ? NY_GRUPPE : a.gruppe_id}
-                onChange={(e) => {
-                  if (e.target.value === NY_GRUPPE) settNyGruppe("");
-                  else {
-                    settNyGruppe(null);
-                    sett({ gruppe_id: e.target.value });
-                  }
-                }}
-              >
-                <option value="">Ingen gruppe</option>
-                {(grupper.data ?? []).map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.navn}
-                  </option>
-                ))}
-                {kanEndre && <option value={NY_GRUPPE}>+ Ny gruppe …</option>}
-              </select>
-              <span className="felt-hjelp">F.eks. leger og sekretærer: kalenderen viser hvor mange i hver gruppe som er på jobb hver dag, mot behovet.</span>
-            </label>
-            {nyGruppe !== null && (
-              <label className="hel">
-                Navn på den nye gruppen
-                <input value={nyGruppe} maxLength={40} placeholder="F.eks. Leger" autoFocus onChange={(e) => settNyGruppe(e.target.value)} />
-                <span className="felt-hjelp">Lages når du lagrer. Hvor mange som trengs per dag, setter du under Vaktplan → Kalender → Grupper.</span>
-              </label>
-            )}
-          </div>
-        )}
         <div className="rad">
           <label>
             Stillingsprosent

@@ -197,6 +197,22 @@ describe.skipIf(!process.env.DATABASE_URL)("Faste tillegg og import av ansatte",
     expect(perId).toBeTruthy();
   });
 
+  it("rollen i fila er rollen med det navnet, eller en ny", async () => {
+    const lege = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Lege", ikke_ansatt: true })).data.id;
+    const r = await importer([
+      { fornavn: "Lise", etternavn: "Rollesen", rolle: "lege" },
+      { fornavn: "Siri", etternavn: "Rollesen", rolle: "Sekretær" },
+      { fornavn: "Sara", etternavn: "Rollesen", rolle: " sekretær" },
+    ]);
+    expect(r.data.antall, JSON.stringify(r.data)).toMatchObject({ ny: 3, feil: 0 });
+    const alle = (await kall("GET", `/api/org/${org}/ansatte`)).data as any[];
+    const finn = (n: string) => alle.find((a) => a.fornavn === n);
+    expect(finn("Lise")).toMatchObject({ gruppe_id: lege, rolle: "Lege", arbeidstaker: false });
+    expect(finn("Siri")).toMatchObject({ rolle: "Sekretær", arbeidstaker: true });
+    expect(finn("Sara").gruppe_id).toBe(finn("Siri").gruppe_id);
+    expect((await kall("GET", `/api/org/${org}/ansattgrupper`)).data.map((g: any) => g.navn)).toEqual(["Lege", "Sekretær"]);
+  });
+
   it("bare eier og administrator importerer, og bare når Import er slått på", async () => {
     expect((await importer([{ fornavn: "A", etternavn: "B" }], { proving: true }, regnskap)).status).toBe(403);
     expect((await importer([{ fornavn: "A", etternavn: "B" }], { proving: true }, fakturerer)).status).toBe(403);

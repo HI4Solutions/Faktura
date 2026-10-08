@@ -107,7 +107,7 @@ const ANSATTFELT: Record<string, string> = {
   ansatt_fra: "startdato",
   ansatt_til: "sluttdato",
   ansettelsestype: "ansettelsestype (fast, midlertidig eller tilkalling)",
-  tilknytning: "tilknytning (ansatt, eier, selvstendig eller innleid)",
+  rolle: "rolle",
   lonnstype: "lønnstype (måned eller time)",
   maanedslonn: "månedslønn",
   timelonn: "timelønn",

@@ -574,10 +574,10 @@ export const FELT: Record<Importtype, Felt[]> = {
       ikke: ["dato", "date", "fra", "til", "prosent", "id", "nummer"],
     },
     {
-      id: "tilknytning",
-      navn: "Tilknytning (ansatt, aksjonær, selvstendig, innleid)",
-      ord: ["tilknytning", "tilknytningsform", "arbeidstakerstatus", "ansattstatus", "affiliation"],
-      del: ["tilknytning"],
+      id: "rolle",
+      navn: "Rolle (f.eks. lege eller sekretær)",
+      ord: ["rolle", "roller", "gruppe", "yrkesgruppe", "personalgruppe", "kategori", "role", "group"],
+      del: ["rolle", "yrkesgruppe", "personalgruppe"],
     },
     {
       id: "lonnstype",
@@ -860,15 +860,9 @@ const tolkAnsettelse = (s: string) => {
   if (/^fast|fast ansatt|permanent|ordinær/.test(t)) return "fast";
   return null;
 };
-// Tilknytning for dem som ikke er ansatt (eier eller aksjonær, selvstendig, innleid).
-export const tolkTilknytning = (s: string) => {
-  const t = s.trim().toLowerCase();
-  if (/aksjon|eier|medeier|partner|shareholder|owner/.test(t)) return "eier";
-  if (/selvstendig|næringsdriv|naeringsdriv|\benk\b|enkeltperson|frilans|freelance|self.?employed/.test(t)) return "selvstendig";
-  if (/innleid|leid inn|konsulent|bemanningsbyr|vikarbyr|contractor/.test(t)) return "innleid";
-  if (/^(ansatt|arbeidstaker|employee)$/.test(t)) return "ansatt";
-  return null;
-};
+// «Aksjonær», «Selvstendig» eller «Innleid» er ikke en ansettelse: om personen er ansatt, følger
+// rollen (en rolle for dem som ikke er ansatt, under Ansatte → Roller).
+const IKKE_ANSETTELSE = /aksjon|medeier|partner|shareholder|owner|selvstendig|næringsdriv|naeringsdriv|frilans|freelance|self.?employed|innleid|leid inn|bemanningsbyr|vikarbyr|contractor/;
 const tolkLonnstype = (s: string) => {
   const t = s.trim().toLowerCase();
   if (/time|hour/.test(t)) return "time";
@@ -1037,11 +1031,10 @@ export function tilRader(type: Importtype, rader: string[][], kobling: (string |
       const tall = (f: string) => (v(f) ? (tolkTall(v(f), desimal[f]!) ?? v(f)) : undefined);
       if (v("stillingsprosent")) o.stillingsprosent = tolkProsent(v("stillingsprosent"), desimal.stillingsprosent!) ?? v("stillingsprosent");
       if (v("ukentlig_arbeidstid")) o.ukentlig_arbeidstid = tall("ukentlig_arbeidstid");
-      // «Aksjonær» eller «Selvstendig» i kolonnen for ansettelse er tilknytningen (ikke ansatt).
-      const fraAnsettelse = v("ansettelsestype") ? tolkTilknytning(v("ansettelsestype")) : null;
-      if (v("tilknytning")) o.tilknytning = tolkTilknytning(v("tilknytning")) ?? v("tilknytning");
-      else if (fraAnsettelse && fraAnsettelse !== "ansatt") o.tilknytning = fraAnsettelse;
-      if (v("ansettelsestype") && !(fraAnsettelse && fraAnsettelse !== "ansatt")) o.ansettelsestype = tolkAnsettelse(v("ansettelsestype")) ?? v("ansettelsestype");
+      // Rollen (f.eks. «Lege»): den som finnes med det navnet, eller en ny.
+      settTekst("rolle");
+      const ansettelse = v("ansettelsestype");
+      if (ansettelse && !IKKE_ANSETTELSE.test(ansettelse.toLowerCase())) o.ansettelsestype = tolkAnsettelse(ansettelse) ?? ansettelse;
       if (v("ferie_dager")) o.ferie_dager = tall("ferie_dager");
 
       // Lønn: månedslønn (eller årslønn delt på tolv) eller timelønn. Lønnstypen følger av den
