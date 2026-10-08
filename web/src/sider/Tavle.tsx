@@ -4,24 +4,27 @@
 // ut av ressursene: plassene står overstreket og teller ikke, og vakten står som «mangler
 // vikar» til en vikar er satt inn (vikaren tar over plassene). Behovet (hvor mange som trengs)
 // står på oppgaven og kan settes per fase. Eier og administrator flytter de ansatte mellom
-// oppgavene: dra og slipp på PC, eller trykk på navnet. Regnskap ser tavla.
+// oppgavene: dra og slipp på PC, eller trykk på navnet, eller fordeler dem med rulleringen
+// (Rullering.tsx), så alle får gjøre alt etter tur. Regnskap ser tavla.
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles";
 import { useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
-import { IkonHoyre, IkonInnstillinger, IkonKopier, IkonNed, IkonOpp, IkonPluss, IkonTavle, IkonVarsel, IkonVenstre } from "../ikoner";
+import { IkonHoyre, IkonInnstillinger, IkonKopier, IkonNed, IkonOpp, IkonPluss, IkonRullering, IkonTavle, IkonVarsel, IkonVenstre } from "../ikoner";
 import { Klokkeslett, mandag, middag, ukenr, visDag } from "../uke";
 import { borteTekst, FravaerDialog, fravaerKlasse, fravaerPeriode, fravaerTekst, VikarSkjema, type Ansatt, type Fravaer, type FravaerType } from "./Fravaer";
 import { ArbeidsplanDialog, fastTider } from "./Arbeidsplan";
+import { HvemKan, Rullering } from "./Rullering";
 
 type Fase = { id: string; navn: string; fra: string | null; til: string | null };
 type Oppgave = { id: string; navn: string; behov: number | null };
 // En fast arbeidsdag fra arbeidsplanen står som en vakt med fast: true (en hel dag uten klokkeslett).
 type TavleVakt = { id: string; fra: string | null; til: string | null; oppgave: string | null; vikar: boolean; publisert: boolean; fast?: boolean; timer?: number };
 type Ressurs = { ansatt_id: string; navn: string; fravaer: FravaerType | null; vakter: TavleVakt[] };
-type Plassering = { fase_id: string; oppgave_id: string; ansatt_id: string };
+// rullert: satt av rulleringen (byttes ut når den kjøres igjen); ellers satt for hånd.
+type Plassering = { fase_id: string; oppgave_id: string; ansatt_id: string; rullert?: boolean };
 type Behov = { fase_id: string; oppgave_id: string; antall: number };
 type ManglerVikar = { vakt_id: string; ansatt_id: string; navn: string; fra: string; til: string; oppgave: string | null; type: FravaerType };
 type TavleSvar = {
@@ -31,6 +34,8 @@ type TavleSvar = {
   behov: Behov[];
   ressurser: Ressurs[];
   plasseringer: Plassering[];
+  // Hvem rulleringen ikke setter i en oppgave.
+  utelatt: { oppgave_id: string; ansatt_id: string }[];
   fravaer: { id: string; ansatt_id: string; navn: string; type: FravaerType; fra: string; til: string }[];
   mangler_vikar: ManglerVikar[];
 };
@@ -92,6 +97,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id]);
   const [oppsett, settOppsett] = useState(false);
   const [kopierer, settKopierer] = useState(false);
+  const [rullerer, settRullerer] = useState(false);
   const [valgt, settValgt] = useState<{ ansatt: string; fase: string } | null>(null);
   const [dra, settDra] = useState<{ ansatt: string; fase: string } | null>(null);
   const [over, settOver] = useState<string | null>(null);
@@ -150,6 +156,9 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
       </div>
       {kanEndre && klar && (
         <div className="knapper">
+          <button type="button" onClick={() => settRullerer(true)}>
+            <IkonRullering storrelse={17} /> Rullering
+          </button>
           <button type="button" onClick={() => settKopierer(true)}>
             <IkonKopier storrelse={17} /> Kopier plasser
           </button>
@@ -172,6 +181,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
         )}
       />
       {data.faser.length > 0 && data.oppgaver.length > 0 && <BehovPerFase faser={data.faser} oppgaver={data.oppgaver} behov={data.behov} endret={last} />}
+      {data.oppgaver.length > 0 && ansatte.data && <HvemKan oppgaver={data.oppgaver} ansatte={ansatte.data} utelatt={data.utelatt} endret={last} />}
       <div className="knapper oppsett-ferdig">
         <button type="button" className="primar" onClick={() => settOppsett(false)}>
           Ferdig
@@ -244,10 +254,12 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
     const vakter = (r?.vakter ?? []).filter((v) => iFasen(v, f));
     const utenVakt = !borte && !vakter.length;
     const utkast = vakter.length > 0 && vakter.every((v) => !v.publisert);
+    const rullert = data.plasseringer.some((p) => p.fase_id === f.id && p.ansatt_id === a && p.rullert);
     const tittel = [
       borte ? `${fravaerTekst[borte]}: plassen teller ikke` : "",
       utenVakt ? "Har ikke vakt i denne fasen" : "",
       utkast ? "Vakten er ikke publisert" : "",
+      rullert ? "Satt av rulleringen" : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -450,6 +462,19 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
         Hvem som hører til en fase, avgjøres av vakten i vaktplanen eller den faste arbeidsdagen (en hel dag hører til alle fasene). Stiplet kant: vakten er ikke publisert, eller den ansatte har ikke vakt i fasen.
       </p>
       {oppsettDialog}
+      <Dialog apen={rullerer} lukk={() => settRullerer(false)} tittel="Rullering" bred>
+        {rullerer && (
+          <Rullering
+            dato={dato}
+            ferdig={(m) => {
+              settRullerer(false);
+              settMelding(m);
+              last();
+            }}
+            avbryt={() => settRullerer(false)}
+          />
+        )}
+      </Dialog>
       <Dialog apen={kopierer} lukk={() => settKopierer(false)} tittel={`Kopier plasser til ${visDag(dato).toLowerCase()}`}>
         {kopierer && (
           <KopierTavle

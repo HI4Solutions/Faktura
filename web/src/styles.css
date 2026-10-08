@@ -1586,6 +1586,38 @@ table.behov-tabell th, table.behov-tabell td { padding: 6px 8px; }
 table.behov-tabell th:first-child, table.behov-tabell td:first-child { padding-left: 0; font-weight: 550; white-space: nowrap; }
 table.behov-tabell input { width: 64px; padding: 6px 8px; text-align: center; font-variant-numeric: tabular-nums; }
 table.behov-tabell tbody tr:last-child td { border-bottom: 0; }
+/* Rulleringen: valgene, forslaget per dag og fase, og hvem som kan ta oppgavene */
+.forslag button.valgt { border-color: var(--aksent); background: var(--aksent-lys); color: var(--aksent); box-shadow: inset 0 0 0 1px var(--aksent); }
+.rullering-valg { margin: -4px 0 16px; }
+.rullering-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0 0 12px; font-size: 0.9rem; color: var(--tekst-2); }
+.rullering-sum strong { font-variant-numeric: tabular-nums; color: var(--tekst); }
+.rullering-sum .fare { color: var(--fare); font-weight: 600; }
+.rullering-tabell { max-height: min(56vh, 560px); overflow: auto; border: 1px solid var(--kant); border-radius: var(--radius-s); }
+.rullering-tabell table th, .rullering-tabell table td { padding: 7px 10px; vertical-align: top; }
+.rullering-tabell thead th { position: sticky; top: 0; z-index: 1; }
+.rullering-tabell tr.rullering-dag th { background: var(--flate); color: var(--tekst); font-size: 0.85rem; text-transform: none; letter-spacing: 0; padding-top: 12px; }
+.rullering-tabell td.tittel { font-weight: 600; white-space: nowrap; }
+.rullering-navn { display: block; font-size: 0.88rem; line-height: 1.45; }
+.rullering-navn.satt { text-decoration: underline dashed var(--dempet); text-underline-offset: 3px; }
+.rullering-mangler { display: inline-block; margin-top: 2px; font-size: 0.78rem; font-weight: 650; color: var(--fare); }
+.rullering-fordeling { margin-top: 14px; }
+.rullering-fordeling summary { cursor: pointer; font-weight: 600; }
+.rullering-fordeling .tabell { margin-top: 8px; }
+.rullering-fordeling table th, .rullering-fordeling table td { padding: 6px 10px; }
+.rullering-forslag > .liten { margin: 12px 0 0; }
+table.hvem-kan { width: auto; min-width: 100%; }
+table.hvem-kan th, table.hvem-kan td { padding: 6px 8px; text-align: center; }
+table.hvem-kan th:first-child, table.hvem-kan td:first-child { padding-left: 0; text-align: left; font-weight: 550; white-space: nowrap; }
+table.hvem-kan input { margin: 0; }
+table.hvem-kan tr.utenfor td:first-child { color: var(--dempet); text-decoration: line-through; }
+table.hvem-kan tbody tr:last-child td { border-bottom: 0; }
+@media (max-width: 700px) {
+  .rullering-tabell { max-height: none; overflow: visible; border: 0; }
+  .rullering-tabell table.stabel > tbody > tr { padding: 10px 0; }
+  .rullering-tabell table.stabel > tbody > tr.rullering-dag { display: block; padding: 14px 0 4px; border-bottom: 0; }
+  .rullering-tabell table.stabel > tbody > tr.rullering-dag > th { display: block; padding: 0; background: none; font-size: 0.95rem; }
+  .rullering-tabell table.stabel td.tittel { font-size: 0.85rem; color: var(--tekst-2); }
+}
 @media (min-width: 801px) {
   .tavle-rad:last-child > * { border-bottom: 0; }
 }

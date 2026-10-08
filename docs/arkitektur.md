@@ -212,6 +212,22 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   dra og slipp på PC, trykk på mobil) og kan kopiere plassene fra en annen dag. Den som er
   borte, kan ikke plasseres, og plassene den har, teller ikke. Regnskap ser tavla, og den
   ansatte ser sine egne plasser under Mine vakter
+- Rullering på tavla (`server/src/rullering.ts`, `POST /tavle/rullering`): de som er på jobb
+  i en periode (høyst 31 dager), fordeles på oppgavene så alle får gjøre alt etter tur. Hver
+  dag og fase for seg, i rekkefølge: behovet fylles først (én i hver oppgave før noen får to,
+  og mangler det folk, i oppgavenes rekkefølge), resten går jevnt til oppgavene uten behov
+  (har alle behov, står resten uten oppgave), og behov 0 betyr ingen. Hvem som får hva, er
+  en tilordning med lavest samlet kostnad (den ungarske metoden): andelen av plassene den
+  ansatte har hatt i oppgaven de siste åtte ukene (de nyeste teller mest, halvert hver
+  annen uke), helst ikke det samme som forrige arbeidsdag, og en annen oppgave enn i fasene
+  før samme dag; faser som overlapper i tid, gir samme oppgave (valgfritt: samme oppgave
+  hele dagen). Plassene rulleringen setter, er merket (`tavle_plasseringer.rullert`) og
+  byttes ut når den kjøres igjen for de samme dagene, mens plassene satt for hånd står og
+  teller med (en plass som flyttes for hånd, er ikke lenger rullert); med `behold: false`
+  fordeles også de. `tavle_utelatt`: hvem rulleringen ikke setter i en oppgave (uten rad
+  kan alle; uten noen oppgave er den ansatte utenfor rulleringen), styrt i oppsettet av
+  tavla; for hånd kan alle plasseres. Appen viser et forslag (dagene med fasene og
+  oppgavene, behovet som mangler og fordelingen per ansatt) før det lagres
 - `arbeidsplaner` og `arbeidsplan_dager`: den faste arbeidsplanen til en ansatt, lagt inn i
   ansattskjemaet ved stillingsprosenten: ukedagene den ansatte jobber, med klokkeslett (og
   pause) eller som hel dag (en femtedel av arbeidstiden i full stilling, vanligvis 7,5 timer),
@@ -385,7 +401,8 @@ og hastighetsgrenser i API-et.
       med overtid og merarbeid, levering og godkjenning med push-varsler
    2. ~~Vaktplan~~ Ferdig: vakter per uke og ansatt med publisering og varsler, ledige vakter
       som de ansatte tar, kopiering av uker, advarsler etter arbeidsmiljøloven, og timer
-      ført fra vakten. Tavle (ressursfordeling i egne faser og oppgaver med behov),
+      ført fra vakten. Tavle (ressursfordeling i egne faser og oppgaver med behov, og
+      rullering som fordeler de ansatte etter tur),
       fravær (sykdom meldt av den ansatte, ferie, permisjon og kurs), vikarer,
       bemanningskalender med de ansatte i grupper mot behovet, faste arbeidsdager per
       ansatt og rapport over ekstratimer (PDF og CSV)

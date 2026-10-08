@@ -235,6 +235,14 @@ export const IkonTavle = (p: P) => (
     <path d="M3 9.5h18M9 9.5V20M15 9.5V20" />
   </Ikon>
 );
+export const IkonRullering = (p: P) => (
+  <Ikon {...p}>
+    <path d="M20.5 4v5.5H15" />
+    <path d="M3.5 20v-5.5H9" />
+    <path d="M5.3 9.2a7.5 7.5 0 0 1 12.4-3l2.8 3.3" />
+    <path d="M3.5 14.5l2.8 3.3a7.5 7.5 0 0 0 12.4-3" />
+  </Ikon>
+);
 export const IkonOpp = (p: P) => (
   <Ikon {...p}>
     <path d="m6 14.5 6-6 6 6" />
