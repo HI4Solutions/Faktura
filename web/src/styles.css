@@ -1815,3 +1815,14 @@ table.bemanning { width: max-content; min-width: 100%; border-collapse: separate
   /* Arkene (dialogene) står på bunnen av skjermen */
   dialog, dialog.assistent { margin: 0; top: 100lvh; bottom: auto; translate: 0 -100%; }
 }
+
+/* Sletting av organisasjoner: en fylt rød knapp, og en tydelig ramme rundt der man sletter. */
+button.fare-fylt { background: var(--fare); color: #fff; border-color: var(--fare); }
+button.fare-fylt:hover:not(:disabled) { background: color-mix(in srgb, var(--fare) 88%, #000); border-color: color-mix(in srgb, var(--fare) 88%, #000); }
+.kort.fare-sone { border-color: color-mix(in srgb, var(--fare) 40%, var(--kant)); }
+.kort.fare-sone h2, .admin-detaljer .fare-sone h3 { color: var(--fare); }
+.slett-org textarea { width: 100%; resize: vertical; }
+.slettede-org td.grunn { max-width: 340px; white-space: normal; }
+.kort.slettede-org { margin-top: 16px; }
+.kort.slettede-org summary { cursor: pointer; font-weight: 600; }
+.kort.slettede-org .admin-rader { margin-top: 10px; }

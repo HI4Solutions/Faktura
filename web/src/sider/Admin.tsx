@@ -8,6 +8,7 @@ import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
 import { dato, orgnr } from "../format";
 import { IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
 import { ModulValg, modulnavn, opplisting, useModuler, type Modul } from "../moduler";
+import { SlettOrganisasjon } from "../slettOrg";
 
 type Org = {
   id: string;
@@ -312,6 +313,7 @@ function Organisasjoner({ orgs, apne }: { orgs: Org[]; apne: (id: string) => voi
         </button>
       </div>
       <OrgListe rader={rader} apne={apne} />
+      <SlettedeOrganisasjoner key={orgs.length} />
     </>
   );
 }
@@ -431,6 +433,7 @@ const Fakta = ({ rader }: { rader: [string, ReactNode][] }) => (
 
 function OrgDetaljer({ id, endret }: { id: string; endret: () => void }) {
   const { data: o, feil } = useData(() => hent<any>(`/admin/organisasjoner/${id}`), [id]);
+  const [slett, settSlett] = useState(false);
   if (feil) return <Feil melding={feil} />;
   if (!o) return <Laster />;
   const eier = o.medlemmer.find((m: any) => m.rolle === "eier");
@@ -587,7 +590,72 @@ function OrgDetaljer({ id, endret }: { id: string; endret: () => void }) {
           </ul>
         </section>
       )}
+
+      <section className="fare-sone">
+        <h3>Slett organisasjonen</h3>
+        <p className="liten dempet" style={{ marginTop: 0 }}>
+          Uten utstedte fakturaer slettes alt. Med utstedte fakturaer stenges organisasjonen, og fakturaene oppbevares så lenge bokføringsloven krever. Eierne får
+          e-post med grunnen.
+        </p>
+        <button type="button" className="fare" onClick={() => settSlett(true)}>
+          Slett organisasjonen …
+        </button>
+        <SlettOrganisasjon
+          admin
+          navn={o.navn}
+          sti={`/admin/organisasjoner/${o.id}/slett`}
+          apen={slett}
+          lukk={() => settSlett(false)}
+          ferdig={() => {
+            settSlett(false);
+            endret();
+          }}
+        />
+      </section>
     </div>
+  );
+}
+
+// Organisasjonene som er slettet (alt borte) eller stengt (fakturaene oppbevares), med grunnen.
+type Slettet = {
+  id: string;
+  navn: string;
+  orgnr: string | null;
+  slettet_at: string;
+  slettet_av_navn: string | null;
+  slettet_av_epost: string | null;
+  av_plattformen: boolean;
+  grunn: string;
+  antall_fakturaer: number;
+  oppbevares_til: string | null;
+};
+function SlettedeOrganisasjoner() {
+  const { data } = useData(() => hent<Slettet[]>("/admin/slettede"), []);
+  if (!data?.length) return null;
+  return (
+    <details className="kort slettede-org">
+      <summary>Slettede organisasjoner ({data.length})</summary>
+      <ul className="admin-rader">
+        {data.map((s) => (
+          <li key={s.id}>
+            <span>
+              <strong>{s.navn}</strong>
+              {s.orgnr && <span className="dempet liten"> · {orgnr(s.orgnr)}</span>}
+              <span className="liten" style={{ display: "block" }}>
+                Grunn: {s.grunn}
+              </span>
+              <span className="dempet liten" style={{ display: "block" }}>
+                {dato(s.slettet_at)} av {s.av_plattformen ? "HI4 Faktura" : "eieren"}
+                {s.slettet_av_navn || s.slettet_av_epost ? ` (${s.slettet_av_navn ?? s.slettet_av_epost})` : ""}
+              </span>
+            </span>
+            <span className={`merke ${s.oppbevares_til ? "merke-advarsel" : "merke-noytral"}`}>
+              {s.oppbevares_til ? `Stengt · ${s.antall_fakturaer} ${s.antall_fakturaer === 1 ? "faktura" : "fakturaer"} til ${dato(s.oppbevares_til)}` : "Slettet"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

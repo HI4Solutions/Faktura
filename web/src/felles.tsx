@@ -110,7 +110,20 @@ export function Dialog({ apen, lukk, tittel, children, bred }: { apen: boolean; 
     if (!apen && d.open) d.close();
   }, [apen]);
   return (
-    <dialog ref={ref} onClose={lukk} onCancel={lukk} className={bred ? "bred" : undefined}>
+    // Hendelsene stoppes her, så en dialog oppå en annen (f.eks. sletting fra detaljene) ikke
+    // lukker den under.
+    <dialog
+      ref={ref}
+      onClose={(e) => {
+        e.stopPropagation();
+        lukk();
+      }}
+      onCancel={(e) => {
+        e.stopPropagation();
+        lukk();
+      }}
+      className={bred ? "bred" : undefined}
+    >
       <div className="dialog-topp">
         <h2>{tittel}</h2>
         <button type="button" aria-label="Lukk" onClick={lukk}>

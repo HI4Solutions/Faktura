@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent, lastOppLogo } from "../api";
 import { EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
 import { erAdmin, harFunksjon, useKonto } from "../konto";
@@ -11,6 +11,7 @@ import { BankKobling, kontoerEndret } from "./Bank";
 import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
+import { SlettOrganisasjon } from "../slettOrg";
 
 type Fane = "organisasjon" | "faktura" | "betaling" | "ehf" | "brukere" | "personal" | "konto" | "app";
 type OrgDel = "organisasjon" | "faktura" | "betaling";
@@ -49,6 +50,7 @@ export function Innstillinger() {
       </div>
       {/* Samme skjema for de tre fanene, så endringer som ikke er lagret, blir med mellom dem. */}
       {orgDel && <Organisasjon del={orgDel} />}
+      {fane === "organisasjon" && org?.rolle === "eier" && org.direkte_medlem && <SlettOrg />}
       {fane === "faktura" && <Logo />}
       {fane === "betaling" && (
         <>
@@ -67,6 +69,39 @@ export function Innstillinger() {
       {fane === "konto" && <MinKonto />}
       {fane === "app" && <AppOgVarsler />}
     </>
+  );
+}
+
+// Eieren kan slette organisasjonen, med en grunn (se slettOrg.tsx).
+function SlettOrg() {
+  const { org, oppdater } = useKonto();
+  const [apen, settApen] = useState(false);
+  const naviger = useNavigate();
+  if (!org) return null;
+  return (
+    <div className="kort fare-sone">
+      <h2>Slett organisasjonen</h2>
+      <p className="dempet">
+        Sletter {org.navn} fra HI4 Faktura for alle brukerne. Du må skrive hvorfor. Har organisasjonen utstedte fakturaer, stenges den i stedet, og fakturaene
+        oppbevares så lenge bokføringsloven krever.
+      </p>
+      <div className="knapper">
+        <button type="button" className="fare" onClick={() => settApen(true)}>
+          Slett organisasjonen …
+        </button>
+      </div>
+      <SlettOrganisasjon
+        navn={org.navn}
+        sti={`/org/${org.id}/slett`}
+        apen={apen}
+        lukk={() => settApen(false)}
+        ferdig={async () => {
+          settApen(false);
+          await oppdater();
+          naviger("/", { replace: true });
+        }}
+      />
+    </div>
   );
 }
 

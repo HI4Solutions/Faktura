@@ -33,6 +33,7 @@ import { arbeidsplanRuter } from "./arbeidsplan.js";
 import { krevFunksjoner } from "./funksjoner.js";
 import { hentModuler, krevGodkjentKonto, meldNyKonto, modulKoder } from "./kontoer.js";
 import { aiPaa } from "./ai.js";
+import { grunnSkjema, meldSlettingTilAdmin, slettOrganisasjon } from "./slettOrg.js";
 
 const uuid = z.string().uuid();
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "må være ÅÅÅÅ-MM-DD");
@@ -365,6 +366,16 @@ export function lagApi() {
       return o;
     });
     return c.json(o);
+  });
+
+  // Eieren sletter organisasjonen, med grunn (0046_slett_organisasjon.sql). Med utstedte
+  // fakturaer stenges den i stedet, og fakturaene oppbevares.
+  org.post("/slett", async (c) => {
+    krevMfa(c);
+    const { grunn } = await kropp(c, grunnSkjema);
+    const s = await bruk(c, (db) => slettOrganisasjon(db, orgId(c), grunn));
+    await meldSlettingTilAdmin(s);
+    return c.json(s);
   });
 
   org.post("/startnummer", async (c) => {

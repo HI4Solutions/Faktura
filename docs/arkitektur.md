@@ -222,6 +222,20 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   halvt minutt), bakgrunnsjobbene hopper over organisasjonen (bankhenting, gjentakende
   fakturaer, EHF-sending, som da går på e-post, påminnelser og Google Disk), og appen
   skjuler det som ikke er slått på (`mine_organisasjoner.funksjoner`)
+- `slettede_organisasjoner` og `organisasjoner.slettet_at`: sletting av organisasjoner. Eieren
+  (Innstillinger → Organisasjon) eller plattformadministratoren (detaljene i Administrasjon)
+  sletter, alltid med en grunn, og bekrefter med navnet; eieren må ha totrinnsinnlogging. Uten
+  utstedte fakturaer eller kreditnotaer slettes alt med en gang (kunder, produkter, utkast,
+  ansatte, timer, vaktplan, revisjonsloggen, og filene ryddes av workeren). Utstedte fakturaer
+  er regnskapsmateriale som skal oppbevares i fem år etter regnskapsårets slutt (bokføringsloven
+  § 13), og er låst; da stenges organisasjonen i stedet: medlemmer, regnskapsførertilgang og
+  invitasjoner fjernes, utkast slettes, gjentakelser, påminnelser og automatisk purring
+  stoppes, og `har_funksjon` er av, så bakgrunnsjobbene hopper over den. Fakturaene, kundene og
+  betalingene blir liggende til `oppbevares_til` (31.12. fem år etter siste faktura); selve
+  slettingen etter det er ikke laget ennå. Hver sletting logges med grunnen, også når alt er
+  borte, og vises under Administrasjon → Organisasjoner → Slettede organisasjoner. Sletter
+  eieren, får plattformadministratorene e-post med grunnen; sletter plattformadministratoren,
+  får eierne det (`0046_slett_organisasjon.sql`, `server/src/slettOrg.ts`)
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
