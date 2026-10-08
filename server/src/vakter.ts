@@ -117,7 +117,7 @@ export function vaktRuter() {
         // Fraværet i perioden (den ansatte ser bare sitt eget).
         const fravaer = await alle(
           db,
-          `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, f.type, f.fra, f.til
+          `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, f.type, f.fra, f.til, f.notat
              from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
             where f.org_id = $1 and f.til >= $2 and f.fra <= $3 and ($4::uuid is null or f.ansatt_id = $4)
             order by f.fra`,

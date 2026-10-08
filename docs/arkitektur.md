@@ -136,7 +136,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   uke etter grensene i oppsettet, overlappende vakter og vakter utenfor ansettelsen. Timene
   kan føres fra vakten (`timeforinger.vakt_id`), og timelisten og godkjenningen viser hvor
   mange timer som var planlagt
-- `fravaer`: sykdom, sykt barn, ferie, permisjon og annet fravær per ansatt (fra og med, til
+- `fravaer`: sykdom, sykt barn, ferie, permisjon, kurs og annet fravær per ansatt (fra og med, til
   og med). Eier og administrator registrerer alt; den ansatte melder selv sykdom (fra og med
   i går) og kan bare endre sluttdatoen på den etterpå. Melder den ansatte seg syk, får eier og
   administrator varsel med hvor mange vakter som trenger vikar; registrerer leder fravær, får
@@ -156,9 +156,14 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   overlapper. Eier og administrator plasserer dem i oppgavene (én oppgave per ansatt og fase;
   dra og slipp på PC, trykk på mobil) og kan kopiere plassene fra en annen dag. Den som er
   borte, kan ikke plasseres, og plassene den har, teller ikke. Regnskap ser tavla, og den
-  ansatte ser sine egne plasser under Mine vakter. Bemanningskalenderen (i appen, fra
-  vaktplanen og fraværet) viser per dag hvor mange som er på jobb, hvem som er borte, vakter
-  uten vikar og ledige vakter
+  ansatte ser sine egne plasser under Mine vakter
+- `ansattgrupper` og `ansatte.gruppe_id`: grupper av ansatte (f.eks. sekretærer og leger) med
+  hvor mange som trengs på jobb per dag. Bemanningskalenderen (i appen, fra vaktplanen og
+  fraværet) viser måneden med datoene nedover og de ansatte bortover, gruppe for gruppe: på
+  jobb (✓), fri (–), fravær (F ferie, S syk, SB sykt barn, P permisjon, K kurs, A annet) eller
+  ekstratimer (timene utover avtalt arbeidstid i uka, alle for tilkallingsvikarer), og til
+  høyre hvor mange som er på jobb i hver gruppe mot behovet, vakter uten vikar og ledige
+  vakter. Grupper kan lages fra stillingene
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
@@ -255,8 +260,8 @@ og hastighetsgrenser i API-et.
    2. ~~Vaktplan~~ Ferdig: vakter per uke og ansatt med publisering og varsler, ledige vakter
       som de ansatte tar, kopiering av uker, advarsler etter arbeidsmiljøloven, og timer
       ført fra vakten. Tavle (ressursfordeling i egne faser og oppgaver med behov),
-      fravær (sykdom meldt av den ansatte, ferie og permisjon), vikarer og
-      bemanningskalender
+      fravær (sykdom meldt av den ansatte, ferie, permisjon og kurs), vikarer og
+      bemanningskalender med de ansatte i grupper mot behovet
    3. Lønnskjøring: lønnsarter, skattetrekk (tabell eller prosent fra skattekortet),
       feriepenger, OTP, arbeidsgiveravgift per sone, sykepenger og lønnsslipp som PDF
    4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og

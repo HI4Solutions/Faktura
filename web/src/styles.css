@@ -1256,6 +1256,8 @@ button.foring:active:not(:disabled) { transform: none; background: var(--aksent-
 fieldset.naken { border: 0; padding: 0; margin: 0; background: none; min-width: 0; }
 .faner.valg { display: flex; width: 100%; margin-bottom: 14px; }
 .faner.valg button { flex: 1; justify-content: center; }
+/* Fraværstypene: tre og tre */
+.faner.valg.fravaertyper { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
 /* Fra, til og pause: klokkefeltene får mest plass (12-timersformat med «PM» skal få plass) */
 .rad.tre { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.75fr); }
 .rad.tre input[type="time"] { padding-left: 10px; padding-right: 8px; }
@@ -1390,10 +1392,8 @@ button.vakt-chip.mangler { border-left-color: var(--fare); }
 .vakt-chip .vakt-vikar { color: var(--aksent); font-weight: 600; font-size: 0.72rem; }
 .fravaer-dag {
   display: block; padding: 3px 6px; border-radius: 7px; font-size: 0.74rem; font-weight: 600; line-height: 1.3;
-  background: var(--flate-2); color: var(--tekst-2); box-shadow: inset 0 0 0 1px var(--kant);
+  background: var(--fv-lys, var(--flate-2)); color: var(--fv, var(--tekst-2));
 }
-.fravaer-dag.ferie { background: var(--info-lys); color: var(--info); box-shadow: none; }
-.fravaer-dag.syk, .fravaer-dag.sykt_barn { background: var(--advarsel-lys); color: var(--advarsel); box-shadow: none; }
 .vakt-chip + .fravaer-dag { margin-top: 4px; }
 .vaktplan tfoot td { padding: 8px 4px; background: var(--flate-2); border-top: 1px solid var(--kant-sterk); border-bottom: 0; font-size: 0.82rem; vertical-align: top; }
 .vaktplan tfoot td:first-child { padding-top: 8px; font-weight: 600; }
@@ -1532,79 +1532,141 @@ table.behov-tabell tbody tr:last-child td { border-bottom: 0; }
 }
 
 /* --------------------------------------------------------------------------
-   Bemanningskalender
+   Fraværstyper: samme farger i merker, vaktplan, tavle og bemanningskalender
    -------------------------------------------------------------------------- */
-.kalender-rad { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
-.kort.kalender-kort { padding: 0; overflow: hidden; }
-.kalender { display: grid; grid-template-columns: 38px repeat(7, minmax(0, 1fr)); }
-.kal-hode, .kal-uke-rad { display: contents; }
-.kal-hode > span {
-  padding: 8px; background: var(--flate-2); border-bottom: 1px solid var(--kant);
-  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dempet);
+:root {
+  --fv-ferie: #1f5fbf; --fv-ferie-lys: #e3edfc;
+  --fv-syk: #c0262d; --fv-syk-lys: #fde7e7;
+  --fv-sykt_barn: #b14a08; --fv-sykt_barn-lys: #ffeddc;
+  --fv-permisjon: #7d5d00; --fv-permisjon-lys: #fcf1c6;
+  --fv-kurs: #0e7068; --fv-kurs-lys: #daf3ee;
+  --fv-annet: #6b2fd0; --fv-annet-lys: #efe7fd;
+  --fv-ekstra: #0f7a47; --fv-ekstra-lys: #e2f6ea;
 }
-.kal-hode > span.kal-uke { padding: 8px 0; text-align: center; letter-spacing: 0; text-transform: none; border-right: 1px solid var(--kant); }
-button.kal-uke {
-  display: block; min-height: 0; padding: 9px 0 0; border: 0; border-bottom: 1px solid var(--kant); border-right: 1px solid var(--kant); border-radius: 0;
-  background: var(--flate-2); box-shadow: none; color: var(--dempet); font-size: 0.74rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center;
+:root[data-tema="mork"] {
+  --fv-ferie: #8ab4ff; --fv-ferie-lys: #172848;
+  --fv-syk: #ff8f8f; --fv-syk-lys: #3d1a1e;
+  --fv-sykt_barn: #ffb070; --fv-sykt_barn-lys: #3a2412;
+  --fv-permisjon: #f0d061; --fv-permisjon-lys: #33290f;
+  --fv-kurs: #62d6c6; --fv-kurs-lys: #0f2f2b;
+  --fv-annet: #c6a9ff; --fv-annet-lys: #2a1f47;
+  --fv-ekstra: #5fd39a; --fv-ekstra-lys: #12301f;
 }
-button.kal-uke:hover:not(:disabled) { color: var(--aksent); background: var(--aksent-lys); }
-button.kal-uke:active:not(:disabled) { transform: none; }
-button.kal-dag {
-  display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; min-height: 108px; margin: 0; padding: 6px 7px 8px;
-  border: 0; border-bottom: 1px solid var(--kant); border-right: 1px solid var(--kant); border-radius: 0; background: var(--flate); box-shadow: none;
-  color: var(--tekst); font-size: 0.76rem; font-weight: 500; line-height: 1.3; text-align: left; overflow: hidden;
+.fravaer-ferie { --fv: var(--fv-ferie); --fv-lys: var(--fv-ferie-lys); }
+.fravaer-syk { --fv: var(--fv-syk); --fv-lys: var(--fv-syk-lys); }
+.fravaer-sykt_barn { --fv: var(--fv-sykt_barn); --fv-lys: var(--fv-sykt_barn-lys); }
+.fravaer-permisjon { --fv: var(--fv-permisjon); --fv-lys: var(--fv-permisjon-lys); }
+.fravaer-kurs { --fv: var(--fv-kurs); --fv-lys: var(--fv-kurs-lys); }
+.fravaer-annet { --fv: var(--fv-annet); --fv-lys: var(--fv-annet-lys); }
+.merke-fravaer { background: var(--fv-lys); color: var(--fv); }
+
+/* --------------------------------------------------------------------------
+   Bemanningskalender: datoene nedover, de ansatte bortover gruppe for gruppe
+   -------------------------------------------------------------------------- */
+/* Gruppefargene (g5: uten gruppe) */
+.g0 { --g: #2f56d8; --g-lys: #edf1fe; }
+.g1 { --g: #0e7068; --g-lys: #e2f4f0; }
+.g2 { --g: #6b2fd0; --g-lys: #f1eafd; }
+.g3 { --g: #8a5a00; --g-lys: #fdf3dc; }
+.g4 { --g: #b4235f; --g-lys: #fce8f0; }
+.g5 { --g: #475569; --g-lys: #eef1f5; }
+:root[data-tema="mork"] .g0 { --g: #8ea8ff; --g-lys: #1b2546; }
+:root[data-tema="mork"] .g1 { --g: #62d6c6; --g-lys: #102f2b; }
+:root[data-tema="mork"] .g2 { --g: #c6a9ff; --g-lys: #2a2047; }
+:root[data-tema="mork"] .g3 { --g: #f2c35b; --g-lys: #33290f; }
+:root[data-tema="mork"] .g4 { --g: #f7a1c4; --g-lys: #3b1627; }
+:root[data-tema="mork"] .g5 { --g: #cbd5e1; --g-lys: #1d2638; }
+
+.bm-forklaring { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: -2px 0 12px; font-size: 0.84rem; color: var(--tekst-2); }
+.bm-forklaring > span { display: inline-flex; align-items: center; gap: 6px; }
+.bm-tegn {
+  display: inline-grid; place-items: center; min-width: 26px; height: 21px; padding: 0 5px; border-radius: 5px;
+  font-size: 0.72rem; font-weight: 700; background: var(--fv-lys, var(--flate)); color: var(--fv, var(--tekst-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fv, var(--kant-sterk)) 30%, transparent);
 }
-.kal-uke-rad > button.kal-dag:last-child { border-right: 0; }
-.kal-uke-rad:last-child > button { border-bottom: 0; }
-button.kal-dag:hover:not(:disabled) { background: var(--flate-2); }
-button.kal-dag:active:not(:disabled) { transform: none; }
-button.kal-dag.utenfor { background: var(--flate-2); color: var(--dempet); }
-button.kal-dag.utenfor .kal-merker, button.kal-dag.utenfor .kal-antall { opacity: 0.75; }
-button.kal-dag.valgt, button.kal-dag.valgt:hover:not(:disabled) { background: var(--aksent-lys); box-shadow: inset 0 0 0 2px var(--aksent); }
-.kal-dato { align-self: flex-start; font-size: 0.86rem; font-weight: 650; font-variant-numeric: tabular-nums; }
-.kal-dag.i-dag .kal-dato { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; margin: -2px 0 0 -3px; border-radius: 999px; background: var(--aksent); color: var(--aksent-tekst); }
-.kal-antall { color: var(--tekst-2); white-space: nowrap; }
-.kal-antall strong { font-variant-numeric: tabular-nums; color: var(--tekst); }
-.kal-merker { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.kal-fravaer, .kal-mangler, .kal-ledige { display: flex; align-items: flex-start; gap: 5px; min-width: 0; }
-.kal-fravaer::before, .kal-mangler::before, .kal-ledige::before { content: ""; flex: none; width: 7px; height: 7px; margin-top: 0.36em; border-radius: 999px; background: var(--dempet); }
-.kal-fravaer.ferie::before { background: var(--info); }
-.kal-fravaer.syk::before, .kal-fravaer.sykt_barn::before { background: var(--advarsel); }
-.kal-mangler { color: var(--fare); font-weight: 650; }
-.kal-mangler::before { background: var(--fare); }
-.kal-ledige { color: var(--aksent); }
-.kal-ledige::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--aksent); }
-/* Smale ruter: høyst to linjer per merke (hele teksten står i verktøytipset og under kalenderen) */
-.kal-lang { min-width: 0; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.kal-forklaring { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 10px 16px; border-top: 1px solid var(--kant); background: var(--flate-2); font-size: 0.8rem; color: var(--tekst-2); }
-.kal-forklaring .kal-mangler { font-weight: 500; }
-.kal-tall-forklaring { display: none; }
-.kort.kal-panel { position: sticky; top: 16px; }
-.kal-panel-topp { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.kal-panel-topp h2 { margin: 0; font-size: 1.05rem; }
-.kal-panel-topp .knapper button { min-height: 34px; padding: 5px 12px; }
-.kal-del h3 { margin: 16px 0 2px; font-size: 0.74rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dempet); }
-.kal-del.mangler h3 { color: var(--fare); }
-.kal-del .liste-enkel li { flex-wrap: wrap; gap: 4px 12px; padding: 8px 0; font-size: 0.9rem; }
-.kal-del .liste-enkel li > button { flex: none; min-height: 34px; padding: 5px 12px; }
-.kal-del .tittel { display: inline-flex; align-items: center; gap: 6px; }
-.kal-del .tid { font-variant-numeric: tabular-nums; }
-.kal-del p { margin: 6px 0 0; }
-@media (max-width: 1020px) {
-  .kalender-rad { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .kort.kal-panel { position: static; }
+.bm-tegn.ekstra { --fv: var(--fv-ekstra); --fv-lys: var(--fv-ekstra-lys); }
+.bm-tegn.utkast { color: color-mix(in srgb, var(--tekst-2) 55%, transparent); }
+/* Vakt uten vikar: en rød prikk i hjørnet */
+.bm-tegn.uten-vikar, .bemanning td.bm-rute.uten-vikar button { position: relative; }
+.bm-tegn.uten-vikar::after, .bemanning td.bm-rute.uten-vikar button::after {
+  content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 999px;
+  background: var(--fare); box-shadow: 0 0 0 1.5px var(--fv-lys, var(--flate));
 }
+
+.kort.bemanning-ramme { --bm-sum-b: 58px; --bm-dag-b: 62px; padding: 0; overflow: auto; max-height: max(440px, calc(100dvh - 250px)); }
+table.bemanning { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.82rem; }
+.bemanning th, .bemanning td {
+  padding: 0; border-bottom: 1px solid var(--kant); border-right: 1px solid var(--kant); text-align: center; vertical-align: middle;
+  background: var(--flate); text-transform: none; letter-spacing: 0; white-space: nowrap;
+}
+.bemanning thead th { position: sticky; top: 0; z-index: 2; background: var(--flate-2); color: var(--tekst-2); font-size: 0.78rem; }
+.bemanning thead tr:first-child th { height: 34px; }
+.bemanning thead tr:nth-child(2) th { top: 34px; }
+.bemanning th.bm-dag-hode { left: 0; z-index: 4; width: var(--bm-dag-b); min-width: var(--bm-dag-b); padding: 0 10px; text-align: left; }
+.bemanning th.bm-gruppe {
+  padding: 0 10px; background: var(--g-lys); color: var(--g); text-align: left;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; box-shadow: inset 2px 0 0 var(--g);
+}
+/* Gruppenavnet følger med når tabellen rulles sidelengs */
+.bm-gruppe-navn { position: sticky; left: calc(var(--bm-dag-b) + 10px); }
+.bemanning th.bm-ansatt { min-width: 46px; padding: 5px 4px 4px; background: var(--g-lys); color: var(--tekst); box-shadow: inset 0 3px 0 var(--g); }
+.bemanning th.bm-ansatt.forste { box-shadow: inset 0 3px 0 var(--g), inset 2px 0 0 var(--g); }
+.bm-navn { display: block; font-size: 0.78rem; font-weight: 650; }
+.bm-prosent { display: block; margin-top: 1px; font-size: 0.68rem; font-weight: 500; color: var(--dempet); font-variant-numeric: tabular-nums; }
+.bemanning th.bm-sum-hode, .bemanning td.bm-sum { right: calc(var(--bm-sum-b) * var(--h-alle, 0)); }
+.bemanning th.bm-sum-hode {
+  z-index: 3; width: var(--bm-sum-b); min-width: var(--bm-sum-b); max-width: var(--bm-sum-b); padding: 0 4px;
+  color: var(--g, var(--tekst-2)); font-size: 0.76rem; font-weight: 700; white-space: normal; line-height: 1.2;
+}
+.bemanning th.bm-sum-hode.varsel { color: var(--fare); }
+.bemanning td.bm-sum {
+  position: sticky; z-index: 1; width: var(--bm-sum-b); min-width: var(--bm-sum-b); max-width: var(--bm-sum-b);
+  background: var(--flate-2); color: var(--tekst); font-weight: 700; font-size: 0.86rem; font-variant-numeric: tabular-nums;
+}
+.bemanning td.bm-sum.under { background: var(--fv-syk-lys); color: var(--fare); }
+.bemanning td.bm-sum.ledig { color: var(--aksent); }
+.bemanning td.bm-sum.null { color: var(--kant-sterk); font-weight: 500; }
+.bemanning .bm-sum-forste { box-shadow: inset 2px 0 0 var(--kant-sterk), -8px 0 10px -8px rgba(15, 23, 42, 0.28); }
+.bemanning th.bm-dag, .bemanning th.bm-dag-hode { box-shadow: 8px 0 10px -8px rgba(15, 23, 42, 0.18); }
+.bemanning tr.i-dag th.bm-dag { box-shadow: inset 3px 0 0 var(--aksent), 8px 0 10px -8px rgba(15, 23, 42, 0.18); }
+.bemanning th.bm-dag { position: sticky; left: 0; z-index: 1; width: var(--bm-dag-b); min-width: var(--bm-dag-b); padding: 0 10px; text-align: left; background: var(--flate); }
+.bemanning th.bm-dag button.lenke { color: var(--tekst); font-size: 0.86rem; font-weight: 650; }
+.bemanning th.bm-dag button.lenke span { color: var(--tekst-2); font-weight: 500; }
+.bemanning tr.ny-uke > * { border-top: 2px solid var(--kant-sterk); }
+.bemanning tr.i-dag th.bm-dag button.lenke { color: var(--aksent); }
+.bemanning tr.i-dag td { background: color-mix(in srgb, var(--aksent-lys) 55%, var(--flate)); }
+.bemanning td.bm-rute.forste { box-shadow: inset 2px 0 0 var(--g); }
+.bemanning td.bm-rute button {
+  display: grid; place-items: center; width: 100%; height: 34px; min-height: 0; padding: 0 3px; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; color: var(--tekst-2); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+}
+.bemanning td.bm-rute button:hover:not(:disabled) { background: color-mix(in srgb, var(--aksent) 12%, transparent); }
+.bemanning td.bm-rute button:active:not(:disabled) { transform: none; }
+.bemanning td.bm-rute button:focus-visible { box-shadow: inset 0 0 0 2px var(--aksent); }
+.bemanning td.bm-rute.fri button { color: var(--dempet); font-weight: 500; }
+.bemanning td.bm-rute.utkast button { opacity: 0.55; }
+.bemanning td.bm-rute.borte { background: var(--fv-lys); }
+.bemanning td.bm-rute.borte button { color: var(--fv); font-weight: 750; }
+.bemanning td.bm-rute.ekstra { background: var(--fv-ekstra-lys); }
+.bemanning td.bm-rute.ekstra button { color: var(--fv-ekstra); font-size: 0.76rem; font-weight: 700; }
+.bemanning td.bm-rute.utenfor { background: repeating-linear-gradient(135deg, var(--flate) 0 6px, var(--flate-2) 6px 8px); }
+.bm-detaljer .melding.bm-borte { margin-bottom: 12px; }
+.bm-detaljer .melding.bm-borte div { margin-top: 4px; }
+.bm-detaljer .liste-enkel { margin-bottom: 12px; }
+.bm-detaljer .liste-enkel li { flex-wrap: wrap; gap: 6px 12px; padding: 9px 0; }
+.bm-detaljer .liste-enkel li > button { flex: none; }
+.bm-ansattliste select { width: auto; min-width: 160px; max-width: 220px; flex: none; }
 @media (max-width: 700px) {
-  .kalender { grid-template-columns: 28px repeat(7, minmax(0, 1fr)); }
-  .kal-hode > span { padding: 7px 0; text-align: center; letter-spacing: 0.02em; }
-  button.kal-uke { padding-top: 8px; font-size: 0.7rem; }
-  button.kal-dag { align-items: center; gap: 2px; min-height: 64px; padding: 5px 2px 6px; font-size: 0.74rem; }
-  .kal-dato { align-self: center; }
-  .kal-dag.i-dag .kal-dato { margin: -2px 0 0; }
-  .kal-lang { display: none; }
-  .kal-antall { color: var(--tekst-2); }
-  .kal-merker { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 3px; }
-  .kal-merker > span { gap: 0; }
-  .kal-merker > span::before { margin-top: 0; }
-  .kal-tall-forklaring { display: inline; }
+  .kort.bemanning-ramme { --bm-sum-b: 48px; --bm-dag-b: 56px; max-height: 72dvh; }
+  .bemanning th.bm-dag-hode, .bemanning th.bm-dag { padding: 0 6px; }
+  /* Bare gruppesummene står fast til høyre; resten ligger sist i tabellen */
+  .bemanning th.bm-sum-hode, .bemanning td.bm-sum { right: calc(var(--bm-sum-b) * var(--h-grupper, 0)); }
+  .bemanning th.bm-ekstra-sum { right: auto; }
+  .bemanning td.bm-ekstra-sum { position: static; }
+  .bemanning th.bm-sum-hode { font-size: 0.7rem; }
+  .bemanning th.bm-ansatt { min-width: 46px; padding: 5px 3px 4px; }
+  .bm-navn { font-size: 0.74rem; }
+  .bemanning td.bm-rute button { height: 36px; }
+  .bm-forklaring { gap: 5px 10px; font-size: 0.8rem; }
+  .bm-ansattliste select { min-width: 0; max-width: 46%; }
 }

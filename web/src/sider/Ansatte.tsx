@@ -34,6 +34,7 @@ type Ansatt = {
   timelonn: number | null;
   aktiv: boolean;
   notat: string | null;
+  gruppe_id: string | null;
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
 };
@@ -234,7 +235,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     timelonn: tekstTall(ansatt.timelonn),
     aktiv: ansatt.aktiv ?? true,
     notat: ansatt.notat ?? "",
+    gruppe_id: ansatt.gruppe_id ?? "",
   }));
+  // Gruppene i bemanningskalenderen (f.eks. sekretærer og leger), hvis noen er laget.
+  const grupper = useData(() => hent<{ id: string; navn: string }[]>(`/org/${org!.id}/ansattgrupper`), [org?.id]);
   const [forlatt, settForlatt] = useState<Record<string, boolean>>({});
   const [melding, settMelding] = useState<string | null>(null);
   const h = useHandling();
@@ -274,6 +278,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       notat: a.notat,
       aktiv: a.aktiv,
     };
+    if (grupper.data?.length) kropp.gruppe_id = a.gruppe_id || null;
     if (a.stillingsprosent.trim()) kropp.stillingsprosent = tall(a.stillingsprosent);
     if (a.ukentlig_arbeidstid.trim()) kropp.ukentlig_arbeidstid = tall(a.ukentlig_arbeidstid);
     // Fødselsnummeret sendes bare når det er skrevet inn eller skal fjernes; ellers fødselsdatoen.
@@ -413,6 +418,19 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             </select>
           </label>
         </div>
+        {!!grupper.data?.length && (
+          <label>
+            Gruppe i bemanningskalenderen
+            <select {...felt("gruppe_id")}>
+              <option value="">Ingen gruppe</option>
+              {grupper.data.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.navn}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="rad">
           <label>
             Stillingsprosent

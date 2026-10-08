@@ -9,16 +9,26 @@ import { iDag, leggTilDager } from "../format";
 import { IkonKalender } from "../ikoner";
 import { visDag } from "../uke";
 
-export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "annet";
+export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "kurs" | "annet";
 export type Fravaer = { id: string; ansatt_id: string; ansatt_navn: string; type: FravaerType; fra: string; til: string; notat?: string | null };
 export type Ansatt = { id: string; fornavn: string; etternavn: string; ansatt_fra: string; ansatt_til: string | null; aktiv: boolean };
 type BerortVakt = { id: string; dato: string; fra: string; til: string; oppgave: string | null };
 
-export const fravaerTekst: Record<FravaerType, string> = { syk: "Syk", sykt_barn: "Sykt barn", ferie: "Ferie", permisjon: "Permisjon", annet: "Annet fravær" };
-// Sykdom er gul (rødt er for det som må gjøres, som vakter uten vikar), ferie blå.
-export const fravaerKlasse: Record<FravaerType, string> = { syk: "merke-advarsel", sykt_barn: "merke-advarsel", ferie: "merke-info", permisjon: "merke-noytral", annet: "merke-noytral" };
+export const FRAVAERTYPER: FravaerType[] = ["ferie", "syk", "sykt_barn", "permisjon", "kurs", "annet"];
+export const fravaerTekst: Record<FravaerType, string> = { syk: "Syk", sykt_barn: "Sykt barn", ferie: "Ferie", permisjon: "Permisjon", kurs: "Kurs", annet: "Annet fravær" };
+// Forkortelsene i bemanningskalenderen.
+export const fravaerKode: Record<FravaerType, string> = { ferie: "F", syk: "S", sykt_barn: "SB", permisjon: "P", kurs: "K", annet: "A" };
+// Hver type har sin farge (styles.css: --fv-ferie osv.), samme i merker, vaktplan og kalender.
+export const fravaerKlasse = Object.fromEntries(FRAVAERTYPER.map((t) => [t, `merke-fravaer fravaer-${t}`])) as Record<FravaerType, string>;
 // «Ola Nordmann har ferie denne dagen.»
-export const borteTekst: Record<FravaerType, string> = { syk: "er syk", sykt_barn: "har sykt barn", ferie: "har ferie", permisjon: "har permisjon", annet: "er borte" };
+export const borteTekst: Record<FravaerType, string> = {
+  syk: "er syk",
+  sykt_barn: "har sykt barn",
+  ferie: "har ferie",
+  permisjon: "har permisjon",
+  kurs: "er på kurs",
+  annet: "er borte",
+};
 
 export const fravaerPeriode = (f: Pick<Fravaer, "fra" | "til">) => (f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)} – ${visDag(f.til)}`);
 const dager = (f: Pick<Fravaer, "fra" | "til">) => Math.round((Date.parse(`${f.til}T12:00:00Z`) - Date.parse(`${f.fra}T12:00:00Z`)) / 86_400_000) + 1;
@@ -51,7 +61,7 @@ export function FravaerSkjema({
   }));
   const h = useHandling();
   const sett = (e: Partial<typeof f>) => settF({ ...f, ...e });
-  const typer = (selv ? ["syk", "sykt_barn"] : ["syk", "sykt_barn", "ferie", "permisjon", "annet"]) as FravaerType[];
+  const typer: FravaerType[] = selv ? ["syk", "sykt_barn"] : FRAVAERTYPER;
   // Den ansatte endrer bare sluttdatoen på en sykmelding som er meldt.
   const bareSlutt = !!selv && !!fravaer.id;
   const valg = (ansatte ?? []).filter((a) => a.id === fravaer.ansatt_id || a.aktiv);
@@ -97,10 +107,10 @@ export function FravaerSkjema({
           </select>
         </label>
       )}
-      <div className="faner valg" role="radiogroup" aria-label="Type fravær">
+      <div className={`faner valg${selv ? "" : " fravaertyper"}`} role="radiogroup" aria-label="Type fravær">
         {typer.map((t) => (
           <button key={t} type="button" role="radio" aria-checked={f.type === t} className={f.type === t ? "valgt" : undefined} disabled={bareSlutt} onClick={() => sett({ type: t })}>
-            {fravaerTekst[t]}
+            {t === "annet" ? "Annet" : fravaerTekst[t]}
           </button>
         ))}
       </div>

@@ -58,6 +58,7 @@ const ansattSkjema = z.object({
   timelonn: valgfri(z.number().min(0, "Lønnen kan ikke være negativ").max(100_000)),
   aktiv: z.boolean().optional(),
   notat: valgfri(tekst(2000, "Notatet")),
+  gruppe_id: uuid.nullable().optional(), // gruppen i bemanningskalenderen (0039_bemanning.sql)
 });
 
 const oppsettSkjema = z.object({
@@ -84,7 +85,7 @@ const foringSkjema = z.object({
 const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
-         a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.opprettet, a.oppdatert,
+         a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.opprettet, a.oppdatert,
          a.bruker_id = faktura.bruker_id() as meg,
          case when a.bruker_id is not null
                    and exists (select 1 from faktura.medlemmer m where m.org_id = a.org_id and m.bruker_id = a.bruker_id) then 'koblet'
@@ -217,10 +218,17 @@ export function ansattRuter() {
     return f;
   }
 
+  // Gruppen må finnes i organisasjonen (databasen sjekker det også, men med en uklar melding).
+  async function sjekkGruppe(db: Db, org: string, f: Record<string, unknown>) {
+    if (typeof f.gruppe_id !== "string") return;
+    if (!(await en(db, "select 1 from faktura.ansattgrupper where org_id = $1 and id = $2", [org, f.gruppe_id]))) throw new ApiFeil(400, "Fant ikke gruppen");
+  }
+
   r.post("/ansatte", async (c) => {
     const f = await felter(ansattSkjema.parse(await c.req.json().catch(() => ({}))));
     const navn = Object.keys(f);
     const a = await bruk(c, async (db) => {
+      await sjekkGruppe(db, orgId(c), f);
       const ny = await en<{ id: string }>(
         db,
         `insert into faktura.ansatte (org_id, ${navn.join(", ")}) values ($1, ${navn.map((_, i) => `$${i + 2}`).join(", ")}) returning id`,
@@ -236,6 +244,7 @@ export function ansattRuter() {
     const navn = Object.keys(f);
     if (!navn.length) throw new ApiFeil(400, "Ingen felt å endre");
     const a = await bruk(c, async (db) => {
+      await sjekkGruppe(db, orgId(c), f);
       const res = await db.query(`update faktura.ansatte set ${navn.map((k, i) => `${k} = $${i + 3}`).join(", ")} where org_id = $1 and id = $2`, [
         orgId(c),
         id(c),

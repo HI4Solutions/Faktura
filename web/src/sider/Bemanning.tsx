@@ -1,35 +1,80 @@
-// Bemanningskalenderen: en måned om gangen, med hvor mange som er på jobb hver dag (fra
-// vaktplanen), hvem som er borte (ferie, sykdom, permisjon), vakter som mangler vikar og
-// ledige vakter. Velg en dag for å se bemanningen den dagen, sette inn vikar eller gå videre
-// til tavla og uka i vaktplanen.
-import { useEffect, useRef, useState } from "react";
-import { hent } from "../api";
-import { Dialog, Feil, Laster, useData } from "../felles";
+// Bemanningskalenderen: måneden med datoene nedover og de ansatte bortover, gruppe for
+// gruppe (f.eks. sekretærer og leger). Hver rute viser om den ansatte er på jobb (✓, fra
+// vaktplanen), har fri (–), er borte (F ferie, S syk, SB sykt barn, P permisjon, K kurs,
+// A annet) eller jobber ekstra (timene utover avtalt arbeidstid i uka). Til høyre står hvor
+// mange som er på jobb i hver gruppe mot behovet, så bemanningen kan ses opp mot hverandre.
+// Trykk på en rute for å registrere fravær eller sette inn vikar; grupper og behov settes
+// opp under «Grupper».
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { api, hent } from "../api";
+import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles";
 import { useKonto } from "../konto";
 import { iDag, leggTilDager, leggTilMaaneder } from "../format";
-import { IkonHoyre, IkonVenstre } from "../ikoner";
-import { mandag, middag, ukedager, ukenr, visDag } from "../uke";
-import { fravaerKlasse, fravaerPeriode, fravaerTekst, FravaerSkjema, VikarSkjema, type Ansatt, type Fravaer, type FravaerType } from "./Fravaer";
+import { IkonAnsatte, IkonHoyre, IkonNed, IkonOpp, IkonPluss, IkonVenstre } from "../ikoner";
+import { mandag, middag, tallformat, ukenr, visDag } from "../uke";
+import {
+  FRAVAERTYPER,
+  fravaerKlasse,
+  fravaerKode,
+  fravaerPeriode,
+  fravaerTekst,
+  FravaerSkjema,
+  VikarSkjema,
+  type Ansatt as Grunnansatt,
+  type Fravaer,
+} from "./Fravaer";
 import { visLangDag } from "./Tavle";
 import type { Vakt, VaktSvar } from "./Vakter";
 
-const maanedFormat = new Intl.DateTimeFormat("nb-NO", { month: "long", year: "numeric", timeZone: "UTC" });
-const UKEDAGER = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
-const TYPER: FravaerType[] = ["ferie", "syk", "sykt_barn", "permisjon", "annet"];
-const fornavn = (navn: string) => navn.split(" ")[0];
-export const gyldigMaaned = (s: string | null): s is string => !!s && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+type Ansatt = Grunnansatt & {
+  stilling: string | null;
+  stillingsprosent: number;
+  ukentlig_arbeidstid: number;
+  ansettelsestype: string;
+  gruppe_id: string | null;
+};
+type Gruppe = { id: string; navn: string; kort: string | null; behov: number | null; rekkefolge: number; antall: number };
+type Seksjon = { id: string | null; navn: string; kort: string; behov: number | null; farge: number; ansatte: Ansatt[] };
+type Rute =
+  | { art: "utenfor" }
+  | { art: "borte"; fravaer: Fravaer; vakter: Vakt[]; utenVikar: Vakt[] }
+  | { art: "jobb"; vakter: Vakt[]; ekstra: number; utkast: boolean }
+  | { art: "fri" };
 
-type Dag = { paJobb: Vakt[]; antall: number; borte: Fravaer[]; mangler: Vakt[]; ledige: Vakt[] };
-function dagInfo(data: VaktSvar, d: string): Dag {
-  const vakter = data.vakter.filter((v) => v.dato === d);
-  const paJobb = vakter.filter((v) => v.ansatt_id && !v.fravaer);
-  return {
-    paJobb,
-    antall: new Set(paJobb.map((v) => v.ansatt_id)).size,
-    borte: data.fravaer.filter((f) => f.fra <= d && f.til >= d),
-    mangler: vakter.filter((v) => v.ansatt_id && v.fravaer && !v.har_vikar),
-    ledige: vakter.filter((v) => !v.ansatt_id),
-  };
+const maanedFormat = new Intl.DateTimeFormat("nb-NO", { month: "long", year: "numeric", timeZone: "UTC" });
+const UKEDAG = ["Sø", "Ma", "Ti", "On", "To", "Fr", "Lø"];
+const FARGER = 5; // gruppefargene g0–g4 (g5 er for dem uten gruppe)
+export const gyldigMaaned = (s: string | null): s is string => !!s && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+// «Sekretærer» blir «Sek.» i oppsummeringen, med mindre gruppen har en egen forkortelse.
+const kortNavn = (g: Pick<Gruppe, "navn" | "kort">) => g.kort || (g.navn.length > 5 ? `${g.navn.slice(0, 3)}.` : g.navn);
+const timerTekst = (t: number) => `${tallformat.format(Math.round(t * 100) / 100)}t`;
+const punktum = (s: string) => (s.endsWith(".") ? s : `${s}.`);
+const avtalt = (a: Ansatt) => (a.ansettelsestype === "tilkalling" ? 0 : (Number(a.ukentlig_arbeidstid) * Number(a.stillingsprosent)) / 100);
+
+// Timene utover avtalt arbeidstid, per ansatt og dag: vaktene i hver uke legges sammen i
+// rekkefølge, og det som går over avtalt arbeidstid (alt for tilkallingsvikarer), er ekstra.
+// Vakter den ansatte er borte fra, teller ikke.
+function ekstraTimer(vakter: Vakt[], ansatte: Map<string, Ansatt>) {
+  const perUke = new Map<string, Vakt[]>();
+  for (const v of vakter) {
+    if (!v.ansatt_id || v.fravaer) continue;
+    const k = `${v.ansatt_id}|${mandag(v.dato)}`;
+    perUke.set(k, [...(perUke.get(k) ?? []), v]);
+  }
+  const ut = new Map<string, number>();
+  for (const [k, liste] of perUke) {
+    const a = ansatte.get(k.split("|")[0]!);
+    if (!a) continue;
+    const grense = avtalt(a);
+    let sum = 0;
+    for (const v of liste.sort((x, y) => x.dato.localeCompare(y.dato) || x.fra.localeCompare(y.fra))) {
+      const t = Number(v.timer);
+      const ekstra = Math.max(0, Math.min(t, sum + t - grense));
+      sum += t;
+      if (ekstra > 0.01) ut.set(`${v.ansatt_id}|${v.dato}`, (ut.get(`${v.ansatt_id}|${v.dato}`) ?? 0) + ekstra);
+    }
+  }
+  return ut;
 }
 
 export function Bemanning({
@@ -48,35 +93,26 @@ export function Bemanning({
   const { org } = useKonto();
   const forste = `${maaned}-01`;
   const siste = leggTilDager(leggTilMaaneder(forste, 1), -1);
+  // Hele uker, så ekstratimene i ukene i kantene av måneden regnes riktig.
   const fra = mandag(forste);
   const til = leggTilDager(mandag(siste), 6);
   const [versjon, settVersjon] = useState(0);
+  const [oppsettVersjon, settOppsettVersjon] = useState(0);
   const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${fra}&til=${til}`), [org?.id, fra, til, versjon]);
-  const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon]);
-  const standard = iDag().startsWith(maaned) ? iDag() : forste;
-  const [valgt, settValgt] = useState(standard);
+  const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon, oppsettVersjon]);
+  const grupper = useData(() => hent<Gruppe[]>(`/org/${org!.id}/ansattgrupper`), [org?.id, oppsettVersjon]);
+  const [rute, settRute] = useState<{ a: Ansatt; d: string } | null>(null);
+  const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
   const [vikar, settVikar] = useState<Vakt | null>(null);
-  const [nyttFravaer, settNyttFravaer] = useState(false);
+  const [oppsett, settOppsett] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  // Velg en dag; på mobil, der dagen vises under kalenderen, rulles den fram.
-  const velg = (d: string) => {
-    settValgt(d);
-    requestAnimationFrame(() => {
-      const r = panel.current?.getBoundingClientRect();
-      if (r && r.top > window.innerHeight - 160) panel.current!.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+  useEffect(() => settMelding(null), [maaned]);
+  const endret = (m?: string) => {
+    if (m) settMelding(m);
+    settVersjon((x) => x + 1);
   };
-  // Ny måned: velg i dag (eller den første), og ikke vis meldingen fra den forrige.
-  useEffect(() => {
-    settValgt(standard);
-    settMelding(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maaned]);
   const denne = iDag().slice(0, 7);
   const navn = maanedFormat.format(middag(forste));
-  const uker: string[][] = [];
-  for (let m = fra; m <= til; m = leggTilDager(m, 7)) uker.push(ukedager(m));
 
   const verktoy = (
     <div className="uke-verktoy">
@@ -100,21 +136,27 @@ export function Bemanning({
         )}
       </div>
       {kanEndre && (
-        <button type="button" className="primar" onClick={() => settNyttFravaer(true)}>
-          Registrer fravær
-        </button>
+        <div className="knapper">
+          <button type="button" onClick={() => settOppsett(true)}>
+            <IkonAnsatte storrelse={17} /> Grupper
+          </button>
+          <button type="button" className="primar" onClick={() => settFravaer({ fra: iDag().startsWith(maaned) ? iDag() : forste, til: iDag().startsWith(maaned) ? iDag() : forste })}>
+            Registrer fravær
+          </button>
+        </div>
       )}
     </div>
   );
 
-  if (feil || ansatte.feil)
+  const feilmelding = feil ?? ansatte.feil ?? grupper.feil;
+  if (feilmelding)
     return (
       <>
         {verktoy}
-        <Feil melding={feil ?? ansatte.feil} />
+        <Feil melding={feilmelding} />
       </>
     );
-  if (!data)
+  if (!data || !ansatte.data || !grupper.data)
     return (
       <>
         {verktoy}
@@ -122,61 +164,97 @@ export function Bemanning({
       </>
     );
 
-  const celle = (d: string) => {
-    const i = dagInfo(data, d);
-    const typer = TYPER.filter((t) => i.borte.some((f) => f.type === t));
-    const hvem = (t: FravaerType) => i.borte.filter((f) => f.type === t);
-    const etikett = [
-      visLangDag(d),
-      `${i.antall} på jobb`,
-      ...typer.map((t) => `${fravaerTekst[t]}: ${hvem(t).map((f) => f.ansatt_navn).join(", ")}`),
-      i.mangler.length ? `${i.mangler.length} mangler vikar` : "",
-      i.ledige.length ? `${i.ledige.length} ${i.ledige.length === 1 ? "ledig vakt" : "ledige vakter"}` : "",
-    ]
-      .filter(Boolean)
-      .join(". ");
+  // --- Utregningen -------------------------------------------------------------------------
+  const alle = new Map(ansatte.data.map((a) => [a.id, a]));
+  const vakterPer = new Map<string, Vakt[]>();
+  for (const v of data.vakter) if (v.ansatt_id) vakterPer.set(`${v.ansatt_id}|${v.dato}`, [...(vakterPer.get(`${v.ansatt_id}|${v.dato}`) ?? []), v]);
+  const ekstra = ekstraTimer(data.vakter, alle);
+
+  // Hverdagene, og helgedager med vakter.
+  const dager: string[] = [];
+  for (let d = forste; d <= siste; d = leggTilDager(d, 1)) {
+    const ukedag = middag(d).getUTCDay();
+    if ((ukedag !== 0 && ukedag !== 6) || data.vakter.some((v) => v.dato === d)) dager.push(d);
+  }
+
+  // Kolonnene: de som er ansatt i måneden, og alle med vakter eller fravær i den.
+  const iMaaneden = (a: Ansatt) =>
+    (a.aktiv && a.ansatt_fra <= siste && (!a.ansatt_til || a.ansatt_til >= forste)) ||
+    data.vakter.some((v) => v.ansatt_id === a.id && v.dato >= forste && v.dato <= siste) ||
+    data.fravaer.some((f) => f.ansatt_id === a.id && f.til >= forste && f.fra <= siste);
+  const synlige = ansatte.data.filter(iMaaneden).sort((x, y) => x.fornavn.localeCompare(y.fornavn, "nb") || x.etternavn.localeCompare(y.etternavn, "nb"));
+  const fornavn = new Map<string, number>();
+  for (const a of synlige) fornavn.set(a.fornavn, (fornavn.get(a.fornavn) ?? 0) + 1);
+  const visNavn = (a: Ansatt) => ((fornavn.get(a.fornavn) ?? 0) > 1 ? `${a.fornavn} ${a.etternavn.charAt(0)}.` : a.fornavn);
+  const kjente = new Set(grupper.data.map((g) => g.id));
+  const seksjoner: Seksjon[] = [
+    ...grupper.data.map((g, i) => ({ id: g.id, navn: g.navn, kort: kortNavn(g), behov: g.behov, farge: i % FARGER, ansatte: synlige.filter((a) => a.gruppe_id === g.id) })),
+    {
+      id: null,
+      navn: grupper.data.length ? "Uten gruppe" : "Ansatte",
+      kort: grupper.data.length ? "Andre" : "På jobb",
+      behov: null,
+      farge: 5,
+      ansatte: synlige.filter((a) => !a.gruppe_id || !kjente.has(a.gruppe_id)),
+    },
+  ].filter((s) => s.ansatte.length > 0);
+
+  const ruteFor = (a: Ansatt, d: string): Rute => {
+    if (!(a.ansatt_fra <= d && (!a.ansatt_til || a.ansatt_til >= d))) return { art: "utenfor" };
+    const vakter = vakterPer.get(`${a.id}|${d}`) ?? [];
+    const f = data.fravaer.find((x) => x.ansatt_id === a.id && x.fra <= d && x.til >= d);
+    if (f) return { art: "borte", fravaer: f, vakter, utenVikar: vakter.filter((v) => !v.har_vikar) };
+    if (vakter.length) return { art: "jobb", vakter, ekstra: ekstra.get(`${a.id}|${d}`) ?? 0, utkast: vakter.every((v) => !v.publisert) };
+    return { art: "fri" };
+  };
+  const paJobb = (s: Seksjon, d: string) => s.ansatte.filter((a) => (vakterPer.get(`${a.id}|${d}`) ?? []).some((v) => !v.fravaer)).length;
+  const utenVikar = (d: string) => data.vakter.filter((v) => v.dato === d && v.ansatt_id && v.fravaer && !v.har_vikar).length;
+  const ledige = (d: string) => data.vakter.filter((v) => v.dato === d && !v.ansatt_id).length;
+  const visUtenVikar = dager.some((d) => utenVikar(d) > 0);
+  const visLedige = dager.some((d) => ledige(d) > 0);
+  const harUtkast = data.vakter.some((v) => v.ansatt_id && !v.publisert && v.dato >= forste && v.dato <= siste);
+  // Oppsummeringen står fast til høyre når tabellen rulles sidelengs (på mobil bare gruppene).
+  const summer = seksjoner.length + (visUtenVikar ? 1 : 0) + (visLedige ? 1 : 0);
+  const hoyre = (i: number) => ({ "--h-alle": summer - 1 - i, "--h-grupper": Math.max(0, seksjoner.length - 1 - i) }) as CSSProperties;
+
+  const beskriv = (r: Rute) => {
+    if (r.art === "utenfor") return "Ikke ansatt";
+    if (r.art === "fri") return "Fri";
+    const deler =
+      r.art === "borte"
+        ? [`${fravaerTekst[r.fravaer.type]} ${fravaerPeriode(r.fravaer)}`, r.utenVikar.length ? "Vakten mangler vikar" : r.vakter.length ? "Vikar er satt inn" : ""]
+        : [
+            ...r.vakter.map((v) => `${v.fra}–${v.til}${v.oppgave ? ` ${v.oppgave}` : ""}${v.publisert ? "" : " (ikke publisert)"}`),
+            r.ekstra ? `${timerTekst(r.ekstra).replace("t", " t")} utover avtalt arbeidstid` : "",
+          ];
+    return deler.filter(Boolean).map(punktum).join(" ");
+  };
+
+  const celle = (a: Ansatt, d: string, s: Seksjon, forsteISeksjon: boolean) => {
+    const r = ruteFor(a, d);
+    let klasse = `bm-rute${forsteISeksjon ? " forste" : ""} g${s.farge}`;
+    let innhold = "";
+    if (r.art === "borte") {
+      klasse += ` borte fravaer-${r.fravaer.type}${r.utenVikar.length ? " uten-vikar" : ""}`;
+      innhold = fravaerKode[r.fravaer.type];
+    } else if (r.art === "jobb") {
+      klasse += `${r.ekstra ? " ekstra" : " jobb"}${r.utkast ? " utkast" : ""}`;
+      innhold = r.ekstra ? timerTekst(r.ekstra) : "✓";
+    } else if (r.art === "fri") {
+      klasse += " fri";
+      innhold = "–";
+    } else klasse += " utenfor";
+    const tekst = beskriv(r);
     return (
-      <button
-        key={d}
-        type="button"
-        aria-label={etikett}
-        aria-pressed={valgt === d}
-        title={etikett}
-        className={`kal-dag${d.slice(0, 7) !== maaned ? " utenfor" : ""}${d === iDag() ? " i-dag" : ""}${valgt === d ? " valgt" : ""}`}
-        onClick={() => velg(d)}
-      >
-        <span className="kal-dato">{Number(d.slice(8))}</span>
-        {i.antall > 0 && (
-          <span className="kal-antall">
-            <strong>{i.antall}</strong>
-            <span className="kal-lang"> på jobb</span>
-          </span>
-        )}
-        <span className="kal-merker">
-          {typer.map((t) => (
-            <span key={t} className={`kal-fravaer ${t}`}>
-              <span className="kal-lang">{hvem(t).map((f) => fornavn(f.ansatt_navn)).join(", ")}</span>
-            </span>
-          ))}
-          {i.mangler.length > 0 && (
-            <span className="kal-mangler">
-              <span className="kal-lang">{i.mangler.length} uten vikar</span>
-            </span>
-          )}
-          {i.ledige.length > 0 && (
-            <span className="kal-ledige">
-              <span className="kal-lang">
-                {i.ledige.length} {i.ledige.length === 1 ? "ledig" : "ledige"}
-              </span>
-            </span>
-          )}
-        </span>
-      </button>
+      <td key={a.id} className={klasse} title={tekst}>
+        <button type="button" aria-label={`${a.fornavn} ${a.etternavn}, ${visDag(d)}: ${tekst}`} onClick={() => settRute({ a, d })}>
+          {innhold}
+        </button>
+      </td>
     );
   };
 
-  const i = dagInfo(data, valgt);
-  const perAnsatt = [...new Set(i.paJobb.map((v) => v.ansatt_id!))].map((id) => ({ id, vakter: i.paJobb.filter((v) => v.ansatt_id === id) }));
+  const valgt = rute && { ...rute, r: ruteFor(rute.a, rute.d) };
 
   return (
     <>
@@ -186,136 +264,229 @@ export function Bemanning({
           {melding}
         </div>
       )}
-      <div className="kalender-rad">
-        <div className="kort kalender-kort">
-          <div className="kalender">
-            <div className="kal-hode">
-              <span className="kal-uke">Uke</span>
-              {UKEDAGER.map((n) => (
-                <span key={n}>{n}</span>
-              ))}
-            </div>
-            {uker.map((u) => (
-              <div key={u[0]} className="kal-uke-rad">
-                <button type="button" className="kal-uke" title={`Uke ${ukenr(u[0]!).uke} i vaktplanen`} onClick={() => tilUke(u[0]!)}>
-                  {ukenr(u[0]!).uke}
-                </button>
-                {u.map(celle)}
-              </div>
-            ))}
-          </div>
-          <div className="kal-forklaring">
-            <span className="kal-fravaer ferie">Ferie</span>
-            <span className="kal-fravaer syk">Syk eller sykt barn</span>
-            <span className="kal-fravaer permisjon">Permisjon og annet</span>
-            <span className="kal-mangler">Mangler vikar</span>
-            <span className="kal-ledige">Ledig vakt</span>
-            <span className="kal-tall-forklaring">Tallet: på jobb</span>
-          </div>
+      {!grupper.data.length && kanEndre && synlige.length > 0 && (
+        <div className="melding info venter">
+          <span>Del de ansatte i grupper, f.eks. sekretærer og leger, for å se hvor mange som er på jobb i hver gruppe mot behovet.</span>
+          <button type="button" className="lenke" onClick={() => settOppsett(true)}>
+            Sett opp grupper
+          </button>
         </div>
-        <div className="kort kal-panel" aria-live="polite" ref={panel}>
-          <div className="kal-panel-topp">
-            <h2>{visLangDag(valgt)}</h2>
-            <div className="knapper">
-              <button type="button" onClick={() => tilTavle(valgt)}>
-                Tavla
-              </button>
-              <button type="button" onClick={() => tilUke(mandag(valgt))}>
-                Uke {ukenr(valgt).uke}
-              </button>
-            </div>
+      )}
+      {!synlige.length ? (
+        <div className="kort">
+          <Tom ikon={<IkonAnsatte storrelse={22} />} tittel="Ingen ansatte denne måneden">
+            <p>Legg inn de ansatte under Ansatte, og vaktene i vaktplanen. Da viser kalenderen hvem som er på jobb hver dag.</p>
+          </Tom>
+        </div>
+      ) : (
+        <>
+          <div className="bm-forklaring" aria-label="Forklaring">
+            <span>
+              <span className="bm-tegn">✓</span> På jobb
+            </span>
+            <span>
+              <span className="bm-tegn">–</span> Fri
+            </span>
+            {FRAVAERTYPER.map((t) => (
+              <span key={t}>
+                <span className={`bm-tegn fravaer-${t}`}>{fravaerKode[t]}</span> {t === "annet" ? "Annet" : fravaerTekst[t]}
+              </span>
+            ))}
+            <span>
+              <span className="bm-tegn ekstra">7,5t</span> Ekstratimer
+            </span>
+            <span>
+              <span className="bm-tegn fravaer-syk uten-vikar">S</span> Vakten mangler vikar
+            </span>
+            {harUtkast && (
+              <span>
+                <span className="bm-tegn utkast">✓</span> Ikke publisert
+              </span>
+            )}
           </div>
-          {i.mangler.length > 0 && (
-            <section className="kal-del mangler">
-              <h3>Mangler vikar ({i.mangler.length})</h3>
+          <div className="kort bemanning-ramme">
+            <table className="bemanning">
+              <thead>
+                <tr>
+                  <th rowSpan={2} className="bm-dag-hode">
+                    Dag
+                  </th>
+                  {seksjoner.map((s) => (
+                    <th key={s.id ?? "uten"} colSpan={s.ansatte.length} className={`bm-gruppe g${s.farge}`}>
+                      <span className="bm-gruppe-navn">{s.navn}</span>
+                    </th>
+                  ))}
+                  {seksjoner.map((s, i) => (
+                    <th
+                      key={`sum-${s.id ?? "uten"}`}
+                      rowSpan={2}
+                      className={`bm-sum-hode g${s.farge}${i === 0 ? " bm-sum-forste" : ""}`}
+                      style={hoyre(i)}
+                      title={s.behov != null ? `${s.navn}: på jobb av ${s.behov} som trengs` : `${s.navn}: på jobb`}
+                    >
+                      {s.kort}
+                      {s.behov != null ? `/${s.behov}` : ""}
+                    </th>
+                  ))}
+                  {visUtenVikar && (
+                    <th rowSpan={2} className="bm-sum-hode bm-ekstra-sum varsel" style={hoyre(seksjoner.length)}>
+                      Uten vikar
+                    </th>
+                  )}
+                  {visLedige && (
+                    <th rowSpan={2} className="bm-sum-hode bm-ekstra-sum" style={hoyre(seksjoner.length + (visUtenVikar ? 1 : 0))}>
+                      Ledige
+                    </th>
+                  )}
+                </tr>
+                <tr>
+                  {seksjoner.flatMap((s) =>
+                    s.ansatte.map((a, j) => (
+                      <th key={a.id} className={`bm-ansatt g${s.farge}${j === 0 ? " forste" : ""}`} title={`${a.fornavn} ${a.etternavn}${a.stilling ? ` · ${a.stilling}` : ""}`}>
+                        <span className="bm-navn">{visNavn(a)}</span>
+                        <span className="bm-prosent">{a.ansettelsestype === "tilkalling" ? "Tilk." : `${tallformat.format(Number(a.stillingsprosent))}%`}</span>
+                      </th>
+                    )),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {dager.map((d, i) => {
+                  const nyUke = i > 0 && mandag(d) !== mandag(dager[i - 1]!);
+                  const uv = utenVikar(d);
+                  const lv = ledige(d);
+                  return (
+                    <tr key={d} className={`${nyUke ? "ny-uke" : ""}${d === iDag() ? " i-dag" : ""}`}>
+                      <th scope="row" className="bm-dag">
+                        <button type="button" className="lenke" title={`Åpne tavla for ${visDag(d).toLowerCase()}`} onClick={() => tilTavle(d)}>
+                          {UKEDAG[middag(d).getUTCDay()]} <span>{Number(d.slice(8))}.</span>
+                        </button>
+                      </th>
+                      {seksjoner.flatMap((s) => s.ansatte.map((a, j) => celle(a, d, s, j === 0)))}
+                      {seksjoner.map((s, k) => {
+                        const n = paJobb(s, d);
+                        return (
+                          <td
+                            key={`sum-${s.id ?? "uten"}`}
+                            className={`bm-sum${k === 0 ? " bm-sum-forste" : ""}${s.behov != null && n < s.behov ? " under" : ""}`}
+                            style={hoyre(k)}
+                            title={s.behov != null ? `${n} av ${s.behov} ${s.navn.toLowerCase()} på jobb` : `${n} på jobb`}
+                          >
+                            {n}
+                            {s.behov != null ? `/${s.behov}` : ""}
+                          </td>
+                        );
+                      })}
+                      {visUtenVikar && (
+                        <td className={`bm-sum bm-ekstra-sum${uv ? " under" : " null"}`} style={hoyre(seksjoner.length)}>
+                          {uv || "–"}
+                        </td>
+                      )}
+                      {visLedige && (
+                        <td className={`bm-sum bm-ekstra-sum${lv ? " ledig" : " null"}`} style={hoyre(seksjoner.length + (visUtenVikar ? 1 : 0))}>
+                          {lv || "–"}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="liten dempet">
+            På jobb og ekstratimer kommer fra vaktplanen: ekstratimer er timene utover avtalt arbeidstid i uka (alle timene for tilkallingsvikarer). Trykk på en dag for tavla,
+            eller på en rute for å registrere fravær og sette inn vikar.
+          </p>
+        </>
+      )}
+
+      <Dialog apen={!!valgt} lukk={() => settRute(null)} tittel={valgt ? `${valgt.a.fornavn} ${valgt.a.etternavn}` : ""}>
+        {valgt && (
+          <div className="bm-detaljer">
+            <p className="dempet" style={{ marginTop: 0 }}>
+              {visLangDag(valgt.d)}
+              {valgt.a.stilling ? ` · ${valgt.a.stilling}` : ""}
+            </p>
+            {valgt.r.art === "utenfor" && <p>Ikke ansatt denne dagen.</p>}
+            {valgt.r.art === "fri" && <p>Fri (ingen vakt i vaktplanen).</p>}
+            {valgt.r.art === "borte" && (
+              <div className={`melding ${valgt.r.utenVikar.length ? "feil" : "info"} bm-borte`}>
+                <span className={`merke ${fravaerKlasse[valgt.r.fravaer.type]}`}>{fravaerTekst[valgt.r.fravaer.type]}</span> {fravaerPeriode(valgt.r.fravaer)}
+                {valgt.r.fravaer.notat ? ` · ${valgt.r.fravaer.notat}` : ""}
+                {valgt.r.vakter.length > 0 && <div>{valgt.r.utenVikar.length ? "Vakten mangler vikar." : "Vikar er satt inn."}</div>}
+              </div>
+            )}
+            {(valgt.r.art === "jobb" || valgt.r.art === "borte") && valgt.r.vakter.length > 0 && (
               <ul className="liste-enkel">
-                {i.mangler.map((v) => (
+                {valgt.r.vakter.map((v) => (
                   <li key={v.id}>
                     <span>
-                      <span className="tittel">{v.ansatt_navn}</span>{" "}
-                      <span className="dempet">
+                      <span className="tittel">
                         {v.fra}–{v.til}
-                        {v.oppgave ? ` · ${v.oppgave}` : ""}
-                      </span>
+                      </span>{" "}
+                      <span className="dempet">{[v.oppgave, v.vikar_for_navn ? `vikar for ${v.vikar_for_navn}` : "", v.publisert ? "" : "ikke publisert"].filter(Boolean).join(" · ")}</span>
                     </span>
-                    {kanEndre && (
-                      <button type="button" onClick={() => settVikar(v)}>
+                    {kanEndre && valgt.r.art === "borte" && !v.har_vikar && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          settRute(null);
+                          settVikar(v);
+                        }}
+                      >
                         Sett inn vikar
                       </button>
                     )}
                   </li>
                 ))}
               </ul>
-            </section>
-          )}
-          <section className="kal-del">
-            <h3>På jobb ({i.antall})</h3>
-            {perAnsatt.length ? (
-              <ul className="liste-enkel">
-                {perAnsatt.map(({ id, vakter }) => (
-                  <li key={id}>
-                    <span className="tittel">
-                      {vakter[0]!.ansatt_navn}
-                      {vakter.some((v) => v.vikar_for) && <span className="merke merke-info">Vikar</span>}
-                    </span>
-                    <span className="dempet tid">
-                      {vakter.map((v) => `${v.fra}–${v.til}`).join(", ")}
-                      {vakter.every((v) => !v.publisert) ? " (utkast)" : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="liten dempet">Ingen vakter {valgt === iDag() ? "i dag" : "denne dagen"}.</p>
             )}
-          </section>
-          {i.borte.length > 0 && (
-            <section className="kal-del">
-              <h3>Borte ({i.borte.length})</h3>
-              <ul className="liste-enkel">
-                {i.borte.map((f) => (
-                  <li key={f.id}>
-                    <span>
-                      <span className="tittel">{f.ansatt_navn}</span> <span className="dempet">{fravaerPeriode(f)}</span>
-                    </span>
-                    <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerTekst[f.type]}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {i.ledige.length > 0 && (
-            <section className="kal-del">
-              <h3>Ledige vakter ({i.ledige.length})</h3>
-              <ul className="liste-enkel">
-                {i.ledige.map((v) => (
-                  <li key={v.id}>
-                    <span className="tid">
-                      {v.fra}–{v.til}
-                    </span>
-                    <span className="dempet">{v.oppgave ?? ""}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-      </div>
-      <Dialog apen={nyttFravaer} lukk={() => settNyttFravaer(false)} tittel="Registrer fravær">
-        {nyttFravaer && (
+            {valgt.r.art === "jobb" && valgt.r.ekstra > 0 && (
+              <p className="liten">
+                {timerTekst(valgt.r.ekstra).replace("t", " t")} utover avtalt arbeidstid denne uka ({tallformat.format(avtalt(valgt.a))} t).
+              </p>
+            )}
+            <div className="knapper">
+              {kanEndre && valgt.r.art !== "utenfor" && (
+                <button
+                  type="button"
+                  className="primar"
+                  onClick={() => {
+                    const r = valgt.r;
+                    settRute(null);
+                    settFravaer(r.art === "borte" ? r.fravaer : { ansatt_id: valgt.a.id, fra: valgt.d, til: valgt.d });
+                  }}
+                >
+                  {valgt.r.art === "borte" ? "Endre fraværet" : "Registrer fravær"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  settRute(null);
+                  tilUke(mandag(valgt.d));
+                }}
+              >
+                Uke {ukenr(valgt.d).uke} i vaktplanen
+              </button>
+            </div>
+          </div>
+        )}
+      </Dialog>
+      <Dialog apen={!!fravaer} lukk={() => settFravaer(null)} tittel={fravaer?.id ? "Endre fravær" : "Registrer fravær"}>
+        {fravaer && (
           <FravaerSkjema
-            fravaer={{ fra: valgt, til: valgt }}
-            ansatte={ansatte.data ?? []}
+            fravaer={fravaer}
+            ansatte={ansatte.data}
             ferdig={(m, berort) => {
-              settNyttFravaer(false);
-              settMelding(
+              settFravaer(null);
+              endret(
                 berort?.length
                   ? `${m} ${berort.length === 1 ? "Én vakt" : `${berort.length} vakter`} i perioden mangler vikar: ${berort.map((v) => `${visDag(v.dato)} ${v.fra}–${v.til}`).join(", ")}.`
                   : m,
               );
-              settVersjon((x) => x + 1);
             }}
-            avbryt={() => settNyttFravaer(false)}
+            avbryt={() => settFravaer(null)}
           />
         )}
       </Dialog>
@@ -323,18 +494,217 @@ export function Bemanning({
         {vikar && (
           <VikarSkjema
             vakt={vikar}
-            ansatte={ansatte.data ?? []}
+            ansatte={ansatte.data}
             fravaer={data.fravaer}
             opptatt={new Map(data.vakter.filter((v) => v.dato === vikar.dato && v.ansatt_id).map((v) => [v.ansatt_id!, `${v.fra}–${v.til}`]))}
             ferdig={(m) => {
               settVikar(null);
-              settMelding(m);
-              settVersjon((x) => x + 1);
+              endret(m);
             }}
             avbryt={() => settVikar(null)}
           />
         )}
       </Dialog>
+      <Dialog apen={oppsett} lukk={() => settOppsett(false)} tittel="Grupper og behov" bred>
+        {oppsett && <GrupperOppsett grupper={grupper.data} ansatte={ansatte.data} endret={() => settOppsettVersjon((x) => x + 1)} lukk={() => settOppsett(false)} />}
+      </Dialog>
     </>
+  );
+}
+
+// --- Grupper -------------------------------------------------------------------------------
+
+function GrupperOppsett({ grupper, ansatte, endret, lukk }: { grupper: Gruppe[]; ansatte: Ansatt[]; endret: () => void; lukk: () => void }) {
+  const { org } = useKonto();
+  const [rediger, settRediger] = useState<string | null>(null); // id-en, eller «ny»
+  const [melding, settMelding] = useState<string | null>(null);
+  const h = useHandling();
+  const aktive = ansatte.filter((a) => a.aktiv).sort((x, y) => x.fornavn.localeCompare(y.fornavn, "nb") || x.etternavn.localeCompare(y.etternavn, "nb"));
+  const fraStillinger = aktive.some((a) => !a.gruppe_id && a.stilling?.trim());
+
+  const flytt = (i: number, til: number) =>
+    h.kjor(async () => {
+      const ider = grupper.map((g) => g.id);
+      const [x] = ider.splice(i, 1);
+      ider.splice(til, 0, x!);
+      await api("POST", `/org/${org!.id}/ansattgrupper/rekkefolge`, { ider });
+      endret();
+    });
+  const slett = (g: Gruppe) =>
+    h.kjor(async () => {
+      if (!confirm(`Slette gruppen «${g.navn}»? De ansatte i den står uten gruppe.`)) return;
+      await api("DELETE", `/org/${org!.id}/ansattgrupper/${g.id}`);
+      endret();
+    });
+  const lagFraStillinger = () =>
+    h.kjor(async () => {
+      const r = await api<{ grupper: number; ansatte: number }>("POST", `/org/${org!.id}/ansattgrupper/fra-stillinger`);
+      settMelding(
+        r.ansatte
+          ? `${r.ansatte} ${r.ansatte === 1 ? "ansatt er satt" : "ansatte er satt"} i grupper etter stillingen${r.grupper ? ` (${r.grupper} ${r.grupper === 1 ? "ny gruppe" : "nye grupper"})` : ""}.`
+          : "Ingen å sette i grupper.",
+      );
+      endret();
+    });
+  const settGruppe = (a: Ansatt, gruppe: string) =>
+    h.kjor(async () => {
+      await api("PATCH", `/org/${org!.id}/ansatte/${a.id}`, { gruppe_id: gruppe || null });
+      endret();
+    });
+  const ferdig = () => {
+    settRediger(null);
+    endret();
+  };
+
+  return (
+    <>
+      <section className="oppsett-del">
+        <h3>Grupper</h3>
+        <p className="liten dempet">
+          Gruppene står ved siden av hverandre i kalenderen, med hvor mange som er på jobb hver dag mot behovet (hvor mange som trengs).
+        </p>
+        {melding && (
+          <div className="melding ok" role="status">
+            {melding}
+          </div>
+        )}
+        {grupper.length > 0 && (
+          <ul className="liste-enkel oppsett-liste">
+            {grupper.map((g, i) =>
+              rediger === g.id ? (
+                <li key={g.id}>
+                  <GruppeSkjema gruppe={g} ferdig={ferdig} avbryt={() => settRediger(null)} />
+                </li>
+              ) : (
+                <li key={g.id}>
+                  <span>
+                    <span className="tittel">{g.navn}</span>{" "}
+                    <span className="dempet">
+                      {[kortNavn(g), g.behov != null ? `trenger ${g.behov} per dag` : "", `${g.antall} ${g.antall === 1 ? "ansatt" : "ansatte"}`].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                  <span className="knapper">
+                    <button type="button" className="ikon" aria-label={`Flytt ${g.navn} opp`} title="Flytt opp (lenger til venstre i kalenderen)" disabled={i === 0 || h.opptatt} onClick={() => flytt(i, i - 1)}>
+                      <IkonOpp storrelse={16} />
+                    </button>
+                    <button
+                      type="button"
+                      className="ikon"
+                      aria-label={`Flytt ${g.navn} ned`}
+                      title="Flytt ned (lenger til høyre i kalenderen)"
+                      disabled={i === grupper.length - 1 || h.opptatt}
+                      onClick={() => flytt(i, i + 1)}
+                    >
+                      <IkonNed storrelse={16} />
+                    </button>
+                    <button type="button" onClick={() => settRediger(g.id)}>
+                      Endre
+                    </button>
+                    <button type="button" className="fare" disabled={h.opptatt} onClick={() => slett(g)}>
+                      Slett
+                    </button>
+                  </span>
+                </li>
+              ),
+            )}
+          </ul>
+        )}
+        {rediger === "ny" ? (
+          <GruppeSkjema ferdig={ferdig} avbryt={() => settRediger(null)} />
+        ) : (
+          <div className="knapper">
+            <button type="button" onClick={() => settRediger("ny")}>
+              <IkonPluss storrelse={16} /> Ny gruppe
+            </button>
+            {fraStillinger && (
+              <button type="button" disabled={h.opptatt} onClick={lagFraStillinger}>
+                Lag grupper fra stillingene
+              </button>
+            )}
+          </div>
+        )}
+        <Feil melding={h.feil} />
+      </section>
+      {grupper.length > 0 && aktive.length > 0 && (
+        <section className="oppsett-del">
+          <h3>Ansatte</h3>
+          <p className="liten dempet">Velg gruppen til hver ansatt (også under Ansatte).</p>
+          <ul className="liste-enkel oppsett-liste bm-ansattliste">
+            {aktive.map((a) => (
+              <li key={a.id}>
+                <span>
+                  <span className="tittel">
+                    {a.fornavn} {a.etternavn}
+                  </span>{" "}
+                  <span className="dempet">{a.stilling ?? ""}</span>
+                </span>
+                <select key={a.gruppe_id ?? ""} defaultValue={a.gruppe_id ?? ""} aria-label={`Gruppe for ${a.fornavn} ${a.etternavn}`} onChange={(e) => settGruppe(a, e.target.value)}>
+                  <option value="">Uten gruppe</option>
+                  {grupper.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.navn}
+                    </option>
+                  ))}
+                </select>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <div className="knapper oppsett-ferdig">
+        <button type="button" className="primar" onClick={lukk}>
+          Ferdig
+        </button>
+      </div>
+    </>
+  );
+}
+
+function GruppeSkjema({ gruppe, ferdig, avbryt }: { gruppe?: Gruppe; ferdig: () => void; avbryt: () => void }) {
+  const { org } = useKonto();
+  const [v, settV] = useState({ navn: gruppe?.navn ?? "", kort: gruppe?.kort ?? "", behov: gruppe?.behov != null ? String(gruppe.behov) : "" });
+  const h = useHandling();
+  const sett = (e: Partial<typeof v>) => settV({ ...v, ...e });
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    const behov = v.behov.trim() === "" ? null : tall(v.behov);
+    if (behov !== null && !(Number.isInteger(behov) && behov >= 0)) return h.settFeil("Skriv behovet som et helt tall");
+    const kropp = { navn: v.navn.trim(), kort: v.kort.trim() || null, behov };
+    const r = await h.kjor(async () => {
+      if (gruppe) await api("PATCH", `/org/${org!.id}/ansattgrupper/${gruppe.id}`, kropp);
+      else await api("POST", `/org/${org!.id}/ansattgrupper`, kropp);
+      return true;
+    });
+    if (r) ferdig();
+  }
+
+  return (
+    <form className="oppsett-skjema" onSubmit={lagre}>
+      <div className="rad fase-felt">
+        <label>
+          Navn
+          <input required autoFocus maxLength={40} placeholder="F.eks. Sekretærer" value={v.navn} onChange={(e) => sett({ navn: e.target.value })} />
+        </label>
+        <label>
+          Forkortelse
+          <input maxLength={8} placeholder={v.navn.trim() ? kortNavn({ navn: v.navn.trim(), kort: null }) : "F.eks. Sek."} value={v.kort} onChange={(e) => sett({ kort: e.target.value })} />
+        </label>
+        <label>
+          Behov per dag
+          <input inputMode="numeric" placeholder="Valgfritt" value={v.behov} onChange={(e) => sett({ behov: e.target.value })} />
+        </label>
+      </div>
+      <p className="felt-hjelp oppsett-hjelp">Behovet er hvor mange i gruppen som trengs på jobb hver dag. Forkortelsen står over oppsummeringen i kalenderen.</p>
+      <Feil melding={h.feil} />
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt}>
+          {gruppe ? "Lagre" : "Legg til"}
+        </button>
+        <button type="button" onClick={avbryt}>
+          Avbryt
+        </button>
+      </div>
+    </form>
   );
 }

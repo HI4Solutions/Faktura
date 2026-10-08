@@ -31,7 +31,7 @@ bank og regnskapssystemer.
 | AI med Gemini på Vertex AI: assistent med talekommandoer, faktura fra tekst eller tale, forslag på innbetalinger | Ferdig (valgfrie GitHub-variabler `AI_AKTIV`, `AI_REGION`, `AI_MODELL`, `AI_GRENSE`) |
 | Ansatte og timer: ansattregister, egen innlogging for ansatte, timeføring med overtid, levering og godkjenning | Ferdig (slås på under Innstillinger → Ansatte og timer) |
 | Vaktplan: planlegging og publisering med varsler, ledige vakter, kopiering av uker, advarsler etter arbeidsmiljøloven | Ferdig |
-| Tavle (ressursfordeling i faser og oppgaver), fravær (sykdom, ferie, permisjon), vikarer og bemanningskalender | Ferdig |
+| Tavle (ressursfordeling i faser og oppgaver), fravær (sykdom, ferie, permisjon, kurs), vikarer og bemanningskalender med grupper (f.eks. sekretærer og leger) mot behovet | Ferdig |
 | Lønnskjøring, a-melding og utbetaling | Planlagt (se veikartet) |
 | Regnskapssystemer | Ikke startet |
 

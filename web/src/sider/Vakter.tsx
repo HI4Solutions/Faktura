@@ -423,7 +423,7 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
                         <td key={d} className={kanPlanlegge ? "ny-vakt" : undefined} onClick={() => nyVakt(d, a.id)}>
                           {vakter.map((v) => chip(v))}
                           {f && (
-                            <span className={`fravaer-dag ${f.type}`} title={`${fravaerTekst[f.type]} ${f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)}–${visDag(f.til)}`}`}>
+                            <span className={`fravaer-dag fravaer-${f.type}`} title={`${fravaerTekst[f.type]} ${f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)}–${visDag(f.til)}`}`}>
                               {fravaerTekst[f.type]}
                             </span>
                           )}

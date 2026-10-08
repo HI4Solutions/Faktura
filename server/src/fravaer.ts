@@ -1,4 +1,4 @@
-// Fravær (0037_tavle_og_fravaer.sql): sykdom, sykt barn, ferie, permisjon og annet. Eier og
+// Fravær (0037_tavle_og_fravaer.sql): sykdom, sykt barn, ferie, permisjon, kurs og annet. Eier og
 // administrator registrerer alt fravær; den ansatte melder selv sykdom, og da får eier og
 // administrator varsel om hvor mange vakter som trenger vikar. Fravær er helseopplysninger:
 // databasen viser det bare til dem som ser de ansatte, og til den ansatte selv.
@@ -14,7 +14,7 @@ const orgId = (c: Context) => uuid.parse(c.req.param("org"));
 const id = (c: Context) => uuid.parse(c.req.param("id"));
 const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("bruker").id, fn);
 
-export const FRAVAERTYPER = { syk: "Syk", sykt_barn: "Sykt barn", ferie: "Ferie", permisjon: "Permisjon", annet: "Annet fravær" } as const;
+export const FRAVAERTYPER = { syk: "Syk", sykt_barn: "Sykt barn", ferie: "Ferie", permisjon: "Permisjon", kurs: "Kurs", annet: "Annet fravær" } as const;
 type Type = keyof typeof FRAVAERTYPER;
 
 const dagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
@@ -23,7 +23,7 @@ export const periode = (fra: string, til: string) => (fra === til ? dag(fra) : `
 
 const skjema = z.object({
   ansatt_id: uuid.optional(), // standard: den innloggede selv
-  type: z.enum(["syk", "sykt_barn", "ferie", "permisjon", "annet"], { error: "Velg hva slags fravær" }),
+  type: z.enum(["syk", "sykt_barn", "ferie", "permisjon", "kurs", "annet"], { error: "Velg hva slags fravær" }),
   fra: datoS,
   til: datoS,
   notat: valgfri(tekst(500, "Notatet")),
