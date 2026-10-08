@@ -602,7 +602,7 @@ function GoogleDisk() {
   }, [Boolean(velger)]);
 
   if (!data || (!data.tilgjengelig && !data.kobling)) return null;
-  // Uten noen organisasjon med Google Disk (Administrasjon → Funksjoner) vises det bare for å
+  // Uten noen organisasjon med Google Disk (funksjonene i Administrasjon) vises det bare for å
   // koble fra en kobling som finnes.
   if (!data.kobling && !(meg?.organisasjoner ?? []).some((o) => harFunksjon(o, "google_disk"))) return null;
   const k = data.kobling;

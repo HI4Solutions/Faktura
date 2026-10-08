@@ -1012,32 +1012,7 @@ tr.makstak-linje td { color: var(--ok); }
 .admin-detaljer > p:first-child { margin-top: 0; }
 .admin-detaljer section { margin-top: 20px; }
 .admin-detaljer h3 { font-size: 0.95rem; margin: 0 0 8px; }
-/* Funksjoner per organisasjon: organisasjonene nedover, funksjonene bortover */
-.kort.funksjon-ramme { padding: 0; overflow: auto; max-height: max(420px, calc(100dvh - 300px)); }
-table.funksjon-tabell { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.86rem; }
-.funksjon-tabell th, .funksjon-tabell td { padding: 8px 10px; border-bottom: 1px solid var(--kant); text-align: center; vertical-align: middle; background: var(--flate); }
-.funksjon-tabell thead th, .funksjon-tabell thead td { position: sticky; top: 0; z-index: 2; background: var(--flate-2); }
-.funksjon-tabell thead th { white-space: nowrap; font-size: 0.7rem; }
-.funksjon-tabell thead tr.funksjon-standard th, .funksjon-tabell thead tr.funksjon-standard td { top: 36px; background: var(--aksent-lys); border-bottom: 2px solid var(--kant-sterk); }
-.funksjon-tabell thead tr:first-child th { height: 36px; }
-.funksjon-tabell .funksjon-org { position: sticky; left: 0; z-index: 1; min-width: 200px; max-width: 280px; text-align: left; text-transform: none; letter-spacing: 0; box-shadow: 8px 0 10px -8px rgba(15, 23, 42, 0.18); }
-.funksjon-tabell thead .funksjon-org { z-index: 3; }
-.funksjon-tabell tbody th.funksjon-org { font-weight: 550; white-space: normal; }
-.funksjon-tabell tbody th.funksjon-org button.lenke { display: block; text-align: left; color: var(--tekst); font-weight: 600; }
-.funksjon-tabell tbody th.funksjon-org .liten { display: block; font-weight: 450; }
-.funksjon-tabell input[type="checkbox"] { margin: 0; vertical-align: middle; }
-.funksjon-tabell td.virker-ikke input { opacity: 0.45; }
-.funksjon-tabell tbody tr:hover > * { background: color-mix(in srgb, var(--aksent-lys) 45%, var(--flate)); }
-.funksjon-tabell tfoot th, .funksjon-tabell tfoot td { position: sticky; bottom: 0; background: var(--flate-2); border-top: 1px solid var(--kant-sterk); border-bottom: 0; font-size: 0.78rem; }
-.funksjon-tabell tfoot .funksjon-org { z-index: 3; }
 /* Modulene over funksjonene (Faktura, Bemanning, ...), med en strek mellom dem. */
-.funksjon-tabell thead tr.funksjon-moduler th { top: 0; height: 30px; padding-top: 4px; padding-bottom: 4px; font-size: 0.74rem; font-weight: 650; color: var(--tekst-2); }
-.funksjon-tabell thead tr.funksjon-moduler + tr th { top: 30px; height: 36px; }
-.funksjon-tabell thead tr.funksjon-moduler ~ tr.funksjon-standard th, .funksjon-tabell thead tr.funksjon-moduler ~ tr.funksjon-standard td { top: 66px; }
-.funksjon-tabell .modul-start { border-left: 2px solid var(--kant-sterk); }
-.funksjon-alle { display: inline-flex; gap: 8px; }
-.funksjon-alle button.lenke { font-size: 0.78rem; }
-.funksjon-forklaring { margin-top: 14px; }
 .funksjon-liste li label { display: flex; align-items: flex-start; gap: 0; margin: 0; font-weight: 450; }
 .funksjon-liste li label input { margin-top: 3px; flex: none; }
 /* Klokkeslett (24-timers, TT:MM) */
@@ -1062,10 +1037,6 @@ fieldset.modul-valg.kompakt { display: flex; flex-wrap: wrap; align-items: cente
 fieldset.modul-valg.kompakt legend { float: left; padding: 0; margin-right: 4px; font-size: 0.8rem; font-weight: 500; color: var(--dempet); }
 fieldset.modul-valg.kompakt label { padding: 0; border: 0; background: none; box-shadow: none; align-items: center; gap: 0; font-size: 0.85rem; }
 fieldset.modul-valg.kompakt label input { margin: 0 6px 0 0; }
-@media (max-width: 700px) {
-  .funksjon-tabell .funksjon-org { min-width: 140px; max-width: 170px; }
-  .funksjon-tabell th, .funksjon-tabell td { padding: 8px 8px; }
-}
 .admin-rader { list-style: none; padding: 0; margin: 0; }
 .admin-rader li { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--kant); }
 .admin-rader li:last-child { border-bottom: 0; }
@@ -1881,3 +1852,15 @@ button.fare-fylt:hover:not(:disabled) { background: color-mix(in srgb, var(--far
   .ferie-soknader li { grid-template-columns: 1fr; }
   .ferie-saldo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Administrasjon: brukerne under organisasjonene, og detaljene om dem. */
+.org-brukere { display: block; margin-top: 2px; font-size: 0.8rem; color: var(--tekst-2); line-height: 1.45; }
+.org-brukere .merke { font-size: 0.68rem; padding: 1px 6px; }
+.liste-rad .org-brukere { margin-top: 0; }
+.org-brukerliste .bruker-info { display: block; margin-top: 2px; }
+.org-brukerliste .bruker-info button.lenke { font-size: inherit; }
+.kort.brukere-uten-org, .kort.funksjoner-nye { margin-top: 16px; }
+.kort.brukere-uten-org summary, .kort.funksjoner-nye summary { cursor: pointer; font-weight: 600; }
+.kort.brukere-uten-org .admin-rader { margin-top: 10px; }
+.funksjoner-nye section { margin-top: 12px; }
+.funksjoner-nye h3 { font-size: 0.9rem; margin: 0 0 4px; }

@@ -17,7 +17,7 @@ export interface MinOrg {
   personal: boolean;
   // Den innloggedes egen ansattrad her (fører egne timer), eller null.
   ansatt_id: string | null;
-  // Funksjonene organisasjonen har tilgang til (Administrasjon → Funksjoner).
+  // Funksjonene organisasjonen har tilgang til (funksjonene i Administrasjon).
   funksjoner?: Funksjon[];
 }
 

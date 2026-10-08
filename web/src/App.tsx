@@ -44,7 +44,7 @@ const initialer = (navn: string) =>
 
 const orgType: Record<string, string> = { foretak: "Foretak", regnskapsbyraa: "Regnskapsbyrå", privatperson: "Privatperson" };
 
-// En side som hører til en funksjon organisasjonen ikke har (Administrasjon → Funksjoner).
+// En side som hører til en funksjon organisasjonen ikke har (funksjonene i Administrasjon).
 function Krever({ kode, navn, children }: { kode: Funksjon | Funksjon[]; navn: string; children: ReactNode }) {
   const { org } = useKonto();
   if ((Array.isArray(kode) ? kode : [kode]).some((k) => harFunksjon(org, k))) return <>{children}</>;

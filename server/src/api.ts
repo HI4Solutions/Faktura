@@ -342,7 +342,7 @@ export function lagApi() {
     c.set("org", uuid.parse(c.req.param("org")));
     await next();
   });
-  // Rutene til funksjoner organisasjonen ikke har (Administrasjon → Funksjoner), avvises.
+  // Rutene til funksjoner organisasjonen ikke har (funksjonene i Administrasjon), avvises.
   org.use("*", krevFunksjoner());
   const orgId = (c: Context) => c.get("org") as string;
 

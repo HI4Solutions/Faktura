@@ -17,7 +17,7 @@ export type EhfKobling = { selskapId: string; nokkel: RecommandNokkel };
 
 // Organisasjonens kobling med hemmeligheten dekryptert (bare workeren kan dekryptere).
 export async function ehfKobling(db: Db, orgId: string): Promise<EhfKobling | null> {
-  // Uten funksjonen EHF (Administrasjon → Funksjoner) går fakturaene på e-post.
+  // Uten funksjonen EHF (funksjonene i Administrasjon) går fakturaene på e-post.
   const k = await en(
     db,
     "select konfig, hemmelighet_kryptert from faktura.integrasjoner where org_id = $1 and type = 'peppol' and status = 'aktiv' and faktura.har_funksjon(org_id, 'ehf')",

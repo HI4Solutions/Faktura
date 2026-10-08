@@ -253,7 +253,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
   // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Ansatte og timer).
   const fullStilling = Number(oppsett.data?.full_stilling ?? 37.5);
-  // Med vaktplanen (Administrasjon → Funksjoner): gruppene i bemanningskalenderen (f.eks.
+  // Med vaktplanen (funksjonene i Administrasjon): gruppene i bemanningskalenderen (f.eks.
   // sekretærer og leger), hvis noen er laget, og den faste arbeidsplanen (ukedagene den ansatte
   // jobber), som et utkast til den lagres.
   const vaktplan = harFunksjon(org, "vaktplan");

@@ -137,7 +137,7 @@ export async function sendPaaminnelser(): Promise<number> {
   const tatt = await somSystem((db) => alle<Tatt>(db, "select * from faktura.ta_paaminnelser()"));
   for (const p of tatt) {
     try {
-      // Uten funksjonen (Administrasjon → Funksjoner) sendes ingen påminnelse.
+      // Uten funksjonen (funksjonene i Administrasjon) sendes ingen påminnelse.
       if (!(await harFunksjon(p.org_id, "paaminnelser"))) continue;
       await varsle(p);
     } catch (e) {

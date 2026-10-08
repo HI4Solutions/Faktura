@@ -73,7 +73,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     expect(e).toHaveLength(1);
     expect(e[0]!.emne).toBe("Ny konto venter på godkjenning: Nina Nilsen");
     expect(e[0]!.tekst).toContain("Moduler: Faktura og Bemanning");
-    expect(e[0]!.tekst).toContain("/admin?fane=venter");
+    expect(e[0]!.tekst).toContain(`Godkjenn eller avvis den på ${config.appUrl}/admin`);
     // Med navnet fra innloggingen går e-posten når modulene er valgt.
     await kall("GET", "/api/meg", per);
     expect(tilAdmin("per.konto@server.test")).toHaveLength(0);

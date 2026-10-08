@@ -21,9 +21,9 @@ bank og regnskapssystemer.
 | Nettapp (`web/`, React + Vite) på `faktura.hi4.no` | I drift |
 | Innlogging: passord, TOTP-MFA og passkeys | Ferdig |
 | Verifisering av organisasjoner og adminside | Ferdig (admin via GitHub-variabelen `ADMIN_EPOSTER`) |
-| Godkjenning av nye kontoer: forespørselen går til administratorene når e-postadressen er bekreftet, med modulene brukeren krysset av for (Faktura, Bemanning og de som kommer), og kontoen kommer ikke inn før den er godkjent | Ferdig (Administrasjon → Venter) |
+| Godkjenning av nye kontoer: forespørselen går til administratorene når e-postadressen er bekreftet, med modulene brukeren krysset av for (Faktura, Bemanning og de som kommer), og kontoen kommer ikke inn før den er godkjent | Ferdig (Administrasjon → Oversikt) |
 | Sletting av organisasjoner, alltid med grunn: alt slettes, eller organisasjonen stenges når utstedte fakturaer må oppbevares (bokføringsloven) | Ferdig (eieren under Innstillinger → Organisasjon, plattformadministratoren i Administrasjon) |
-| Funksjoner per organisasjon: administratoren velger hvilke organisasjoner som har EHF, bank, AI, ansatte og timer, vaktplan osv., og standarden for nye | Ferdig (Administrasjon → Funksjoner) |
+| Funksjoner per organisasjon: administratoren velger hvilke organisasjoner som har EHF, bank, AI, ansatte og timer, vaktplan osv., og standarden for nye | Ferdig (Administrasjon → Organisasjoner, i organisasjonen) |
 | Gjentakende fakturaer, purring og inkassovarsel | Ferdig |
 | Makstak: kunden faktureres aldri mer enn et avtalt beløp; alle produktene står på fakturaen, og et fratrekk tar summen ned. Makstaket kan stå på kunden og kommer da på nye fakturaer, flere på én gang og gjentakelser, og kan fjernes per faktura | Ferdig |
 | Påminnelser om å lage fakturaer (push og e-post), for beløp som varierer | Ferdig |

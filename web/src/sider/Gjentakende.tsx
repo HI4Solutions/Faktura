@@ -16,7 +16,7 @@ const intervallTekst: Record<string, string> = { maaned: "Hver måned", kvartal:
 export function Gjentakende() {
   const { org } = useKonto();
   const [sok, settSok] = useSearchParams();
-  // Bare fanene organisasjonen har funksjonene til (Administrasjon → Funksjoner).
+  // Bare fanene organisasjonen har funksjonene til (funksjonene i Administrasjon).
   const synlige = (
     [
       ["fakturaer", "Fakturaer", harFunksjon(org, "gjentakende")],

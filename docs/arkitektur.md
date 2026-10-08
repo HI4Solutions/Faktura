@@ -45,7 +45,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `brukere.status`: en ny konto venter (`venter`) til plattformadministratoren har godkjent
   den (`godkjent`) eller avvist den (`avvist`, med begrunnelse). Når e-postadressen er
   bekreftet og navnet skrevet inn, går forespørselen på e-post til administratorene (én gang,
-  `varslet_at`), og de godkjenner eller avviser under Administrasjon → Venter; brukeren får
+  `varslet_at`), og de godkjenner eller avviser i Administrasjon → Oversikt; brukeren får
   e-post om utfallet. Til da slipper API-et bare gjennom `/meg` og invitasjoner
   (`server/src/kontoer.ts`), og appen viser bare at kontoen venter (eller begrunnelsen for
   avslaget). Den som tar imot en invitasjon fra en organisasjon (sendt til e-postadressen
@@ -56,7 +56,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   modul. Den som lager en konto, krysser av for modulene den trenger (lagres rett fra
   registreringen, også før e-postadressen er bekreftet, eller på venteskjermen), og
   forespørselen til administratorene går først når navn og moduler er på plass, med modulene i
-  e-posten. Administratoren godkjenner med de modulene eller andre (Administrasjon → Venter),
+  e-posten. Administratoren godkjenner med de modulene eller andre (Administrasjon → Oversikt),
   og etter godkjenningen er det bare administratoren som endrer dem. Organisasjonene brukeren
   lager, får bare funksjonene i modulene (av standarden for nye organisasjoner), og med
   Bemanning er ansatte og timer slått på fra start. Brukere uten moduler (fra før, eller
@@ -258,13 +258,20 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
   bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
   Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer),
-  gruppert i modulene Faktura og Bemanning. Fakturaer, kunder og produkter har alle. Plattformadministratoren slår dem av og på under
-  Administrasjon → Funksjoner (eller i detaljene for en organisasjon) og velger standarden
-  for nye organisasjoner; de som fantes da funksjonene kom, beholdt alt. API-et avviser rutene
+  gruppert i modulene Faktura og Bemanning. Fakturaer, kunder og produkter har alle. Plattformadministratoren slår dem av og på i
+  detaljene for organisasjonen (Administrasjon → Organisasjoner) og velger standarden for nye
+  organisasjoner nederst samme sted; de som fantes da funksjonene kom, beholdt alt. API-et avviser rutene
   til en funksjon organisasjonen ikke har (`server/src/funksjoner.ts`, med svaret husket et
   halvt minutt), bakgrunnsjobbene hopper over organisasjonen (bankhenting, gjentakende
   fakturaer, EHF-sending, som da går på e-post, påminnelser og Google Disk), og appen
   skjuler det som ikke er slått på (`mine_organisasjoner.funksjoner`)
+- Administrasjonen har tre faner. Oversikt: bruken, og kontoer og organisasjoner som venter på
+  godkjenning (antallet står på fanen). Organisasjoner: alle organisasjonene med brukerne under
+  organisasjonen de er med i (søket finner også en bruker), detaljer med behandling,
+  funksjonene, brukerne (moduler, passkeys og de andre organisasjonene de er med i), bruk,
+  integrasjoner, logg og sletting, og nederst brukere uten organisasjon, funksjonene for nye
+  organisasjoner og de slettede. Drift: e-post, EHF, banker og utboksen. Gamle lenker til
+  Venter, Funksjoner og Brukere går til Oversikt og Organisasjoner
 - `slettede_organisasjoner` og `organisasjoner.slettet_at`: sletting av organisasjoner. Eieren
   (Innstillinger → Organisasjon) eller plattformadministratoren (detaljene i Administrasjon)
   sletter, alltid med en grunn, og bekrefter med navnet; eieren må ha totrinnsinnlogging. Uten

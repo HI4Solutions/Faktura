@@ -69,7 +69,7 @@ export async function meldNyKonto(c: Context) {
       ``,
       `Moduler: ${opplisting(ny.moduler)}`,
       ``,
-      `Kontoen kommer ikke inn før den er godkjent. Godkjenn eller avvis den på ${config.appUrl}/admin?fane=venter`,
+      `Kontoen kommer ikke inn før den er godkjent. Godkjenn eller avvis den på ${config.appUrl}/admin`,
     ].join("\n"),
   }).catch((e) => console.warn("Kunne ikke varsle administratorer om ny konto", e));
 }
