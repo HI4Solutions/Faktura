@@ -13,6 +13,7 @@ import { ryddVedlegg, vedleggFiler } from "./vedlegg.js";
 import { oppdaterEhfKoblinger, sendSomEhf, sjekkEhfLevering } from "./ehfSending.js";
 import { fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, slettBankOkter } from "./bank.js";
 import { sendPaaminnelser } from "./paaminnelser.js";
+import { sendBursdager } from "./bursdager.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -481,11 +482,12 @@ export function lagWorker() {
 
   app.post("/jobber/gjenta", async (c) => c.json(await gjenta()));
   // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag henter fra banken på de faste
-  // hentetidene (planleggingen tar hver hentetid én gang per bank), og sjekker nye kunder for
-  // EHF (litt om gangen).
+  // hentetidene (planleggingen tar hver hentetid én gang per bank), sjekker nye kunder for
+  // EHF (litt om gangen) og sender bursdagsvarslene (fra kl. 08, én gang per bursdag).
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
+    await sendBursdager().catch((e) => logg("ERROR", "Bursdagsvarsler feilet", { feil: (e as Error).message }));
     await planleggBankhenting().catch((e) => logg("ERROR", "Planlegging av bankhenting feilet", { feil: (e as Error).message }));
     await oppdaterEhf(10, { nye: true }).catch((e) => logg("ERROR", "EHF-oppslag for nye kunder feilet", { feil: (e as Error).message }));
     return c.json(r);

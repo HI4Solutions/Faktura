@@ -60,6 +60,7 @@ const ansattSkjema = z.object({
   aktiv: z.boolean().optional(),
   notat: valgfri(tekst(2000, "Notatet")),
   gruppe_id: uuid.nullable().optional(), // gruppen i bemanningskalenderen (0039_bemanning.sql)
+  bursdag_varsel: z.boolean().optional(), // varsle de andre på bursdagen (0045_bursdager.sql)
 });
 
 const oppsettSkjema = z.object({
@@ -67,6 +68,8 @@ const oppsettSkjema = z.object({
   daglig_grense: z.number().gt(0, "Grensen må være over 0").max(24, "Høyst 24 timer per dag").optional(),
   ukentlig_grense: z.number().gt(0, "Grensen må være over 0").max(80, "Høyst 80 timer per uke").optional(),
   overtid_prosent: z.number().int().min(40, "Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)").max(200).optional(),
+  // Bursdagsvarsler til de andre i organisasjonen (0045_bursdager.sql).
+  bursdag_varsel: z.enum(["av", "push", "epost", "begge"]).optional(),
 });
 
 const foringSkjema = z.object({
@@ -86,7 +89,7 @@ const foringSkjema = z.object({
 const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
-         a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.opprettet, a.oppdatert,
+         a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.opprettet, a.oppdatert,
          -- Ukedagene i den faste arbeidsplanen som gjelder i dag (1 = mandag).
          (select coalesce(array_agg(d.ukedag order by d.ukedag), '{}') from faktura.arbeidsplan_dager d
            where d.org_id = a.org_id
@@ -109,13 +112,14 @@ const FORING = `
 
 type Foringsrad = { id: string; ansatt_id: string; ansatt_navn: string; dato: string; timer: number; overtid_prosent: number | null; status: string };
 
-export async function regler(db: Db, org: string): Promise<Regler & { aktiv: boolean }> {
-  const r = await en<Regler & { aktiv: boolean }>(
+export type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
+export async function regler(db: Db, org: string): Promise<Regler & { aktiv: boolean; bursdag_varsel: Bursdagsvarsel }> {
+  const r = await en<Regler & { aktiv: boolean; bursdag_varsel: Bursdagsvarsel }>(
     db,
-    "select aktiv, daglig_grense, ukentlig_grense, overtid_prosent from faktura.lonn_oppsett where org_id = $1",
+    "select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel from faktura.lonn_oppsett where org_id = $1",
     [org],
   );
-  return r ?? { aktiv: false, ...AML };
+  return r ?? { aktiv: false, ...AML, bursdag_varsel: "av" };
 }
 
 // Den innloggedes egen ansattrad i organisasjonen (eller null).
@@ -178,10 +182,10 @@ export function ansattRuter() {
         const naa = await regler(db, orgId(c));
         const ny = { ...naa, ...Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined)) };
         await db.query(
-          `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent) values ($1, $2, $3, $4, $5)
+          `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel) values ($1, $2, $3, $4, $5, $6)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
-             ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent`,
-          [orgId(c), ny.aktiv, ny.daglig_grense, ny.ukentlig_grense, ny.overtid_prosent],
+             ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel`,
+          [orgId(c), ny.aktiv, ny.daglig_grense, ny.ukentlig_grense, ny.overtid_prosent, ny.bursdag_varsel],
         );
         return regler(db, orgId(c));
       }),

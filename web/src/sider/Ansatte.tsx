@@ -36,6 +36,7 @@ type Ansatt = {
   aktiv: boolean;
   notat: string | null;
   gruppe_id: string | null;
+  bursdag_varsel: boolean; // varsle de andre på bursdagen (når organisasjonen har slått på bursdagsvarsler)
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -241,7 +242,11 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     aktiv: ansatt.aktiv ?? true,
     notat: ansatt.notat ?? "",
     gruppe_id: ansatt.gruppe_id ?? "",
+    bursdag_varsel: ansatt.bursdag_varsel ?? true,
   }));
+  // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
+  const oppsett = useData(() => hent<{ bursdag_varsel: string }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
+  const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
   // Med vaktplanen (Administrasjon → Funksjoner): gruppene i bemanningskalenderen (f.eks.
   // sekretærer og leger), hvis noen er laget, og den faste arbeidsplanen (ukedagene den ansatte
   // jobber), som et utkast til den lagres.
@@ -295,6 +300,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       notat: a.notat,
       aktiv: a.aktiv,
     };
+    if (bursdager) kropp.bursdag_varsel = a.bursdag_varsel;
     if (grupper.data?.length) kropp.gruppe_id = a.gruppe_id || null;
     if (a.stillingsprosent.trim()) kropp.stillingsprosent = tall(a.stillingsprosent);
     if (a.ukentlig_arbeidstid.trim()) kropp.ukentlig_arbeidstid = tall(a.ukentlig_arbeidstid);
@@ -423,6 +429,12 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             <input type="date" max={iDag()} {...felt("fodselsdato")} disabled={!kanEndre || (a.endreFnr ? fnrGyldig(fnr) : !a.fjernFnr)} />
           </label>
         </div>
+        {bursdager && (
+          <label>
+            <input type="checkbox" checked={a.bursdag_varsel} disabled={!kanEndre} onChange={(e) => sett({ bursdag_varsel: e.target.checked })} />
+            Varsle de andre på bursdagen
+          </label>
+        )}
         <label>
           Kontonummer for lønn
           <input inputMode="numeric" autoComplete="off" spellCheck={false} aria-invalid={!!kontonrFeil || undefined} placeholder="1234 56 78903" {...felt("kontonr")} />

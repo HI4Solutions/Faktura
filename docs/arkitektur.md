@@ -191,6 +191,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   den dagen; uten plan timene utover avtalt arbeidstid i uka (alle timene for
   tilkallingsvikarer); vakter den ansatte er borte fra, teller ikke. Rapporten over
   ekstratimer per ansatt i en periode tas ut som PDF eller CSV (`/ekstratimer.pdf|.csv`)
+- `lonn_oppsett.bursdag_varsel` og `ansatte.bursdag_varsel`: bursdagsvarsler. Eier og
+  administrator slår dem på under Innstillinger → Ansatte og timer (de ansatte har ikke tilgang
+  dit) og velger push-varsel, e-post eller begge. Når en aktiv ansatt har bursdag (fødselsdatoen
+  på ansattkortet; 29. februar feires 28. februar i år som ikke er skuddår), får alle de andre i
+  organisasjonen beskjed kl. 08 norsk tid: medlemmene og de aktive ansatte, også dem uten
+  innlogging når det går på e-post, men ikke den som har bursdag (`bursdager_i_dag`,
+  `bursdag_mottakere`). Workeren tar det i hjerteslaget hvert minutt (`server/src/bursdager.ts`),
+  én gang per ansatt og dag, og e-posten går til hver mottaker for seg. En ansatt kan unntas i
+  ansattkortet, og hver bruker kan slå av push om bursdager for seg selv (varseltypen
+  `bursdag`). Varselet sier ikke alderen (`0045_bursdager.sql`)
 - Klokkeslett skrives og vises med 24-timersklokke (tt:mm) overalt i appen, også på enheter
   med engelsk språk, der nettleserens eget klokkeslettfelt ville vist AM og PM. Feltet
   (`Klokkeslett` i `web/src/uke.tsx`) tar også «730», «7.30» og «1530» og retter dem til 07:30

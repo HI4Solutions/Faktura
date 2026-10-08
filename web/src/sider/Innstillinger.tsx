@@ -70,17 +70,24 @@ export function Innstillinger() {
   );
 }
 
-// Ansatte og timer: slås på per organisasjon, med grensene for overtid.
+// Ansatte og timer: slås på per organisasjon, med grensene for overtid og bursdagsvarslene.
+type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
 function PersonalOppsett() {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
-  const [o, settO] = useState<{ aktiv: boolean; daglig_grense: string; ukentlig_grense: string; overtid_prosent: string } | null>(null);
+  const [o, settO] = useState<{ aktiv: boolean; daglig_grense: string; ukentlig_grense: string; overtid_prosent: string; bursdag_varsel: Bursdagsvarsel } | null>(null);
   const [lagret, settLagret] = useState(false);
   const h = useHandling();
   const tekst = (n: number) => String(n).replace(".", ",");
   useEffect(() => {
     if (data)
-      settO({ aktiv: data.aktiv, daglig_grense: tekst(data.daglig_grense), ukentlig_grense: tekst(data.ukentlig_grense), overtid_prosent: String(data.overtid_prosent) });
+      settO({
+        aktiv: data.aktiv,
+        daglig_grense: tekst(data.daglig_grense),
+        ukentlig_grense: tekst(data.ukentlig_grense),
+        overtid_prosent: String(data.overtid_prosent),
+        bursdag_varsel: data.bursdag_varsel ?? "av",
+      });
   }, [data]);
   if (!o) return <Laster />;
 
@@ -93,6 +100,7 @@ function PersonalOppsett() {
         daglig_grense: tall(o!.daglig_grense),
         ukentlig_grense: tall(o!.ukentlig_grense),
         overtid_prosent: tall(o!.overtid_prosent),
+        bursdag_varsel: o!.bursdag_varsel,
       }),
     );
     if (!r) return;
@@ -128,6 +136,21 @@ function PersonalOppsett() {
       <p className="liten dempet">
         Arbeidsmiljøloven: arbeid ut over 9 timer per dag eller 40 timer per uke er overtid, med minst 40 % tillegg (§ 10-4 og § 10-6). Har dere tariffavtale
         med andre grenser, skriver du dem her.
+      </p>
+      <h3>Bursdager</h3>
+      <label>
+        Varsle om bursdager
+        <select value={o.bursdag_varsel} onChange={(e) => settO({ ...o, bursdag_varsel: e.target.value as Bursdagsvarsel })}>
+          <option value="av">Nei</option>
+          <option value="push">Ja, med push-varsel</option>
+          <option value="epost">Ja, med e-post</option>
+          <option value="begge">Ja, med push-varsel og e-post</option>
+        </select>
+      </label>
+      <p className="liten dempet">
+        Når en ansatt har bursdag, får alle de andre i {org?.navn} beskjed kl. 08 (den som har bursdag, får ikke). Bursdagen er fødselsdatoen på ansattkortet,
+        og der kan du også unnta en ansatt. Push-varsel går til dem som har slått på varsler i appen, og hver enkelt kan slå av bursdagsvarslene for seg selv.
+        E-post går til e-postadressen på ansattkortet eller innloggingen.
       </p>
       <Feil melding={h.feil} />
       {lagret && (
