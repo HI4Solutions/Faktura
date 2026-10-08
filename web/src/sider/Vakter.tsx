@@ -1,19 +1,19 @@
 // Vaktplan: eier og administrator planlegger uka (tabell på PC, dag for dag på mobil),
-// publiserer den og kopierer uker; regnskap ser planen. Ansatte ser sine egne vakter og de
-// ledige, som de kan ta, melder seg syke, og gir bort eller bytter vakter (Vaktbytte.tsx).
+// publiserer den og kopierer uker; regnskap og de ansatte ser planen (0063). Ansatte ser også sine
+// egne vakter og de ledige, som de kan ta, melder seg syke, og gir bort eller bytter vakter (Vaktbytte.tsx).
 // Advarslene etter arbeidsmiljøloven (hviletid, overtid) kommer fra serveren
-// (server/src/vaktregler.ts). Tavla (Tavle.tsx), kalenderen (Bemanning.tsx), fraværet
+// (server/src/vaktregler.ts). Tavla (Tavle.tsx), måneden i vaktplanen (Bemanning.tsx), fraværet
 // (Fravaer.tsx) og vaktbyttene er egne faner.
 //
-// Fanen står i adressen (?fane=plan|tavle|kalender|fravaer|mine|ledige|bytter), vaktplanen per dag,
+// Fanen står i adressen (?fane=plan|tavle|fravaer|mine|ledige|bytter; kalender er måneden i planen), vaktplanen per dag,
 // uke eller måned (?visning=dag|maaned; uke uten), uka med mandagen (?uke=2026-10-12), dagen i
-// vaktplanen og på tavla (?dato=2026-10-14) og måneden i vaktplanen og kalenderen (?maaned=2026-10).
+// vaktplanen og på tavla (?dato=2026-10-14) og måneden i vaktplanen (?maaned=2026-10).
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
 import { erAdmin, kanPersonal, kanSePersonal, useKonto } from "../konto";
-import { iDag, leggTilDager, leggTilMaaneder } from "../format";
+import { iDag, leggTilDager } from "../format";
 import { IkonHoyre, IkonKalender, IkonPluss, IkonVarsel, IkonVenstre } from "../ikoner";
 import { gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import { borteTekst, FravaerDialog, fravaerKlasse, fravaerTekst, FravaerListe, MittFravaer, VikarSkjema, type Fravaer, type FravaerType } from "./Fravaer";
@@ -70,7 +70,7 @@ type Ansatt = {
   ansatt_til: string | null;
   aktiv: boolean;
 };
-// Vaktplanen per dag, uke eller måned (samme side som kalenderen).
+// Vaktplanen per dag, uke eller måned (måneden er bemanningskalenderen, Bemanning.tsx).
 type Visning = "dag" | "uke" | "maaned";
 
 const tid = (v: Pick<Vakt, "fra" | "til">) => `${v.fra}–${v.til}`;
@@ -101,7 +101,6 @@ function huskSist(v: Sist) {
 const TITLER: Record<string, string> = {
   plan: "Vaktplan",
   tavle: "Tavle",
-  kalender: "Bemanningskalender",
   fravaer: "Fravær",
   mine: "Vakter",
   ledige: "Vakter",
@@ -141,7 +140,8 @@ export function Vakter() {
   const tilGodkjenning = kanPersonal(org?.rolle) ? (bytter.data?.bytter ?? []).filter((b) => b.status === "akseptert").length : 0;
 
   const faner: [string, ReactNode][] = [];
-  if (seHelePlanen) faner.push(["plan", "Vaktplan"], ["tavle", "Tavle"], ["kalender", "Kalender"], ["fravaer", "Fravær"]);
+  // Vaktplanen har dagen, uka og måneden (måneden er bemanningskalenderen, Bemanning.tsx).
+  if (seHelePlanen) faner.push(["plan", "Vaktplan"], ["tavle", "Tavle"], ["fravaer", "Fravær"]);
   if (egen)
     faner.push(
       ["mine", "Mine vakter"],
@@ -153,10 +153,10 @@ export function Vakter() {
         </>,
       ],
     );
-  // De ansatte ser hele den publiserte planen, tavla og kalenderen, bare til lesing (0063); ikke en
+  // De ansatte ser hele den publiserte planen (også måneden) og tavla, bare til lesing (0063); ikke en
   // som har sluttet (ser_planen).
   const ansattSerPlanen = !seHelePlanen && !!egen && org?.ser_planen !== false;
-  if (ansattSerPlanen) faner.push(["plan", "Vaktplan"], ["tavle", "Tavle"], ["kalender", "Kalender"]);
+  if (ansattSerPlanen) faner.push(["plan", "Vaktplan"], ["tavle", "Tavle"]);
   if (bytter.data && (bytter.data.innstilling !== "av" || (bytter.data.bytter?.length ?? 0) > 0))
     faner.push([
       "bytter",
@@ -165,11 +165,12 @@ export function Vakter() {
         {tilSvar > 0 && <span className="teller">{tilSvar}</span>}
       </>,
     ]);
-  const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? faner[0]?.[0] ?? null;
+  const gammelKalender = sok.get("fane") === "kalender";
+  const fane = faner.find(([v]) => v === (gammelKalender ? "plan" : sok.get("fane")))?.[0] ?? faner[0]?.[0] ?? null;
   const uke = mandag(gyldigDato(sok.get("uke")) ? sok.get("uke")! : iDag());
   const dato = gyldigDato(sok.get("dato")) ? sok.get("dato")! : iDag();
   const maaned = gyldigMaaned(sok.get("maaned")) ? sok.get("maaned")! : iDag().slice(0, 7);
-  const visning: Visning = sok.get("visning") === "dag" ? "dag" : sok.get("visning") === "maaned" ? "maaned" : "uke";
+  const visning: Visning = sok.get("visning") === "dag" ? "dag" : sok.get("visning") === "maaned" || gammelKalender ? "maaned" : "uke";
   const ga = (endring: Record<string, string | null>) => {
     const p = new URLSearchParams(sok);
     for (const [k, v] of Object.entries(endring)) {
@@ -178,6 +179,11 @@ export function Vakter() {
     }
     settSok(p, { replace: true });
   };
+  // Kalenderen er måneden i vaktplanen nå: gamle lenker og varsler (fane=kalender) går dit.
+  useEffect(() => {
+    if (gammelKalender) ga({ fane: "plan", visning: "maaned" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gammelKalender]);
   // En annen visning (eller en dag fra måneden): dagen, uka eller måneden følger det som vises nå.
   const velgVisning = (v: Visning, dag?: string) => {
     const denneMnd = iDag().slice(0, 7);
@@ -222,14 +228,24 @@ export function Vakter() {
           ))}
         </div>
       )}
-      {fane === "plan" && (
+      {fane === "plan" && visning === "maaned" && (
+        <Bemanning
+          maaned={maaned}
+          velgMaaned={(m) => ga({ maaned: m === iDag().slice(0, 7) ? null : m })}
+          kanEndre={kanPersonal(org.rolle)}
+          seAlle={seHelePlanen}
+          visningsvalg={<Visningsvalg visning={visning} velg={velgVisning} />}
+          tilDag={(d) => velgVisning("dag", d)}
+          tilUke={(m) => velgVisning("uke", m)}
+        />
+      )}
+      {fane === "plan" && visning !== "maaned" && (
         <Vaktplan
           visning={visning}
           velgVisning={velgVisning}
           dato={dato}
           velgDato={(d) => ga({ dato: d === iDag() ? null : d })}
-          maaned={maaned}
-          velgMaaned={(m) => ga({ maaned: m === iDag().slice(0, 7) ? null : m })}
+          tilTavle={(d) => ga({ fane: "tavle", dato: d === iDag() ? null : d })}
           uke={uke}
           velgUke={(u) => ga({ uke: u === mandag(iDag()) ? null : u })}
           kanPlanlegge={kanPersonal(org.rolle)}
@@ -241,16 +257,6 @@ export function Vakter() {
         />
       )}
       {fane === "tavle" && <Tavle dato={dato} velgDato={(d) => ga({ dato: d === iDag() ? null : d })} kanEndre={kanPersonal(org.rolle)} />}
-      {fane === "kalender" && (
-        <Bemanning
-          maaned={maaned}
-          velgMaaned={(m) => ga({ maaned: m === iDag().slice(0, 7) ? null : m })}
-          kanEndre={kanPersonal(org.rolle)}
-          seAlle={seHelePlanen}
-          tilTavle={(d) => ga({ fane: "tavle", dato: d === iDag() ? null : d })}
-          tilUke={(m) => ga({ fane: "plan", uke: m === mandag(iDag()) ? null : m })}
-        />
-      )}
       {fane === "fravaer" && <FravaerListe versjon={versjon} endret={endret} />}
       {fane === "mine" && (
         <MineVakter
@@ -280,16 +286,31 @@ export function Vakter() {
 
 const DAGNAVN = ["Ma", "Ti", "On", "To", "Fr", "Lø", "Sø"];
 
-const maanedFormat = new Intl.DateTimeFormat("nb-NO", { month: "long", year: "numeric", timeZone: "UTC" });
-const forstStor = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+// Dagen, uka eller måneden i vaktplanen (dagen og uka her, måneden i Bemanning.tsx).
+function Visningsvalg({ visning, velg }: { visning: Visning; velg: (v: Visning) => void }) {
+  return (
+    <div className="faner valg visningsvalg" role="radiogroup" aria-label="Visning">
+      {(
+        [
+          ["dag", "Dag"],
+          ["uke", "Uke"],
+          ["maaned", "Måned"],
+        ] as const
+      ).map(([v, t]) => (
+        <button key={v} type="button" role="radio" aria-checked={visning === v} className={visning === v ? "valgt" : undefined} onClick={() => velg(v)}>
+          {t}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function Vaktplan({
   visning,
   velgVisning,
   dato,
   velgDato,
-  maaned,
-  velgMaaned,
+  tilTavle,
   uke,
   velgUke,
   kanPlanlegge,
@@ -303,8 +324,7 @@ function Vaktplan({
   velgVisning: (v: Visning, dato?: string) => void;
   dato: string;
   velgDato: (dato: string) => void;
-  maaned: string;
-  velgMaaned: (maaned: string) => void;
+  tilTavle: (dato: string) => void;
   uke: string;
   velgUke: (mandag: string) => void;
   kanPlanlegge: boolean;
@@ -316,13 +336,10 @@ function Vaktplan({
   tilBytter: () => void;
 }) {
   const { org } = useKonto();
-  // Perioden som vises: dagen, uka, eller hele uker rundt måneden.
-  const forsteIMnd = `${maaned}-01`;
-  const sisteIMnd = leggTilDager(leggTilMaaneder(forsteIMnd, 1), -1);
-  const [fra, til] =
-    visning === "dag" ? [dato, dato] : visning === "maaned" ? [mandag(forsteIMnd), leggTilDager(mandag(sisteIMnd), 6)] : [uke, leggTilDager(uke, 6)];
+  // Perioden som vises: dagen eller uka (måneden er bemanningskalenderen).
+  const [fra, til] = visning === "dag" ? [dato, dato] : [uke, leggTilDager(uke, 6)];
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/${seAlle ? "ansatte" : "kolleger"}`), [org?.id, seAlle, versjon]);
-  // Rollene (rekkefølgen og fargene) i dags- og månedsvisningen.
+  // Rollene (rekkefølgen og fargene) i dagsvisningen.
   const grupper = useData(() => (visning === "uke" ? Promise.resolve([]) : hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`)), [org?.id, visning === "uke", versjon]);
   const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${fra}&til=${til}`), [org?.id, fra, til, versjon]);
   const [apen, settApen] = useState<(Partial<Vakt> & { fraPlan?: boolean }) | null>(null);
@@ -346,7 +363,7 @@ function Vaktplan({
     h.settFeil(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fra, til]);
-  const periodeNavn = visning === "uke" ? `Uke ${nr}` : visning === "dag" ? visDag(dato) : forstStor(maanedFormat.format(middag(forsteIMnd)));
+  const periodeNavn = visning === "dag" ? visDag(dato) : `Uke ${nr}`;
 
   // Publiser utkastene i perioden som vises.
   const publiser = () =>
@@ -366,39 +383,11 @@ function Vaktplan({
     });
 
   // «Ny vakt»: dagen som vises (mobil: den valgte), i dag om den er i perioden, ellers den første.
-  const nyDato =
-    visning === "dag"
-      ? dato
-      : visning === "maaned"
-        ? iDag().startsWith(maaned)
-          ? iDag()
-          : forsteIMnd
-        : mobil
-          ? valgtDag
-          : dager.includes(iDag())
-            ? iDag()
-            : uke;
-  const visningsvalg = (
-    <div className="faner valg visningsvalg" role="radiogroup" aria-label="Visning">
-      {(
-        [
-          ["dag", "Dag"],
-          ["uke", "Uke"],
-          ["maaned", "Måned"],
-        ] as const
-      ).map(([v, t]) => (
-        <button key={v} type="button" role="radio" aria-checked={visning === v} className={visning === v ? "valgt" : undefined} onClick={() => velgVisning(v)}>
-          {t}
-        </button>
-      ))}
-    </div>
-  );
+  const nyDato = visning === "dag" ? dato : mobil ? valgtDag : dager.includes(iDag()) ? iDag() : uke;
   const verktoy = (
     <div className="uke-verktoy">
-      {visningsvalg}
-      {visning === "uke" ? (
-        <Ukevelger uke={uke} velgUke={velgUke} />
-      ) : visning === "dag" ? (
+      <Visningsvalg visning={visning} velg={velgVisning} />
+      {visning === "dag" ? (
         <Periodevelger
           navn={visLangDag(dato)}
           under={`Uke ${ukenr(dato).uke}`}
@@ -407,13 +396,7 @@ function Vaktplan({
           naa={dato !== iDag() ? ["I dag", () => velgDato(iDag())] : undefined}
         />
       ) : (
-        <Periodevelger
-          navn={periodeNavn}
-          under={`Uke ${ukenr(fra).uke}–${ukenr(til).uke}`}
-          forrige={["Forrige måned", () => velgMaaned(leggTilMaaneder(forsteIMnd, -1).slice(0, 7))]}
-          neste={["Neste måned", () => velgMaaned(leggTilMaaneder(forsteIMnd, 1).slice(0, 7))]}
-          naa={maaned !== iDag().slice(0, 7) ? ["Denne måneden", () => velgMaaned(iDag().slice(0, 7))] : undefined}
-        />
+        <Ukevelger uke={uke} velgUke={velgUke} />
       )}
       {kanPlanlegge && data && (
         <div className="knapper">
@@ -631,9 +614,8 @@ function Vaktplan({
           apneVakt={(v) => settApen(v)}
           apneFast={apneFast}
           nyVakt={nyVakt}
+          tilTavle={tilTavle}
         />
-      ) : visning === "maaned" ? (
-        <MaanedVisning maaned={maaned} fra={fra} til={til} data={data} ansatte={ansatte.data} grupper={grupper.data} tilDag={(d) => velgVisning("dag", d)} />
       ) : !data.vakter.length && !alleFaste.length ? (
         <div className="kort">
           <Tom ikon={<IkonKalender storrelse={22} />} tittel={`Ingen vakter i uke ${nr}`}>
@@ -902,7 +884,7 @@ function Periodevelger({ navn, under, forrige, neste, naa }: { navn: string; und
 
 // --- Dags- og månedsvisningen ----------------------------------------------------------------
 
-// Rollene i rekkefølge, med fargene fra bemanningskalenderen (g0–g4; g5 uten rolle), og
+// Rollene i rekkefølge, med fargene fra måneden i vaktplanen (g0–g4; g5 uten rolle), og
 // forkortelsen og navnet til hver person.
 function rolleoppsett(grupper: Rolle[], ansatte: Ansatt[]) {
   const indeks = new Map(grupper.map((g, i) => [g.id, i]));
@@ -954,6 +936,7 @@ function DagVisning({
   apneVakt,
   apneFast,
   nyVakt,
+  tilTavle,
 }: {
   dato: string;
   data: VaktSvar;
@@ -963,6 +946,7 @@ function DagVisning({
   apneVakt: (v: Vakt) => void;
   apneFast: (f: Fast) => void;
   nyVakt: (dato: string, ansatt: string | null) => void;
+  tilTavle: (dato: string) => void;
 }) {
   const r = rolleoppsett(grupper, ansatte);
   const linjer: Linje[] = [
@@ -1064,6 +1048,9 @@ function DagVisning({
         {mangler > 0 && <span className="merke merke-fare">{mangler} mangler vikar</span>}
         {ledige.length > 0 && <span>{ledige.length === 1 ? "Én ledig vakt" : `${ledige.length} ledige vakter`}</span>}
         {helligdag(dato) && <span className="helligdag-navn">{helligdag(dato)}</span>}
+        <button type="button" className="lenke dl-tavle" onClick={() => tilTavle(dato)}>
+          Tavla for dagen
+        </button>
       </div>
       <div className="dl-akse" aria-hidden="true">
         <span className="dl-person" />
@@ -1100,132 +1087,6 @@ function DagVisning({
         </p>
       )}
     </div>
-  );
-}
-
-// Måneden: hvem som er på jobb hver dag, med forkortelsene i rollens farge (en hel dag: bare
-// forkortelsen; tiden står i hjelpeteksten). Trykk på en dag for å se den.
-function MaanedVisning({
-  maaned,
-  fra,
-  til,
-  data,
-  ansatte,
-  grupper,
-  tilDag,
-}: {
-  maaned: string;
-  fra: string;
-  til: string;
-  data: VaktSvar;
-  ansatte: Ansatt[];
-  grupper: Rolle[];
-  tilDag: (dato: string) => void;
-}) {
-  const r = rolleoppsett(grupper, ansatte);
-  const mobil = useSmal();
-  const dager: string[] = [];
-  for (let d = fra; d <= til; d = leggTilDager(d, 1)) dager.push(d);
-  type Person = { id: string; fra: string; tider: string[]; borte: FravaerType | null; mangler: boolean; utkast: boolean };
-  const folk = (d: string): Person[] => {
-    const per = new Map<string, Person>();
-    const legg = (id: string, fraKl: string, tid: string | null, borte: FravaerType | null, mangler: boolean, utkast: boolean) => {
-      const p = per.get(id) ?? { id, fra: fraKl, tider: [], borte: null, mangler: false, utkast: true };
-      per.set(id, { ...p, fra: fraKl < p.fra ? fraKl : p.fra, tider: tid ? [...p.tider, tid] : p.tider, borte: p.borte ?? borte, mangler: p.mangler || mangler, utkast: p.utkast && utkast });
-    };
-    for (const v of data.vakter) if (v.dato === d && v.ansatt_id) legg(v.ansatt_id, v.fra, `${v.fra}–${v.til}`, v.fravaer, !!v.fravaer && !v.har_vikar, !v.publisert);
-    for (const f of data.faste ?? []) if (f.dato === d) legg(f.ansatt_id, f.fra ?? "08:00", fastTid(f) || null, f.fravaer, !!f.fravaer, false);
-    return [...per.values()].sort((a, b) => r.rekke(a.id) - r.rekke(b.id) || a.fra.localeCompare(b.fra) || r.navn(a.id).localeCompare(r.navn(b.id), "nb"));
-  };
-  const ledigeDag = (d: string) => data.vakter.filter((v) => v.dato === d && !v.ansatt_id).length;
-  const brukte = new Set(dager.flatMap((d) => folk(d).map((p) => r.farge(p.id))));
-  const chip = (p: Person) => (
-    <span
-      key={p.id}
-      className={`mnd-fork g${r.farge(p.id)}${p.borte ? " borte" : ""}${p.mangler ? " mangler" : ""}${p.utkast ? " utkast" : ""}`}
-      title={[r.navn(p.id), p.tider.join(", "), p.borte ? `${fravaerTekst[p.borte]}${p.mangler ? ", mangler vikar" : ""}` : "", p.utkast ? "Ikke publisert" : ""].filter(Boolean).join(" · ")}
-    >
-      {r.fork(p.id)}
-    </span>
-  );
-  const iMaaneden = (d: string) => d.startsWith(maaned);
-
-  return (
-    <>
-      <div className="mnd-roller">
-        {r.seksjoner
-          .filter((s) => brukte.has(s.farge) && (s.id !== null || brukte.has(5)))
-          .map((s) => (
-            <span key={s.id ?? "uten"} className={`mnd-rolle g${s.farge}`}>
-              <i /> {s.navn}
-            </span>
-          ))}
-      </div>
-      {mobil ? (
-        <div className="kort liste mnd-liste">
-          {dager.filter(iMaaneden).map((d) => {
-            const p = folk(d);
-            const ledige = ledigeDag(d);
-            const n = p.filter((x) => !x.borte).length;
-            return (
-              <button key={d} type="button" className={`liste-rad mnd-rad${d === iDag() ? " i-dag" : ""}${helligdag(d) ? " helligdag" : ""}`} onClick={() => tilDag(d)}>
-                <span className="linje">
-                  <span className="tittel">
-                    {visDag(d)}
-                    {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
-                  </span>
-                  <span className="under">{n ? `${n} på jobb` : "Ingen"}</span>
-                </span>
-                {(p.length > 0 || ledige > 0) && (
-                  <span className="mnd-folk">
-                    {p.map(chip)}
-                    {ledige > 0 && <span className="mnd-fork ledig">+{ledige} ledig</span>}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="kort mnd-kalender">
-          <div className="mnd-grid mnd-hode">
-            {DAGNAVN.map((x) => (
-              <span key={x}>{x}</span>
-            ))}
-          </div>
-          <div className="mnd-grid">
-            {dager.map((d) => {
-              const p = folk(d);
-              const ledige = ledigeDag(d);
-              const n = p.filter((x) => !x.borte).length;
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  className={["mnd-dag", iMaaneden(d) ? "" : "utenfor", d === iDag() ? "i-dag" : "", helligdag(d) ? "helligdag" : ""].filter(Boolean).join(" ")}
-                  aria-label={`${visDag(d)}: ${n} på jobb${helligdag(d) ? `, ${helligdag(d)}` : ""}`}
-                  onClick={() => tilDag(d)}
-                >
-                  <span className="mnd-topp">
-                    <span className="mnd-dato">{Number(d.slice(8))}</span>
-                    {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
-                    {n > 0 && <span className="mnd-antall">{n}</span>}
-                  </span>
-                  <span className="mnd-folk">
-                    {p.map(chip)}
-                    {ledige > 0 && <span className="mnd-fork ledig">+{ledige}</span>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      <p className="liten dempet">
-        Forkortelsene står i fargen til rollen; hold over (eller trykk på dagen) for navn og tider. Overstrøket: borte. Stiplet: ikke publisert. Forkortelsene endres på hver
-        ansatt under Ansatte.
-      </p>
-    </>
   );
 }
 

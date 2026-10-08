@@ -1,12 +1,13 @@
-// Bemanningskalenderen: måneden med datoene nedover og folkene bortover, rolle for rolle
+// Vaktplanen per måned (bemanningskalenderen; dagen og uka står i Vakter.tsx): datoene nedover og
+// folkene bortover, rolle for rolle
 // (f.eks. sekretærer og leger, også leger som ikke er ansatt). Hver rute viser om personen er på
 // jobb (✓, fra den faste arbeidsplanen eller vaktplanen), har fri (–), er borte (F ferie, S syk,
 // SB sykt barn, P permisjon, K kurs, A annet) eller jobber ekstra (timene utover planen). Til
 // høyre står hvor mange med hver rolle som er på jobb mot behovet, så bemanningen kan ses opp mot
 // hverandre, og nederst ekstratimene i måneden per ansatt. Trykk på en rute for å registrere
 // fravær eller sette inn vikar; rollene og behovet settes opp under «Roller» (Roller.tsx), og
-// rapporten over ekstratimene (PDF og CSV) under «Ekstratimer».
-import { useEffect, useState, type CSSProperties } from "react";
+// rapporten over ekstratimene (PDF og CSV) under «Ekstratimer». Trykk på en dato for dagen.
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { api, hent, lastNed } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling, useSmal } from "../felles";
 import { kortNavn, RollerOppsett, type Rolle } from "./Roller";
@@ -60,16 +61,19 @@ export function Bemanning({
   velgMaaned,
   kanEndre,
   seAlle = true,
-  tilTavle,
+  visningsvalg,
+  tilDag,
   tilUke,
 }: {
   maaned: string; // «2026-10»
   velgMaaned: (maaned: string) => void;
   kanEndre: boolean;
-  // false: en ansatt (0063_ansatte_ser_planen.sql), som ser kalenderen uten stillingsprosenten og
+  // false: en ansatt (0063_ansatte_ser_planen.sql), som ser måneden uten stillingsprosenten og
   // ekstratimene til kollegaene.
   seAlle?: boolean;
-  tilTavle: (dato: string) => void;
+  // Dag, uke eller måned (vaktplanen), først i verktøylinja.
+  visningsvalg?: ReactNode;
+  tilDag: (dato: string) => void;
   tilUke: (mandag: string) => void;
 }) {
   const smal = useSmal();
@@ -104,6 +108,7 @@ export function Bemanning({
 
   const verktoy = (
     <div className="uke-verktoy">
+      {visningsvalg}
       <div className="ukevelger">
         <button type="button" className="ikon" aria-label="Forrige måned" title="Forrige måned" onClick={() => velgMaaned(leggTilMaaneder(forste, -1).slice(0, 7))}>
           <IkonVenstre storrelse={20} />
@@ -317,7 +322,7 @@ export function Bemanning({
       På jobb kommer fra de faste arbeidsdagene til de ansatte{seAlle ? " (under Ansatte)" : ""} og vaktplanen; en vakt gjelder i stedet for den faste dagen.
       {seAlle &&
         " Ekstratimer er timene utover den faste planen den dagen (uten fast plan: utover avtalt arbeidstid i uka, og alle timene for tilkallingsvikarer)."}{" "}
-      {kanEndre ? "Trykk på en dag for tavla, eller på en rute for å registrere fravær og sette inn vikar." : "Trykk på en dag for tavla, eller på en rute for detaljene."}
+      {kanEndre ? "Trykk på en dato for dagen, eller på en rute for å registrere fravær og sette inn vikar." : "Trykk på en dato for dagen, eller på en rute for detaljene."}
     </p>
   );
 
@@ -340,7 +345,7 @@ export function Bemanning({
       {!synlige.length ? (
         <div className="kort">
           <Tom ikon={<IkonAnsatte storrelse={22} />} tittel="Ingen ansatte denne måneden">
-            <p>Legg inn de ansatte under Ansatte, med de faste arbeidsdagene, eller vaktene i vaktplanen. Da viser kalenderen hvem som er på jobb hver dag.</p>
+            <p>Legg inn de ansatte under Ansatte, med de faste arbeidsdagene, eller vaktene i vaktplanen. Da viser vaktplanen hvem som er på jobb hver dag.</p>
           </Tom>
         </div>
       ) : (
@@ -425,9 +430,9 @@ export function Bemanning({
                         <button
                           type="button"
                           className="lenke"
-                          title={`${helligdag(d) ? `${helligdag(d)}. ` : ""}Åpne tavla for ${visDag(d).toLowerCase()}`}
+                          title={`${helligdag(d) ? `${helligdag(d)}. ` : ""}Se ${visDag(d).toLowerCase()}`}
                           aria-label={helligdag(d) ? `${visDag(d)}, ${helligdag(d)}` : undefined}
-                          onClick={() => tilTavle(d)}
+                          onClick={() => tilDag(d)}
                         >
                           {UKEDAG[middag(d).getUTCDay()]} <span>{Number(d.slice(8))}.</span>
                         </button>
@@ -618,7 +623,7 @@ export function Bemanning({
                   tilUke(mandag(valgt.d));
                 }}
               >
-                Uke {ukenr(valgt.d).uke} i vaktplanen
+                Se uke {ukenr(valgt.d).uke}
               </button>
             </div>
           </div>
@@ -687,7 +692,7 @@ type Rapport = {
   ansatte: { ansatt_id: string; ansattnummer: number; navn: string; gruppe: string | null; stilling: string | null; stillingsprosent: number; timer: number; dager: { dato: string; timer: number; vakter: string }[] }[];
 };
 
-// Ekstratimer per ansatt i en periode (som i kalenderen), med nedlasting som PDF og CSV.
+// Ekstratimer per ansatt i en periode (som i vaktplanen for måneden), med nedlasting som PDF og CSV.
 function EkstratimerRapport({ fra: start, til: slutt, lukk }: { fra: string; til: string; lukk: () => void }) {
   const { org } = useKonto();
   const [periode, settPeriode] = useState({ fra: start, til: slutt });

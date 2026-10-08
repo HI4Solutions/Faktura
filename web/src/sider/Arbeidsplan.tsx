@@ -148,7 +148,7 @@ export function ArbeidsplanFelt({
     <fieldset className="arbeidsplan" disabled={!kanEndre}>
       <legend className="arbeidsplan-tittel">Faste arbeidsdager</legend>
       <p className="felt-hjelp arbeidsplan-hjelp">
-        Velg dagene den ansatte jobber, med klokkeslett eller hel dag ({timer(rund(gyldigUke ? ukentlig / 5 : 7.5))}). De vises i bemanningskalenderen, vaktplanen og på
+        Velg dagene den ansatte jobber, med klokkeslett eller hel dag ({timer(rund(gyldigUke ? ukentlig / 5 : 7.5))}). De vises i vaktplanen og på
         tavla, og timer utover planen blir ekstratimer.
       </p>
       <div className="arbeidsdager" role="group" aria-label="Ukedager den ansatte jobber">
@@ -224,8 +224,8 @@ export function ArbeidsplanFelt({
           <input type="date" required value={utkast.gjelder_fra} onChange={(e) => endre({ ...utkast, gjelder_fra: e.target.value })} />
           <span className="felt-hjelp">
             {utkast.harPlan
-              ? `Dagene før beholder planen som gjaldt da (i bemanningskalenderen og for ekstratimene).${utkast.neste ? ` Planen fra ${dato(utkast.neste)} gjelder fortsatt fra da.` : ""}`
-              : "Fra den ansatte begynte, så hele bemanningskalenderen viser planen."}
+              ? `Dagene før beholder planen som gjaldt da (i vaktplanen og for ekstratimene).${utkast.neste ? ` Planen fra ${dato(utkast.neste)} gjelder fortsatt fra da.` : ""}`
+              : "Fra den ansatte begynte, så hele vaktplanen viser planen."}
           </span>
         </label>
       )}

@@ -97,15 +97,17 @@ export type PersonalGrunnlag = {
   meg: string | null; // brukerens egen ansattrad
   faser: { id: string; navn: string; fra: string | null; til: string | null }[];
   oppgaver: { id: string; navn: string }[];
-  kan: { personal: boolean; se: boolean; ferie: boolean }; // personal: eier og administrator; se: også regnskap
+  // personal: eier og administrator; se: også regnskap; plan: også de aktive ansatte (vaktplanen og
+  // tavla, 0063_ansatte_ser_planen.sql).
+  kan: { personal: boolean; se: boolean; ferie: boolean; plan: boolean };
   vaktplan: boolean; // funksjonen «Vaktplan og bemanning» (vakter, tavle, fravær og ferie)
 };
 
 // null: personalmodulen er ikke slått på, eller brukeren verken ser de ansatte eller er ansatt.
 export async function hentPersonal(db: Db, org: string): Promise<PersonalGrunnlag | null> {
-  const k = await en<{ personal: boolean; se: boolean; aktiv: boolean; vaktplan: boolean; meg: string | null }>(
+  const k = await en<{ personal: boolean; se: boolean; plan: boolean; aktiv: boolean; vaktplan: boolean; meg: string | null }>(
     db,
-    `select faktura.kan($1, 'personal') as personal, faktura.kan($1, 'personal_les') as se,
+    `select faktura.kan($1, 'personal') as personal, faktura.kan($1, 'personal_les') as se, faktura.kan($1, 'plan') as plan,
             coalesce((select l.aktiv from faktura.lonn_oppsett l where l.org_id = $1), false) and faktura.har_funksjon($1, 'ansatte') as aktiv,
             faktura.har_funksjon($1, 'vaktplan') as vaktplan, faktura.min_ansatt($1) as meg`,
     [org],
@@ -127,7 +129,7 @@ export async function hentPersonal(db: Db, org: string): Promise<PersonalGrunnla
       : [],
     oppgaver: tavle ? await alle(db, "select id, navn from faktura.tavle_oppgaver where org_id = $1 order by rekkefolge, opprettet", [org]) : [],
     // Feriebanken ser eier, administrator og den ansatte selv (ikke regnskap).
-    kan: { personal: k.personal, se: k.se, ferie: k.personal || !!k.meg },
+    kan: { personal: k.personal, se: k.se, ferie: k.personal || !!k.meg, plan: k.plan },
     vaktplan: k.vaktplan,
   };
 }
@@ -1026,10 +1028,11 @@ async function ferie(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSvar
 // Sider og hjelp
 // ---------------------------------------------------------------------------
 
-const PSIDER: Record<PersonalSide, [string, string, "se" | "personal" | "meg" | "alle"]> = {
-  vaktplan: ["/vakter?fane=plan", "vaktplanen", "se"],
-  tavle: ["/vakter?fane=tavle", "tavla", "se"],
-  kalender: ["/vakter?fane=kalender", "bemanningskalenderen", "se"],
+// Vaktplanen og tavla ser også de ansatte (plan); kalenderen er måneden i vaktplanen.
+const PSIDER: Record<PersonalSide, [string, string, "se" | "plan" | "personal" | "meg" | "alle"]> = {
+  vaktplan: ["/vakter?fane=plan", "vaktplanen", "plan"],
+  tavle: ["/vakter?fane=tavle", "tavla", "plan"],
+  kalender: ["/vakter?fane=plan&visning=maaned", "vaktplanen for måneden", "plan"],
   fravaer: ["/vakter?fane=fravaer", "fraværet", "se"],
   mine_vakter: ["/vakter?fane=mine", "vaktene dine", "meg"],
   ledige_vakter: ["/vakter?fane=ledige", "de ledige vaktene", "meg"],
@@ -1042,7 +1045,7 @@ export function visPersonal(p: PersonalGrunnlag, side: string): PSvar | null {
   const s = PSIDER[side as PersonalSide];
   if (!s) return null;
   const [til, navn, krav] = s;
-  const ok = krav === "alle" || (krav === "se" && p.kan.se) || (krav === "personal" && p.kan.personal) || (krav === "meg" && !!p.meg);
+  const ok = krav === "alle" || (krav === "se" && p.kan.se) || (krav === "plan" && p.kan.plan) || (krav === "personal" && p.kan.personal) || (krav === "meg" && !!p.meg);
   if (!ok) return { tekst: `Du har ikke tilgang til ${navn}.` };
   if (til.startsWith("/vakter") || til === "/ferie") if (!p.vaktplan) return UTEN_VAKTPLAN;
   return { tekst: `Åpner ${navn}.`, gaa_til: til };

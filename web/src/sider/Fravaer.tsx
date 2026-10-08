@@ -346,7 +346,7 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
       ) : !liste.length ? (
         <div className="kort">
           <Tom ikon={<IkonKalender storrelse={22} />} tittel={tidligere ? "Ingen fravær det siste året" : "Ingen fravær nå eller framover"}>
-            <p>Sykdom, ferie og permisjon vises i vaktplanen, på tavla og i kalenderen. Den som er borte, tas ut av ressursene på tavla.</p>
+            <p>Sykdom, ferie og permisjon vises i vaktplanen og på tavla. Den som er borte, tas ut av ressursene på tavla.</p>
           </Tom>
         </div>
       ) : (
@@ -510,7 +510,7 @@ export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId:
     <section className="ansatt-fravaer">
       <h3>Fravær og ferie</h3>
       <p className="felt-hjelp" style={{ marginTop: 0 }}>
-        Vises i vaktplanen, på tavla, i bemanningskalenderen og i timelista, og kan registreres og endres der også.
+        Vises i vaktplanen, på tavla og i timelista, og kan registreres og endres der også.
       </p>
       {kanEndre && <FerieSaldo key={versjon} ansattId={ansattId} aar={aar} lenke />}
       {feil ? (

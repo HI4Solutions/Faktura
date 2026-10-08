@@ -229,6 +229,14 @@ export const IkonKalender = (p: P) => (
     <path d="M3.5 10h17M8 3v4M16 3v4" />
   </Ikon>
 );
+// Mine vakter: kalenderen med en hake.
+export const IkonMineVakter = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3.5" y="5" width="17" height="15.5" rx="2.2" />
+    <path d="M3.5 10h17M8 3v4M16 3v4" />
+    <path d="M9 15.2l2 2 4-4.2" />
+  </Ikon>
+);
 export const IkonTavle = (p: P) => (
   <Ikon {...p}>
     <rect x="3" y="4" width="18" height="16" rx="2.2" />

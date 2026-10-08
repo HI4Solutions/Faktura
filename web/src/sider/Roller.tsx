@@ -19,7 +19,7 @@ type Person = { id: string; fornavn: string; etternavn: string; aktiv: boolean; 
 
 // «Sekretær» blir «Sek.» i oppsummeringen i kalenderen, med mindre rollen har en egen forkortelse.
 export const kortNavn = (g: Pick<Rolle, "navn" | "kort">) => g.kort || (g.navn.length > 5 ? `${g.navn.slice(0, 3)}.` : g.navn);
-export const IKKE_ANSATT_HJELP = "med i vaktplanen, kalenderen og fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler";
+export const IKKE_ANSATT_HJELP = "med i vaktplanen og fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler";
 
 // kalender: med vaktplanen (behov og forkortelse i bemanningskalenderen).
 export function RollerOppsett({ roller, personer, kalender, endret, lukk }: { roller: Rolle[]; personer: Person[]; kalender: boolean; endret: () => void; lukk: () => void }) {
@@ -75,7 +75,7 @@ export function RollerOppsett({ roller, personer, kalender, endret, lukk }: { ro
         <h3>Roller</h3>
         <p className="liten dempet">
           Rollen personen har hos dere, f.eks. lege eller sekretær.
-          {kalender ? " I bemanningskalenderen står rollene ved siden av hverandre, med hvor mange som er på jobb hver dag mot behovet (hvor mange som trengs)." : ""}
+          {kalender ? " I vaktplanen for måneden står rollene ved siden av hverandre, med hvor mange som er på jobb hver dag mot behovet (hvor mange som trengs)." : ""}
         </p>
         {melding && (
           <div ref={meldingRef} className="melding ok" role="status">
@@ -108,14 +108,14 @@ export function RollerOppsett({ roller, personer, kalender, endret, lukk }: { ro
                   <span className="knapper">
                     {kalender && (
                       <>
-                        <button type="button" className="ikon" aria-label={`Flytt ${g.navn} opp`} title="Flytt opp (lenger til venstre i kalenderen)" disabled={i === 0 || h.opptatt} onClick={() => flytt(i, i - 1)}>
+                        <button type="button" className="ikon" aria-label={`Flytt ${g.navn} opp`} title="Flytt opp (lenger til venstre i vaktplanen)" disabled={i === 0 || h.opptatt} onClick={() => flytt(i, i - 1)}>
                           <IkonOpp storrelse={16} />
                         </button>
                         <button
                           type="button"
                           className="ikon"
                           aria-label={`Flytt ${g.navn} ned`}
-                          title="Flytt ned (lenger til høyre i kalenderen)"
+                          title="Flytt ned (lenger til høyre i vaktplanen)"
                           disabled={i === roller.length - 1 || h.opptatt}
                           onClick={() => flytt(i, i + 1)}
                         >
@@ -244,7 +244,7 @@ function RolleSkjema({ rolle, kalender, ferdig, avbryt }: { rolle?: Rolle; kalen
           </>
         )}
       </div>
-      {kalender && <p className="felt-hjelp oppsett-hjelp">Behovet er hvor mange med rollen som trengs på jobb hver dag. Forkortelsen står over oppsummeringen i kalenderen.</p>}
+      {kalender && <p className="felt-hjelp oppsett-hjelp">Behovet er hvor mange med rollen som trengs på jobb hver dag. Forkortelsen står over oppsummeringen i vaktplanen for måneden.</p>}
       <label>
         <input type="checkbox" checked={v.ikke_ansatt} onChange={(e) => sett({ ikke_ansatt: e.target.checked })} /> Ikke ansatt
       </label>
@@ -255,7 +255,7 @@ function RolleSkjema({ rolle, kalender, ferdig, avbryt }: { rolle?: Rolle; kalen
             <input type="checkbox" checked={v.tavle} onChange={(e) => sett({ tavle: e.target.checked })} /> Med på tavla
           </label>
           <p className="felt-hjelp oppsett-hjelp">
-            Uten kryss står de med rollen ikke på tavla, rulleringen fordeler dem ikke, og plassene deres fra i dag av fjernes. I vaktplanen og kalenderen er de med
+            Uten kryss står de med rollen ikke på tavla, rulleringen fordeler dem ikke, og plassene deres fra i dag av fjernes. I vaktplanen er de med
             som før.
           </p>
         </>

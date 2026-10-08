@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { updateProfile } from "firebase/auth";
 import { hentAuth } from "./firebase";
-import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster, Tom } from "./felles";
 import { KontoProvider, erAdmin, erAnsatt, harFunksjon, kanSePersonal, kanSkrive, useKonto, type Funksjon } from "./konto";
@@ -32,8 +32,8 @@ import { installer } from "./pwa";
 import { Assistent } from "./assistent";
 import { iFakturadelen } from "./fakturameny";
 import {
-  IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonMeny, IkonNokkel, IkonOversikt, IkonPluss,
-  IkonProdukter, IkonRapport, IkonSkjold, IkonVelg,
+  IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonMeny, IkonMineVakter, IkonNokkel, IkonOversikt, IkonPluss,
+  IkonProdukter, IkonRapport, IkonSkjold, IkonTavle, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -180,6 +180,20 @@ function Ramme() {
   // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
   // og bunnmenyen viser personaldelen i stedet for fakturadelen der.
   const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder)(\/|$)/.test(sted.pathname);
+  // De ansatte har Vaktplan og Tavle som egne punkter i sidemenyen (fanene på /vakter), ved siden av
+  // Vakter (egne og ledige vakter og vaktbytter); ikke en som har sluttet (ser_planen).
+  const ansattSerPlanen = ansatt && visVakter && org?.ser_planen !== false;
+  const vakterFane = (() => {
+    if (sted.pathname !== "/vakter") return null;
+    const f = new URLSearchParams(sted.search).get("fane");
+    return f === "plan" || f === "kalender" ? "plan" : f === "tavle" ? "tavle" : "vakter";
+  })();
+  const vakterLenke = (til: string, hvilken: string, ikon: ReactNode, tekst: string) => (
+    <Link to={til} className={vakterFane === hvilken ? "active" : undefined} aria-current={vakterFane === hvilken ? "page" : undefined}>
+      {ikon}
+      {tekst}
+    </Link>
+  );
   const personalmeny = !ansatt && iPersonal && (visAnsatte || visTimer || visBeskjeder);
 
   if (ny || orgs.length === 0) {
@@ -232,7 +246,7 @@ function Ramme() {
             </NavLink>
             {visVakter && (
               <NavLink to="/vakter">
-                <IkonKalender storrelse={22} />
+                <IkonMineVakter storrelse={22} />
                 <span>Vakter</span>
               </NavLink>
             )}
@@ -348,11 +362,12 @@ function Ramme() {
               <IkonKlokke />
               Timer
             </NavLink>
-            {visVakter && (
-              <NavLink to="/vakter">
-                <IkonKalender />
-                Vakter
-              </NavLink>
+            {visVakter && vakterLenke("/vakter", "vakter", <IkonMineVakter />, "Vakter")}
+            {ansattSerPlanen && (
+              <>
+                {vakterLenke("/vakter?fane=plan", "plan", <IkonKalender />, "Vaktplan")}
+                {vakterLenke("/vakter?fane=tavle", "tavle", <IkonTavle />, "Tavle")}
+              </>
             )}
             {visFerie && (
               <NavLink to="/ferie">

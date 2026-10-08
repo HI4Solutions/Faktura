@@ -135,7 +135,10 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten for personal", () => 
     );
     expect((await spor({ handling: "fravaer", ansatt: "Kari", fravaerstype: "syk" }, ola)).tekst).toBe("Du har ikke tilgang til å registrere fravær for andre.");
     expect((await spor({ handling: "publiser_vakter" }, ola)).tekst).toBe("Du har ikke tilgang til å publisere vaktplanen.");
-    expect((await spor({ handling: "vis", side: "tavle" }, ola)).tekst).toBe("Du har ikke tilgang til tavla.");
+    // Vaktplanen og tavla ser de ansatte også (0063); kalenderen er måneden i vaktplanen.
+    expect(await spor({ handling: "vis", side: "tavle" }, ola)).toMatchObject({ tekst: "Åpner tavla.", gaa_til: "/vakter?fane=tavle" });
+    expect(await spor({ handling: "vis", side: "kalender" }, ola)).toMatchObject({ tekst: "Åpner vaktplanen for måneden.", gaa_til: "/vakter?fane=plan&visning=maaned" });
+    expect((await spor({ handling: "vis", side: "fravaer" }, ola)).tekst).toBe("Du har ikke tilgang til fraværet.");
     expect(await spor({ handling: "vis", side: "mine_vakter" }, ola)).toMatchObject({ tekst: "Åpner vaktene dine.", gaa_til: "/vakter?fane=mine" });
   });
 

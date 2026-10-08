@@ -471,7 +471,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     (!arbeidstaker
       ? `${rollenavn ? `«${rollenavn}»` : "Rollen"} er for dem som ikke er ansatt: ${IKKE_ANSATT_HJELP}.`
       : vaktplan
-        ? "F.eks. lege eller sekretær. Bemanningskalenderen viser hvor mange med hver rolle som er på jobb, mot behovet."
+        ? "F.eks. lege eller sekretær. Vaktplanen viser hvor mange med hver rolle som er på jobb, mot behovet."
         : "F.eks. lege eller sekretær.") + (vaktplan && !nyRolle && valgtRolle?.tavle === false ? " Rollen er ikke med på tavla." : "");
 
   async function lagre(e: FormEvent) {
@@ -599,7 +599,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             Etternavn
             <input required autoComplete="off" {...felt("etternavn")} />
           </label>
-          <label title="Vises i vaktplanen og kalenderen der plassen er trang. Tom: lages av initialene.">
+          <label title="Vises i vaktplanen der plassen er trang. Tom: lages av initialene.">
             Forkortelse
             <input
               autoComplete="off"

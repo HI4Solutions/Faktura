@@ -1532,7 +1532,7 @@ fieldset.arbeidsplan { padding: 12px 16px 6px; margin: 0 0 16px; }
 }
 
 /* --------------------------------------------------------------------------
-   Vaktplanen per dag og måned (Vakter.tsx): visningsvalget, tidslinja og månedskalenderen
+   Vaktplanen per dag og uke (Vakter.tsx; måneden er bemanningskalenderen): visningsvalget og tidslinja
    -------------------------------------------------------------------------- */
 .faner.valg.visningsvalg { width: auto; margin-bottom: 0; flex: none; }
 .faner.valg.visningsvalg button { min-width: 64px; }
@@ -1542,6 +1542,7 @@ fieldset.arbeidsplan { padding: 12px 16px 6px; margin: 0 0 16px; }
 .dl-oppsummering { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-bottom: 8px; font-size: 0.9rem; color: var(--tekst-2); }
 .dl-oppsummering strong { color: var(--tekst); }
 .dl-oppsummering .helligdag-navn { margin-left: 0; }
+.dl-oppsummering .dl-tavle { margin-left: auto; font-size: 0.86rem; }
 .dl-akse, .dl-rad { display: grid; grid-template-columns: minmax(150px, 240px) minmax(0, 1fr); gap: 0 12px; align-items: center; }
 .dl-akse .dl-spor { height: 18px; background: none; }
 .dl-akse .dl-spor span { position: absolute; top: 0; transform: translateX(-50%); font-size: 0.7rem; color: var(--dempet); font-variant-numeric: tabular-nums; }
@@ -1582,42 +1583,6 @@ fieldset.arbeidsplan { padding: 12px 16px 6px; margin: 0 0 16px; }
 .dl-tom, .dl-borte { margin: 12px 0 0; font-size: 0.88rem; }
 .dl-borte { color: var(--tekst-2); }
 
-/* Måneden: forkortelsene i rollens farge per dag */
-.mnd-roller { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -2px 0 10px; font-size: 0.82rem; color: var(--tekst-2); }
-.mnd-rolle i { display: inline-block; width: 10px; height: 10px; margin-right: 2px; border-radius: 3px; background: var(--g); vertical-align: -1px; }
-.mnd-kalender { padding: 0; overflow: hidden; }
-.mnd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.mnd-hode span { padding: 6px 8px; border-bottom: 1px solid var(--kant); background: var(--flate-2); color: var(--dempet); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-.mnd-dag {
-  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 4px; min-width: 0; min-height: 96px; margin: 0; padding: 6px;
-  border: 0; border-right: 1px solid var(--kant); border-bottom: 1px solid var(--kant); border-radius: 0; background: var(--flate); box-shadow: none;
-  color: inherit; font: inherit; text-align: left; cursor: pointer;
-}
-.mnd-dag:nth-child(7n) { border-right: 0; }
-.mnd-dag:hover:not(:disabled) { background: var(--flate-2); }
-.mnd-dag:active:not(:disabled) { transform: none; }
-.mnd-dag.utenfor { background: var(--flate-2); }
-.mnd-dag.utenfor > * { opacity: 0.55; }
-.mnd-topp { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 0.82rem; }
-.mnd-dato { min-width: 22px; padding: 0 5px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
-.mnd-dag.i-dag .mnd-dato { background: var(--aksent); color: var(--aksent-tekst); }
-.mnd-dag.helligdag .mnd-dato { color: var(--fare); }
-.mnd-topp .helligdag-navn { min-width: 0; margin-left: 0; padding: 0 5px; overflow: hidden; text-overflow: ellipsis; font-size: 0.64rem; }
-.mnd-antall { margin-left: auto; color: var(--dempet); font-size: 0.72rem; font-weight: 650; font-variant-numeric: tabular-nums; }
-.mnd-folk { display: flex; flex-wrap: wrap; gap: 3px; }
-.mnd-fork {
-  display: inline-block; min-width: 24px; padding: 0 4px; border-radius: 5px; background: var(--g-lys); color: var(--g);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g) 30%, transparent);
-  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; line-height: 1.6; text-align: center;
-}
-.mnd-fork.borte { opacity: 0.55; text-decoration: line-through; }
-.mnd-fork.mangler { opacity: 1; color: var(--fare); box-shadow: inset 0 0 0 1.5px var(--fare); }
-.mnd-fork.utkast { background: transparent; box-shadow: inset 0 0 0 1px var(--g); border: 0; outline: 1px dashed var(--g); outline-offset: -1px; }
-.mnd-fork.ledig { background: transparent; color: var(--aksent); box-shadow: inset 0 0 0 1px var(--aksent); }
-.mnd-liste .mnd-rad { gap: 6px; }
-.mnd-liste .mnd-folk { gap: 4px; }
-.mnd-rad.helligdag .tittel { color: var(--fare); }
-.mnd-rad .helligdag-navn { font-size: 0.66rem; }
 @media (max-width: 700px) {
   .faner.valg.visningsvalg { width: 100%; }
   .faner.valg.visningsvalg button { flex: 1; }

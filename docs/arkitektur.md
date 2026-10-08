@@ -218,11 +218,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   uke etter grensene i oppsettet, overlappende vakter og vakter utenfor ansettelsen. Timene
   kan føres fra vakten (`timeforinger.vakt_id`), og timelisten og godkjenningen viser hvor
   mange timer som var planlagt. Vaktplanen vises per dag, uke eller måned (`?visning=dag`,
-  `uke` eller `maaned`, på samme side som kalenderen): dagen som en tidslinje rolle for rolle
-  (vaktene og de faste dagene som streker, hvem som har vakt ledig og hvem som er borte; trykk på
-  en strek åpner vakten, og på en tom linje legges en vakt inn), uka som før, og måneden som en
-  kalender med forkortelsene i rollens farge (på mobil en liste dag for dag); trykk på en dag i
-  måneden åpner dagen. «Publiser» gjelder perioden som vises
+  `uke` eller `maaned`): dagen som en tidslinje rolle for rolle (vaktene og de faste dagene som
+  streker, hvem som har vakt ledig og hvem som er borte; trykk på en strek åpner vakten, og på en
+  tom linje legges en vakt inn, og «Tavla for dagen» åpner tavla), uka som før, og måneden som
+  bemanningskalenderen (se under; kalenderen er ikke en egen fane lenger, og gamle lenker med
+  `fane=kalender` går til måneden). Trykk på en dato i måneden åpner dagen. «Publiser» gjelder
+  dagen eller uka som vises
 - `vaktbytter` (`0060_vaktbytte.sql`, `server/src/vaktbytte.ts`): den ansatte gir bort en
   publisert vakt eller en fast arbeidsdag (den blir en vakt med de samme tidene,
   `vakt_fra_plan`), til en bestemt kollega eller til alle med samme rolle (uten rolle: alle), eller
@@ -365,15 +366,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   felt og rader (fortsatt 16 px tekst i feltene, så iPhone ikke zoomer), vaktplanen én dag om
   gangen med en dagvelger (ukedagene med hvor mange som er på jobb, og «!» når en vakt mangler
   vikar; samme ukedag når uka byttes), navnene på tavla ved siden av hverandre under oppgaven,
-  forklaringen i bemanningskalenderen i «Forklaring», og bunnmenyen med personaldelen (Ansatte,
+  forklaringen i vaktplanen for måneden i «Forklaring», og bunnmenyen med personaldelen (Ansatte,
   Vaktplan og Timer) der. PC og fakturadelen er som før
 - `ansattgrupper` og `ansatte.gruppe_id`: rollene (i appen «Roller»; f.eks. lege og sekretær),
   med hvor mange som trengs på jobb per dag, om de med rollen er ansatt (`ikke_ansatt`), og om
   de er med på tavla (`tavle`, se over).
-  Rollene settes opp under Ansatte → Roller og i bemanningskalenderen, og velges (eller lages,
+  Rollene settes opp under Ansatte → Roller og i vaktplanen for måneden, og velges (eller lages,
   «+ Ny rolle») i ansattskjemaet; de hører til «Ansatte og timer», ikke bare vaktplanen.
-  Bemanningskalenderen (i appen, fra de faste arbeidsplanene, vaktplanen og fraværet) viser
-  måneden med datoene nedover og folkene bortover, rolle for rolle: på jobb (✓), fri (–),
+  Bemanningskalenderen (månedsvisningen i vaktplanen, `web/src/sider/Bemanning.tsx`; fra de faste
+  arbeidsplanene, vaktene og fraværet) viser måneden med datoene nedover og folkene bortover,
+  rolle for rolle: på jobb (✓), fri (–),
   fravær (for eier og administrator Fe ferie, S syk, SB sykt barn, P permisjon, K kurs, A
   annet; for andre bare F) eller ekstratimer, nederst ekstratimene i måneden per ansatt,
   og til høyre hvor mange med hver rolle som er på jobb mot behovet, vakter uten vikar og
@@ -382,7 +384,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   AI-assistenten svarer med det samme når man spør hvem som jobber («Lege 6 av 7 (mangler 1),
   Sekretær 4 av 4»)
 - `ansatte.forkortelse` (`0061_forkortelser.sql`): en kort forkortelse for hver person, brukt der
-  plassen er liten (kolonnene i bemanningskalenderen og månedsvisningen i vaktplanen). Den lages
+  plassen er liten (kolonnene i vaktplanen for måneden). Den lages
   av navnet når den mangler (`ny_forkortelse`: forbokstavene i fornavn og etternavn, så to
   bokstaver fra etternavnet eller fornavnet, så et tall; «KN», «KNO», «KAN», «KN2»), er unik i
   organisasjonen uten hensyn til store og små bokstaver, og kan endres i ansattskjemaet (1–6
@@ -453,7 +455,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Registrere betaling og refusjon | ✓ | ✓ | ✓ | ✓ | | |
 | Innstillinger, kontonummer, medlemmer, integrasjoner, regnskapsfører | ✓ | ✓ | | | | |
 | Se ansatte, hele vaktplanen (også utkast), tavla, fraværet og alle timer | ✓ | ✓ | | ✓ | | |
-| Se den publiserte vaktplanen, tavla og bemanningskalenderen (kollegaenes fravær bare som «F») | ✓ | ✓ | ✓¹ | ✓ | ✓¹ | ✓² |
+| Se den publiserte vaktplanen (dag, uke og måned) og tavla (kollegaenes fravær bare som «F») | ✓ | ✓ | ✓¹ | ✓ | ✓¹ | ✓² |
 | Endre ansatte, gi innlogging, planlegge og publisere vakter, sette inn vikarer, styre tavla, registrere fravær, godkjenne og avvise timer | ✓ | ✓ | | | | |
 | Se egne vakter og plasser og ta ledige, melde seg syk, føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Legge beskjeder til rollene eller alle, og se dem som er til en selv | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -469,15 +471,15 @@ begge parter kan trekke den. Byråets ansatte med rollen `ansatt` får ikke tilg
 klientene.
 
 Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort,
-den publiserte vaktplanen, tavla og bemanningskalenderen (se under), vaktbyttene de er med i og
+den publiserte vaktplanen og tavla (se under), vaktbyttene de er med i og
 de åpne tilbudene fra kolleger med samme rolle (`vaktbytte_liste`), sitt eget fravær (med typen),
 sine egne timer og beskjedene til rollen sin og til alle (`ser_beskjed`; `faktura.kan(org,
 'medlem')`, `faktura.kan(org, 'plan')`, `faktura.er_meg` og `faktura.min_ansatt`), aldri
 fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, notater og typen fravær,
 utkast i vaktplanen eller revisjonsloggen. Varsler til hele organisasjonen og
 Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter (Mine vakter,
-Ledige vakter, Vaktplan, Tavle, Kalender og Bytter), Ferie, Beskjeder og Innstillinger (egen
-konto og app).
+Ledige vakter og Bytter, og fanene Vaktplan og Tavle), Vaktplan og Tavle som egne punkter i
+sidemenyen (lenker til de samme fanene), Ferie, Beskjeder og Innstillinger (egen konto og app).
 
 De ansatte ser planen (`0063_ansatte_ser_planen.sql`): `faktura.kan(org, 'plan')` er eier,
 administrator og regnskap, og de aktive ansatte med innlogging (`min_ansatt`; ikke etter at de har
@@ -492,7 +494,9 @@ og ansettelsestypen bare for dem som ser de ansatte og for den ansatte selv). Vi
 tabellene som eieren, så det er where-leddet i dem som avgjør hvem som ser hvem. API-et gir de
 ansatte personene i planen fra `/kolleger` (ikke `/ansatte`), notatet på en kollegas vakt er tomt,
 og advarslene, timene per uke og ekstratimene får bare de som ser de ansatte.
-`mine_organisasjoner.ser_planen` forteller appen om fanene Vaktplan, Tavle og Kalender skal vises.
+`mine_organisasjoner.ser_planen` forteller appen om Vaktplan og Tavle skal vises (fanene og
+punktene i sidemenyen). AI-assistenten åpner vaktplanen, måneden og tavla også for de ansatte
+(`kan.plan`).
 
 ### Sikkerhet i databasen
 

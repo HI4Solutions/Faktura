@@ -74,7 +74,7 @@ const TESTPERSONAL: PersonalGrunnlag = {
   meg: "test-ansatt-1",
   faser: [{ id: "test-fase-1", navn: "Formiddag", fra: "08:00", til: "12:00" }],
   oppgaver: [{ id: "test-oppgave-1", navn: "Kasse" }],
-  kan: { personal: true, se: true, ferie: true },
+  kan: { personal: true, se: true, ferie: true, plan: true },
   vaktplan: true,
 };
 const TESTPERSONALKOMMANDO = "Kari er syk i dag, og Per tar vaktene hennes";
