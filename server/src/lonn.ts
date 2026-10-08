@@ -128,12 +128,17 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     [org],
   );
   // De godkjente timene i ukene som har timer som ikke er lønnet (uker som begynner i perioden
-  // eller før), i ordinære kjøringer.
+  // eller før), i ordinære kjøringer: hele uka, også det som er lønnet før (overtiden regnes på uka).
   const foringer = ordinar
     ? await alle<{ id: string; ansatt_id: string; dato: string; timer: number; overtid_prosent: number | null; lonnskjoring_id: string | null }>(
         db,
-        `select id, ansatt_id, to_char(dato, 'YYYY-MM-DD') as dato, timer::float8 as timer, overtid_prosent, lonnskjoring_id
-           from faktura.timeforinger where org_id = $1 and status = 'godkjent' and dato <= $2 and dato >= $3`,
+        `with uker as (
+           select distinct ansatt_id, date_trunc('week', dato)::date as uke from faktura.timeforinger
+            where org_id = $1 and status = 'godkjent' and lonnskjoring_id is null and dato <= $2 and dato >= $3
+         )
+         select t.id, t.ansatt_id, to_char(t.dato, 'YYYY-MM-DD') as dato, t.timer::float8 as timer, t.overtid_prosent, t.lonnskjoring_id
+           from faktura.timeforinger t join uker u on u.ansatt_id = t.ansatt_id and date_trunc('week', t.dato)::date = u.uke
+          where t.org_id = $1 and t.status = 'godkjent'`,
         [org, pluss(til, 6), pluss(fra, -400)],
       )
     : [];

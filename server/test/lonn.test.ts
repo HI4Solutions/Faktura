@@ -249,10 +249,16 @@ describe.skipIf(!process.env.DATABASE_URL)("lønnskjøring", () => {
   });
 
   it("neste måned tar ikke med timene som er lønnet, og tallene hittil i år øker", async () => {
+    // En dag til i uka som er lønnet (mandag 12. med 10 timer): overtiden regnes på hele uka.
+    const sen = await kall("POST", `/api/org/${org}/timer`, { dato: "2026-10-13", timer: 9 }, per);
+    expect((await kall("POST", `/api/org/${org}/timer/lever`, { fra: "2026-10-12", til: "2026-10-18" }, per)).data).toEqual({ levert: 1 });
+    expect((await kall("POST", `/api/org/${org}/timer/godkjenn`, { ider: [sen.data.id] })).data).toEqual({ godkjent: 1 });
     const k = (await kall("POST", `/api/org/${org}/lonn/kjoringer`, { periode: "2026-11" })).data;
     nov = k.id;
     expect(k.utbetalingsdato).toBe("2026-11-20");
-    expect(k.slipper.map((s: any) => s.navn)).toEqual(["Kari Fast", "Lise Tabell"]);
+    expect(k.slipper.map((s: any) => s.navn)).toEqual(["Kari Fast", "Per Time", "Lise Tabell"]);
+    expect(slipp(k, perId).linjer.map((l: any) => [l.lonnsart, l.antall, l.belop])).toEqual([["timelonn", 9, 2250]]);
+    expect(slipp(k, perId).antall_timeforinger).toBe(1);
     const g = (await kall("POST", `/api/org/${org}/lonn/kjoringer/${nov}/godkjenn`)).data;
     const s = (await kall("GET", `/api/org/${org}/lonn/slipper/${slipp(g, kari).id}`)).data;
     expect(s.hittil).toMatchObject({ brutto: 100000, skattetrekk: 30000, otp: 2000 });
@@ -306,7 +312,7 @@ describe.skipIf(!process.env.DATABASE_URL)("lønnskjøring", () => {
     expect(linje(s, "feriepenger")).toMatchObject({ tekst: "Feriepenger opptjent 2026", antall: 500000, sats: 12, belop: 60000, opptjeningsaar: 2026 });
     expect(linje(s, "ferietrekk")).toMatchObject({ antall: 25, belop: -57692.31 });
     expect(s.merknader).toContain("Skattekortet er for 2026, ikke 2027. Hent det nye skattekortet.");
-    expect(linje(slipp(k, perId), "feriepenger")).toMatchObject({ belop: 1512 });
+    expect(linje(slipp(k, perId), "feriepenger")).toMatchObject({ antall: 14850, belop: 1782 }); // 12 600 i oktober og 2 250 i november
     const l = slipp(k, lise);
     expect(l.merknader).toContain("Det trekkes ikke skatt av feriepengene (tabelltrekk).");
     expect(l.merknader.some((m: string) => m.startsWith("Trekktabellene for 2027 er ikke lastet inn ennå"))).toBe(true);
