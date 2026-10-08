@@ -298,8 +298,8 @@ strong { font-weight: 650; }
 .sentrert > .kort, .sentrert > form.kort { width: 100%; max-width: 440px; box-shadow: var(--skygge-3); }
 
 button, .knapp {
-  font: inherit; font-size: 0.92rem; font-weight: 550; border: 1px solid var(--kant-sterk); background: var(--flate); color: var(--tekst);
-  padding: 8px 15px; border-radius: var(--radius-s); cursor: pointer; text-decoration: none;
+  font: inherit; font-size: var(--knapp-skrift, 0.92rem); font-weight: 550; border: 1px solid var(--kant-sterk); background: var(--flate); color: var(--tekst);
+  padding: var(--knapp-pad, 8px 15px); border-radius: var(--radius-s); cursor: pointer; text-decoration: none;
   display: inline-flex; align-items: center; gap: 7px; line-height: 1.3;
   box-shadow: var(--skygge-1); transition: background .15s, border-color .15s, box-shadow .15s, transform .05s;
 }
@@ -319,9 +319,9 @@ button.lenke:hover:not(:disabled) { text-decoration: underline; }
 button.ikon { padding: 7px; }
 .knapper { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
-label { display: block; font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); margin-bottom: 14px; }
-label > input, label > select, label > textarea, label > div { margin-top: 5px; }
-.felt-hjelp, .felt-feil { display: block; margin-top: 5px; font-size: 0.8rem; font-weight: 450; color: var(--dempet); }
+label { display: block; font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); margin-bottom: var(--felt-avstand, 14px); }
+label > input, label > select, label > textarea, label > div { margin-top: var(--etikett-avstand, 5px); }
+.felt-hjelp, .felt-feil { display: block; margin-top: var(--etikett-avstand, 5px); font-size: var(--hjelp-skrift, 0.8rem); font-weight: 450; color: var(--dempet); }
 .felt-feil { color: var(--fare); }
 input[aria-invalid] { border-color: var(--fare); }
 /* Felt med en knapp ved siden av (f.eks. kunde + «Ny kunde») */
@@ -329,7 +329,7 @@ input[aria-invalid] { border-color: var(--fare); }
 .med-knapp > select, .med-knapp > input { flex: 1; min-width: 0; }
 .med-knapp > button { flex: none; white-space: nowrap; }
 input, select, textarea {
-  font: inherit; font-size: 0.93rem; width: 100%; padding: 9px 12px; border: 1px solid var(--kant-sterk); border-radius: var(--radius-s);
+  font: inherit; font-size: 0.93rem; width: 100%; padding: var(--felt-pad, 9px 12px); border: 1px solid var(--kant-sterk); border-radius: var(--radius-s);
   background: var(--flate); color: var(--tekst); transition: border-color .15s, box-shadow .15s;
 }
 input::placeholder, textarea::placeholder { color: var(--dempet); opacity: .7; }
@@ -689,8 +689,8 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
 /* Felt på 16 px: ellers zoomer iPhone inn når man trykker i dem. Større trykkflater. */
 @media (pointer: coarse), (max-width: 700px) {
   input, select, textarea { font-size: 16px; }
-  input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
-  button, .knapp { min-height: 42px; }
+  input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--felt-hoyde, 44px); }
+  button, .knapp { min-height: var(--knapp-hoyde, 42px); }
   button.lenke, .dialog-topp button { min-height: 0; }
   .meny a { padding: 11px 12px; }
   label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { padding: 4px 0; }
@@ -1952,3 +1952,135 @@ th.tall .helligdag-navn { margin-left: auto; }
 .bm-tegn.helligdag { --fv: var(--fare); --fv-lys: var(--fare-lys); }
 .bemanning tr.helligdag th.bm-dag button.lenke, .bemanning tr.helligdag th.bm-dag button.lenke span { color: var(--fare); }
 .bemanning tr.helligdag td.bm-rute { background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--fare-lys) 70%, transparent) 6px 8px); }
+
+/* --------------------------------------------------------------------------
+   Personalmodulen på mobil (Ansatte, Vaktplan, Timer og Ferie, med dialogene der): tettere enn
+   resten av appen, så mer får plass på skjermen og det blir mindre å rulle. Mindre knapper og
+   felt (fortsatt 16 px tekst i feltene, så iPhone ikke zoomer), mindre luft i kort, lister og
+   skjemaer, vaktplanen én dag om gangen (dagvelgeren) og navnene på tavla ved siden av hverandre.
+   -------------------------------------------------------------------------- */
+@media (max-width: 700px) {
+  main[data-modul="personal"] {
+    --knapp-hoyde: 36px; --knapp-pad: 6px 12px; --knapp-skrift: 0.88rem;
+    --felt-hoyde: 40px; --felt-pad: 7px 10px; --felt-avstand: 10px; --etikett-avstand: 4px; --hjelp-skrift: 0.75rem;
+    padding-top: 12px;
+  }
+  [data-modul="personal"] h1 { font-size: 1.2rem; margin-bottom: 0.6rem; }
+  [data-modul="personal"] h2 { font-size: 0.98rem; margin: 1.1rem 0 0.5rem; }
+  [data-modul="personal"] h3 { font-size: 0.92rem; margin: 0.8rem 0 0.4rem; }
+  [data-modul="personal"] .topp { margin-bottom: 8px; gap: 8px; }
+  [data-modul="personal"] .topp .knapper { gap: 6px; }
+  [data-modul="personal"] .knapper { gap: 6px; }
+  [data-modul="personal"] .kort { padding: 12px; margin-bottom: 10px; border-radius: 12px; }
+  [data-modul="personal"] .kort.liste, [data-modul="personal"] .kort.tavle-ramme, [data-modul="personal"] .kort.bemanning-ramme { padding: 0; }
+  [data-modul="personal"] .kort.tabell { padding: 2px 0; }
+  [data-modul="personal"] .melding { padding: 8px 11px; margin-bottom: 10px; font-size: 0.86rem; }
+  [data-modul="personal"] .liten { font-size: 0.8rem; }
+  [data-modul="personal"] input.sok { margin-bottom: 8px; }
+  [data-modul="personal"] fieldset:not(.naken) { padding: 10px 12px 2px; margin: 6px 0 12px; }
+  /* Vaktplanen: overskriften er den samme som den valgte fanen, så den leses bare opp */
+  [data-modul="personal"] .topp.med-faner { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  [data-modul="personal"] textarea { min-height: 64px; }
+  [data-modul="personal"] label:has(> input[type="checkbox"]), [data-modul="personal"] label:has(> input[type="radio"]) { padding: 2px 0; }
+
+  /* Faner, uke- og dagvelger, verktøylinjen */
+  [data-modul="personal"] .faner { margin-bottom: 8px; padding: 3px; }
+  [data-modul="personal"] .faner button { min-height: 32px; padding: 4px 11px; font-size: 0.86rem; }
+  [data-modul="personal"] .faner.valg button { min-height: 34px; }
+  [data-modul="personal"] .uke-verktoy { margin-bottom: 8px; gap: 8px; }
+  [data-modul="personal"] .uke-verktoy > .knapper { width: 100%; flex-wrap: nowrap; }
+  [data-modul="personal"] .uke-verktoy > .knapper > button { flex: 1 1 auto; justify-content: center; min-width: 0; white-space: nowrap; }
+  [data-modul="personal"] .uke-verktoy > .knapper > button svg { flex: none; }
+  [data-modul="personal"] .ukevelger button.ikon { width: 34px; height: 34px; min-height: 34px; }
+  [data-modul="personal"] .ukevelger .uke-navn strong { font-size: 0.95rem; }
+  [data-modul="personal"] .ukevelger .uke-navn span { font-size: 0.75rem; }
+  [data-modul="personal"] .knapper.bm-knapper { flex-wrap: nowrap; }
+  [data-modul="personal"] .knapper.bm-knapper > button, [data-modul="personal"] .knapper.bm-knapper > button.primar { flex: 1 1 auto; padding-left: 8px; padding-right: 8px; gap: 5px; }
+
+  /* Lister */
+  [data-modul="personal"] .liste-rad { padding: 7px 12px; gap: 1px; line-height: 1.3; }
+  [data-modul="personal"] .liste-rad .tittel { font-size: 0.93rem; }
+  [data-modul="personal"] .liste-rad .under { font-size: 0.8rem; }
+  [data-modul="personal"] .liste-rad .merke { font-size: 0.7rem; }
+  [data-modul="personal"] .liste-enkel li { padding: 8px 0; gap: 8px; }
+  [data-modul="personal"] .oppsett-liste li { padding: 6px 0; }
+  [data-modul="personal"] .oppsett-liste .knapper button { min-height: 32px; padding: 4px 9px; }
+  [data-modul="personal"] .oppsett-liste .knapper button.ikon { width: 32px; height: 32px; }
+  [data-modul="personal"] .oppsett-skjema { padding: 10px 12px; }
+  [data-modul="personal"] .oppsett-del + .oppsett-del { margin-top: 14px; padding-top: 12px; }
+  [data-modul="personal"] .bm-ansattliste select { min-height: 34px; padding-top: 4px; padding-bottom: 4px; }
+  [data-modul="personal"] .bm-ansattliste li { padding: 5px 0; }
+  [data-modul="personal"] .mine-vakter-topp { padding: 8px 12px; font-size: 0.9rem; }
+
+  /* Dagene (timer og vaktplan) */
+  [data-modul="personal"] .dag-topp { min-height: 38px; padding: 2px 6px 2px 12px; gap: 8px; }
+  [data-modul="personal"] .dag-navn { font-size: 0.88rem; }
+  [data-modul="personal"] .kopier, [data-modul="personal"] button.kopier { width: 34px; height: 34px; min-height: 34px; }
+  [data-modul="personal"] button.foring { width: calc(100% - 20px); margin: 0 10px 6px; padding: 7px 10px; }
+  [data-modul="personal"] .foring .under { font-size: 0.8rem; }
+  [data-modul="personal"] .vakt-linje { margin: 0 10px 6px; padding: 6px 10px; font-size: 0.86rem; }
+  [data-modul="personal"] .dag-fravaer { padding: 0 10px 6px 12px; }
+  [data-modul="personal"] .ukesum-topp strong { font-size: 1.15rem; }
+  [data-modul="personal"] .uke-rad > .ukesum { margin-bottom: 10px; }
+
+  /* Vaktplanen: dagvelgeren og vaktene to og to */
+  .dagvelger { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-bottom: 8px; }
+  .dagvelger button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-width: 0; min-height: 0;
+    padding: 5px 0 4px; border-radius: 10px; box-shadow: none; line-height: 1.15; font-size: 0.8rem;
+  }
+  .dagvelger .dv-dag { font-size: 0.66rem; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--dempet); }
+  .dagvelger .dv-dato { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .dagvelger .dv-antall { font-size: 0.68rem; font-weight: 600; color: var(--tekst-2); font-variant-numeric: tabular-nums; }
+  .dagvelger .dv-antall.varsel { color: var(--fare); font-weight: 800; }
+  .dagvelger button.i-dag { border-color: var(--aksent); }
+  .dagvelger button.i-dag .dv-dato { color: var(--aksent); }
+  .dagvelger button.helligdag .dv-dato { color: var(--fare); }
+  .dagvelger button.utkast { border-style: dashed; }
+  .dagvelger button.valgt, .dagvelger button.valgt:hover:not(:disabled) { background: var(--aksent); border-color: var(--aksent); color: var(--aksent-tekst); }
+  .dagvelger button.valgt .dv-dag, .dagvelger button.valgt .dv-dato, .dagvelger button.valgt .dv-antall { color: inherit; }
+  .vaktdager .ingen-vakter { margin: 0; padding: 0 12px 10px; }
+  [data-modul="personal"] .vaktdager .vakt-rad { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 0 10px 10px; }
+  [data-modul="personal"] .vaktdager button.vakt-chip, [data-modul="personal"] .vaktdager .vakt-chip.fast { padding: 5px 8px; font-size: 0.82rem; }
+  [data-modul="personal"] .vaktdager .vakt-chip .vakt-oppgave { font-size: 0.74rem; }
+  /* Tiden og oppgaven (eller «Fast») på første linje, navnet under */
+  [data-modul="personal"] .vaktdager .vakt-chip { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; align-items: baseline; }
+  [data-modul="personal"] .vaktdager .vakt-chip > * { grid-column: 1 / -1; min-width: 0; }
+  [data-modul="personal"] .vaktdager .vakt-chip > .vakt-tid { grid-column: 1; grid-row: 1; }
+  [data-modul="personal"] .vaktdager .vakt-chip > .vakt-oppgave, [data-modul="personal"] .vaktdager .vakt-chip > .vakt-fast { grid-column: 2; grid-row: 1; justify-self: end; max-width: 100%; }
+  [data-modul="personal"] .vaktdager .vakt-chip > .vakt-navn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-modul="personal"] .utkast-info { margin: -2px 0 8px; }
+
+  /* Tavla: oppgaven over navnene, og navnene ved siden av hverandre */
+  [data-modul="personal"] .tavle-sum { margin: -2px 0 8px; gap: 2px 12px; font-size: 0.85rem; }
+  [data-modul="personal"] .tavle-rad { margin-bottom: 10px; border-radius: 12px; }
+  [data-modul="personal"] .tavle-fase { padding: 7px 12px; }
+  [data-modul="personal"] .tavle-fase strong { font-size: 0.9rem; }
+  [data-modul="personal"] .tavle-celle { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; padding: 7px 10px 8px 12px; }
+  [data-modul="personal"] .celle-topp { flex-direction: row; align-items: center; gap: 6px; }
+  [data-modul="personal"] .celle-navn { font-size: 0.82rem; }
+  [data-modul="personal"] .celle-folk { flex: 1 1 100%; gap: 5px; }
+  [data-modul="personal"] .celle-folk:empty { flex: 0 1 auto; }
+  [data-modul="personal"] .ressurs { padding: 4px 8px; font-size: 0.82rem; gap: 0 5px; }
+  [data-modul="personal"] .ressurs-tid { font-size: 0.72rem; }
+  [data-modul="personal"] .kort.mangler-vikar { padding: 10px 12px; }
+  [data-modul="personal"] .kort.mangler-vikar h2 { margin: 0 0 2px; font-size: 0.9rem; }
+  [data-modul="personal"] .kort.mangler-vikar li { padding: 6px 0; font-size: 0.88rem; gap: 4px 10px; }
+  [data-modul="personal"] .kort.mangler-vikar li > button { min-height: 30px; padding: 3px 10px; font-size: 0.82rem; }
+  [data-modul="personal"] .borte-i-dag li { padding: 6px 0; font-size: 0.88rem; }
+
+  /* Bemanningskalenderen: forklaringen i «Forklaring», som er lukket */
+  .bm-forklaring-boks { margin: 0 0 8px; }
+  .bm-forklaring-boks > summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--tekst-2); padding: 2px 0 6px; }
+  .bm-forklaring-boks[open] > summary { margin-bottom: 4px; }
+  .bm-forklaring-boks .bm-forklaring { margin-bottom: 8px; }
+  [data-modul="personal"] .bemanning td.bm-rute button { height: 30px; }
+  [data-modul="personal"] .bemanning th.bm-dag button.lenke { font-size: 0.82rem; }
+  [data-modul="personal"] .bemanning td.bm-sum { font-size: 0.85rem; }
+
+  /* Dialogene */
+  [data-modul="personal"] .dialog-topp { padding: 10px 14px; }
+  [data-modul="personal"] .dialog-topp h2 { font-size: 1rem; margin: 0; }
+  [data-modul="personal"] .dialog-innhold { padding: 12px 14px calc(16px + env(safe-area-inset-bottom)); }
+  [data-modul="personal"] .rad { gap: 0 8px; }
+}

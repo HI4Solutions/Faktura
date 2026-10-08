@@ -858,19 +858,22 @@ function Ukeoversikt({
         <div className="kort liste">
           {rader.map(({ a, u, overtid }) => (
             <button key={a.id} type="button" className="liste-rad" onClick={() => apne(a.id)}>
+              {/* Uten timer: én linje. */}
               <span className="linje">
                 <span className="tittel">
                   {a.fornavn} {a.etternavn}
                 </span>
-                <span className="belop">{timer(u?.sum ?? 0)}</span>
+                {u ? <span className="belop">{timer(u.sum)}</span> : <span className="under">Ingen timer</span>}
               </span>
-              <span className="linje">
-                <span className="under">
-                  {overtid > 0 ? `Overtid ${timer(overtid)}` : u ? antallForinger(u.antall) : "Ingen timer"}
-                  {u?.merarbeid ? ` · merarbeid ${timer(u.merarbeid)}` : ""}
+              {u && (
+                <span className="linje">
+                  <span className="under">
+                    {overtid > 0 ? `Overtid ${timer(overtid)}` : antallForinger(u.antall)}
+                    {u.merarbeid ? ` · merarbeid ${timer(u.merarbeid)}` : ""}
+                  </span>
+                  {merke(u)}
                 </span>
-                {u && merke(u)}
-              </span>
+              )}
             </button>
           ))}
           {!rader.length && <p className="dempet ingen-enna" style={{ padding: 16 }}>Ingen ansatte i jobb denne uka.</p>}

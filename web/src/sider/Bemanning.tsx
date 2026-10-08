@@ -8,7 +8,7 @@
 // rapporten over ekstratimene (PDF og CSV) under «Ekstratimer».
 import { useEffect, useState, type CSSProperties } from "react";
 import { api, hent, lastNed } from "../api";
-import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
+import { Dialog, Feil, Laster, Tom, useData, useHandling, useSmal } from "../felles";
 import { kortNavn, RollerOppsett, type Rolle } from "./Roller";
 import { erAdmin, useKonto } from "../konto";
 import { dato as visDato, iDag, leggTilDager, leggTilMaaneder } from "../format";
@@ -68,6 +68,7 @@ export function Bemanning({
   tilTavle: (dato: string) => void;
   tilUke: (mandag: string) => void;
 }) {
+  const smal = useSmal();
   const { org } = useKonto();
   // Bare eier og administrator ser hva slags fravær det er; andre ser F (0047_fravaer_skjult.sql).
   const serType = erAdmin(org?.rolle);
@@ -269,6 +270,47 @@ export function Bemanning({
   const vikarForFast = (a: Ansatt, f: Fast) =>
     settVikar({ id: "", dato: f.dato, ...fastTider(f), oppgave: null, ansatt_id: a.id, ansatt_navn: `${a.fornavn} ${a.etternavn}` });
 
+  // Forklaringen av tegnene, og hvor tallene kommer fra (på mobil i «Forklaring», som er lukket).
+  const forklaring = (
+    <div className="bm-forklaring" aria-label="Forklaring">
+      <span>
+        <span className="bm-tegn">✓</span> På jobb
+      </span>
+      <span>
+        <span className="bm-tegn">–</span> Fri
+      </span>
+      {(serType ? FRAVAERTYPER : (["fravaer"] as const)).map((t) => (
+        <span key={t}>
+          <span className={`bm-tegn fravaer-${t}`}>{fravaerKode[t]}</span> {t === "annet" ? "Annet" : fravaerTekst[t]}
+        </span>
+      ))}
+      <span>
+        <span className="bm-tegn ekstra">2t</span> Ekstratimer
+      </span>
+      <span>
+        <span className={`bm-tegn uten-vikar fravaer-${serType ? "syk" : "fravaer"}`}>{serType ? "S" : "F"}</span> Vakten mangler vikar
+      </span>
+      {harUtkast && (
+        <span>
+          <span className="bm-tegn utkast">✓</span> Ikke publisert
+        </span>
+      )}
+      {helligdager.length > 0 && (
+        <span className="bm-helligdager">
+          <span className="bm-tegn helligdag">{Number(helligdager[0]!.slice(8))}</span> Helligdag:{" "}
+          {helligdager.map((d) => `${helligdag(d)} (${Number(d.slice(8))}.)`).join(", ")}
+        </span>
+      )}
+    </div>
+  );
+  const forklaringTekst = (
+    <p className="liten dempet">
+      På jobb kommer fra de faste arbeidsdagene til de ansatte (under Ansatte) og vaktplanen; en vakt gjelder i stedet for den faste dagen. Ekstratimer er timene utover den
+      faste planen den dagen (uten fast plan: utover avtalt arbeidstid i uka, og alle timene for tilkallingsvikarer). Trykk på en dag for tavla, eller på en rute for å
+      registrere fravær og sette inn vikar.
+    </p>
+  );
+
   return (
     <>
       {verktoy}
@@ -293,36 +335,15 @@ export function Bemanning({
         </div>
       ) : (
         <>
-          <div className="bm-forklaring" aria-label="Forklaring">
-            <span>
-              <span className="bm-tegn">✓</span> På jobb
-            </span>
-            <span>
-              <span className="bm-tegn">–</span> Fri
-            </span>
-            {(serType ? FRAVAERTYPER : (["fravaer"] as const)).map((t) => (
-              <span key={t}>
-                <span className={`bm-tegn fravaer-${t}`}>{fravaerKode[t]}</span> {t === "annet" ? "Annet" : fravaerTekst[t]}
-              </span>
-            ))}
-            <span>
-              <span className="bm-tegn ekstra">2t</span> Ekstratimer
-            </span>
-            <span>
-              <span className={`bm-tegn uten-vikar fravaer-${serType ? "syk" : "fravaer"}`}>{serType ? "S" : "F"}</span> Vakten mangler vikar
-            </span>
-            {harUtkast && (
-              <span>
-                <span className="bm-tegn utkast">✓</span> Ikke publisert
-              </span>
-            )}
-            {helligdager.length > 0 && (
-              <span className="bm-helligdager">
-                <span className="bm-tegn helligdag">{Number(helligdager[0]!.slice(8))}</span> Helligdag:{" "}
-                {helligdager.map((d) => `${helligdag(d)} (${Number(d.slice(8))}.)`).join(", ")}
-              </span>
-            )}
-          </div>
+          {smal ? (
+            <details className="bm-forklaring-boks">
+              <summary>Forklaring</summary>
+              {forklaring}
+              {forklaringTekst}
+            </details>
+          ) : (
+            forklaring
+          )}
           <div className="kort bemanning-ramme">
             <table className="bemanning">
               <thead>
@@ -468,11 +489,7 @@ export function Bemanning({
               </tfoot>
             </table>
           </div>
-          <p className="liten dempet">
-            På jobb kommer fra de faste arbeidsdagene til de ansatte (under Ansatte) og vaktplanen; en vakt gjelder i stedet for den faste dagen. Ekstratimer er timene utover
-            den faste planen den dagen (uten fast plan: utover avtalt arbeidstid i uka, og alle timene for tilkallingsvikarer). Trykk på en dag for tavla, eller på en rute
-            for å registrere fravær og sette inn vikar.
-          </p>
+          {!smal && forklaringTekst}
         </>
       )}
 

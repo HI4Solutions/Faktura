@@ -320,6 +320,13 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med engelsk språk, der nettleserens eget klokkeslettfelt ville vist AM og PM. Feltet
   (`Klokkeslett` i `web/src/uke.tsx`) tar også «730», «7.30» og «1530» og retter dem til 07:30
   og 15:30
+- Personalmodulen på mobil (Ansatte, Vaktplan, Timer og Ferie; `main[data-modul="personal"]` i
+  `web/src/styles.css`) er tettere enn resten av appen, så det blir mindre å rulle: mindre knapper,
+  felt og rader (fortsatt 16 px tekst i feltene, så iPhone ikke zoomer), vaktplanen én dag om
+  gangen med en dagvelger (ukedagene med hvor mange som er på jobb, og «!» når en vakt mangler
+  vikar; samme ukedag når uka byttes), navnene på tavla ved siden av hverandre under oppgaven,
+  forklaringen i bemanningskalenderen i «Forklaring», og bunnmenyen med personaldelen (Ansatte,
+  Vaktplan og Timer) der. PC og fakturadelen er som før
 - `ansattgrupper` og `ansatte.gruppe_id`: rollene (i appen «Roller»; f.eks. lege og sekretær),
   med hvor mange som trengs på jobb per dag, om de med rollen er ansatt (`ikke_ansatt`), og om
   de er med på tavla (`tavle`, se over).

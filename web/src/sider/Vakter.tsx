@@ -156,7 +156,7 @@ export function Vakter() {
 
   return (
     <>
-      <div className="topp">
+      <div className={faner.length > 1 ? "topp med-faner" : "topp"}>
         <h1>{TITLER[fane] ?? "Vakter"}</h1>
       </div>
       {faner.length > 1 && (
@@ -198,6 +198,8 @@ export function Vakter() {
 
 // --- Planen (eier, administrator og regnskap) -----------------------------------------
 
+const DAGNAVN = ["Ma", "Ti", "On", "To", "Fr", "Lø", "Sø"];
+
 function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string; velgUke: (mandag: string) => void; kanPlanlegge: boolean; versjon: number; endret: () => void }) {
   const { org } = useKonto();
   const til = leggTilDager(uke, 6);
@@ -212,8 +214,12 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
   const [melding, settMelding] = useState<string | null>(null);
   const h = useHandling();
   const smal = useSmal(1099);
+  // Mobil: én dag om gangen, valgt i en stripe med ukedagene (samme ukedag når uka byttes).
+  const mobil = useSmal();
+  const [ukedag, settUkedag] = useState<number | null>(null);
   const dager = ukedager(uke);
   const nr = ukenr(uke).uke;
+  const valgtDag = dager[ukedag ?? Math.max(0, dager.indexOf(iDag()))]!;
   // Ny uke: ikke vis meldingen eller feilen fra den forrige.
   useEffect(() => {
     settMelding(null);
@@ -252,7 +258,11 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
               Publiser ({data.upubliserte})
             </button>
           )}
-          <button type="button" className={data.upubliserte > 0 ? undefined : "primar"} onClick={() => settApen({ dato: dager.includes(iDag()) ? iDag() : uke })}>
+          <button
+            type="button"
+            className={data.upubliserte > 0 ? undefined : "primar"}
+            onClick={() => settApen({ dato: mobil ? valgtDag : dager.includes(iDag()) ? iDag() : uke })}
+          >
             <IkonPluss storrelse={18} /> Ny vakt
           </button>
         </div>
@@ -381,6 +391,48 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
     );
   };
 
+  // En dag i lista (nettbrett og mobil): hvem som er borte, og vaktene og de faste dagene.
+  const dagen = (d: string) => {
+    const dagens = data.vakter.filter((v) => v.dato === d);
+    const faste = alleFaste.filter((f) => f.dato === d);
+    const borte = data.fravaer.filter((f) => f.fra <= d && f.til >= d);
+    const mangler = manglerVikar(d);
+    return (
+      <section key={d} className={`dag${d === iDag() ? " i-dag" : ""}${helligdag(d) ? " helligdag" : ""}`} aria-label={visDag(d)}>
+        <div className="dag-topp">
+          <span className="dag-navn">
+            {visDag(d)}
+            {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
+          </span>
+          {dagens.length + faste.length > 0 && <span className="dag-sum">{paJobb(d)} på jobb</span>}
+          {kanPlanlegge && (
+            <button type="button" className="kopier" aria-label={`Ny vakt ${visDag(d)}`} title="Ny vakt" onClick={() => nyVakt(d, null)}>
+              <IkonPluss storrelse={18} />
+            </button>
+          )}
+        </div>
+        {(borte.length > 0 || mangler > 0) && (
+          <div className="dag-fravaer">
+            {mangler > 0 && <span className="merke merke-fare">{mangler} mangler vikar</span>}
+            {borte.map((f) => (
+              <span key={f.id} className={`merke ${fravaerKlasse[f.type]}`}>
+                {fornavn(f.ansatt_navn)}: {fravaerTekst[f.type].toLowerCase()}
+              </span>
+            ))}
+          </div>
+        )}
+        {dagens.length + faste.length > 0 ? (
+          <div className="vakt-rad">
+            {dagens.map((v) => chip(v, true))}
+            {faste.map((f) => fastChip(f, true))}
+          </div>
+        ) : (
+          mobil && <p className="dempet liten ingen-vakter">Ingen vakter denne dagen.</p>
+        )}
+      </section>
+    );
+  };
+
   return (
     <>
       {verktoy}
@@ -419,46 +471,33 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
           </Tom>
         </div>
       ) : smal ? (
-        <div className="kort liste uke-dager vaktdager">
-          {dager.map((d) => {
-            const dagens = data.vakter.filter((v) => v.dato === d);
-            const faste = alleFaste.filter((f) => f.dato === d);
-            const borte = data.fravaer.filter((f) => f.fra <= d && f.til >= d);
-            const mangler = manglerVikar(d);
-            return (
-              <section key={d} className={`dag${d === iDag() ? " i-dag" : ""}${helligdag(d) ? " helligdag" : ""}`} aria-label={visDag(d)}>
-                <div className="dag-topp">
-                  <span className="dag-navn">
-                    {visDag(d)}
-                    {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
-                  </span>
-                  {dagens.length + faste.length > 0 && <span className="dag-sum">{paJobb(d)} på jobb</span>}
-                  {kanPlanlegge && (
-                    <button type="button" className="kopier" aria-label={`Ny vakt ${visDag(d)}`} title="Ny vakt" onClick={() => nyVakt(d, null)}>
-                      <IkonPluss storrelse={18} />
-                    </button>
-                  )}
-                </div>
-                {(borte.length > 0 || mangler > 0) && (
-                  <div className="dag-fravaer">
-                    {mangler > 0 && <span className="merke merke-fare">{mangler} mangler vikar</span>}
-                    {borte.map((f) => (
-                      <span key={f.id} className={`merke ${fravaerKlasse[f.type]}`}>
-                        {fornavn(f.ansatt_navn)}: {fravaerTekst[f.type].toLowerCase()}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {dagens.length + faste.length > 0 && (
-                  <div className="vakt-rad">
-                    {dagens.map((v) => chip(v, true))}
-                    {faste.map((f) => fastChip(f, true))}
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </div>
+        <>
+          {mobil && (
+            <div className="dagvelger" role="tablist" aria-label="Dag">
+              {dager.map((d, i) => {
+                const n = paJobb(d);
+                const mangler = manglerVikar(d) > 0;
+                const utkast = data.vakter.some((v) => v.dato === d && !v.publisert);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    role="tab"
+                    aria-selected={d === valgtDag}
+                    aria-label={`${visDag(d)}: ${n} på jobb${mangler ? ", mangler vikar" : ""}${utkast ? ", ikke publisert" : ""}`}
+                    className={[d === valgtDag ? "valgt" : "", d === iDag() ? "i-dag" : "", helligdag(d) ? "helligdag" : "", utkast ? "utkast" : ""].filter(Boolean).join(" ") || undefined}
+                    onClick={() => settUkedag(i)}
+                  >
+                    <span className="dv-dag">{DAGNAVN[i]}</span>
+                    <span className="dv-dato">{Number(d.slice(8))}</span>
+                    <span className={`dv-antall${mangler ? " varsel" : ""}`}>{mangler ? "!" : n || "–"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="kort liste uke-dager vaktdager">{(mobil ? [valgtDag] : dager).map(dagen)}</div>
+        </>
       ) : (
         <div className="kort tabell vaktplan">
           <table>

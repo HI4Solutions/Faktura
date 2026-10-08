@@ -169,6 +169,10 @@ function Ramme() {
   const visVakter = harFunksjon(org, "vaktplan");
   // Feriebanken: eier og administrator ser alle, den ansatte seg selv (regnskap ser den ikke).
   const visFerie = visVakter && !!org?.personal && (ansatt || erAdmin(org.rolle));
+  // Personalmodulen (Ansatte, Vaktplan, Timer og Ferie): tettere på mobil (styles.css), og
+  // bunnmenyen viser personaldelen i stedet for fakturadelen der.
+  const iPersonal = /^\/(ansatte|vakter|timer|ferie)(\/|$)/.test(sted.pathname);
+  const personalmeny = !ansatt && iPersonal && (visAnsatte || visTimer);
 
   if (ny || orgs.length === 0) {
     return (
@@ -231,7 +235,29 @@ function Ramme() {
             <span>{org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}</span>
           </NavLink>
         )}
-        {!ansatt && org?.type !== "regnskapsbyraa" && (
+        {personalmeny && (
+          <>
+            {visAnsatte && (
+              <NavLink to="/ansatte">
+                <IkonAnsatte storrelse={22} />
+                <span>Ansatte</span>
+              </NavLink>
+            )}
+            {visTimer && visVakter && (
+              <NavLink to="/vakter">
+                <IkonKalender storrelse={22} />
+                <span>Vaktplan</span>
+              </NavLink>
+            )}
+            {visTimer && (
+              <NavLink to="/timer">
+                <IkonKlokke storrelse={22} />
+                <span>Timer</span>
+              </NavLink>
+            )}
+          </>
+        )}
+        {!ansatt && !personalmeny && org?.type !== "regnskapsbyraa" && (
           <>
             <NavLink to="/fakturaer" end={false} className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
               <IkonFaktura storrelse={22} />
@@ -411,7 +437,7 @@ function Ramme() {
           </button>
         </div>
       </nav>
-      <main className="innhold">
+      <main className="innhold" data-modul={iPersonal ? "personal" : undefined}>
         {org && ansatt && (
           <Routes>
             <Route path="/timer" element={<Timer />} />
