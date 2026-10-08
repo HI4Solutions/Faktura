@@ -29,6 +29,7 @@ import { vaktRuter } from "./vakter.js";
 import { tavleRuter } from "./tavle.js";
 import { fravaerRuter } from "./fravaer.js";
 import { bemanningRuter } from "./bemanning.js";
+import { arbeidsplanRuter } from "./arbeidsplan.js";
 import { aiPaa } from "./ai.js";
 
 const uuid = z.string().uuid();
@@ -350,6 +351,7 @@ export function lagApi() {
   org.route("/", tavleRuter());
   org.route("/", fravaerRuter());
   org.route("/", bemanningRuter());
+  org.route("/", arbeidsplanRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting

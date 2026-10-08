@@ -14,10 +14,12 @@ import { iDag, leggTilDager } from "../format";
 import { IkonHoyre, IkonInnstillinger, IkonKopier, IkonNed, IkonOpp, IkonPluss, IkonTavle, IkonVarsel, IkonVenstre } from "../ikoner";
 import { mandag, middag, ukenr, visDag } from "../uke";
 import { borteTekst, fravaerKlasse, fravaerPeriode, fravaerTekst, VikarSkjema, type Ansatt, type FravaerType } from "./Fravaer";
+import { fastTider } from "./Arbeidsplan";
 
 type Fase = { id: string; navn: string; fra: string | null; til: string | null };
 type Oppgave = { id: string; navn: string; behov: number | null };
-type TavleVakt = { id: string; fra: string; til: string; oppgave: string | null; vikar: boolean; publisert: boolean };
+// En fast arbeidsdag fra arbeidsplanen står som en vakt med fast: true (en hel dag uten klokkeslett).
+type TavleVakt = { id: string; fra: string | null; til: string | null; oppgave: string | null; vikar: boolean; publisert: boolean; fast?: boolean; timer?: number };
 type Ressurs = { ansatt_id: string; navn: string; fravaer: FravaerType | null; vakter: TavleVakt[] };
 type Plassering = { fase_id: string; oppgave_id: string; ansatt_id: string };
 type Behov = { fase_id: string; oppgave_id: string; antall: number };
@@ -34,9 +36,10 @@ type TavleSvar = {
 };
 
 const minutter = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
-// Vakten overlapper fasen (begge kan gå over midnatt). En fase uten tidsrom gjelder hele dagen.
-export function iFasen(v: { fra: string; til: string }, f: Fase) {
-  if (!f.fra || !f.til) return true;
+// Vakten overlapper fasen (begge kan gå over midnatt). En fase uten tidsrom gjelder hele dagen,
+// og en fast hel dag (uten klokkeslett) hører til alle fasene.
+export function iFasen(v: { fra: string | null; til: string | null }, f: Fase) {
+  if (!f.fra || !f.til || !v.fra || !v.til) return true;
   const vf = minutter(v.fra);
   const ff = minutter(f.fra);
   const vt = minutter(v.til) + (minutter(v.til) <= vf ? 1440 : 0);
@@ -45,7 +48,8 @@ export function iFasen(v: { fra: string; til: string }, f: Fase) {
 }
 // «07–15» eller «07:30–15»
 const kortTid = (s: string) => (s.endsWith(":00") ? s.slice(0, 2) : s);
-const tidKort = (v: { fra: string; til: string }) => `${kortTid(v.fra)}–${kortTid(v.til)}`;
+const tidKort = (v: { fra: string | null; til: string | null }) => (v.fra && v.til ? `${kortTid(v.fra)}–${kortTid(v.til)}` : "hel dag");
+const vaktTid = (v: { fra: string | null; til: string | null }) => (v.fra && v.til ? `${v.fra}–${v.til}` : "hel dag");
 const fasetid = (f: Fase) => (f.fra && f.til ? `${f.fra}–${f.til}` : "Hele dagen");
 // Hvor mange som trengs i oppgaven i fasen: satt for fasen, ellers på oppgaven (null: ikke satt).
 const trengs = (behov: Behov[], fase: string, o: Oppgave) => behov.find((b) => b.fase_id === fase && b.oppgave_id === o.id)?.antall ?? o.behov;
@@ -388,7 +392,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
       )}
       {!data.ressurser.length && (
         <div className="melding info venter">
-          <span>Ingen har vakt {dato === iDag() ? "i dag" : "denne dagen"}. Ressursene på tavla hentes fra vaktplanen.</span>
+          <span>Ingen har vakt {dato === iDag() ? "i dag" : "denne dagen"}. Ressursene på tavla hentes fra vaktplanen og de faste arbeidsdagene.</span>
           <Link to={`/vakter?fane=plan&uke=${mandag(dato)}`}>Åpne vaktplanen</Link>
         </div>
       )}
@@ -440,7 +444,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
         </div>
       )}
       <p className="liten dempet">
-        Hvem som hører til en fase, avgjøres av vakten i vaktplanen. Stiplet kant: vakten er ikke publisert, eller den ansatte har ikke vakt i fasen.
+        Hvem som hører til en fase, avgjøres av vakten i vaktplanen eller den faste arbeidsdagen (en hel dag hører til alle fasene). Stiplet kant: vakten er ikke publisert, eller den ansatte har ikke vakt i fasen.
       </p>
       {oppsettDialog}
       <Dialog apen={kopierer} lukk={() => settKopierer(false)} tittel={`Kopier plasser til ${visDag(dato).toLowerCase()}`}>
@@ -481,7 +485,8 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
             vakt={{ id: vikar.vakt_id, dato, fra: vikar.fra, til: vikar.til, oppgave: vikar.oppgave, ansatt_id: vikar.ansatt_id, ansatt_navn: vikar.navn }}
             ansatte={ansatte.data ?? []}
             fravaer={data.fravaer}
-            opptatt={new Map(data.ressurser.map((r) => [r.ansatt_id, r.vakter.map((x) => `${x.fra}–${x.til}`).join(", ")]))}
+            opptatt={new Map(data.ressurser.filter((r) => !r.fravaer).map((r) => [r.ansatt_id, r.vakter.map(vaktTid).join(", ")]))}
+            hentVaktId={async () => (await api<{ id: string }>("POST", `/org/${org!.id}/vakter/fra-plan`, { ansatt_id: vikar.ansatt_id, dato })).id}
             ferdig={(m) => {
               settVikar(null);
               settMelding(m);
@@ -519,22 +524,26 @@ function Flytt({
   const na = data.plasseringer.find((p) => p.fase_id === fase.id && p.ansatt_id === ansatt)?.oppgave_id ?? null;
   const mangler = data.mangler_vikar.find((m) => m.ansatt_id === ansatt);
   const faser = alle ? [fase.id, ...andre.map((x) => x.id)] : [fase.id];
-  const vakter = (r?.vakter ?? []).map((v) => `${v.fra}–${v.til}`).join(", ");
+  const vakter = (r?.vakter ?? []).map(vaktTid).join(", ");
+  // En fast arbeidsdag (uten vakt) den ansatte er borte fra: vikaren får en vakt etter planen.
+  const fast = r?.fravaer ? r.vakter.find((v) => v.fast) : undefined;
+  const vikarFast: ManglerVikar | undefined =
+    fast && r?.fravaer ? { vakt_id: "", ansatt_id: r.ansatt_id, navn: r.navn, ...fastTider({ fra: fast.fra, til: fast.til, timer: fast.timer ?? 0 }), oppgave: null, type: r.fravaer } : undefined;
 
   return (
     <div className="flytt">
       <p className="dempet" style={{ marginTop: 0 }}>
-        {fase.navn} ({fasetid(fase).toLowerCase()}){vakter ? ` · vakt ${vakter}` : " · ingen vakt denne dagen"}
+        {fase.navn} ({fasetid(fase).toLowerCase()}){vakter ? ` · ${r?.vakter.some((v) => v.fast) ? "fast arbeidsdag" : "vakt"} ${vakter}` : " · ingen vakt denne dagen"}
       </p>
       {r?.fravaer ? (
         <>
           <div className="melding feil">
             {navn} {borteTekst[r.fravaer]} denne dagen, og plassen teller ikke.{" "}
-            {mangler ? "Vakten mangler vikar." : "Vikar er satt inn."}
+            {vikarFast ? "Det er en fast arbeidsdag." : mangler ? "Vakten mangler vikar." : "Vikar er satt inn."}
           </div>
           <div className="knapper">
-            {mangler && (
-              <button type="button" className="primar" onClick={() => settInnVikar(mangler)}>
+            {(mangler ?? vikarFast) && (
+              <button type="button" className="primar" onClick={() => settInnVikar((mangler ?? vikarFast)!)}>
                 Sett inn vikar
               </button>
             )}

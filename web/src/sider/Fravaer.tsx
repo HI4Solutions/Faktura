@@ -156,6 +156,7 @@ export function VikarSkjema({
   ansatte,
   fravaer,
   opptatt,
+  hentVaktId,
   ferdig,
   avbryt,
 }: {
@@ -163,6 +164,8 @@ export function VikarSkjema({
   ansatte: Ansatt[];
   fravaer: Pick<Fravaer, "ansatt_id" | "fra" | "til" | "type">[];
   opptatt?: Map<string, string>; // ansatte som har vakt samme dag: id → tid
+  // For en fast arbeidsdag uten vakt: lager vakten (fra planen) når vikaren settes inn.
+  hentVaktId?: () => Promise<string>;
   ferdig: (melding: string) => void;
   avbryt: () => void;
 }) {
@@ -195,7 +198,8 @@ export function VikarSkjema({
         ansatt = a.id;
       }
       if (!ansatt) throw new Error("Velg en vikar");
-      return api("POST", `/org/${org!.id}/vakter/${vakt.id}/vikar`, { ansatt_id: ansatt, publiser });
+      const id = vakt.id || (await hentVaktId!());
+      return api("POST", `/org/${org!.id}/vakter/${id}/vikar`, { ansatt_id: ansatt, publiser });
     });
     if (r) ferdig(`${r.ansatt_navn} er satt inn som vikar ${visDag(vakt.dato)} ${vakt.fra}–${vakt.til}.${publiser ? " Vikaren har fått beskjed." : ""}`);
   }

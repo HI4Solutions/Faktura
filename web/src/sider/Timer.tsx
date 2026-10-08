@@ -13,6 +13,7 @@ import { dato, iDag, leggTilDager } from "../format";
 import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
 import { gyldigDato, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import type { VaktSvar } from "./Vakter";
+import { fastTid } from "./Arbeidsplan";
 import { fravaerKlasse, fravaerTekst } from "./Fravaer";
 
 type Status = "utkast" | "levert" | "godkjent" | "avvist";
@@ -252,9 +253,12 @@ function Ukeside({
   const { data, feil } = useData(() => hent<TimerSvar>(`/org/${org!.id}/timer?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
   const vaktsvar = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
   const vakter = (vaktsvar.data?.vakter ?? []).filter((v) => v.publisert);
-  // Vakter den ansatte er borte fra, er ikke planlagt arbeid.
+  // De faste arbeidsdagene etter arbeidsplanen (dager uten vakt).
+  const faste = (vaktsvar.data?.faste ?? []).filter((f) => f.ansatt_id === ansattId);
+  // Vakter og faste dager den ansatte er borte fra, er ikke planlagt arbeid.
   const iArbeid = vakter.filter((v) => !v.fravaer);
-  const planlagt = iArbeid.reduce((s, v) => s + Number(v.timer), 0);
+  const fasteIArbeid = faste.filter((f) => !f.fravaer);
+  const planlagt = [...iArbeid, ...fasteIArbeid].reduce((s, v) => s + Number(v.timer), 0);
   const fravaer = vaktsvar.data?.fravaer ?? [];
   const [apen, settApen] = useState<Partial<Foring> | null>(null);
   const [avviser, settAvviser] = useState(false);
@@ -343,9 +347,16 @@ function Ukeside({
             <h2>Uke {nr}</h2>
             <strong>{timer(sum?.sum ?? 0)}</strong>
           </div>
-          {iArbeid.length > 0 && (
+          {iArbeid.length + fasteIArbeid.length > 0 && (
             <p className="liten dempet planlagt">
-              Planlagt i vaktplanen: {timer(planlagt)} ({iArbeid.length} {iArbeid.length === 1 ? "vakt" : "vakter"})
+              Planlagt: {timer(Math.round(planlagt * 100) / 100)} (
+              {[
+                iArbeid.length ? `${iArbeid.length} ${iArbeid.length === 1 ? "vakt" : "vakter"}` : "",
+                fasteIArbeid.length ? `${fasteIArbeid.length} ${fasteIArbeid.length === 1 ? "fast dag" : "faste dager"}` : "",
+              ]
+                .filter(Boolean)
+                .join(" og ")}
+              )
             </p>
           )}
           <Summer u={sum} />
@@ -417,6 +428,34 @@ function Ukeside({
                       </div>
                     );
                   })}
+                {faste
+                  .filter((x) => x.dato === d)
+                  .map((x) => (
+                    // Fast arbeidsdag: timene føres etter planen (klokkeslettene, eller antall timer
+                    // for en hel dag), med mindre noe allerede er ført den dagen.
+                    <div key={`fast-${d}`} className="vakt-linje">
+                      <span>
+                        <span className="vakt-merke">Fast</span> {fastTid(x)}
+                        {!x.fra && <span className="dempet"> · {timer(x.timer)}</span>}
+                      </span>
+                      {dagens.length > 0 ? (
+                        <span className="merke merke-ok">Ført</span>
+                      ) : (
+                        kanFore &&
+                        ansattDag(d) &&
+                        d <= iDagIso &&
+                        !borte && (
+                          <button
+                            type="button"
+                            className="lenke"
+                            onClick={() => settApen(x.fra && x.til ? { dato: d, fra: x.fra, til: x.til, pause_min: x.pause_min } : { dato: d, timer: x.timer })}
+                          >
+                            Før timer
+                          </button>
+                        )
+                      )}
+                    </div>
+                  ))}
                 {dagens.map((f) => (
                   <button key={f.id} type="button" className="foring" onClick={() => settApen(f)}>
                     <span className="linje">
@@ -495,15 +534,16 @@ function ForingSkjema({
 }) {
   const { org } = useKonto();
   const [f, settF] = useState(() => {
-    // Ny føring: tidene fra vakten den føres fra, ellers fra forrige føring.
-    const sist = foring.id || foring.fra ? null : lesSist();
+    // Ny føring: tidene fra vakten eller den faste dagen den føres fra (en hel fast dag som
+    // antall timer), ellers fra forrige føring.
+    const sist = foring.id || foring.fra || foring.timer != null ? null : lesSist();
     return {
       dato: foring.dato ?? iDag(),
-      modus: foring.id ? (foring.fra ? "tid" : "timer") : (sist?.modus ?? "tid"),
+      modus: foring.fra ? "tid" : foring.id || foring.timer != null ? "timer" : (sist?.modus ?? "tid"),
       fra: foring.fra ?? sist?.fra ?? "",
       til: foring.til ?? sist?.til ?? "",
       pause: String(foring.pause_min ?? sist?.pause_min ?? 0),
-      timer: foring.id && !foring.fra ? tallformat.format(Number(foring.timer)) : "",
+      timer: !foring.fra && foring.timer != null ? tallformat.format(Number(foring.timer)) : "",
       overtid: !!foring.overtid_prosent,
       prosent: String(foring.overtid_prosent ?? regler.overtid_prosent),
       beskrivelse: foring.beskrivelse ?? "",

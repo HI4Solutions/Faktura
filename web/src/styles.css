@@ -1302,6 +1302,10 @@ button.lenke.fare:hover:not(:disabled) { background: none; }
 @media (max-width: 700px) {
   .uke-verktoy { gap: 10px; }
   .uke-verktoy > button.primar { flex: 1 1 100%; justify-content: center; }
+  /* Bemanningskalenderen: to knapper på første linje, «Registrer fravær» under */
+  .knapper.bm-knapper { width: 100%; }
+  .knapper.bm-knapper > button { flex: 1 1 40%; justify-content: center; }
+  .knapper.bm-knapper > button.primar { flex-basis: 100%; }
   .ukevelger { width: 100%; justify-content: space-between; }
   .ukevelger .uke-navn { flex: 1; }
   /* Delene av summen på én linje under totalen */
@@ -1398,6 +1402,17 @@ button.vakt-chip.mangler { border-left-color: var(--fare); }
 .vaktplan tfoot td { padding: 8px 4px; background: var(--flate-2); border-top: 1px solid var(--kant-sterk); border-bottom: 0; font-size: 0.82rem; vertical-align: top; }
 .vaktplan tfoot td:first-child { padding-top: 8px; font-weight: 600; }
 .vaktplan tfoot strong { font-variant-numeric: tabular-nums; }
+/* Faste arbeidsdager (fra arbeidsplanen) i vaktplanen: som vakter, med «Fast» */
+.vakt-chip.fast {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; margin: 0 0 4px; padding: 4px 6px;
+  border: 1px solid var(--kant); border-left: 3px solid color-mix(in srgb, var(--aksent) 50%, var(--kant-sterk)); border-radius: 7px;
+  background: color-mix(in srgb, var(--aksent-lys) 45%, var(--flate)); color: var(--tekst); font-size: 0.78rem; font-weight: 600; line-height: 1.25; text-align: left;
+}
+.vakt-chip.fast:last-child { margin-bottom: 0; }
+.vakt-chip.fast .vakt-fast { color: var(--aksent); font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.vakt-chip.fast.borte { border-left-color: var(--dempet); background: var(--flate-2); }
+.vakt-chip.fast.borte .vakt-tid { text-decoration: line-through; color: var(--dempet); }
+.vaktdager .vakt-chip.fast { margin: 0; padding: 7px 9px; font-size: 0.86rem; }
 .mangler-tekst { display: block; color: var(--fare); font-weight: 600; font-size: 0.74rem; line-height: 1.3; }
 .dag-fravaer { display: flex; flex-wrap: wrap; gap: 4px 6px; padding: 0 12px 8px 16px; }
 .dag-fravaer .merke { font-size: 0.74rem; }
@@ -1412,6 +1427,36 @@ button.vakt-chip.mangler { border-left-color: var(--fare); }
 fieldset.ny-vikar { padding-bottom: 12px; }
 fieldset.ny-vikar legend { font-size: 0.83rem; font-weight: 600; color: var(--tekst-2); padding: 0 4px; }
 button.lenke.ny-vikar-lenke { display: inline-block; margin-top: 8px; font-size: 0.86rem; }
+
+/* Faste arbeidsdager i ansattskjemaet: ukedagene som knapper, og én rad per valgt dag */
+fieldset.arbeidsplan { padding: 12px 16px 6px; margin: 0 0 16px; }
+.arbeidsplan legend { font-size: 0.83rem; font-weight: 600; color: var(--tekst-2); padding: 0 4px; }
+.arbeidsplan .arbeidsplan-hjelp { margin: 0 0 10px; }
+.arbeidsdager { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.arbeidsdager button { min-width: 44px; min-height: 38px; justify-content: center; padding: 6px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.arbeidsdager button.valgt { background: var(--aksent); border-color: var(--aksent); color: var(--aksent-tekst); }
+.arbeidsdager button.valgt:hover:not(:disabled) { background: var(--aksent-hover); border-color: var(--aksent-hover); }
+.arbeidsdag-rad { display: grid; grid-template-columns: 82px auto minmax(0, 1fr) 58px; align-items: center; gap: 8px 12px; padding: 8px 0; border-top: 1px solid var(--kant); font-size: 0.9rem; }
+.arbeidsdag-navn { font-weight: 600; color: var(--tekst); }
+.arbeidsdag-rad label.arbeidsdag-hel { margin: 0; white-space: nowrap; }
+.arbeidsdag-tid { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.arbeidsdag-tid input { min-width: 0; padding: 7px 8px; }
+.arbeidsdag-tid input[type="time"] { flex: 1 1 104px; }
+.arbeidsdag-tid label.arbeidsdag-pause { display: inline-flex; flex: none; align-items: center; gap: 6px; margin: 0 0 0 4px; font-weight: 500; color: var(--dempet); white-space: nowrap; }
+.arbeidsdag-tid label.arbeidsdag-pause > input { width: 52px; margin: 0; text-align: right; }
+.arbeidsdag-timer { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tekst-2); white-space: nowrap; grid-column: 4; }
+.arbeidsplan-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 2px 0 10px; padding-top: 10px; border-top: 1px solid var(--kant); font-size: 0.9rem; font-variant-numeric: tabular-nums; color: var(--tekst-2); }
+.arbeidsplan-sum strong { color: var(--tekst); font-weight: 650; }
+.arbeidsplan-sum button.lenke { font-size: 0.88rem; }
+.arbeidsplan label.arbeidsplan-fra { max-width: 260px; }
+@media (max-width: 700px) {
+  /* Dagen og «Hel dag» på første linje, klokkeslettene under */
+  .arbeidsdag-rad { grid-template-columns: minmax(0, 1fr) auto 52px; }
+  .arbeidsdag-tid { grid-column: 1 / -1; grid-row: 2; }
+  .arbeidsdag-timer { grid-column: 3; grid-row: 1; }
+  .arbeidsdager { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .arbeidsdager button { min-width: 0; padding: 6px 0; }
+}
 
 /* --------------------------------------------------------------------------
    Tavle (ressursfordeling)
@@ -1650,12 +1695,39 @@ table.bemanning { width: max-content; min-width: 100%; border-collapse: separate
 .bemanning td.bm-rute.ekstra { background: var(--fv-ekstra-lys); }
 .bemanning td.bm-rute.ekstra button { color: var(--fv-ekstra); font-size: 0.76rem; font-weight: 700; }
 .bemanning td.bm-rute.utenfor { background: repeating-linear-gradient(135deg, var(--flate) 0 6px, var(--flate-2) 6px 8px); }
+/* Ekstratimene i måneden per ansatt: raden nederst står fast når tabellen rulles */
+.bemanning tfoot th, .bemanning tfoot td {
+  position: sticky; bottom: 0; z-index: 2; height: 34px; border-top: 2px solid var(--kant-sterk); border-bottom: 0;
+  background: var(--flate-2); color: var(--dempet); font-size: 0.76rem; font-weight: 650; font-variant-numeric: tabular-nums;
+}
+.bemanning tfoot th.bm-dag { z-index: 4; color: var(--tekst-2); font-size: 0.8rem; font-weight: 700; }
+.bemanning tfoot td.bm-sum { z-index: 3; font-size: 0.78rem; }
+.bemanning tfoot td.bm-fot-rute.forste { box-shadow: inset 2px 0 0 var(--g); }
+.bemanning tfoot td.bm-fot-rute.har { background: color-mix(in srgb, var(--fv-ekstra-lys) 75%, var(--flate-2)); color: var(--fv-ekstra); font-weight: 750; }
+.bemanning tfoot td.bm-sum.ekstra { color: var(--fv-ekstra); }
+.bm-detaljer .bm-ekstra-tekst { display: flex; align-items: center; gap: 8px; }
 .bm-detaljer .melding.bm-borte { margin-bottom: 12px; }
 .bm-detaljer .melding.bm-borte div { margin-top: 4px; }
 .bm-detaljer .liste-enkel { margin-bottom: 12px; }
 .bm-detaljer .liste-enkel li { flex-wrap: wrap; gap: 6px 12px; padding: 9px 0; }
 .bm-detaljer .liste-enkel li > button { flex: none; }
 .bm-ansattliste select { width: auto; min-width: 160px; max-width: 220px; flex: none; }
+/* Rapporten over ekstratimer */
+.ekstra-rapport .rad { max-width: 440px; }
+.knapper.ekstra-perioder { margin: -4px 0 14px; gap: 6px; }
+.ekstra-perioder button { padding: 5px 12px; font-size: 0.84rem; border-radius: 999px; }
+.ekstra-perioder button.valgt { background: var(--aksent-lys); border-color: var(--aksent); color: var(--aksent); }
+.tabell.ekstra-tabell { margin: 0 0 14px; border: 1px solid var(--kant); border-radius: var(--radius-s); max-height: min(52dvh, 440px); overflow: auto; }
+.ekstra-tabell tfoot td { position: sticky; bottom: 0; }
+.ekstra-tabell table { width: 100%; }
+.ekstra-tabell thead th { position: sticky; top: 0; z-index: 1; }
+.ekstra-tabell td { vertical-align: top; }
+.ekstra-tabell td.tall { white-space: nowrap; }
+.ekstra-navn { display: block; font-weight: 600; }
+.ekstra-under { display: block; font-size: 0.8rem; color: var(--tekst-2); }
+.ekstra-datoer { display: block; margin-top: 3px; font-size: 0.78rem; color: var(--dempet); white-space: normal; font-variant-numeric: tabular-nums; }
+.ekstra-tabell tfoot td { font-weight: 700; background: var(--flate-2); border-top: 1px solid var(--kant-sterk); border-bottom: 0; }
+.ekstra-tom { margin: 0 0 14px; padding: 14px 16px; border: 1px dashed var(--kant-sterk); border-radius: var(--radius-s); color: var(--tekst-2); }
 @media (max-width: 700px) {
   .kort.bemanning-ramme { --bm-sum-b: 48px; --bm-dag-b: 56px; max-height: 72dvh; }
   .bemanning th.bm-dag-hode, .bemanning th.bm-dag { padding: 0 6px; }

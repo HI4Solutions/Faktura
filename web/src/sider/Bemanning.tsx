@@ -1,17 +1,18 @@
 // Bemanningskalenderen: måneden med datoene nedover og de ansatte bortover, gruppe for
-// gruppe (f.eks. sekretærer og leger). Hver rute viser om den ansatte er på jobb (✓, fra
-// vaktplanen), har fri (–), er borte (F ferie, S syk, SB sykt barn, P permisjon, K kurs,
-// A annet) eller jobber ekstra (timene utover avtalt arbeidstid i uka). Til høyre står hvor
-// mange som er på jobb i hver gruppe mot behovet, så bemanningen kan ses opp mot hverandre.
-// Trykk på en rute for å registrere fravær eller sette inn vikar; grupper og behov settes
-// opp under «Grupper».
+// gruppe (f.eks. sekretærer og leger). Hver rute viser om den ansatte er på jobb (✓, fra den
+// faste arbeidsplanen eller vaktplanen), har fri (–), er borte (F ferie, S syk, SB sykt barn,
+// P permisjon, K kurs, A annet) eller jobber ekstra (timene utover planen). Til høyre står hvor
+// mange som er på jobb i hver gruppe mot behovet, så bemanningen kan ses opp mot hverandre, og
+// nederst ekstratimene i måneden per ansatt. Trykk på en rute for å registrere fravær eller
+// sette inn vikar; grupper og behov settes opp under «Grupper», og rapporten over ekstratimene
+// (PDF og CSV) under «Ekstratimer».
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import { api, hent } from "../api";
+import { api, hent, lastNed } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles";
 import { useKonto } from "../konto";
-import { iDag, leggTilDager, leggTilMaaneder } from "../format";
-import { IkonAnsatte, IkonHoyre, IkonNed, IkonOpp, IkonPluss, IkonVenstre } from "../ikoner";
-import { mandag, middag, tallformat, ukenr, visDag } from "../uke";
+import { dato as visDato, iDag, leggTilDager, leggTilMaaneder } from "../format";
+import { IkonAnsatte, IkonHoyre, IkonNed, IkonOpp, IkonPluss, IkonRapport, IkonVenstre } from "../ikoner";
+import { gyldigDato, mandag, middag, tallformat, timer, ukenr, visDag } from "../uke";
 import {
   FRAVAERTYPER,
   fravaerKlasse,
@@ -24,7 +25,8 @@ import {
   type Fravaer,
 } from "./Fravaer";
 import { visLangDag } from "./Tavle";
-import type { Vakt, VaktSvar } from "./Vakter";
+import { fastTid, fastTider } from "./Arbeidsplan";
+import type { Fast, Vakt, VaktSvar, VikarVakt } from "./Vakter";
 
 type Ansatt = Grunnansatt & {
   stilling: string | null;
@@ -37,8 +39,8 @@ type Gruppe = { id: string; navn: string; kort: string | null; behov: number | n
 type Seksjon = { id: string | null; navn: string; kort: string; behov: number | null; farge: number; ansatte: Ansatt[] };
 type Rute =
   | { art: "utenfor" }
-  | { art: "borte"; fravaer: Fravaer; vakter: Vakt[]; utenVikar: Vakt[] }
-  | { art: "jobb"; vakter: Vakt[]; ekstra: number; utkast: boolean }
+  | { art: "borte"; fravaer: Fravaer; vakter: Vakt[]; utenVikar: Vakt[]; fast: Fast | null }
+  | { art: "jobb"; vakter: Vakt[]; fast: Fast | null; ekstra: number; plan: boolean; utkast: boolean }
   | { art: "fri" };
 
 const maanedFormat = new Intl.DateTimeFormat("nb-NO", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -47,35 +49,10 @@ const FARGER = 5; // gruppefargene g0–g4 (g5 er for dem uten gruppe)
 export const gyldigMaaned = (s: string | null): s is string => !!s && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
 // «Sekretærer» blir «Sek.» i oppsummeringen, med mindre gruppen har en egen forkortelse.
 const kortNavn = (g: Pick<Gruppe, "navn" | "kort">) => g.kort || (g.navn.length > 5 ? `${g.navn.slice(0, 3)}.` : g.navn);
-const timerTekst = (t: number) => `${tallformat.format(Math.round(t * 100) / 100)}t`;
+const rund = (t: number) => Math.round(t * 100) / 100;
+const timerTekst = (t: number) => `${tallformat.format(rund(t))}t`;
 const punktum = (s: string) => (s.endsWith(".") ? s : `${s}.`);
-const avtalt = (a: Ansatt) => (a.ansettelsestype === "tilkalling" ? 0 : (Number(a.ukentlig_arbeidstid) * Number(a.stillingsprosent)) / 100);
-
-// Timene utover avtalt arbeidstid, per ansatt og dag: vaktene i hver uke legges sammen i
-// rekkefølge, og det som går over avtalt arbeidstid (alt for tilkallingsvikarer), er ekstra.
-// Vakter den ansatte er borte fra, teller ikke.
-function ekstraTimer(vakter: Vakt[], ansatte: Map<string, Ansatt>) {
-  const perUke = new Map<string, Vakt[]>();
-  for (const v of vakter) {
-    if (!v.ansatt_id || v.fravaer) continue;
-    const k = `${v.ansatt_id}|${mandag(v.dato)}`;
-    perUke.set(k, [...(perUke.get(k) ?? []), v]);
-  }
-  const ut = new Map<string, number>();
-  for (const [k, liste] of perUke) {
-    const a = ansatte.get(k.split("|")[0]!);
-    if (!a) continue;
-    const grense = avtalt(a);
-    let sum = 0;
-    for (const v of liste.sort((x, y) => x.dato.localeCompare(y.dato) || x.fra.localeCompare(y.fra))) {
-      const t = Number(v.timer);
-      const ekstra = Math.max(0, Math.min(t, sum + t - grense));
-      sum += t;
-      if (ekstra > 0.01) ut.set(`${v.ansatt_id}|${v.dato}`, (ut.get(`${v.ansatt_id}|${v.dato}`) ?? 0) + ekstra);
-    }
-  }
-  return ut;
-}
+const forstStor = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function Bemanning({
   maaned,
@@ -93,7 +70,7 @@ export function Bemanning({
   const { org } = useKonto();
   const forste = `${maaned}-01`;
   const siste = leggTilDager(leggTilMaaneder(forste, 1), -1);
-  // Hele uker, så ekstratimene i ukene i kantene av måneden regnes riktig.
+  // Hele uker, så ukene i kantene av måneden kommer med.
   const fra = mandag(forste);
   const til = leggTilDager(mandag(siste), 6);
   const [versjon, settVersjon] = useState(0);
@@ -103,8 +80,9 @@ export function Bemanning({
   const grupper = useData(() => hent<Gruppe[]>(`/org/${org!.id}/ansattgrupper`), [org?.id, oppsettVersjon]);
   const [rute, settRute] = useState<{ a: Ansatt; d: string } | null>(null);
   const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
-  const [vikar, settVikar] = useState<Vakt | null>(null);
+  const [vikar, settVikar] = useState<VikarVakt | null>(null);
   const [oppsett, settOppsett] = useState(false);
+  const [rapport, settRapport] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
   useEffect(() => settMelding(null), [maaned]);
   const endret = (m?: string) => {
@@ -121,7 +99,7 @@ export function Bemanning({
           <IkonVenstre storrelse={20} />
         </button>
         <div className="uke-navn" aria-live="polite">
-          <strong>{navn.charAt(0).toUpperCase() + navn.slice(1)}</strong>
+          <strong>{forstStor(navn)}</strong>
           <span>
             Uke {ukenr(fra).uke}–{ukenr(til).uke}
           </span>
@@ -135,17 +113,27 @@ export function Bemanning({
           </button>
         )}
       </div>
-      {kanEndre && (
-        <div className="knapper">
-          <button type="button" onClick={() => settOppsett(true)}>
-            <IkonAnsatte storrelse={17} /> Grupper
-          </button>
-          <button type="button" className="primar" onClick={() => settFravaer({ fra: iDag().startsWith(maaned) ? iDag() : forste, til: iDag().startsWith(maaned) ? iDag() : forste })}>
-            Registrer fravær
-          </button>
-        </div>
-      )}
+      <div className="knapper bm-knapper">
+        <button type="button" onClick={() => settRapport(true)}>
+          <IkonRapport storrelse={17} /> Ekstratimer
+        </button>
+        {kanEndre && (
+          <>
+            <button type="button" onClick={() => settOppsett(true)}>
+              <IkonAnsatte storrelse={17} /> Grupper
+            </button>
+            <button type="button" className="primar" onClick={() => settFravaer({ fra: iDag().startsWith(maaned) ? iDag() : forste, til: iDag().startsWith(maaned) ? iDag() : forste })}>
+              Registrer fravær
+            </button>
+          </>
+        )}
+      </div>
     </div>
+  );
+  const rapportDialog = (
+    <Dialog apen={rapport} lukk={() => settRapport(false)} tittel="Ekstratimer" bred>
+      {rapport && <EkstratimerRapport fra={forste} til={siste} lukk={() => settRapport(false)} />}
+    </Dialog>
   );
 
   const feilmelding = feil ?? ansatte.feil ?? grupper.feil;
@@ -154,6 +142,7 @@ export function Bemanning({
       <>
         {verktoy}
         <Feil melding={feilmelding} />
+        {rapportDialog}
       </>
     );
   if (!data || !ansatte.data || !grupper.data)
@@ -161,20 +150,23 @@ export function Bemanning({
       <>
         {verktoy}
         <Laster />
+        {rapportDialog}
       </>
     );
 
   // --- Utregningen -------------------------------------------------------------------------
-  const alle = new Map(ansatte.data.map((a) => [a.id, a]));
+  const nokkel = (a: string, d: string) => `${a}|${d}`;
   const vakterPer = new Map<string, Vakt[]>();
-  for (const v of data.vakter) if (v.ansatt_id) vakterPer.set(`${v.ansatt_id}|${v.dato}`, [...(vakterPer.get(`${v.ansatt_id}|${v.dato}`) ?? []), v]);
-  const ekstra = ekstraTimer(data.vakter, alle);
+  for (const v of data.vakter) if (v.ansatt_id) vakterPer.set(nokkel(v.ansatt_id, v.dato), [...(vakterPer.get(nokkel(v.ansatt_id, v.dato)) ?? []), v]);
+  // De faste arbeidsdagene (dager i arbeidsplanen uten vakt) og ekstratimene, fra serveren.
+  const fastePer = new Map((data.faste ?? []).map((f) => [nokkel(f.ansatt_id, f.dato), f]));
+  const ekstraPer = new Map((data.ekstra ?? []).map((e) => [nokkel(e.ansatt_id, e.dato), e]));
 
-  // Hverdagene, og helgedager med vakter.
+  // Hverdagene, og helgedager med vakter eller faste dager.
   const dager: string[] = [];
   for (let d = forste; d <= siste; d = leggTilDager(d, 1)) {
     const ukedag = middag(d).getUTCDay();
-    if ((ukedag !== 0 && ukedag !== 6) || data.vakter.some((v) => v.dato === d)) dager.push(d);
+    if ((ukedag !== 0 && ukedag !== 6) || data.vakter.some((v) => v.dato === d) || (data.faste ?? []).some((f) => f.dato === d)) dager.push(d);
   }
 
   // Kolonnene: de som er ansatt i måneden, og alle med vakter eller fravær i den.
@@ -201,18 +193,24 @@ export function Bemanning({
 
   const ruteFor = (a: Ansatt, d: string): Rute => {
     if (!(a.ansatt_fra <= d && (!a.ansatt_til || a.ansatt_til >= d))) return { art: "utenfor" };
-    const vakter = vakterPer.get(`${a.id}|${d}`) ?? [];
+    const vakter = vakterPer.get(nokkel(a.id, d)) ?? [];
+    const fast = fastePer.get(nokkel(a.id, d)) ?? null;
     const f = data.fravaer.find((x) => x.ansatt_id === a.id && x.fra <= d && x.til >= d);
-    if (f) return { art: "borte", fravaer: f, vakter, utenVikar: vakter.filter((v) => !v.har_vikar) };
-    if (vakter.length) return { art: "jobb", vakter, ekstra: ekstra.get(`${a.id}|${d}`) ?? 0, utkast: vakter.every((v) => !v.publisert) };
+    if (f) return { art: "borte", fravaer: f, vakter, utenVikar: vakter.filter((v) => !v.har_vikar), fast };
+    if (vakter.length || fast) {
+      const e = ekstraPer.get(nokkel(a.id, d));
+      return { art: "jobb", vakter, fast, ekstra: Number(e?.timer ?? 0), plan: !!e?.plan, utkast: vakter.length > 0 && vakter.every((v) => !v.publisert) };
+    }
     return { art: "fri" };
   };
-  const paJobb = (s: Seksjon, d: string) => s.ansatte.filter((a) => (vakterPer.get(`${a.id}|${d}`) ?? []).some((v) => !v.fravaer)).length;
+  const paJobb = (s: Seksjon, d: string) => s.ansatte.filter((a) => ruteFor(a, d).art === "jobb").length;
   const utenVikar = (d: string) => data.vakter.filter((v) => v.dato === d && v.ansatt_id && v.fravaer && !v.har_vikar).length;
   const ledige = (d: string) => data.vakter.filter((v) => v.dato === d && !v.ansatt_id).length;
   const visUtenVikar = dager.some((d) => utenVikar(d) > 0);
   const visLedige = dager.some((d) => ledige(d) > 0);
   const harUtkast = data.vakter.some((v) => v.ansatt_id && !v.publisert && v.dato >= forste && v.dato <= siste);
+  // Ekstratimene i måneden per ansatt (raden nederst).
+  const ekstraMaaned = (a: string) => rund((data.ekstra ?? []).filter((e) => e.ansatt_id === a && e.dato >= forste && e.dato <= siste).reduce((sum, e) => sum + Number(e.timer), 0));
   // Oppsummeringen står fast til høyre når tabellen rulles sidelengs (på mobil bare gruppene).
   const summer = seksjoner.length + (visUtenVikar ? 1 : 0) + (visLedige ? 1 : 0);
   const hoyre = (i: number) => ({ "--h-alle": summer - 1 - i, "--h-grupper": Math.max(0, seksjoner.length - 1 - i) }) as CSSProperties;
@@ -222,10 +220,15 @@ export function Bemanning({
     if (r.art === "fri") return "Fri";
     const deler =
       r.art === "borte"
-        ? [`${fravaerTekst[r.fravaer.type]} ${fravaerPeriode(r.fravaer)}`, r.utenVikar.length ? "Vakten mangler vikar" : r.vakter.length ? "Vikar er satt inn" : ""]
+        ? [
+            `${fravaerTekst[r.fravaer.type]} ${fravaerPeriode(r.fravaer)}`,
+            r.fast ? `Fast arbeidsdag ${fastTid(r.fast).toLowerCase()}` : "",
+            r.utenVikar.length ? "Vakten mangler vikar" : r.vakter.length ? "Vikar er satt inn" : "",
+          ]
         : [
+            r.fast ? `Fast arbeidsdag ${fastTid(r.fast).toLowerCase()}` : "",
             ...r.vakter.map((v) => `${v.fra}–${v.til}${v.oppgave ? ` ${v.oppgave}` : ""}${v.publisert ? "" : " (ikke publisert)"}`),
-            r.ekstra ? `${timerTekst(r.ekstra).replace("t", " t")} utover avtalt arbeidstid` : "",
+            r.ekstra ? `${timer(rund(r.ekstra))} ekstra` : "",
           ];
     return deler.filter(Boolean).map(punktum).join(" ");
   };
@@ -255,6 +258,9 @@ export function Bemanning({
   };
 
   const valgt = rute && { ...rute, r: ruteFor(rute.a, rute.d) };
+  // Vikar for en fast arbeidsdag uten vakt: vakten lages etter planen når vikaren settes inn.
+  const vikarForFast = (a: Ansatt, f: Fast) =>
+    settVikar({ id: "", dato: f.dato, ...fastTider(f), oppgave: null, ansatt_id: a.id, ansatt_navn: `${a.fornavn} ${a.etternavn}` });
 
   return (
     <>
@@ -275,7 +281,7 @@ export function Bemanning({
       {!synlige.length ? (
         <div className="kort">
           <Tom ikon={<IkonAnsatte storrelse={22} />} tittel="Ingen ansatte denne måneden">
-            <p>Legg inn de ansatte under Ansatte, og vaktene i vaktplanen. Da viser kalenderen hvem som er på jobb hver dag.</p>
+            <p>Legg inn de ansatte under Ansatte, med de faste arbeidsdagene, eller vaktene i vaktplanen. Da viser kalenderen hvem som er på jobb hver dag.</p>
           </Tom>
         </div>
       ) : (
@@ -293,7 +299,7 @@ export function Bemanning({
               </span>
             ))}
             <span>
-              <span className="bm-tegn ekstra">7,5t</span> Ekstratimer
+              <span className="bm-tegn ekstra">2t</span> Ekstratimer
             </span>
             <span>
               <span className="bm-tegn fravaer-syk uten-vikar">S</span> Vakten mangler vikar
@@ -391,11 +397,48 @@ export function Bemanning({
                   );
                 })}
               </tbody>
+              <tfoot>
+                <tr className="bm-fot">
+                  <th scope="row" className="bm-dag" title={`Ekstratimer i ${navn}`}>
+                    Ekstra
+                  </th>
+                  {seksjoner.flatMap((s) =>
+                    s.ansatte.map((a, j) => {
+                      const t = ekstraMaaned(a.id);
+                      return (
+                        <td
+                          key={a.id}
+                          className={`bm-fot-rute g${s.farge}${j === 0 ? " forste" : ""}${t ? " har" : ""}`}
+                          title={`${a.fornavn} ${a.etternavn}: ${t ? timer(t) : "ingen"} ekstratimer i ${navn}`}
+                        >
+                          {t ? timerTekst(t) : "–"}
+                        </td>
+                      );
+                    }),
+                  )}
+                  {seksjoner.map((s, k) => {
+                    const t = rund(s.ansatte.reduce((sum, a) => sum + ekstraMaaned(a.id), 0));
+                    return (
+                      <td
+                        key={`sum-${s.id ?? "uten"}`}
+                        className={`bm-sum${k === 0 ? " bm-sum-forste" : ""}${t ? " ekstra" : " null"}`}
+                        style={hoyre(k)}
+                        title={`${s.navn}: ${t ? timer(t) : "ingen"} ekstratimer i ${navn}`}
+                      >
+                        {t ? timerTekst(t) : "–"}
+                      </td>
+                    );
+                  })}
+                  {visUtenVikar && <td className="bm-sum bm-ekstra-sum null" style={hoyre(seksjoner.length)} />}
+                  {visLedige && <td className="bm-sum bm-ekstra-sum null" style={hoyre(seksjoner.length + (visUtenVikar ? 1 : 0))} />}
+                </tr>
+              </tfoot>
             </table>
           </div>
           <p className="liten dempet">
-            På jobb og ekstratimer kommer fra vaktplanen: ekstratimer er timene utover avtalt arbeidstid i uka (alle timene for tilkallingsvikarer). Trykk på en dag for tavla,
-            eller på en rute for å registrere fravær og sette inn vikar.
+            På jobb kommer fra de faste arbeidsdagene til de ansatte (under Ansatte) og vaktplanen; en vakt gjelder i stedet for den faste dagen. Ekstratimer er timene utover
+            den faste planen den dagen (uten fast plan: utover avtalt arbeidstid i uka, og alle timene for tilkallingsvikarer). Trykk på en dag for tavla, eller på en rute
+            for å registrere fravær og sette inn vikar.
           </p>
         </>
       )}
@@ -408,13 +451,34 @@ export function Bemanning({
               {valgt.a.stilling ? ` · ${valgt.a.stilling}` : ""}
             </p>
             {valgt.r.art === "utenfor" && <p>Ikke ansatt denne dagen.</p>}
-            {valgt.r.art === "fri" && <p>Fri (ingen vakt i vaktplanen).</p>}
+            {valgt.r.art === "fri" && <p>Fri (ingen fast arbeidsdag eller vakt).</p>}
             {valgt.r.art === "borte" && (
               <div className={`melding ${valgt.r.utenVikar.length ? "feil" : "info"} bm-borte`}>
                 <span className={`merke ${fravaerKlasse[valgt.r.fravaer.type]}`}>{fravaerTekst[valgt.r.fravaer.type]}</span> {fravaerPeriode(valgt.r.fravaer)}
                 {valgt.r.fravaer.notat ? ` · ${valgt.r.fravaer.notat}` : ""}
                 {valgt.r.vakter.length > 0 && <div>{valgt.r.utenVikar.length ? "Vakten mangler vikar." : "Vikar er satt inn."}</div>}
               </div>
+            )}
+            {(valgt.r.art === "jobb" || valgt.r.art === "borte") && valgt.r.fast && (
+              <ul className="liste-enkel">
+                <li>
+                  <span>
+                    <span className="tittel">{fastTid(valgt.r.fast)}</span> <span className="dempet">Fast arbeidsdag · {timer(valgt.r.fast.timer)}</span>
+                  </span>
+                  {kanEndre && valgt.r.art === "borte" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const f = (valgt.r as { fast: Fast }).fast;
+                        settRute(null);
+                        vikarForFast(valgt.a, f);
+                      }}
+                    >
+                      Sett inn vikar
+                    </button>
+                  )}
+                </li>
+              </ul>
             )}
             {(valgt.r.art === "jobb" || valgt.r.art === "borte") && valgt.r.vakter.length > 0 && (
               <ul className="liste-enkel">
@@ -442,8 +506,17 @@ export function Bemanning({
               </ul>
             )}
             {valgt.r.art === "jobb" && valgt.r.ekstra > 0 && (
-              <p className="liten">
-                {timerTekst(valgt.r.ekstra).replace("t", " t")} utover avtalt arbeidstid denne uka ({tallformat.format(avtalt(valgt.a))} t).
+              <p className="liten bm-ekstra-tekst">
+                <span className="bm-tegn ekstra">{timerTekst(valgt.r.ekstra)}</span>
+                <span>
+                  {timer(rund(valgt.r.ekstra))} ekstratimer denne dagen (
+                  {valgt.r.plan
+                    ? "utover den faste arbeidsplanen"
+                    : valgt.a.ansettelsestype === "tilkalling"
+                      ? "tilkallingsvikar: alle timene"
+                      : `utover avtalt arbeidstid i uka, ${tallformat.format((Number(valgt.a.ukentlig_arbeidstid) * Number(valgt.a.stillingsprosent)) / 100)} t`}
+                  ).
+                </span>
               </p>
             )}
             <div className="knapper">
@@ -496,7 +569,13 @@ export function Bemanning({
             vakt={vikar}
             ansatte={ansatte.data}
             fravaer={data.fravaer}
-            opptatt={new Map(data.vakter.filter((v) => v.dato === vikar.dato && v.ansatt_id).map((v) => [v.ansatt_id!, `${v.fra}–${v.til}`]))}
+            opptatt={
+              new Map([
+                ...(data.faste ?? []).filter((f) => f.dato === vikar.dato && !f.fravaer).map((f) => [f.ansatt_id, fastTid(f).toLowerCase()] as const),
+                ...data.vakter.filter((v) => v.dato === vikar.dato && v.ansatt_id).map((v) => [v.ansatt_id!, `${v.fra}–${v.til}`] as const),
+              ])
+            }
+            hentVaktId={async () => (await api<Vakt>("POST", `/org/${org!.id}/vakter/fra-plan`, { ansatt_id: vikar.ansatt_id, dato: vikar.dato })).id}
             ferdig={(m) => {
               settVikar(null);
               endret(m);
@@ -508,7 +587,122 @@ export function Bemanning({
       <Dialog apen={oppsett} lukk={() => settOppsett(false)} tittel="Grupper og behov" bred>
         {oppsett && <GrupperOppsett grupper={grupper.data} ansatte={ansatte.data} endret={() => settOppsettVersjon((x) => x + 1)} lukk={() => settOppsett(false)} />}
       </Dialog>
+      {rapportDialog}
     </>
+  );
+}
+
+// --- Rapporten over ekstratimer --------------------------------------------------------------
+
+type Rapport = {
+  fra: string;
+  til: string;
+  sum: number;
+  ansatte: { ansatt_id: string; ansattnummer: number; navn: string; gruppe: string | null; stilling: string | null; stillingsprosent: number; timer: number; dager: { dato: string; timer: number; vakter: string }[] }[];
+};
+
+// Ekstratimer per ansatt i en periode (som i kalenderen), med nedlasting som PDF og CSV.
+function EkstratimerRapport({ fra: start, til: slutt, lukk }: { fra: string; til: string; lukk: () => void }) {
+  const { org } = useKonto();
+  const [periode, settPeriode] = useState({ fra: start, til: slutt });
+  const { fra, til } = periode;
+  const gyldig = gyldigDato(fra) && gyldigDato(til) && fra <= til;
+  const { data, feil, laster } = useData(() => (gyldig ? hent<Rapport>(`/org/${org!.id}/ekstratimer?fra=${fra}&til=${til}`) : Promise.resolve(null)), [org?.id, fra, til]);
+  const h = useHandling();
+  const iDagen = iDag();
+  const denneMnd = `${iDagen.slice(0, 7)}-01`;
+  const forrigeMnd = leggTilMaaneder(denneMnd, -1);
+  const valg: [string, { fra: string; til: string }][] = [
+    ["Denne måneden", { fra: denneMnd, til: leggTilDager(leggTilMaaneder(denneMnd, 1), -1) }],
+    ["Forrige måned", { fra: forrigeMnd, til: leggTilDager(denneMnd, -1) }],
+    ["Hittil i år", { fra: `${iDagen.slice(0, 4)}-01-01`, til: iDagen }],
+  ];
+  const last = (format: "pdf" | "csv") => h.kjor(() => lastNed(`/org/${org!.id}/ekstratimer.${format}?fra=${fra}&til=${til}`, `ekstratimer-${fra}-${til}.${format}`));
+
+  return (
+    <div className="ekstra-rapport">
+      <p className="dempet" style={{ marginTop: 0 }}>
+        Timene utover den faste arbeidsplanen den dagen, per ansatt (uten fast plan: utover avtalt arbeidstid i uka, og alle timene for tilkallingsvikarer). Vakter den
+        ansatte er borte fra, teller ikke.
+      </p>
+      <div className="rad">
+        <label>
+          Fra
+          <input type="date" required value={fra} max={til || undefined} onChange={(e) => settPeriode({ ...periode, fra: e.target.value })} />
+        </label>
+        <label>
+          Til
+          <input type="date" required value={til} min={fra || undefined} onChange={(e) => settPeriode({ ...periode, til: e.target.value })} />
+        </label>
+      </div>
+      <div className="knapper ekstra-perioder">
+        {valg.map(([t, p]) => (
+          <button key={t} type="button" className={p.fra === fra && p.til === til ? "valgt" : undefined} aria-pressed={p.fra === fra && p.til === til} onClick={() => settPeriode(p)}>
+            {t}
+          </button>
+        ))}
+      </div>
+      {!gyldig ? (
+        <p className="felt-feil">Velg en periode der slutten ikke er før starten.</p>
+      ) : feil ? (
+        <Feil melding={feil} />
+      ) : !data || laster ? (
+        <Laster />
+      ) : !data.ansatte.length ? (
+        <p className="ekstra-tom">Ingen ekstratimer {visDato(fra)}–{visDato(til)}.</p>
+      ) : (
+        <div className="tabell ekstra-tabell">
+          <table>
+            <thead>
+              <tr>
+                <th>Ansatt</th>
+                <th className="tall">Dager</th>
+                <th className="tall">Ekstratimer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.ansatte.map((a) => (
+                <tr key={a.ansatt_id}>
+                  <td>
+                    <span className="ekstra-navn">{a.navn}</span>
+                    <span className="ekstra-under">
+                      {/* «Sekretærer · Sekretær» blir bare «Sekretærer» */}
+                      {[a.gruppe, a.gruppe && a.stilling && a.gruppe.toLowerCase().startsWith(a.stilling.toLowerCase()) ? null : a.stilling, `${tallformat.format(a.stillingsprosent)} %`]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                    <span className="ekstra-datoer">{a.dager.map((d) => `${visDato(d.dato).slice(0, 5)}: ${tallformat.format(d.timer)} t`).join(", ")}</span>
+                  </td>
+                  <td className="tall">{a.dager.length}</td>
+                  <td className="tall">
+                    <strong>{timer(a.timer)}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Sum</td>
+                <td className="tall">{data.ansatte.reduce((n, a) => n + a.dager.length, 0)}</td>
+                <td className="tall">{timer(data.sum)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+      <Feil melding={h.feil} />
+      <div className="knapper">
+        <button type="button" className="primar" disabled={!gyldig || h.opptatt} onClick={() => last("pdf")}>
+          Last ned PDF
+        </button>
+        <button type="button" disabled={!gyldig || h.opptatt} onClick={() => last("csv")}>
+          Last ned CSV
+        </button>
+        <button type="button" onClick={lukk} style={{ marginLeft: "auto" }}>
+          Lukk
+        </button>
+      </div>
+    </div>
   );
 }
 

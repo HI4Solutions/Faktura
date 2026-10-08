@@ -17,6 +17,7 @@ import { gyldigDato, mandag, middag, regnTimer, tallformat, timer, ukedagFormat,
 import { borteTekst, fravaerKlasse, fravaerTekst, FravaerListe, MittFravaer, VikarSkjema, type Fravaer, type FravaerType } from "./Fravaer";
 import { iFasen, Tavle } from "./Tavle";
 import { Bemanning, gyldigMaaned } from "./Bemanning";
+import { fastTid, fastTider } from "./Arbeidsplan";
 
 export type Vakt = {
   id: string;
@@ -38,8 +39,21 @@ export type Vakt = {
   har_vikar: boolean; // en vikar dekker denne vakten
   fravaer: FravaerType | null; // den ansatte er borte den dagen
 };
+// En fast arbeidsdag fra arbeidsplanen (server/src/arbeidsplan.ts): en dag i planen uten vakt.
+// En hel dag har ikke klokkeslett.
+export type Fast = { ansatt_id: string; dato: string; fra: string | null; til: string | null; pause_min: number; timer: number; fravaer: FravaerType | null };
 type Ukesum = { ansatt_id: string; fra: string; planlagt: number; avtalt: number | null; advarsler: string[] };
-export type VaktSvar = { vakter: Vakt[]; uker: Ukesum[]; upubliserte: number; fravaer: Fravaer[] };
+export type VaktSvar = {
+  vakter: Vakt[];
+  uker: Ukesum[];
+  upubliserte: number;
+  fravaer: Fravaer[];
+  faste: Fast[];
+  // Timene utover den faste planen den dagen (plan), eller utover avtalt arbeidstid i uka.
+  ekstra: { ansatt_id: string; dato: string; timer: number; plan: boolean }[];
+};
+// Vakten vikaren settes inn for (id-en er tom for en fast dag uten vakt).
+export type VikarVakt = Pick<Vakt, "id" | "dato" | "fra" | "til" | "oppgave" | "ansatt_id" | "ansatt_navn">;
 type MinPlass = { dato: string; fase: string; fra: string | null; til: string | null; oppgave: string };
 type Ansatt = { id: string; fornavn: string; etternavn: string; ansatt_fra: string; ansatt_til: string | null; aktiv: boolean };
 
@@ -187,8 +201,8 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
   const til = leggTilDager(uke, 6);
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon]);
   const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${uke}&til=${til}`), [org?.id, uke, versjon]);
-  const [apen, settApen] = useState<Partial<Vakt> | null>(null);
-  const [vikarFor, settVikarFor] = useState<Vakt | null>(null);
+  const [apen, settApen] = useState<(Partial<Vakt> & { fraPlan?: boolean }) | null>(null);
+  const [vikarFor, settVikarFor] = useState<VikarVakt | null>(null);
   const [kopierer, settKopierer] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
   const h = useHandling();
@@ -260,6 +274,8 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
   const rader = ansatte.data.filter(
     (a) => data.vakter.some((v) => v.ansatt_id === a.id) || (a.aktiv && a.ansatt_fra <= til && (!a.ansatt_til || a.ansatt_til >= uke)),
   );
+  const navn = new Map(ansatte.data.map((a) => [a.id, `${a.fornavn} ${a.etternavn}`]));
+  const alleFaste = data.faste ?? [];
   const ledige = data.vakter.filter((v) => !v.ansatt_id);
   const sum = (a: string) => data.uker.find((u) => u.ansatt_id === a);
   const advarsler = [
@@ -270,9 +286,15 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
     }),
   ];
   const nyVakt = (dato: string, ansatt_id: string | null) => kanPlanlegge && settApen({ dato, ansatt_id });
-  // Fraværet til en ansatt en dag, og hvor mange som er på jobb (de som er borte, teller ikke).
+  // Fraværet til en ansatt en dag, og hvor mange som er på jobb (med vakt eller fast arbeidsdag;
+  // de som er borte, teller ikke).
   const borteDag = (a: string, d: string) => data.fravaer.find((f) => f.ansatt_id === a && f.fra <= d && f.til >= d);
-  const paJobb = (d: string) => new Set(data.vakter.filter((v) => v.dato === d && v.ansatt_id && !v.fravaer).map((v) => v.ansatt_id)).size;
+  const fastDag = (a: string, d: string) => alleFaste.find((f) => f.ansatt_id === a && f.dato === d);
+  const paJobb = (d: string) =>
+    new Set([
+      ...data.vakter.filter((v) => v.dato === d && v.ansatt_id && !v.fravaer).map((v) => v.ansatt_id),
+      ...alleFaste.filter((f) => f.dato === d && !f.fravaer).map((f) => f.ansatt_id),
+    ]).size;
   const manglerVikar = (d: string) => data.vakter.filter((v) => v.dato === d && v.ansatt_id && v.fravaer && !v.har_vikar).length;
 
   const chip = (v: Vakt, medNavn = false) => {
@@ -314,6 +336,46 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
     );
   };
 
+  // En fast arbeidsdag: trykk for å lage en vakt i stedet (andre tider den dagen), eller for å
+  // sette inn vikar når den ansatte er borte.
+  const apneFast = (f: Fast) => {
+    if (f.fravaer) settVikarFor({ id: "", dato: f.dato, ...fastTider(f), oppgave: null, ansatt_id: f.ansatt_id, ansatt_navn: navn.get(f.ansatt_id) ?? null });
+    else settApen({ dato: f.dato, ansatt_id: f.ansatt_id, ...fastTider(f), pause_min: f.pause_min, fraPlan: true });
+  };
+  const fastChip = (f: Fast, medNavn = false) => {
+    const tittel = f.fravaer
+      ? `Fast arbeidsdag. ${fravaerTekst[f.fravaer]}${kanPlanlegge ? ": trykk for å sette inn vikar" : ""}`
+      : `Fast arbeidsdag (${timer(f.timer)})${kanPlanlegge ? ". Trykk for å lage en vakt med andre tider" : ""}`;
+    const innhold = (
+      <>
+        <span className="vakt-tid">{fastTid(f)}</span>
+        {medNavn && <span className="vakt-navn">{navn.get(f.ansatt_id) ?? ""}</span>}
+        {f.fravaer ? <span className="vakt-fravaer">{fravaerTekst[f.fravaer]}</span> : <span className="vakt-fast">Fast</span>}
+      </>
+    );
+    const klasse = `vakt-chip fast${f.fravaer ? " borte" : ""}`;
+    if (!kanPlanlegge)
+      return (
+        <span key={`fast-${f.ansatt_id}`} className={klasse} title={tittel}>
+          {innhold}
+        </span>
+      );
+    return (
+      <button
+        key={`fast-${f.ansatt_id}`}
+        type="button"
+        className={klasse}
+        title={tittel}
+        onClick={(e) => {
+          e.stopPropagation();
+          apneFast(f);
+        }}
+      >
+        {innhold}
+      </button>
+    );
+  };
+
   return (
     <>
       {verktoy}
@@ -328,12 +390,15 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
           {data.upubliserte === 1 ? "Én vakt" : `${data.upubliserte} vakter`} med stiplet kant er ikke publisert. De ansatte ser dem først når du publiserer.
         </p>
       )}
-      {!data.vakter.length ? (
+      {!data.vakter.length && !alleFaste.length ? (
         <div className="kort">
           <Tom ikon={<IkonKalender storrelse={22} />} tittel={`Ingen vakter i uke ${nr}`}>
             {kanPlanlegge ? (
               <>
-                <p>Legg inn vakter for de ansatte, eller kopier forrige ukes plan. Vaktene er utkast til du publiserer uka.</p>
+                <p>
+                  Legg inn vakter for de ansatte, eller kopier forrige ukes plan. Vaktene er utkast til du publiserer uka. Faste arbeidsdager legger du inn på hver ansatt
+                  under Ansatte.
+                </p>
                 <div className="knapper" style={{ justifyContent: "center" }}>
                   <button type="button" disabled={h.opptatt} onClick={kopierForrige}>
                     Kopier uke {ukenr(leggTilDager(uke, -7)).uke}
@@ -352,13 +417,14 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
         <div className="kort liste uke-dager vaktdager">
           {dager.map((d) => {
             const dagens = data.vakter.filter((v) => v.dato === d);
+            const faste = alleFaste.filter((f) => f.dato === d);
             const borte = data.fravaer.filter((f) => f.fra <= d && f.til >= d);
             const mangler = manglerVikar(d);
             return (
               <section key={d} className={`dag${d === iDag() ? " i-dag" : ""}`} aria-label={visDag(d)}>
                 <div className="dag-topp">
                   <span className="dag-navn">{visDag(d)}</span>
-                  {dagens.length > 0 && <span className="dag-sum">{paJobb(d)} på jobb</span>}
+                  {dagens.length + faste.length > 0 && <span className="dag-sum">{paJobb(d)} på jobb</span>}
                   {kanPlanlegge && (
                     <button type="button" className="kopier" aria-label={`Ny vakt ${visDag(d)}`} title="Ny vakt" onClick={() => nyVakt(d, null)}>
                       <IkonPluss storrelse={18} />
@@ -375,7 +441,12 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
                     ))}
                   </div>
                 )}
-                {dagens.length > 0 && <div className="vakt-rad">{dagens.map((v) => chip(v, true))}</div>}
+                {dagens.length + faste.length > 0 && (
+                  <div className="vakt-rad">
+                    {dagens.map((v) => chip(v, true))}
+                    {faste.map((f) => fastChip(f, true))}
+                  </div>
+                )}
               </section>
             );
           })}
@@ -418,10 +489,12 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
                     </td>
                     {dager.map((d) => {
                       const vakter = data.vakter.filter((v) => v.ansatt_id === a.id && v.dato === d);
-                      const f = vakter.length ? undefined : borteDag(a.id, d);
+                      const fast = vakter.length ? undefined : fastDag(a.id, d);
+                      const f = vakter.length || fast ? undefined : borteDag(a.id, d);
                       return (
                         <td key={d} className={kanPlanlegge ? "ny-vakt" : undefined} onClick={() => nyVakt(d, a.id)}>
                           {vakter.map((v) => chip(v))}
+                          {fast && fastChip(fast)}
                           {f && (
                             <span className={`fravaer-dag fravaer-${f.type}`} title={`${fravaerTekst[f.type]} ${f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)}–${visDag(f.til)}`}`}>
                               {fravaerTekst[f.type]}
@@ -453,7 +526,13 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
           </table>
         </div>
       )}
-      {data.vakter.length > 0 && !smal && <p className="liten dempet">Timer: planlagt / avtalt arbeidstid i uka. {kanPlanlegge ? "Trykk i en rute for å legge inn en vakt." : ""}</p>}
+      {data.vakter.length + alleFaste.length > 0 && (
+        <p className="liten dempet">
+          {alleFaste.length > 0 && "«Fast» er en fast arbeidsdag etter arbeidsplanen til den ansatte (under Ansatte); en vakt samme dag gjelder i stedet. "}
+          {!smal && "Timer: planlagt / avtalt arbeidstid i uka. "}
+          {kanPlanlegge ? "Trykk i en rute for å legge inn en vakt." : ""}
+        </p>
+      )}
       {advarsler.length > 0 && (
         <div className="kort advarsler">
           <h2>
@@ -501,7 +580,13 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
             vakt={vikarFor}
             ansatte={ansatte.data}
             fravaer={data.fravaer}
-            opptatt={new Map(data.vakter.filter((v) => v.dato === vikarFor.dato && v.ansatt_id).map((v) => [v.ansatt_id!, tid(v)]))}
+            opptatt={
+              new Map([
+                ...alleFaste.filter((f) => f.dato === vikarFor.dato && !f.fravaer).map((f) => [f.ansatt_id, fastTid(f).toLowerCase()] as const),
+                ...data.vakter.filter((v) => v.dato === vikarFor.dato && v.ansatt_id).map((v) => [v.ansatt_id!, tid(v)] as const),
+              ])
+            }
+            hentVaktId={async () => (await api<Vakt>("POST", `/org/${org!.id}/vakter/fra-plan`, { ansatt_id: vikarFor.ansatt_id, dato: vikarFor.dato })).id}
             ferdig={(tekst) => {
               settVikarFor(null);
               settMelding(tekst);
@@ -575,7 +660,7 @@ function VaktSkjema({
   avbryt,
   settInnVikar,
 }: {
-  vakt: Partial<Vakt>;
+  vakt: Partial<Vakt> & { fraPlan?: boolean };
   ansatte: Ansatt[];
   oppgaver: string[];
   kanEndre: boolean;
@@ -629,6 +714,12 @@ function VaktSkjema({
 
   return (
     <form onSubmit={lagre}>
+      {vakt.fraPlan && (
+        <p className="liten vakt-status">
+          Fast arbeidsdag etter arbeidsplanen. Lagrer du en vakt, gjelder den i stedet denne dagen (som utkast til uka publiseres). Timer utover planen blir
+          ekstratimer.
+        </p>
+      )}
       {vakt.id && (
         <p className={`liten vakt-status${vakt.publisert ? "" : " utkast"}`}>
           {vakt.publisert ? "Publisert. Endringer varsles til den ansatte." : "Ikke publisert ennå. Den ansatte ser vakten når uka publiseres."}
@@ -750,10 +841,14 @@ function MineVakter({
   if (feil) return <Feil melding={feil} />;
   if (!svar) return <Laster />;
   const mine = svar.vakter.filter((v) => v.ansatt_id === egen && v.publisert);
-  const uker = new Map<string, Vakt[]>();
-  for (const v of mine) uker.set(mandag(v.dato), [...(uker.get(mandag(v.dato)) ?? []), v]);
+  // Vaktene og de faste arbeidsdagene (etter arbeidsplanen), uke for uke.
+  const faste = (svar.faste ?? []).filter((f) => f.ansatt_id === egen);
+  const uker = new Map<string, (Vakt | Fast)[]>();
+  for (const v of [...mine, ...faste].sort((x, y) => x.dato.localeCompare(y.dato) || (x.fra ?? "").localeCompare(y.fra ?? "")))
+    uker.set(mandag(v.dato), [...(uker.get(mandag(v.dato)) ?? []), v]);
+  const erVakt = (v: Vakt | Fast): v is Vakt => "id" in v;
   // Plassene på tavla som hører til vakten (fasene vakten overlapper).
-  const plassTekst = (v: Vakt) =>
+  const plassTekst = (v: Pick<Vakt, "dato"> & { fra: string | null; til: string | null }) =>
     plasser
       .filter((p) => p.dato === v.dato && iFasen(v, { id: "", navn: p.fase, fra: p.fra, til: p.til }))
       .map((p) => `${p.fase}: ${p.oppgave}`)
@@ -769,7 +864,7 @@ function MineVakter({
           </button>
         </div>
       )}
-      {!mine.length ? (
+      {!mine.length && !faste.length ? (
         <div className="kort">
           <Tom ikon={<IkonKalender storrelse={22} />} tittel="Ingen vakter de neste ukene">
             <p>Du får varsel når vaktplanen er publisert.</p>
@@ -785,6 +880,28 @@ function MineVakter({
             </div>
             {vakter.map((v) => {
               const plass = v.fravaer ? "" : plassTekst(v);
+              if (!erVakt(v))
+                return (
+                  <div key={`fast-${v.dato}`} className={`liste-rad statisk${v.dato === iDag() ? " i-dag" : ""}${v.fravaer ? " borte" : ""}`}>
+                    <span className="linje">
+                      <span className="tittel">
+                        {visDag(v.dato)} · <span className="vakt-tid-tekst">{fastTid(v)}</span>
+                      </span>
+                      {v.fravaer ? <span className={`merke ${fravaerKlasse[v.fravaer]}`}>{fravaerTekst[v.fravaer]}</span> : <span className="belop">{timer(v.timer)}</span>}
+                    </span>
+                    {plass && <span className="under plass">{plass}</span>}
+                    {!v.fravaer && (
+                      <span className="linje">
+                        <span className="under">Fast arbeidsdag</span>
+                        {v.dato <= iDag() && (
+                          <Link className="liten" to={`/timer?uke=${mandag(v.dato)}`}>
+                            Før timer
+                          </Link>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                );
               return (
                 <div key={v.id} className={`liste-rad statisk${v.dato === iDag() ? " i-dag" : ""}${v.fravaer ? " borte" : ""}`}>
                   <span className="linje">

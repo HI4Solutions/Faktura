@@ -152,17 +152,29 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (ressursfordelingen). Organisasjonen lager selv fasene (radene, f.eks. forvakt, mellomvakt
   og senvakt eller før og etter lunsj, med tidsrom) og oppgavene (kolonnene, f.eks. telefon,
   resepsjon og lab), med hvor mange som trengs i hver oppgave, eventuelt forskjellig per fase.
-  Ressursene en dag er de som har vakt i vaktplanen, og hver hører til fasene vakten
-  overlapper. Eier og administrator plasserer dem i oppgavene (én oppgave per ansatt og fase;
+  Ressursene en dag er de som har vakt i vaktplanen eller fast arbeidsdag etter
+  arbeidsplanen, og hver hører til fasene vakten overlapper (en hel fast dag hører til alle). Eier og administrator plasserer dem i oppgavene (én oppgave per ansatt og fase;
   dra og slipp på PC, trykk på mobil) og kan kopiere plassene fra en annen dag. Den som er
   borte, kan ikke plasseres, og plassene den har, teller ikke. Regnskap ser tavla, og den
   ansatte ser sine egne plasser under Mine vakter
+- `arbeidsplaner` og `arbeidsplan_dager`: den faste arbeidsplanen til en ansatt, lagt inn i
+  ansattskjemaet ved stillingsprosenten: ukedagene den ansatte jobber, med klokkeslett (og
+  pause) eller som hel dag (en femtedel av arbeidstiden i full stilling, vanligvis 7,5 timer),
+  gjeldende fra en dato. En endring blir en ny plan fra en dato, så tidligere måneder beholder
+  planen som gjaldt da; en plan uten dager betyr ingen faste dager fra da. En fast dag er en
+  dag i planen uten vakt (en vakt samme dag gjelder i stedet), og den vises i
+  bemanningskalenderen, vaktplanen, på tavla og i timelisten (med «Før timer»), og teller som
+  planlagt arbeid. Vikar for en fast dag gir en vakt etter planen (`POST /vakter/fra-plan`) som
+  vikaren dekker. Ekstratimer (`server/src/arbeidsplan.ts`): med plan timene utover planen
+  den dagen; uten plan timene utover avtalt arbeidstid i uka (alle timene for
+  tilkallingsvikarer); vakter den ansatte er borte fra, teller ikke. Rapporten over
+  ekstratimer per ansatt i en periode tas ut som PDF eller CSV (`/ekstratimer.pdf|.csv`)
 - `ansattgrupper` og `ansatte.gruppe_id`: grupper av ansatte (f.eks. sekretærer og leger) med
-  hvor mange som trengs på jobb per dag. Bemanningskalenderen (i appen, fra vaktplanen og
-  fraværet) viser måneden med datoene nedover og de ansatte bortover, gruppe for gruppe: på
-  jobb (✓), fri (–), fravær (F ferie, S syk, SB sykt barn, P permisjon, K kurs, A annet) eller
-  ekstratimer (timene utover avtalt arbeidstid i uka, alle for tilkallingsvikarer), og til
-  høyre hvor mange som er på jobb i hver gruppe mot behovet, vakter uten vikar og ledige
+  hvor mange som trengs på jobb per dag. Bemanningskalenderen (i appen, fra de faste
+  arbeidsplanene, vaktplanen og fraværet) viser måneden med datoene nedover og de ansatte
+  bortover, gruppe for gruppe: på jobb (✓), fri (–), fravær (F ferie, S syk, SB sykt barn,
+  P permisjon, K kurs, A annet) eller ekstratimer, nederst ekstratimene i måneden per ansatt,
+  og til høyre hvor mange som er på jobb i hver gruppe mot behovet, vakter uten vikar og ledige
   vakter. Grupper kan lages fra stillingene
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
@@ -260,8 +272,9 @@ og hastighetsgrenser i API-et.
    2. ~~Vaktplan~~ Ferdig: vakter per uke og ansatt med publisering og varsler, ledige vakter
       som de ansatte tar, kopiering av uker, advarsler etter arbeidsmiljøloven, og timer
       ført fra vakten. Tavle (ressursfordeling i egne faser og oppgaver med behov),
-      fravær (sykdom meldt av den ansatte, ferie, permisjon og kurs), vikarer og
-      bemanningskalender med de ansatte i grupper mot behovet
+      fravær (sykdom meldt av den ansatte, ferie, permisjon og kurs), vikarer,
+      bemanningskalender med de ansatte i grupper mot behovet, faste arbeidsdager per
+      ansatt og rapport over ekstratimer (PDF og CSV)
    3. Lønnskjøring: lønnsarter, skattetrekk (tabell eller prosent fra skattekortet),
       feriepenger, OTP, arbeidsgiveravgift per sone, sykepenger og lønnsslipp som PDF
    4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og

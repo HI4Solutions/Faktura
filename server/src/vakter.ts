@@ -11,6 +11,7 @@ import { ApiFeil } from "./feil.js";
 import { uke } from "./arbeidstid.js";
 import { advarsler, type Ansettelse } from "./vaktregler.js";
 import { datoS, klokke, regler, tekst, valgfri, varslePersonal } from "./ansatte.js";
+import { beregnBemanning, dagTimer, hentPlaner, planFor, ukedag } from "./arbeidsplan.js";
 import { leggIKo } from "./tjenester.js";
 
 const uuid = z.string().uuid();
@@ -114,6 +115,9 @@ export function vaktRuter() {
           [orgId(c), fra, til, q.ansatt ?? null],
         );
         const iPerioden = vakter.filter((v) => v.dato >= q.fra && v.dato <= q.til);
+        // Faste dager fra arbeidsplanene (dager i planen uten vakt) og ekstratimene.
+        const bemanning = await beregnBemanning(db, orgId(c), fra, til, q.ansatt ?? null);
+        const faste = bemanning.faste.filter((f) => f.dato >= q.fra && f.dato <= q.til);
         // Fraværet i perioden (den ansatte ser bare sitt eget).
         const fravaer = await alle(
           db,
@@ -123,7 +127,7 @@ export function vaktRuter() {
             order by f.fra`,
           [orgId(c), q.fra, q.til, q.ansatt ?? null],
         );
-        if (!helPlan) return { regler: regel, vakter: iPerioden.map((v) => ({ ...v, advarsler: [] })), uker: [], upubliserte: 0, fravaer };
+        if (!helPlan) return { regler: regel, vakter: iPerioden.map((v) => ({ ...v, advarsler: [] })), uker: [], upubliserte: 0, fravaer, faste, ekstra: [] };
 
         const ansatte = await alle<Ansettelse & { id: string; avtalt: number }>(
           db,
@@ -136,9 +140,10 @@ export function vaktRuter() {
           regel,
           new Map(ansatte.map((x) => [x.id, x])),
         );
-        // Sum per ansatt og uke for ukene i perioden (uten vaktene den ansatte er borte fra).
+        // Sum per ansatt og uke for ukene i perioden: vaktene og de faste dagene, uten dagene den
+        // ansatte er borte.
         const uker = new Map<string, { ansatt_id: string; fra: string; planlagt: number; avtalt: number | null; advarsler: string[] }>();
-        for (const v of vakter) {
+        for (const v of [...vakter, ...bemanning.faste]) {
           const m = uke(v.dato).fra;
           if (!v.ansatt_id || v.fravaer || m > q.til || uke(v.dato).til < q.fra) continue;
           const k = `${v.ansatt_id}:${m}`;
@@ -158,6 +163,15 @@ export function vaktRuter() {
           uker: [...uker.values()],
           upubliserte: iPerioden.filter((v) => !v.publisert).length,
           fravaer,
+          faste,
+          // plan: ekstratimene er regnet mot den faste planen den dagen (ellers mot avtalt
+          // arbeidstid i uka).
+          ekstra: [...bemanning.ekstra.entries()]
+            .map(([k, timer]) => {
+              const [ansatt_id, dato] = k.split("|") as [string, string];
+              return { ansatt_id, dato, timer, plan: !!planFor(bemanning.planer.get(ansatt_id), dato) };
+            })
+            .filter((e) => e.dato >= q.fra && e.dato <= q.til),
         };
       }),
     );
@@ -353,6 +367,30 @@ export function vaktRuter() {
       return { vakt, varsler };
     });
     await sendVarsler(orgId(c), varsler);
+    return c.json(vakt, 201);
+  });
+
+  // En vakt fra den faste arbeidsplanen en dag (den som finnes, eller en ny, publisert uten
+  // varsel), f.eks. for å sette inn vikar for en fast dag. En hel dag begynner kl. 08.
+  r.post("/vakter/fra-plan", async (c) => {
+    const b = z.object({ ansatt_id: uuid, dato: datoS }).parse(await c.req.json().catch(() => ({})));
+    const vakt = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      const finnes = await en<Vakt>(db, `${VAKT} where v.org_id = $1 and v.ansatt_id = $2 and v.dato = $3 order by v.fra limit 1`, [orgId(c), b.ansatt_id, b.dato]);
+      if (finnes) return finnes;
+      const a = await en<{ ukentlig_arbeidstid: number }>(db, "select ukentlig_arbeidstid from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), b.ansatt_id]);
+      const dag = planFor((await hentPlaner(db, orgId(c), b.ansatt_id)).get(b.ansatt_id), b.dato)?.dager.find((d) => d.ukedag === ukedag(b.dato));
+      if (!a || !dag) throw new ApiFeil(400, "Den ansatte har ingen fast arbeidsdag denne dagen");
+      const slutt = 8 * 60 + Math.round(dagTimer(dag, a.ukentlig_arbeidstid) * 60);
+      const kl = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      const ny = (await en<{ id: string }>(
+        db,
+        "insert into faktura.vakter (org_id, ansatt_id, dato, fra, til, pause_min) values ($1, $2, $3, $4, $5, $6) returning id",
+        [orgId(c), b.ansatt_id, b.dato, dag.fra ?? "08:00", dag.til ?? kl(slutt), dag.pause_min],
+      ))!;
+      await db.query("select faktura.publiser_vakt($1, $2)", [orgId(c), ny.id]);
+      return (await en<Vakt>(db, `${VAKT} where v.id = $1`, [ny.id]))!;
+    });
     return c.json(vakt, 201);
   });
 

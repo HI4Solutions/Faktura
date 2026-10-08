@@ -15,6 +15,7 @@ import { krypter } from "./kryptering.js";
 import { AML, beregnUke, uke, type Regler, type Ukesum } from "./arbeidstid.js";
 import { dato as visDato, iDag, kontonrGyldig } from "./regler.js";
 import { leggIKo } from "./tjenester.js";
+import { beregnBemanning } from "./arbeidsplan.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -86,6 +87,11 @@ const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
          a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.opprettet, a.oppdatert,
+         -- Ukedagene i den faste arbeidsplanen som gjelder i dag (1 = mandag).
+         (select coalesce(array_agg(d.ukedag order by d.ukedag), '{}') from faktura.arbeidsplan_dager d
+           where d.org_id = a.org_id
+             and d.plan_id = (select p.id from faktura.arbeidsplaner p where p.org_id = a.org_id and p.ansatt_id = a.id and p.gjelder_fra <= faktura.i_dag()
+                               order by p.gjelder_fra desc limit 1)) as arbeidsdager,
          a.bruker_id = faktura.bruker_id() as meg,
          case when a.bruker_id is not null
                    and exists (select 1 from faktura.medlemmer m where m.org_id = a.org_id and m.bruker_id = a.bruker_id) then 'koblet'
@@ -342,6 +348,12 @@ export function ansattRuter() {
         )) {
           const k = `${v.ansatt_id}:${uke(v.dato).fra}`;
           planlagt.set(k, Math.round(((planlagt.get(k) ?? 0) + Number(v.timer)) * 100) / 100);
+        }
+        // Og de faste dagene i arbeidsplanene (dager i planen uten vakt).
+        for (const f of (await beregnBemanning(db, orgId(c), fra, til, q.ansatt ?? null)).faste) {
+          if (f.fravaer || !avtalt.has(f.ansatt_id) || f.dato < fra || f.dato > til) continue;
+          const k = `${f.ansatt_id}:${uke(f.dato).fra}`;
+          planlagt.set(k, Math.round(((planlagt.get(k) ?? 0) + f.timer) * 100) / 100);
         }
         let uker = ukesummer(foringer, regel, avtalt, planlagt);
         // Med status: ukene med føringer med den statusen (f.eks. levert, til godkjenning).

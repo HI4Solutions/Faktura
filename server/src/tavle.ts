@@ -11,6 +11,7 @@ import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { datoS, klokke, tekst } from "./ansatte.js";
+import { beregnBemanning } from "./arbeidsplan.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -160,18 +161,32 @@ export function tavleRuter() {
             order by v.fra, a.etternavn, a.fornavn`,
           [orgId(c), dato],
         );
-        const ressurser = new Map<string, { ansatt_id: string; navn: string; fravaer: string | null; vakter: { id: string; fra: string; til: string; oppgave: string | null; vikar: boolean; publisert: boolean }[] }>();
+        type TavleVakt = { id: string; fra: string | null; til: string | null; oppgave: string | null; vikar: boolean; publisert: boolean; fast?: boolean; timer?: number };
+        const ressurser = new Map<string, { ansatt_id: string; navn: string; fravaer: string | null; vakter: TavleVakt[] }>();
         for (const v of vakter) {
           const r = ressurser.get(v.ansatt_id) ?? { ansatt_id: v.ansatt_id, navn: v.navn, fravaer: v.fravaer, vakter: [] };
           r.vakter.push({ id: v.id, fra: v.fra, til: v.til, oppgave: v.oppgave, vikar: !!v.vikar_for, publisert: v.publisert });
           ressurser.set(v.ansatt_id, r);
         }
+        // De som har fast arbeidsdag i dag etter arbeidsplanen (og ingen vakt); en hel dag har
+        // ingen klokkeslett og hører til alle fasene.
+        const b = await beregnBemanning(db, orgId(c), dato, dato);
+        const navn = new Map(b.ansatte.map((a) => [a.id, a.navn]));
+        for (const f of b.faste.filter((x) => x.dato === dato))
+          ressurser.set(f.ansatt_id, {
+            ansatt_id: f.ansatt_id,
+            navn: navn.get(f.ansatt_id) ?? "",
+            fravaer: f.fravaer,
+            vakter: [{ id: `fast:${f.ansatt_id}`, fra: f.fra, til: f.til, oppgave: null, vikar: false, publisert: true, fast: true, timer: f.timer }],
+          });
         return {
           dato,
           faser: await alle(db, FASER, [orgId(c)]),
           oppgaver: await alle(db, OPPGAVER, [orgId(c)]),
           behov: await alle(db, BEHOV, [orgId(c)]),
-          ressurser: [...ressurser.values()],
+          ressurser: [...ressurser.values()].sort(
+            (x, y) => (x.vakter[0]?.fra ?? "00:00").localeCompare(y.vakter[0]?.fra ?? "00:00") || x.navn.localeCompare(y.navn, "nb"),
+          ),
           plasseringer: await alle(db, "select id, fase_id, oppgave_id, ansatt_id from faktura.tavle_plasseringer where org_id = $1 and dato = $2", [orgId(c), dato]),
           fravaer: await alle(
             db,
@@ -233,6 +248,8 @@ export function tavleRuter() {
     if (b.fra === b.til) throw new ApiFeil(400, "Velg en annen dag å kopiere fra");
     const kopiert = await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      // De som har fast arbeidsdag den nye dagen etter arbeidsplanen, er også på jobb.
+      const faste = (await beregnBemanning(db, orgId(c), b.til, b.til)).faste.filter((f) => f.dato === b.til).map((f) => f.ansatt_id);
       const nye = await alle(
         db,
         `insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id)
@@ -241,11 +258,11 @@ export function tavleRuter() {
            join faktura.ansatte a on a.org_id = p.org_id and a.id = p.ansatt_id
           where p.org_id = $1 and p.dato = $2
             and a.aktiv and $3 >= a.ansatt_fra and (a.ansatt_til is null or $3 <= a.ansatt_til)
-            and exists (select 1 from faktura.vakter v where v.org_id = p.org_id and v.ansatt_id = p.ansatt_id and v.dato = $3)
+            and (exists (select 1 from faktura.vakter v where v.org_id = p.org_id and v.ansatt_id = p.ansatt_id and v.dato = $3) or p.ansatt_id = any($4::uuid[]))
             and not exists (select 1 from faktura.fravaer f where f.org_id = p.org_id and f.ansatt_id = p.ansatt_id and $3 between f.fra and f.til)
          on conflict (org_id, dato, fase_id, ansatt_id) do nothing
          returning id`,
-        [orgId(c), b.fra, b.til],
+        [orgId(c), b.fra, b.til, faste],
       );
       return nye.length;
     });

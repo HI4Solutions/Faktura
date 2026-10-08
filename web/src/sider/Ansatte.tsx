@@ -1,7 +1,7 @@
 // Ansatte: registeret over de ansatte (personalia, ansettelse og lønn) og deres egen innlogging
 // for timeføring (rollen ansatt). Eier og administrator endrer; regnskap ser. Fødselsnummeret
 // lagres kryptert og vises aldri igjen, bare at det er registrert.
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
@@ -9,6 +9,7 @@ import { kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag } from "../format";
 import { fnrGyldig, fodselsdato, kontonrGyldig, visKontonr } from "../personnummer";
 import { IkonAnsatte } from "../ikoner";
+import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
 
 type Ansatt = {
   id: string;
@@ -35,6 +36,7 @@ type Ansatt = {
   aktiv: boolean;
   notat: string | null;
   gruppe_id: string | null;
+  arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
 };
@@ -142,7 +144,7 @@ export function Ansatte() {
               </span>
               <span className="linje">
                 <span className="under">
-                  {[a.stilling, `${belop.format(a.stillingsprosent)} %`, lonn(a)].filter(Boolean).join(" · ")}
+                  {[a.stilling, `${belop.format(a.stillingsprosent)} %`, dagerTekst(a.arbeidsdager ?? []), lonn(a)].filter(Boolean).join(" · ")}
                 </span>
                 <Merker a={a} />
               </span>
@@ -159,6 +161,7 @@ export function Ansatte() {
                 <th>Navn</th>
                 <th>Stilling</th>
                 <th className="tall">Stilling %</th>
+                <th>Faste dager</th>
                 <th className="tall">Lønn</th>
                 <th>Ansatt fra</th>
                 <th></th>
@@ -174,6 +177,7 @@ export function Ansatte() {
                   </td>
                   <td>{a.stilling}</td>
                   <td className="tall">{belop.format(a.stillingsprosent)} %</td>
+                  <td>{dagerTekst(a.arbeidsdager ?? []) || <span className="dempet">–</span>}</td>
                   <td className="tall">{lonn(a)}</td>
                   <td>{dato(a.ansatt_fra)}</td>
                   <td>
@@ -183,7 +187,7 @@ export function Ansatte() {
               ))}
               {!liste.length && (
                 <tr>
-                  <td colSpan={7} className="dempet">
+                  <td colSpan={8} className="dempet">
                     Ingen ansatte passer søket.
                   </td>
                 </tr>
@@ -239,6 +243,13 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   }));
   // Gruppene i bemanningskalenderen (f.eks. sekretærer og leger), hvis noen er laget.
   const grupper = useData(() => hent<{ id: string; navn: string }[]>(`/org/${org!.id}/ansattgrupper`), [org?.id]);
+  // Den faste arbeidsplanen (ukedagene den ansatte jobber), som et utkast til den lagres.
+  const planer = useData(() => (ansatt.id ? hent<Plan[]>(`/org/${org!.id}/ansatte/${ansatt.id}/arbeidsplan`) : Promise.resolve([] as Plan[])), [org?.id, ansatt.id]);
+  const [plan, settPlan] = useState<PlanUtkast | null>(null);
+  useEffect(() => {
+    if (planer.data) settPlan(lagUtkast(planer.data, ansatt.ansatt_fra));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planer.data]);
   const [forlatt, settForlatt] = useState<Record<string, boolean>>({});
   const [melding, settMelding] = useState<string | null>(null);
   const h = useHandling();
@@ -286,7 +297,18 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     else if (a.endreFnr && fnr) kropp.fnr = fnr;
     if (!kropp.fnr) kropp.fodselsdato = a.fodselsdato;
     const ny = !ansatt.id;
-    const r = await h.kjor(() => (ny ? api<Ansatt>("POST", `/org/${org!.id}/ansatte`, kropp) : api<Ansatt>("PATCH", `/org/${org!.id}/ansatte/${ansatt.id}`, kropp)));
+    const nyPlan = plan && endret(plan) ? tilLagring(plan) : null;
+    if (typeof nyPlan === "string") return h.settFeil(nyPlan);
+    const r = await h.kjor(async () => {
+      const lagret = await (ny ? api<Ansatt>("POST", `/org/${org!.id}/ansatte`, kropp) : api<Ansatt>("PATCH", `/org/${org!.id}/ansatte/${ansatt.id}`, kropp));
+      // Planen for en ny ansatt gjelder fra den ansatte begynner.
+      if (nyPlan) {
+        const p = await api<Plan[]>("PUT", `/org/${org!.id}/ansatte/${lagret.id}/arbeidsplan`, { ...nyPlan, gjelder_fra: ny ? lagret.ansatt_fra : nyPlan.gjelder_fra });
+        settPlan(lagUtkast(p, lagret.ansatt_fra));
+        return { ...lagret, arbeidsdager: p.findLast((x) => x.gjelder_fra <= iDag())?.dager.map((d) => d.ukedag) ?? [] };
+      }
+      return lagret;
+    });
     if (!r) return;
     if (!ny) return lukk();
     // Ny ansatt: bli i skjemaet, så man kan gi innlogging med en gang.
@@ -442,6 +464,21 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             <span className="felt-hjelp">Timer per uke, vanligvis 37,5.</span>
           </label>
         </div>
+      </fieldset>
+      {plan ? (
+        <ArbeidsplanFelt
+          utkast={plan}
+          endre={settPlan}
+          ukentlig={a.ukentlig_arbeidstid.trim() ? tall(a.ukentlig_arbeidstid) : 37.5}
+          prosent={a.stillingsprosent.trim() ? tall(a.stillingsprosent) : 100}
+          settProsent={(p) => sett({ stillingsprosent: tekstTall(p) })}
+          ny={!ansatt.id}
+          kanEndre={kanEndre}
+        />
+      ) : (
+        planer.feil && <Feil melding={planer.feil} />
+      )}
+      <fieldset className="naken" disabled={!kanEndre}>
         <div className="rad">
           <label>
             Ansatt fra
