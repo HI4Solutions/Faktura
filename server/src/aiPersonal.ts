@@ -101,14 +101,17 @@ export type PersonalGrunnlag = {
   // tavla, 0063_ansatte_ser_planen.sql).
   kan: { personal: boolean; se: boolean; ferie: boolean; plan: boolean };
   vaktplan: boolean; // funksjonen «Vaktplan og bemanning» (vakter, tavle, fravær og ferie)
+  // Åpent i helgene (0064_helg.sql); stengt: perioder («hele neste uke») er mandag–fredag.
+  helg: boolean;
 };
 
 // null: personalmodulen er ikke slått på, eller brukeren verken ser de ansatte eller er ansatt.
 export async function hentPersonal(db: Db, org: string): Promise<PersonalGrunnlag | null> {
-  const k = await en<{ personal: boolean; se: boolean; plan: boolean; aktiv: boolean; vaktplan: boolean; meg: string | null }>(
+  const k = await en<{ personal: boolean; se: boolean; plan: boolean; aktiv: boolean; vaktplan: boolean; helg: boolean; meg: string | null }>(
     db,
     `select faktura.kan($1, 'personal') as personal, faktura.kan($1, 'personal_les') as se, faktura.kan($1, 'plan') as plan,
             coalesce((select l.aktiv from faktura.lonn_oppsett l where l.org_id = $1), false) and faktura.har_funksjon($1, 'ansatte') as aktiv,
+            coalesce((select l.helg from faktura.lonn_oppsett l where l.org_id = $1), true) as helg,
             faktura.har_funksjon($1, 'vaktplan') as vaktplan, faktura.min_ansatt($1) as meg`,
     [org],
   );
@@ -131,6 +134,7 @@ export async function hentPersonal(db: Db, org: string): Promise<PersonalGrunnla
     // Feriebanken ser eier, administrator og den ansatte selv (ikke regnskap).
     kan: { personal: k.personal, se: k.se, ferie: k.personal || !!k.meg, plan: k.plan },
     vaktplan: k.vaktplan,
+    helg: k.helg,
   };
 }
 
@@ -140,6 +144,7 @@ export function personalRegister(p: PersonalGrunnlag): string {
     `Ansatte (id: navn):\n${p.ansatte.map((a, i) => `A${i + 1}: ${enLinje(a.navn)}${a.id === p.meg ? " (deg)" : ""}`).join("\n") || "(ingen)"}`,
   ];
   if (!p.meg) deler.push("Brukeren er ikke selv registrert som ansatt.");
+  if (!p.helg) deler.push("Stengt i helgene: «denne uka», «neste uke» og andre perioder gjelder mandag–fredag. Lørdag og søndag bare når brukeren sier dem.");
   if (p.faser.length) deler.push(`Fasene på tavla (id: navn):\n${p.faser.map((f, i) => `F${i + 1}: ${enLinje(f.navn, 40)}${f.fra ? ` ${f.fra}–${f.til}` : ""}`).join("\n")}`);
   if (p.oppgaver.length) deler.push(`Oppgavene på tavla (id: navn):\n${p.oppgaver.map((o, i) => `O${i + 1}: ${enLinje(o.navn, 40)}`).join("\n")}`);
   return deler.join("\n\n");
@@ -206,6 +211,7 @@ const gyldig = (s: unknown): s is string => {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 };
 const pluss = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const erHelg = (d: string) => [0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay());
 const dagerMellom = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
 const dagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 const dag = (iso: string) => dagFormat.format(new Date(`${iso}T12:00:00Z`));
@@ -255,15 +261,16 @@ function periodeFra(ai: Partial<PersonalKommando>, iDag: string, standard: [stri
   if (dagerMellom(fra, til) >= maks) return `Velg en periode på høyst ${maks} dager.`;
   return [fra, til];
 }
-// Dagene i kommandoen (datoer, ellers fra_dato–til_dato, ellers i dag).
-function dagerFra(ai: Partial<PersonalKommando>, iDag: string, maks: number): string[] {
+// Dagene i kommandoen (datoer, ellers fra_dato–til_dato, ellers i dag). Med stengt helg er en
+// periode mandag–fredag (en enkelt dag og datoene brukeren sa, gjelder likevel).
+function dagerFra(ai: Partial<PersonalKommando>, iDag: string, maks: number, helg = true): string[] {
   const d = (Array.isArray(ai.datoer) ? ai.datoer : []).filter(gyldig);
   if (d.length) return [...new Set(d)].sort().slice(0, maks);
   const p = periodeFra(ai, iDag, [iDag, iDag], 62);
   if (typeof p === "string") return [iDag];
   const ut: string[] = [];
-  for (let x = p[0]; x <= p[1] && ut.length < maks; x = pluss(x, 1)) ut.push(x);
-  return ut;
+  for (let x = p[0]; x <= p[1] && ut.length < maks; x = pluss(x, 1)) if (helg || p[0] === p[1] || !erHelg(x)) ut.push(x);
+  return ut.length ? ut : [p[0]];
 }
 
 const MEG = /^(jeg|meg|meg selv|deg|deg selv|selv)$/i;
@@ -435,7 +442,7 @@ async function nyVakt(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSva
   const fra = klokke(ai.klokke_fra);
   const til = klokke(ai.klokke_til);
   if (!fra || !til) return { tekst: "Hvilket klokkeslett? Si for eksempel «08–16»." };
-  const dager = dagerFra(ai, k.iDag, 14);
+  const dager = dagerFra(ai, k.iDag, 14, k.p.helg);
   const pause = typeof ai.pause_min === "number" && ai.pause_min >= 0 && ai.pause_min <= 600 ? Math.round(ai.pause_min) : 0;
   const o = finnPaTavla(k.p.oppgaver, "O", ai.oppgave);
   const oppgave = o?.navn ?? (enLinje(ai.oppgave, 60) || null);
@@ -543,7 +550,7 @@ async function plasser(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSv
   if (!o) return { tekst: `${enLinje(ai.oppgave, 60) ? `Fant ikke oppgaven «${enLinje(ai.oppgave, 60)}» på tavla.` : "Hvilken oppgave?"} Oppgavene er ${liste(k.p.oppgaver.map((x) => x.navn))}.` };
   const fase = ai.fase ? finnPaTavla(k.p.faser, "F", ai.fase) : null;
   if (ai.fase && !fase) return { tekst: `Fant ikke fasen «${enLinje(ai.fase, 40)}». Fasene er ${liste(k.p.faser.map((x) => x.navn))}.` };
-  const dager = dagerFra(ai, k.iDag, 7);
+  const dager = dagerFra(ai, k.iDag, 7, k.p.helg);
   // Når den ansatte er på jobb (vakter og faste dager), og hvilke faser det dekker.
   const b = await beregnBemanning(k.db, k.orgId, dager[0]!, dager.at(-1)!, a.a.id);
   const plasser: { dato: string; fase_id: string; oppgave_id: string; ansatt_id: string }[] = [];
@@ -608,7 +615,7 @@ async function forTimer(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PS
   if (h.ukjent) return ukjentSvar(k, h.ukjent, "føre timer for andre");
   if (!h.a) return { tekst: "Du er ikke registrert som ansatt her. Si hvem timene skal føres på." };
   if (!h.selv && !k.p.kan.personal) return ingen("føre timer for andre");
-  const dager = dagerFra(ai, k.iDag, 14);
+  const dager = dagerFra(ai, k.iDag, 14, k.p.helg);
   if (dager.some((d) => d > k.iDag)) return { tekst: "Timer kan bare føres for dager som har vært (eller i dag)." };
   const fra = klokke(ai.klokke_fra);
   const til = klokke(ai.klokke_til);
@@ -862,6 +869,8 @@ async function hvemJobber(k: PKontekst, ai: Partial<PersonalKommando>): Promise<
         );
       dagTekster.push(deler.join(" "));
     } else {
+      // Stengt i helgene: lørdag og søndag bare når noen er satt opp da.
+      if (!k.p.helg && erHelg(d) && !paJobb.length && !mangler.length && !ledige.length) continue;
       const deler = [`${dag(d)}: ${paJobb.length} på jobb`];
       if (borte.length) deler.push(`borte ${liste(borte)}`);
       if (mangler.length) deler.push(`${mangler.length} mangler vikar`);
@@ -871,7 +880,7 @@ async function hvemJobber(k: PKontekst, ai: Partial<PersonalKommando>): Promise<
     }
   }
   return {
-    tekst: enDag ? dagTekster.join(" ") : `${dagTekster.join(". ")}.`,
+    tekst: enDag ? dagTekster.join(" ") : dagTekster.length ? `${dagTekster.join(". ")}.` : "Dere har stengt i helgene, og ingen er satt opp da.",
     lenker: [
       { tekst: "Tavla", til: `/vakter?fane=tavle&dato=${fra}` },
       { tekst: "Vaktplanen", til: `/vakter?uke=${uke(fra).fra}` },

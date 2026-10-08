@@ -11,7 +11,7 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres
 import { erAdmin, harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag, leggTilDager } from "../format";
 import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
-import { gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
+import { erHelg, gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import type { VaktSvar } from "./Vakter";
 import { ArbeidsplanDialog, fastTid } from "./Arbeidsplan";
 import { FravaerDialog, fravaerKlasse, fravaerTekst, type Fravaer } from "./Fravaer";
@@ -250,6 +250,8 @@ function Ukeside({
   tilbake?: () => void;
 }) {
   const { org } = useKonto();
+  // Stengt i helgene (0064_helg.sql): mandag–fredag, og helgen bare med timer, vakter eller faste dager.
+  const helg = org?.helg !== false;
   const til = leggTilDager(uke, 6);
   const ansatt = useData(() => hent<Ansatt>(`/org/${org!.id}/ansatte/${ansattId}`), [org?.id, ansattId, versjon]);
   const { data, feil } = useData(() => hent<TimerSvar>(`/org/${org!.id}/timer?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
@@ -311,7 +313,9 @@ function Ukeside({
   if (feil || ansatt.feil) return <Feil melding={feil ?? ansatt.feil} />;
   if (!data || !a) return <Laster />;
 
-  const nyFra = ansattDag(iDagIso) && iDagIso >= uke && iDagIso <= til ? iDagIso : [0, 1, 2, 3, 4, 5, 6].map((i) => leggTilDager(uke, i)).find(ansattDag);
+  const aapenDag = (d: string) => helg || !erHelg(d);
+  const nyFra = ansattDag(iDagIso) && aapenDag(iDagIso) && iDagIso >= uke && iDagIso <= til ? iDagIso : ukedager(uke).find((d) => ansattDag(d) && aapenDag(d));
+  const visesDag = (d: string) => aapenDag(d) || foringer.some((f) => f.dato === d) || vakter.some((v) => v.dato === d) || faste.some((f) => f.dato === d);
 
   return (
     <>
@@ -331,7 +335,7 @@ function Ukeside({
         </div>
       )}
       <div className="uke-verktoy">
-        <Ukevelger uke={uke} velgUke={velgUke} />
+        <Ukevelger uke={uke} velgUke={velgUke} helg={helg} />
         {kanFore && nyFra && (
           <button type="button" className="primar" onClick={() => settApen({ dato: nyFra })}>
             <IkonPluss storrelse={18} /> Før timer
@@ -426,8 +430,7 @@ function Ukeside({
           {ikkeLevert.length > 0 && egen && <p className="liten dempet">Når uka er levert, kan timene ikke endres før de eventuelt blir avvist.</p>}
         </div>
         <div className="kort liste uke-dager">
-          {[0, 1, 2, 3, 4, 5, 6].map((i) => {
-            const d = leggTilDager(uke, i);
+          {ukedager(uke).filter(visesDag).map((d) => {
             const dagens = foringer.filter((f) => f.dato === d);
             const sumDag = dagens.reduce((s, f) => s + Number(f.timer), 0);
             const borte = fravaer.find((f) => f.ansatt_id === ansattId && f.fra <= d && f.til >= d)?.type;
@@ -791,7 +794,9 @@ function Ukeoversikt({
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon]);
   const { data, feil } = useData(() => hent<TimerSvar>(`/org/${org!.id}/timer?fra=${uke}&til=${til}`), [org?.id, uke, versjon]);
   const smal = useSmal();
-  const dager = [0, 1, 2, 3, 4, 5, 6].map((i) => leggTilDager(uke, i));
+  // Stengt i helgene (0064_helg.sql): mandag–fredag, og helgen bare når noen har ført timer da.
+  const helg = org?.helg !== false;
+  const dager = ukedager(uke).filter((d) => helg || !erHelg(d) || !!data?.foringer.some((f) => f.dato === d));
 
   const toppen = (
     <>
@@ -806,7 +811,7 @@ function Ukeoversikt({
         </div>
       )}
       <div className="uke-verktoy">
-        <Ukevelger uke={uke} velgUke={velgUke} />
+        <Ukevelger uke={uke} velgUke={velgUke} helg={helg} />
       </div>
     </>
   );
@@ -914,7 +919,7 @@ function Ukeoversikt({
               ))}
               {!rader.length && (
                 <tr>
-                  <td colSpan={11} className="dempet">
+                  <td colSpan={dager.length + 4} className="dempet">
                     Ingen ansatte i jobb denne uka.
                   </td>
                 </tr>

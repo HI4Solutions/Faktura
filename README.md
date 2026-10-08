@@ -42,6 +42,7 @@ bank og regnskapssystemer.
 | Faste arbeidsdager per ansatt (ukedager med klokkeslett eller hel dag; en hel dag står bare med navnet) i vaktplanen og på tavla, og ekstratimer per ansatt med rapport som PDF og CSV | Ferdig |
 | Bemanningsdata ett sted: stillingsprosent (følger de faste dagene), arbeidstid, faste dager, fravær og ferie registreres én gang, vises i alle bemanningsmodulene og kan endres fra hver av dem | Ferdig |
 | Bursdagsvarsler: når en ansatt har bursdag, får alle de andre push-varsel og/eller e-post kl. 08 | Ferdig (slås på under Innstillinger → Ansatte og timer) |
+| Stengt i helgene: vaktplanen, tavla, timene og de faste arbeidsdagene viser bare mandag–fredag (helgen bare når noen har vakt eller timer da), og AI-assistenten legger perioder på hverdagene | Ferdig (slås av og på under Innstillinger → Ansatte og timer) |
 | Beskjeder: alle i organisasjonen legger beskjeder til én eller flere roller (f.eks. legene) eller til alle, med push-varsel om de vil; de nye står merket, og tallet på dem vises i menyen | Ferdig (menyen «Beskjeder» når Ansatte og timer er slått på) |
 | Feriebank: feriedager, avviklet, planlagt og gjenstående ferie per ansatt (justeres av seg selv når ferie registreres), og søknad om å overføre dager til neste år som eier eller administrator godkjenner | Ferdig (menyen «Ferie»; feriedager per år under Innstillinger → Ansatte og timer) |
 | Lønnskjøring, a-melding og utbetaling | Planlagt (se veikartet) |

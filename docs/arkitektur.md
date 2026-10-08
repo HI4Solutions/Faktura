@@ -354,6 +354,17 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   ansatte. Stillingsprosenten følger de faste dagene når de endres (timene i uka av arbeidstiden
   i full stilling), og kan endres etterpå. `lonn_oppsett.full_stilling` er organisasjonens
   arbeidstid i full stilling (vanligvis 37,5), som nye ansatte får (`0048_full_stilling.sql`)
+- `lonn_oppsett.helg` (`0064_helg.sql`): åpent i helgene (standard: ja). Eier og administrator
+  slår det av under Innstillinger → Ansatte og timer når de har stengt lørdag og søndag; alle i
+  organisasjonen får det i `mine_organisasjoner.helg` (`/api/meg`). Med stengt helg viser
+  vaktplanen (dagen, uka og måneden), tavla, timeføringen (timelista og ukeoversikten) og de
+  faste arbeidsdagene bare mandag–fredag, ukevelgeren viser «5.–9. okt.», og dag for dag (i
+  vaktplanen og på tavla) hopper over helgen; «i dag» på en lørdag eller søndag er mandagen etter.
+  Lørdag og søndag vises likevel når noen har vakt, fast dag eller timer da, så ingenting blir
+  borte, og en vakt som legges på en lørdag, får en merknad. Med åpen helg viser måneden alle
+  dagene (før bare helgedager med vakter). AI-assistenten legger perioder («hele neste uke») på
+  mandag–fredag (dagene brukeren sier, gjelder likevel), og hopper over tomme helgedager når den
+  forteller hvem som jobber
 - `lonn_oppsett.bursdag_varsel` og `ansatte.bursdag_varsel`: bursdagsvarsler. Eier og
   administrator slår dem på under Innstillinger → Ansatte og timer (de ansatte har ikke tilgang
   dit) og velger push-varsel, e-post eller begge. Når en aktiv ansatt har bursdag (fødselsdatoen

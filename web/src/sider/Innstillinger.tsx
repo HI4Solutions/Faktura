@@ -141,8 +141,8 @@ function SlettOrg() {
   );
 }
 
-// Ansatte og timer: slås på per organisasjon, med grensene for overtid, bursdagsvarslene og om de
-// ansatte kan bytte vakter (Vaktbytte.tsx).
+// Ansatte og timer: slås på per organisasjon, med grensene for overtid, bursdagsvarslene, om de
+// ansatte kan bytte vakter (Vaktbytte.tsx) og om det er åpent i helgene (0064_helg.sql).
 type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
 type Vaktbytte = "av" | "godkjenning" | "fritt";
 function PersonalOppsett() {
@@ -157,6 +157,7 @@ function PersonalOppsett() {
     full_stilling: string;
     ferie_dager: string;
     vaktbytte: Vaktbytte;
+    helg: boolean;
   } | null>(null);
   const [lagret, settLagret] = useState(false);
   const h = useHandling();
@@ -172,6 +173,7 @@ function PersonalOppsett() {
         full_stilling: tekst(data.full_stilling ?? 37.5),
         ferie_dager: tekst(data.ferie_dager ?? 25),
         vaktbytte: data.vaktbytte ?? "godkjenning",
+        helg: data.helg ?? true,
       });
   }, [data]);
   if (!o) return <Laster />;
@@ -189,11 +191,12 @@ function PersonalOppsett() {
         full_stilling: tall(o!.full_stilling),
         ferie_dager: tall(o!.ferie_dager),
         vaktbytte: o!.vaktbytte,
+        helg: o!.helg,
       }),
     );
     if (!r) return;
     settLagret(true);
-    await oppdater(); // menyen får (eller mister) Ansatte og Timer
+    await oppdater(); // menyen får (eller mister) Ansatte og Timer, og helgen vises eller ikke
   }
 
   return (
@@ -215,6 +218,14 @@ function PersonalOppsett() {
           stillingsprosenten regnes av den.
         </span>
       </label>
+      <label>
+        <input type="checkbox" checked={o.helg} onChange={(e) => settO({ ...o, helg: e.target.checked })} />
+        Åpent i helgene (lørdag og søndag)
+      </label>
+      <p className="liten dempet">
+        Har dere stengt i helgene, viser vaktplanen, tavla, timene og de faste arbeidsdagene bare mandag–fredag, og dag for dag hopper over helgen. Lørdag og
+        søndag vises likevel når noen har vakt, fast dag eller timer da.
+      </p>
       {harFunksjon(org, "vaktplan") && (
         <>
           <h3>Ferie</h3>

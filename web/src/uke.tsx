@@ -12,6 +12,18 @@ export const gyldigDato = (s: string | null): s is string => !!s && /^\d{4}-\d{2
 export const mandag = (iso: string) => leggTilDager(iso, -((middag(iso).getUTCDay() + 6) % 7));
 export const ukedager = (man: string) => [0, 1, 2, 3, 4, 5, 6].map((i) => leggTilDager(man, i));
 
+// Helgen. Har organisasjonen stengt i helgene (org.helg, 0064_helg.sql), viser personalmodulen
+// bare mandag–fredag, og lørdag og søndag bare når noen har vakt, fast dag eller timer da.
+export const erHelg = (iso: string) => [0, 6].includes(middag(iso).getUTCDay());
+// Dagen før eller etter, forbi helgen når den er stengt.
+export function nesteDag(iso: string, retning: 1 | -1, helg: boolean) {
+  let d = leggTilDager(iso, retning);
+  while (!helg && erHelg(d)) d = leggTilDager(d, retning);
+  return d;
+}
+// Dagen, eller mandagen etter når den er i en stengt helg (f.eks. «i dag» på en lørdag).
+export const apenDag = (iso: string, helg: boolean) => (helg || !erHelg(iso) ? iso : nesteDag(iso, 1, false));
+
 export function ukenr(iso: string) {
   const man = mandag(iso);
   const aar = middag(leggTilDager(man, 3)).getUTCFullYear(); // torsdagen bestemmer året
@@ -37,10 +49,10 @@ function visPeriode(fra: string, til: string) {
   }
 }
 
-// «5.–11. okt.», med året når uka ikke er i år.
-export function ukePeriode(man: string) {
+// «5.–11. okt.» («5.–9. okt.» med stengt helg), med året når uka ikke er i år.
+export function ukePeriode(man: string, helg = true) {
   const { aar } = ukenr(man);
-  return `${visPeriode(man, leggTilDager(man, 6))}${aar !== Number(iDag().slice(0, 4)) ? ` ${aar}` : ""}`;
+  return `${visPeriode(man, leggTilDager(man, helg ? 6 : 4))}${aar !== Number(iDag().slice(0, 4)) ? ` ${aar}` : ""}`;
 }
 
 // Timene mellom fra og til (over midnatt når til er før fra), minus pausen. Som i databasen.
@@ -124,7 +136,7 @@ export function Klokkeslett({
   );
 }
 
-export function Ukevelger({ uke, velgUke }: { uke: string; velgUke: (mandag: string) => void }) {
+export function Ukevelger({ uke, velgUke, helg = true }: { uke: string; velgUke: (mandag: string) => void; helg?: boolean }) {
   const denne = mandag(iDag());
   return (
     <div className="ukevelger">
@@ -133,7 +145,7 @@ export function Ukevelger({ uke, velgUke }: { uke: string; velgUke: (mandag: str
       </button>
       <div className="uke-navn" aria-live="polite">
         <strong>Uke {ukenr(uke).uke}</strong>
-        <span>{ukePeriode(uke)}</span>
+        <span>{ukePeriode(uke, helg)}</span>
       </div>
       <button type="button" className="ikon" aria-label="Neste uke" title="Neste uke" onClick={() => velgUke(leggTilDager(uke, 7))}>
         <IkonHoyre storrelse={20} />

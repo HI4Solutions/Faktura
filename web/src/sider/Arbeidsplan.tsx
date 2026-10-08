@@ -125,6 +125,9 @@ export function ArbeidsplanFelt({
   ny: boolean;
   kanEndre: boolean;
 }) {
+  // Stengt i helgene (0064_helg.sql): mandag–fredag, og lørdag og søndag bare når de er valgt fra før.
+  const { org } = useKonto();
+  const helg = org?.helg !== false;
   // Stillingsprosenten følger dagene når de endres (den kan endres etterpå).
   const sett = (ukedag: number, d: DagUtkast | undefined) => {
     const ny = { ...utkast, dager: { ...utkast.dager, [ukedag]: d } };
@@ -152,7 +155,7 @@ export function ArbeidsplanFelt({
         tavla, og timer utover planen blir ekstratimer.
       </p>
       <div className="arbeidsdager" role="group" aria-label="Ukedager den ansatte jobber">
-        {[1, 2, 3, 4, 5, 6, 7].map((u) => (
+        {[1, 2, 3, 4, 5, 6, 7].filter((u) => helg || u <= 5 || !!utkast.dager[u]).map((u) => (
           <button
             key={u}
             type="button"

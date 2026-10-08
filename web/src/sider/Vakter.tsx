@@ -16,7 +16,7 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres
 import { erAdmin, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
 import { IkonHoyre, IkonKalender, IkonPluss, IkonVarsel, IkonVenstre } from "../ikoner";
-import { gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
+import { apenDag, erHelg, gyldigDato, Klokkeslett, mandag, middag, nesteDag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import { borteTekst, FravaerDialog, fravaerKlasse, fravaerTekst, FravaerListe, MittFravaer, VikarSkjema, type Fravaer, type FravaerType } from "./Fravaer";
 import { iFasen, Tavle, visLangDag } from "./Tavle";
 import { Bemanning, gyldigMaaned } from "./Bemanning";
@@ -118,6 +118,9 @@ export function Vakter() {
   const egen = org?.ansatt_id ?? null;
   // Rollene som vises i vaktplanen (dagen, uka og måneden), husket på enheten.
   const rollevalget = useRollevalg(org?.id);
+  // Stengt i helgene (0064_helg.sql): dagen er i dag, eller mandag når det er helg.
+  const helg = org?.helg !== false;
+  const idag = apenDag(iDag(), helg);
 
   // Egne og ledige vakter de neste åtte ukene (for ansatte; hele planen står under Vaktplan).
   const fra = iDag();
@@ -171,7 +174,7 @@ export function Vakter() {
   const gammelKalender = sok.get("fane") === "kalender";
   const fane = faner.find(([v]) => v === (gammelKalender ? "plan" : sok.get("fane")))?.[0] ?? faner[0]?.[0] ?? null;
   const uke = mandag(gyldigDato(sok.get("uke")) ? sok.get("uke")! : iDag());
-  const dato = gyldigDato(sok.get("dato")) ? sok.get("dato")! : iDag();
+  const dato = gyldigDato(sok.get("dato")) ? sok.get("dato")! : idag;
   const maaned = gyldigMaaned(sok.get("maaned")) ? sok.get("maaned")! : iDag().slice(0, 7);
   const visning: Visning = sok.get("visning") === "dag" ? "dag" : sok.get("visning") === "maaned" || gammelKalender ? "maaned" : "uke";
   const ga = (endring: Record<string, string | null>) => {
@@ -187,13 +190,15 @@ export function Vakter() {
     if (gammelKalender) ga({ fane: "plan", visning: "maaned" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gammelKalender]);
-  // En annen visning (eller en dag fra måneden): dagen, uka eller måneden følger det som vises nå.
+  // En annen visning (eller en dag fra måneden): dagen, uka eller måneden følger det som vises nå
+  // (dagen ikke i en stengt helg).
   const velgVisning = (v: Visning, dag?: string) => {
     const denneMnd = iDag().slice(0, 7);
-    const her = dag ?? (visning === "dag" ? dato : visning === "uke" ? (ukedager(uke).includes(iDag()) ? iDag() : uke) : maaned === denneMnd ? iDag() : `${maaned}-01`);
+    const valgt = dag ?? (visning === "dag" ? dato : visning === "uke" ? (ukedager(uke).includes(iDag()) ? iDag() : uke) : maaned === denneMnd ? iDag() : `${maaned}-01`);
+    const her = v === "dag" ? apenDag(valgt, helg) : valgt;
     ga({
       visning: v === "uke" ? null : v,
-      dato: v === "dag" && her !== iDag() ? her : v === "dag" ? null : sok.get("dato"),
+      dato: v === "dag" && her !== idag ? her : v === "dag" ? null : sok.get("dato"),
       uke: v === "uke" && mandag(her) !== mandag(iDag()) ? mandag(her) : v === "uke" ? null : sok.get("uke"),
       maaned: v === "maaned" && her.slice(0, 7) !== denneMnd ? her.slice(0, 7) : v === "maaned" ? null : sok.get("maaned"),
     });
@@ -248,8 +253,8 @@ export function Vakter() {
           visning={visning}
           velgVisning={velgVisning}
           dato={dato}
-          velgDato={(d) => ga({ dato: d === iDag() ? null : d })}
-          tilTavle={(d) => ga({ fane: "tavle", dato: d === iDag() ? null : d })}
+          velgDato={(d) => ga({ dato: d === idag ? null : d })}
+          tilTavle={(d) => ga({ fane: "tavle", dato: d === idag ? null : d })}
           uke={uke}
           velgUke={(u) => ga({ uke: u === mandag(iDag()) ? null : u })}
           kanPlanlegge={kanPersonal(org.rolle)}
@@ -261,7 +266,7 @@ export function Vakter() {
           rollevalget={rollevalget}
         />
       )}
-      {fane === "tavle" && <Tavle dato={dato} velgDato={(d) => ga({ dato: d === iDag() ? null : d })} kanEndre={kanPersonal(org.rolle)} />}
+      {fane === "tavle" && <Tavle dato={dato} velgDato={(d) => ga({ dato: d === idag ? null : d })} kanEndre={kanPersonal(org.rolle)} />}
       {fane === "fravaer" && <FravaerListe versjon={versjon} endret={endret} />}
       {fane === "mine" && (
         <MineVakter
@@ -343,6 +348,8 @@ function Vaktplan({
   rollevalget: Rollevalget;
 }) {
   const { org } = useKonto();
+  const helg = org?.helg !== false;
+  const idag = apenDag(iDag(), helg);
   // Perioden som vises: dagen eller uka (måneden er bemanningskalenderen).
   const [fra, til] = visning === "dag" ? [dato, dato] : [uke, leggTilDager(uke, 6)];
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/${seAlle ? "ansatte" : "kolleger"}`), [org?.id, seAlle, versjon]);
@@ -361,9 +368,10 @@ function Vaktplan({
   // Mobil: én dag om gangen, valgt i en stripe med ukedagene (samme ukedag når uka byttes).
   const mobil = useSmal();
   const [ukedag, settUkedag] = useState<number | null>(null);
-  const dager = ukedager(uke);
+  // Med stengt helg: mandag–fredag, og lørdag og søndag bare når noen har vakt eller fast dag da.
+  const dager = ukedager(uke).filter((d) => helg || !erHelg(d) || !!data?.vakter.some((v) => v.dato === d) || !!data?.faste?.some((f) => f.dato === d));
   const nr = ukenr(uke).uke;
-  const valgtDag = dager[ukedag ?? Math.max(0, dager.indexOf(iDag()))]!;
+  const valgtDag = dager[Math.min(ukedag ?? Math.max(0, dager.indexOf(iDag())), dager.length - 1)]!;
   // Ny periode: ikke vis meldingen eller feilen fra den forrige.
   useEffect(() => {
     settMelding(null);
@@ -398,12 +406,12 @@ function Vaktplan({
         <Periodevelger
           navn={visLangDag(dato)}
           under={`Uke ${ukenr(dato).uke}`}
-          forrige={["Forrige dag", () => velgDato(leggTilDager(dato, -1))]}
-          neste={["Neste dag", () => velgDato(leggTilDager(dato, 1))]}
-          naa={dato !== iDag() ? ["I dag", () => velgDato(iDag())] : undefined}
+          forrige={["Forrige dag", () => velgDato(nesteDag(dato, -1, helg))]}
+          neste={["Neste dag", () => velgDato(nesteDag(dato, 1, helg))]}
+          naa={dato !== idag ? [idag === iDag() ? "I dag" : "Mandag", () => velgDato(idag)] : undefined}
         />
       ) : (
-        <Ukevelger uke={uke} velgUke={velgUke} />
+        <Ukevelger uke={uke} velgUke={velgUke} helg={helg} />
       )}
       {kanPlanlegge && data && (
         <div className="knapper">
@@ -692,7 +700,7 @@ function Vaktplan({
                     className={[d === valgtDag ? "valgt" : "", d === iDag() ? "i-dag" : "", helligdag(d) ? "helligdag" : "", utkast ? "utkast" : ""].filter(Boolean).join(" ") || undefined}
                     onClick={() => settUkedag(i)}
                   >
-                    <span className="dv-dag">{DAGNAVN[i]}</span>
+                    <span className="dv-dag">{DAGNAVN[(middag(d).getUTCDay() + 6) % 7]}</span>
                     <span className="dv-dato">{Number(d.slice(8))}</span>
                     <span className={`dv-antall${mangler ? " varsel" : ""}`}>{mangler ? "!" : n || "–"}</span>
                   </button>
@@ -1314,6 +1322,7 @@ function VaktSkjema({
         <label>
           Dato
           <input type="date" required value={v.dato} onChange={(e) => sett({ dato: e.target.value })} />
+          {org?.helg === false && gyldigDato(v.dato) && erHelg(v.dato) && <span className="felt-hjelp">Dere har stengt i helgene, men vakten vises i vaktplanen.</span>}
         </label>
         <div className="rad tre">
           <label>

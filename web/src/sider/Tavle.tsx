@@ -14,7 +14,7 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles
 import { useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
 import { IkonHoyre, IkonInnstillinger, IkonKopier, IkonNed, IkonOpp, IkonPluss, IkonRullering, IkonTavle, IkonVarsel, IkonVenstre } from "../ikoner";
-import { Klokkeslett, mandag, middag, ukenr, visDag } from "../uke";
+import { apenDag, Klokkeslett, mandag, middag, nesteDag, ukenr, visDag } from "../uke";
 import { borteTekst, FravaerDialog, fravaerKlasse, fravaerPeriode, fravaerTekst, VikarSkjema, type Ansatt, type Fravaer, type FravaerType } from "./Fravaer";
 import { ArbeidsplanDialog, fastTider } from "./Arbeidsplan";
 import { HvemKan, Rullering } from "./Rullering";
@@ -98,6 +98,9 @@ const OPPGAVEFORSLAG = ["Telefon", "Resepsjon", "Lab"];
 
 export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (dato: string) => void; kanEndre: boolean }) {
   const { org } = useKonto();
+  // Stengt i helgene (0064_helg.sql): dag for dag hopper over helgen, og «i dag» på en lørdag er mandag.
+  const helg = org?.helg !== false;
+  const idag = apenDag(iDag(), helg);
   const { data, feil, last, settData } = useData(() => hent<TavleSvar>(`/org/${org!.id}/tavle?dato=${dato}`), [org?.id, dato], { oppdater: true });
   // Uten endringer (regnskap og de ansatte): personene i planen, uten resten av ansattkortet (0063).
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/${kanEndre ? "ansatte" : "kolleger"}`), [org?.id, kanEndre]);
@@ -144,7 +147,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
   const verktoy = (
     <div className="uke-verktoy">
       <div className="ukevelger">
-        <button type="button" className="ikon" aria-label="Forrige dag" title="Forrige dag" onClick={() => velgDato(leggTilDager(dato, -1))}>
+        <button type="button" className="ikon" aria-label="Forrige dag" title="Forrige dag" onClick={() => velgDato(nesteDag(dato, -1, helg))}>
           <IkonVenstre storrelse={20} />
         </button>
         <div className="uke-navn dag-navn-lang" aria-live="polite">
@@ -154,12 +157,12 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
             {helligdag(dato) ? ` · ${helligdag(dato)}` : ""}
           </span>
         </div>
-        <button type="button" className="ikon" aria-label="Neste dag" title="Neste dag" onClick={() => velgDato(leggTilDager(dato, 1))}>
+        <button type="button" className="ikon" aria-label="Neste dag" title="Neste dag" onClick={() => velgDato(nesteDag(dato, 1, helg))}>
           <IkonHoyre storrelse={20} />
         </button>
-        {dato !== iDag() && (
-          <button type="button" className="lenke" onClick={() => velgDato(iDag())}>
-            I dag
+        {dato !== idag && (
+          <button type="button" className="lenke" onClick={() => velgDato(idag)}>
+            {idag === iDag() ? "I dag" : "Mandag"}
           </button>
         )}
       </div>

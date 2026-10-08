@@ -22,6 +22,8 @@ export interface MinOrg {
   // Ser vaktplanen, tavla og bemanningskalenderen (eier, administrator og regnskap, og de aktive
   // ansatte; 0063_ansatte_ser_planen.sql).
   ser_planen?: boolean;
+  // Åpent i helgene (0064_helg.sql); stengt: personalmodulen viser bare mandag–fredag.
+  helg?: boolean;
 }
 
 export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan";

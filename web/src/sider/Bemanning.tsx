@@ -15,7 +15,7 @@ import { kortNavn, rollevalg, Rollevalg, RollerOppsett, type Rolle, type Rolleva
 import { erAdmin, useKonto } from "../konto";
 import { dato as visDato, iDag, leggTilDager, leggTilMaaneder } from "../format";
 import { IkonAnsatte, IkonHoyre, IkonRapport, IkonVenstre } from "../ikoner";
-import { gyldigDato, mandag, middag, tallformat, timer, ukenr, visDag } from "../uke";
+import { erHelg, gyldigDato, mandag, middag, tallformat, timer, ukenr, visDag } from "../uke";
 import {
   FRAVAERTYPER,
   fravaerKlasse,
@@ -183,11 +183,11 @@ export function Bemanning({
   const fastePer = new Map((data.faste ?? []).map((f) => [nokkel(f.ansatt_id, f.dato), f]));
   const ekstraPer = new Map((data.ekstra ?? []).map((e) => [nokkel(e.ansatt_id, e.dato), e]));
 
-  // Hverdagene, og helgedager med vakter eller faste dager.
+  // Alle dagene; med stengt helg (0064_helg.sql) hverdagene, og helgedager med vakter eller faste dager.
+  const helg = org?.helg !== false;
   const dager: string[] = [];
   for (let d = forste; d <= siste; d = leggTilDager(d, 1)) {
-    const ukedag = middag(d).getUTCDay();
-    if ((ukedag !== 0 && ukedag !== 6) || data.vakter.some((v) => v.dato === d) || (data.faste ?? []).some((f) => f.dato === d)) dager.push(d);
+    if (helg || !erHelg(d) || data.vakter.some((v) => v.dato === d) || (data.faste ?? []).some((f) => f.dato === d)) dager.push(d);
   }
 
   // Kolonnene: de som er ansatt i måneden, og alle med vakter eller fravær i den.
