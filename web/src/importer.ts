@@ -1,9 +1,10 @@
-// Import av kunder og produkter fra andre systemer (Fiken, Tripletex, Visma, PowerOffice,
+// Import av kunder, produkter og ansatte fra andre systemer (Fiken, Tripletex, Visma, PowerOffice,
 // Excel …). Leser CSV, Excel (.xlsx) og tabeller limt inn fra et regneark, kjenner igjen
 // kolonnene på overskriftene og gjør verdiene om til det API-et vil ha. API-et kontrollerer
 // radene og sier hva som blir nytt, hva som finnes fra før og hva som har feil.
+import { fnrGyldig, kontonrGyldig } from "./personnummer";
 
-export type Importtype = "kunder" | "produkter";
+export type Importtype = "kunder" | "produkter" | "ansatte";
 
 export interface Ark {
   navn: string;
@@ -11,9 +12,10 @@ export interface Ark {
   radnr: number[]; // radnummeret i fila (som i Excel), for hver rad
 }
 
+// kilde: tall fra Excel og AI har punktum som desimaltegn; i tekst er komma vanligst.
 export interface Innlest {
   ark: Ark[];
-  kilde: "xlsx" | "tekst";
+  kilde: "xlsx" | "tekst" | "ai";
 }
 
 // ---------------------------------------------------------------------------
@@ -451,6 +453,174 @@ export const FELT: Record<Importtype, Felt[]> = {
     },
     ...FELLES,
   ],
+  ansatte: [
+    {
+      id: "navn",
+      navn: "Navn (fornavn og etternavn)",
+      ord: ["navn", "fulltnavn", "ansattnavn", "medarbeidernavn", "ansatt", "medarbeider", "arbeidstaker", "name", "fullname", "employeename", "employee"],
+      del: ["navn", "name"],
+      ikke: ["fornavn", "etternavn", "first", "last", "bruker", "user", "fil", "firma", "arbeidsgiver", "employer", "bank", "stilling", "leder", "tillegg", "pårørende"],
+    },
+    { id: "fornavn", navn: "Fornavn", ord: ["fornavn", "firstname", "givenname", "forename"], del: ["fornavn", "firstname"], ikke: ["pårørende", "leder"] },
+    { id: "etternavn", navn: "Etternavn", ord: ["etternavn", "lastname", "surname", "familyname"], del: ["etternavn", "lastname", "surname"], ikke: ["pårørende", "leder"] },
+    {
+      id: "epost",
+      navn: "E-post",
+      ord: ["epost", "epostadresse", "jobbepost", "privatepost", "email", "emailaddress", "workemail", "mail", "mailadresse"],
+      del: ["epost", "email", "mail"],
+      ikke: ["pårørende", "leder", "kopi", "cc"],
+    },
+    {
+      id: "telefon",
+      navn: "Telefon",
+      ord: ["telefon", "mobil", "mobilnummer", "mobilnr", "telefonnummer", "telefonnr", "tlf", "tlfnr", "mobiltelefon", "phone", "mobile", "mobilephone", "cellphone", "phonenumber"],
+      del: ["telefon", "tlf", "mobil", "phone"],
+      ikke: ["fax", "faks", "pårørende", "nærmeste", "kontaktperson"],
+    },
+    {
+      id: "adresse",
+      navn: "Adresse",
+      ord: ["adresse", "postadresse", "gateadresse", "hjemmeadresse", "bostedsadresse", "adresselinje1", "adresse1", "address", "streetaddress", "street", "addressline1", "address1"],
+      del: ["adresse", "address"],
+      ikke: ["epost", "email", "mail", "web", "linje2", "line2", "adresse2", "address2", "arbeidsgiver", "firma", "pårørende"],
+    },
+    { id: "adresse2", navn: "Adresselinje 2", ord: ["adresselinje2", "adresse2", "addressline2", "address2", "co", "careof"], del: ["linje2", "line2"] },
+    {
+      id: "postnr",
+      navn: "Postnr.",
+      ord: ["postnr", "postnummer", "postkode", "postalcode", "postcode", "zip", "zipcode", "postnrsted", "postnrogsted"],
+      del: ["postnr", "postnummer", "zip", "postalcode", "postcode"],
+    },
+    { id: "poststed", navn: "Poststed", ord: ["poststed", "sted", "by", "city", "town", "postalarea", "place"], del: ["poststed", "city"] },
+    {
+      id: "fodselsdato",
+      navn: "Fødselsdato",
+      ord: ["fødselsdato", "fodselsdato", "født", "fodt", "fdato", "birthdate", "dateofbirth", "dob", "birthday"],
+      del: ["fødselsdato", "fodselsdato", "birth"],
+    },
+    {
+      id: "fnr",
+      navn: "Fødselsnummer",
+      ord: ["fødselsnummer", "fodselsnummer", "personnummer", "fnr", "personnr", "fødselsnr", "fodselsnr", "dnummer", "personid", "identitetsnummer", "nationalidentitynumber",
+        "nationalid", "ssn"],
+      del: ["fødselsn", "fodselsn", "personn", "fnr"],
+    },
+    {
+      id: "kontonr",
+      navn: "Kontonummer for lønn",
+      ord: ["kontonummer", "kontonr", "bankkonto", "bankkontonummer", "bankkontonr", "lønnskonto", "lonnskonto", "konto", "accountnumber", "bankaccount", "bankaccountnumber"],
+      del: ["kontonr", "kontonummer", "bankkonto", "lønnskonto"],
+    },
+    {
+      id: "stilling",
+      navn: "Stilling",
+      ord: ["stilling", "stillingstittel", "stillingsbetegnelse", "tittel", "jobbtittel", "yrke", "position", "jobtitle", "title", "role", "rolle"],
+      del: ["stilling", "tittel", "title"],
+      ikke: ["prosent", "pst", "prst", "andel", "kode", "percent", "type", "brøk"],
+    },
+    {
+      id: "stillingsprosent",
+      navn: "Stillingsprosent",
+      ord: ["stillingsprosent", "stillingsandel", "stillingspst", "stillingsprst", "stillingsbrøk", "prosent", "andel", "percentage", "fte", "employmentpercentage"],
+      del: ["stillingsprosent", "stillingsandel", "prosent", "percent"],
+      ikke: ["tillegg", "ferie", "skatt", "pensjon", "mva"],
+    },
+    {
+      id: "ukentlig_arbeidstid",
+      navn: "Arbeidstid i full stilling (timer per uke)",
+      ord: ["arbeidstid", "ukentligarbeidstid", "arbeidstidperuke", "timerperuke", "arbeidstimerperuke", "avtaltarbeidstid", "hoursperweek", "weeklyhours"],
+      del: ["arbeidstid", "peruke", "weeklyhours"],
+    },
+    {
+      id: "ansatt_fra",
+      navn: "Ansatt fra",
+      ord: ["ansattfra", "startdato", "ansattdato", "ansettelsesdato", "tiltredelse", "tiltredelsesdato", "tiltrådt", "førstearbeidsdag", "fradato", "fra", "startdate",
+        "hiredate", "employmentdate", "datestarted"],
+      del: ["ansattfra", "startdato", "ansettelsesdato", "tiltred", "startdate", "hiredate"],
+      ikke: ["tillegg"],
+    },
+    {
+      id: "ansatt_til",
+      navn: "Sluttdato",
+      ord: ["sluttdato", "ansatttil", "fratredelse", "fratredelsesdato", "fratrådt", "sistearbeidsdag", "tildato", "til", "enddate", "terminationdate", "dateleft"],
+      del: ["sluttdato", "fratred", "enddate"],
+      ikke: ["tillegg"],
+    },
+    {
+      id: "ansettelsestype",
+      navn: "Ansettelse (fast, midlertidig, tilkalling)",
+      ord: ["ansettelsestype", "ansettelsesform", "ansettelse", "arbeidsforhold", "arbeidsforholdstype", "typeansettelse", "employmenttype", "contracttype"],
+      del: ["ansettelsestype", "ansettelsesform", "arbeidsforhold", "employmenttype"],
+      ikke: ["dato", "date", "fra", "til", "prosent", "id", "nummer"],
+    },
+    {
+      id: "lonnstype",
+      navn: "Lønnstype (måned eller time)",
+      ord: ["lønnstype", "lonnstype", "lønnsform", "lonnsform", "avlønning", "avlønningsform", "paytype", "salarytype", "wagetype"],
+      del: ["lønnstype", "lonnstype", "lønnsform", "avlønning"],
+    },
+    {
+      id: "maanedslonn",
+      navn: "Månedslønn",
+      ord: ["månedslønn", "manedslonn", "fastlønn", "fastlonn", "grunnlønn", "grunnlonn", "lønnpermåned", "monthlysalary", "basesalary", "salary", "lønn", "lonn"],
+      del: ["månedslønn", "manedslonn", "fastlønn", "grunnlønn", "monthly"],
+      ikke: ["årslønn", "arslonn", "annual", "yearly", "time", "hour", "konto", "type", "form", "tillegg"],
+    },
+    {
+      id: "aarslonn",
+      navn: "Årslønn (blir månedslønn)",
+      ord: ["årslønn", "arslonn", "årslønn100", "lønnperår", "annualsalary", "yearlysalary"],
+      del: ["årslønn", "arslonn", "annual", "yearly"],
+    },
+    {
+      id: "timelonn",
+      navn: "Timelønn",
+      ord: ["timelønn", "timelonn", "timesats", "lønnpertime", "hourlyrate", "hourlywage", "hourlypay", "rate"],
+      del: ["timelønn", "timelonn", "timesats", "hourly"],
+      ikke: ["tillegg"],
+    },
+    {
+      id: "ferie_dager",
+      navn: "Feriedager per år",
+      ord: ["feriedager", "antallferiedager", "ferierett", "ferie", "vacationdays", "holidaydays"],
+      del: ["feriedag", "ferierett", "vacation"],
+      ikke: ["penger", "pay", "prosent", "grunnlag"],
+    },
+    {
+      id: "tillegg_belop",
+      navn: "Fast tillegg (beløp)",
+      ord: ["fasttillegg", "fastetillegg", "tillegg", "tilleggbeløp", "tilleggsbeløp", "lønnstillegg", "lonnstillegg", "funksjonstillegg", "ansiennitetstillegg", "fagbrevtillegg",
+        "personligtillegg", "allowance", "fixedallowance", "supplement"],
+      del: ["tillegg", "allowance"],
+      ikke: ["navn", "name", "type", "per", "enhet", "tekst", "beskrivelse"],
+    },
+    {
+      id: "tillegg_navn",
+      navn: "Navn på tillegget",
+      ord: ["tilleggsnavn", "tilleggnavn", "navnpåtillegg", "navnpatillegg", "tilleggstype", "typetillegg", "tilleggsbeskrivelse", "allowancename", "allowancetype"],
+      del: ["tilleggsnavn", "tilleggstype", "allowancename"],
+    },
+    {
+      id: "tillegg_per",
+      navn: "Tillegget per (måned eller time)",
+      ord: ["tilleggper", "tilleggsper", "tilleggperiode", "tilleggsenhet", "tilleggenhet", "allowanceper", "allowanceunit"],
+      del: ["tilleggper", "tilleggsper", "tilleggsenhet"],
+    },
+    {
+      id: "ansattnummer",
+      navn: "Tidligere ansattnr. (til notat)",
+      ord: ["ansattnummer", "ansattnr", "ansattid", "medarbeidernummer", "medarbeidernr", "lønnsnummer", "lonnsnummer", "employeenumber", "employeeno", "employeeid", "nummer",
+        "nr", "id"],
+      del: ["ansattn", "employeen", "employeeid"],
+    },
+    {
+      id: "notat",
+      navn: "Notat",
+      ord: ["notat", "notater", "merknad", "merknader", "kommentar", "kommentarer", "note", "notes", "comment", "comments"],
+      del: ["notat", "merknad", "kommentar", "note"],
+    },
+    ...FELLES,
+  ],
 };
 
 export const normaliserOverskrift = (s: string) => s.toLowerCase().replace(/[^a-z0-9æøåäöü]/g, "");
@@ -519,6 +689,11 @@ export function gjett(type: Importtype, rader: string[][]): (string | null)[] {
   };
   for (let k = 0; k < bredde; k++) {
     if (andel(k, (v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) >= 0.6) sett(k, "epost");
+    else if (type === "ansatte" && andel(k, (v) => fnrGyldig(v.replace(/[\s.]/g, ""))) >= 0.6) sett(k, "fnr");
+    else if (type === "ansatte" && andel(k, (v) => kontonrGyldig(v.replace(/[\s.]/g, ""))) >= 0.6) sett(k, "kontonr");
+    else if (type === "ansatte" && andel(k, (v) => /^\d{4}$/.test(v)) >= 0.6) sett(k, "postnr");
+    else if (type === "ansatte" && andel(k, (v) => /^(\+?\d[\d\s]{7,14})$/.test(v)) >= 0.6) sett(k, "telefon");
+    else if (type === "ansatte" && andel(k, (v) => tolkDato(v) !== null) >= 0.8) sett(k, brukt.has("fodselsdato") ? "ansatt_fra" : "fodselsdato");
     else if (type === "kunder" && andel(k, (v) => /^\d{9}$/.test(renOrgnr(v))) >= 0.6) sett(k, "orgnr");
     else if (type === "kunder" && andel(k, (v) => /^\d{4}$/.test(v)) >= 0.6) sett(k, "postnr");
     else if (type === "kunder" && andel(k, (v) => /^(\+?\d[\d\s]{7,14})$/.test(v)) >= 0.6) sett(k, "telefon");
@@ -575,7 +750,7 @@ export function desimaltegn(verdier: string[], kilde: Innlest["kilde"]): "," | "
     else if (/\.\d{1,2}$/.test(v) || /\d\.\d{4,}$/.test(v)) punktum++;
   }
   if (komma !== punktum) return komma > punktum ? "," : ".";
-  return kilde === "xlsx" ? "." : ",";
+  return kilde === "tekst" ? "," : ".";
 }
 
 const SATSER = [25, 15, 12, 0];
@@ -604,9 +779,73 @@ export function tolkMva(s: string): number | null {
 export function tolkJaNei(s: string): boolean | null {
   const t = s.trim().toLowerCase();
   if (["ja", "j", "yes", "y", "true", "sann", "1", "x", "aktiv", "active", "✓", "✔"].includes(t)) return true;
-  if (["nei", "n", "no", "false", "usann", "0", "inaktiv", "inactive", "arkivert", "archived", "deaktivert", "slettet", "deleted"].includes(t)) return false;
+  if (["nei", "n", "no", "false", "usann", "0", "inaktiv", "inactive", "arkivert", "archived", "deaktivert", "slettet", "deleted", "sluttet", "avsluttet"].includes(t))
+    return false;
   return null;
 }
+
+// Datoer som «31.12.2025», «31/12/2025», «2025-12-31», «31.12.85» eller et datotall fra Excel
+// (dager siden 30.12.1899). To sifre i året: dette århundret til og med i år, ellers forrige.
+export function tolkDato(s: string): string | null {
+  const t = s.trim();
+  if (!t) return null;
+  if (/^\d{5}(?:\.\d+)?$/.test(t)) {
+    const n = Math.floor(Number(t));
+    return n >= 10000 && n <= 80000 ? new Date(Date.UTC(1899, 11, 30) + n * 86_400_000).toISOString().slice(0, 10) : null;
+  }
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/.exec(t);
+  const norsk = /^(\d{1,2})([./-])(\d{1,2})\2(\d{4}|\d{2})$/.exec(t);
+  let aar: number;
+  let mnd: number;
+  let dag: number;
+  if (iso) [aar, mnd, dag] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else if (norsk) {
+    [dag, mnd, aar] = [Number(norsk[1]), Number(norsk[3]), Number(norsk[4])];
+    if (norsk[4]!.length === 2) aar += aar <= new Date().getFullYear() % 100 ? 2000 : 1900;
+    // Amerikansk rekkefølge (12/31/2025) når den norske ikke går.
+    if (mnd > 12 && dag <= 12 && norsk[2] === "/") [dag, mnd] = [mnd, dag];
+  } else return null;
+  const d = new Date(Date.UTC(aar, mnd - 1, dag));
+  if (d.getUTCFullYear() !== aar || d.getUTCMonth() !== mnd - 1 || d.getUTCDate() !== dag || aar < 1900) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+// Stillingsprosent: «80», «80 %», «80,5» eller en andel som 0,8 (Excel lagrer 80 % som 0.8).
+export function tolkProsent(s: string, desimal: "," | "."): number | null {
+  const n = tolkTall(s.replace(/%|prosent/gi, ""), desimal);
+  if (n === null) return null;
+  return n > 0 && n <= 1 ? Math.round(n * 10000) / 100 : n;
+}
+
+// Fornavn og etternavn fra hele navnet: «Etternavn, Fornavn», ellers er det siste ordet
+// etternavnet («Ola Johan Hansen»).
+export function delNavn(navn: string): [string, string] {
+  const t = navn.trim().replace(/\s+/g, " ");
+  const komma = t.indexOf(",");
+  if (komma > 0) return [t.slice(komma + 1).trim(), t.slice(0, komma).trim()];
+  const ord = t.split(" ");
+  return ord.length < 2 ? [t, ""] : [ord.slice(0, -1).join(" "), ord.at(-1)!];
+}
+
+const tolkAnsettelse = (s: string) => {
+  const t = s.trim().toLowerCase();
+  if (/tilkall|ekstrahjelp|on.?call|ringevikar|timebasert/.test(t)) return "tilkalling";
+  if (/midlertid|vikariat|vikar|engasjement|prosjekt|sesong|temporary|fixed.?term/.test(t)) return "midlertidig";
+  if (/^fast|fast ansatt|permanent|ordinær/.test(t)) return "fast";
+  return null;
+};
+const tolkLonnstype = (s: string) => {
+  const t = s.trim().toLowerCase();
+  if (/time|hour/.test(t)) return "time";
+  if (/måned|maaned|maned|mnd|fast|month|salary|år/.test(t)) return "maaned";
+  return null;
+};
+const tolkPer = (s: string) => {
+  const t = s.trim().toLowerCase();
+  if (/time|hour|^t$|\/t$/.test(t)) return "time";
+  if (/måned|maaned|maned|mnd|month/.test(t)) return "maaned";
+  return null;
+};
 
 const LAND: Record<string, string> = {
   norge: "NO", noreg: "NO", norway: "NO", nor: "NO", sverige: "SE", sweden: "SE", swe: "SE", danmark: "DK", denmark: "DK", dnk: "DK", finland: "FI",
@@ -639,6 +878,7 @@ const FIRMAORD =
 export interface Gjoremaal {
   kilde: Innlest["kilde"];
   mvaRegistrert: boolean;
+  overskrifter?: string[]; // overskriftene i fila (navnet på et fast tillegg kan stå der)
 }
 
 // Gjør radene om til det API-et vil ha. Tomme celler tas ikke med (da gjelder
@@ -653,6 +893,12 @@ export function tilRader(type: Importtype, rader: string[][], kobling: (string |
   const tallformat = (f: string) => desimaltegn(rader.map((r) => celle(r, f)).filter(Boolean), valg.kilde);
   const prisDesimal = tallformat("enhetspris");
   const inklDesimal = tallformat("pris_inkl");
+  const desimal = Object.fromEntries(
+    ["stillingsprosent", "ukentlig_arbeidstid", "maanedslonn", "aarslonn", "timelonn", "ferie_dager", "tillegg_belop"].map((f) => [f, tallformat(f)]),
+  );
+  // Et fast tillegg i en kolonne som heter noe eget («Funksjonstillegg»): det blir navnet.
+  const tilleggKolonne = valg.overskrifter?.[kol("tillegg_belop")] ? rensCelle(valg.overskrifter[kol("tillegg_belop")]!) : "";
+  const tilleggNavn = /^(fast(e)?\s*)?tillegg(\s*\(?(kr|beløp|nok)\)?)?$/i.test(tilleggKolonne) ? "" : tilleggKolonne;
 
   return rader.map((r) => {
     const v = (f: string) => celle(r, f);
@@ -716,6 +962,67 @@ export function tilRader(type: Importtype, rader: string[][], kobling: (string |
       if (tidligere) notater.unshift(`Kundenr. i tidligere system: ${tidligere}`);
       const notat = [v("notat"), ...notater].filter(Boolean).join("\n");
       if (notat) o.notat = notat;
+    } else if (type === "ansatte") {
+      let fornavn = v("fornavn");
+      let etternavn = v("etternavn");
+      if (v("navn") && (!fornavn || !etternavn)) {
+        const [f, e] = delNavn(v("navn"));
+        fornavn ||= f;
+        etternavn ||= e;
+      }
+      o.fornavn = fornavn;
+      o.etternavn = etternavn;
+      const epost = v("epost").replace(/^mailto:/i, "");
+      if (epost.includes("@")) {
+        const [forste, ...flere] = epost.split(/[\s,;]+/).filter(Boolean);
+        o.epost = forste!.replace(/^<|>$/g, "");
+        if (flere.length) notater.push(`Flere e-postadresser: ${flere.join(", ")}`);
+      }
+      settTekst("telefon");
+      settTekst("adresse", [v("adresse"), v("adresse2")].filter(Boolean).join(", "));
+      let postnr = v("postnr").replace(/^NO-/i, "");
+      let poststed = v("poststed");
+      const samlet = /^(\d{3,4})\s+(\D.*)$/.exec(postnr);
+      if (samlet) {
+        postnr = samlet[1]!;
+        poststed ||= samlet[2]!;
+      }
+      if (/^\d{1,3}$/.test(postnr)) postnr = postnr.padStart(4, "0");
+      settTekst("postnr", postnr);
+      settTekst("poststed", poststed);
+
+      // Datoer som ikke kan tolkes, sendes som de er, så API-et sier fra.
+      for (const f of ["fodselsdato", "ansatt_fra", "ansatt_til"]) if (v(f)) o[f] = tolkDato(v(f)) ?? v(f);
+      // Fødselsnummer og kontonummer: bare sifrene (Excel mister nullen foran et fødselsnummer).
+      const fnr = v("fnr").replace(/[\s.\-]/g, "");
+      if (/\d/.test(fnr)) o.fnr = /^\d{10}$/.test(fnr) ? `0${fnr}` : fnr;
+      const konto = v("kontonr").replace(/[\s.\-]/g, "");
+      if (/\d/.test(konto)) o.kontonr = konto;
+      settTekst("stilling");
+      const tall = (f: string) => (v(f) ? (tolkTall(v(f), desimal[f]!) ?? v(f)) : undefined);
+      if (v("stillingsprosent")) o.stillingsprosent = tolkProsent(v("stillingsprosent"), desimal.stillingsprosent!) ?? v("stillingsprosent");
+      if (v("ukentlig_arbeidstid")) o.ukentlig_arbeidstid = tall("ukentlig_arbeidstid");
+      if (v("ansettelsestype")) o.ansettelsestype = tolkAnsettelse(v("ansettelsestype")) ?? v("ansettelsestype");
+      if (v("ferie_dager")) o.ferie_dager = tall("ferie_dager");
+
+      // Lønn: månedslønn (eller årslønn delt på tolv) eller timelønn. Lønnstypen følger av den
+      // når den ikke står i fila.
+      const maaned = tall("maanedslonn");
+      const aar = tall("aarslonn");
+      if (maaned !== undefined) o.maanedslonn = maaned;
+      else if (typeof aar === "number") o.maanedslonn = Math.round((aar / 12) * 100) / 100;
+      else if (aar !== undefined) o.maanedslonn = aar;
+      if (v("timelonn")) o.timelonn = tall("timelonn");
+      const lonnstype = v("lonnstype") ? tolkLonnstype(v("lonnstype")) : o.maanedslonn !== undefined ? "maaned" : o.timelonn !== undefined ? "time" : null;
+      if (lonnstype) o.lonnstype = lonnstype;
+      else if (v("lonnstype")) o.lonnstype = v("lonnstype");
+
+      if (v("tillegg_belop"))
+        o.tillegg = [{ navn: v("tillegg_navn") || tilleggNavn || "Fast tillegg", belop: tall("tillegg_belop"), per: tolkPer(v("tillegg_per")) ?? "maaned" }];
+      const tidligere = v("ansattnummer");
+      if (tidligere) notater.unshift(`Ansattnr. i tidligere system: ${tidligere}`);
+      const notat = [v("notat"), ...notater].filter(Boolean).join("\n");
+      if (notat) o.notat = notat;
     } else {
       const navn = v("navn");
       const beskrivelse = v("beskrivelse");
@@ -758,10 +1065,18 @@ export function mal(type: Importtype): string {
           ["Eksempel Regnskap AS", "", "faktura@eksempel.no", "22 22 22 22", "Storgata 1", "0155", "Oslo", "NO", "Kari Nordmann", ""],
           ["Ola Nordmann", "", "ola@eksempel.no", "912 34 567", "Bakkeveien 2", "5003", "Bergen", "NO", "", ""],
         ]
-      : [
-          ["Varenummer", "Navn", "Beskrivelse", "Enhet", "Pris eks. mva", "Mva"],
-          ["100", "Konsulenttime", "", "time", "1250,00", "25"],
-          ["200", "Husleie", "Kontorlokale", "mnd", "14500,00", "0"],
-        ];
+      : type === "ansatte"
+        ? [
+            ["Fornavn", "Etternavn", "E-post", "Telefon", "Adresse", "Postnr.", "Poststed", "Fødselsnummer", "Fødselsdato", "Kontonummer", "Stilling", "Stillingsprosent",
+              "Ansatt fra", "Ansettelse", "Månedslønn", "Timelønn", "Fast tillegg", "Navn på tillegg"],
+            ["Kari", "Nordmann", "kari@eksempel.no", "912 34 567", "Storgata 1", "0155", "Oslo", "", "15.03.1990", "8601 11 17947", "Butikkmedarbeider", "80",
+              "01.08.2024", "Fast", "38000", "", "1500", "Funksjonstillegg"],
+            ["Ola", "Hansen", "ola@eksempel.no", "", "", "", "", "", "", "", "Lagermedarbeider", "", "01.09.2025", "Tilkalling", "", "210", "", ""],
+          ]
+        : [
+            ["Varenummer", "Navn", "Beskrivelse", "Enhet", "Pris eks. mva", "Mva"],
+            ["100", "Konsulenttime", "", "time", "1250,00", "25"],
+            ["200", "Husleie", "Kontorlokale", "mnd", "14500,00", "0"],
+          ];
   return "﻿" + rader.map((r) => r.map((c) => (/[;"\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(";")).join("\r\n") + "\r\n";
 }

@@ -151,6 +151,14 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (Innstillinger → Ansatte og timer). Ansattregisteret har personalia, ansettelse og lønn.
   Fødselsnummeret krypteres med KMS i API-et, som ikke kan lese det igjen (bare workeren kan,
   til lønn og a-melding senere); revisjonsloggen sier bare at det er registrert eller endret.
+  Faste tillegg på lønnen (`ansatt_tillegg`: f.eks. funksjonstillegg per måned eller
+  fagbrevtillegg per time, eventuelt for en periode) ligger på den ansatte og vises som lønnen
+  (eier, administrator, regnskap og den ansatte selv); lønnskjøringen skal ta dem med som faste
+  tillegg i a-meldingen. Ansatte kan importeres fra lønnssystemet eller et regneark, som kunder
+  og produkter (Excel eller CSV, kolonnene kjennes igjen; «Etternavn, Fornavn», norske datoer,
+  prosent og årslønn tolkes): samme e-post, eller samme navn når e-posten mangler, er samme
+  ansatt, fødselsnumrene krypteres før lagringen, og et fast tillegg i fila legges til eller
+  oppdaterer tillegget med samme navn (`POST /ansatte/importer`, krever Import og personal).
   En ansatt kan få egen innlogging: invitasjonen (`inviter_ansatt`) gir rollen `ansatt` og
   kobler brukeren til ansattkortet, og er e-posten alt med i organisasjonen, kobles den med
   en gang. Timene føres med fra og til (over midnatt går fint) og pause, eller som antall

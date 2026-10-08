@@ -442,6 +442,7 @@ function Ramme() {
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/produkter/importer" element={<Krever kode="import" navn="Importer produkter"><Importer key="produkter" type="produkter" /></Krever>} />
             <Route path="/ansatte" element={<Ansatte />} />
+            <Route path="/ansatte/importer" element={<Krever kode="import" navn="Importer ansatte"><Importer key="ansatte" type="ansatte" /></Krever>} />
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vaktplan"><Vakter /></Krever>} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/timer" element={<Timer />} />

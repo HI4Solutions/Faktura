@@ -20,6 +20,7 @@ describe("rutene og funksjonene de krever", () => {
     expect(funksjonerFor("/fakturaer/flere")).toEqual(["flere"]);
     expect(funksjonerFor("/fakturaer/utsted-flere")).toEqual(["flere"]);
     expect(funksjonerFor("/kunder/importer")).toEqual(["import"]);
+    expect(funksjonerFor("/ansatte/importer").sort()).toEqual(["ansatte", "import"]);
     expect(funksjonerFor("/kunder")).toEqual([]);
     expect(funksjonerFor("/eksport/fakturaer.csv")).toEqual(["rapporter"]);
     expect(funksjonerFor("/paaminnelser/abc")).toEqual(["paaminnelser"]);

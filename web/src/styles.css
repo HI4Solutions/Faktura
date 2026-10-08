@@ -629,6 +629,20 @@ ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 .hentetider strong { font-weight: 600; font-variant-numeric: tabular-nums; }
 .hentetider .liten { margin-top: 2px; }
 .kort .hentetider { margin: 12px 0; }
+/* Faste tillegg på lønnen i ansattskjemaet: én rad per tillegg (to kolonner på mobil). */
+.tillegg-hjelp { margin: -2px 0 10px; }
+.tillegg-rad { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 1.25fr) 36px; gap: 0 10px; align-items: end; }
+.tillegg-rad > .ikon { margin-bottom: 18px; justify-self: center; }
+.legg-til-tillegg { display: inline-block; margin: 0 0 16px; }
+.tillegg-liten { display: block; font-size: 0.78rem; font-weight: 450; color: var(--dempet); white-space: nowrap; }
+@media (max-width: 700px) {
+  .tillegg-rad { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px; padding-top: 10px; border-top: 1px solid var(--kant); }
+  .tillegg-rad > label:first-child { grid-column: 1 / 3; }
+  .tillegg-rad > label:nth-child(4) { grid-column: 1; }
+  .tillegg-rad > label:nth-child(3), .tillegg-rad > label:nth-child(5) { grid-column: 2 / 4; }
+  .tillegg-rad > .ikon { grid-column: 3; grid-row: 1; }
+}
+
 /* «Hent innbetalinger nå» står til høyre i boksen (under teksten på smale skjermer). */
 .hentetider-tekst { flex: 1; min-width: 0; }
 .hentetider-handling { flex: none; align-self: center; }

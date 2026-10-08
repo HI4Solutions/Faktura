@@ -21,7 +21,7 @@ const RUTER: [RegExp, string][] = [
   [/^\/fakturaer\/(flere|utsted-flere)$/, "flere"],
   [/^\/paaminnelser(\/|$)/, "paaminnelser"],
   [/^\/(rapporter|eksport)(\/|$)/, "rapporter"],
-  [/^\/(kunder|produkter)\/importer$/, "import"],
+  [/^\/(kunder|produkter|ansatte)\/importer$/, "import"],
   [/^\/ansatte\/[^/]+\/arbeidsplan(\/|$)/, "vaktplan"],
   [/^\/(ansatte|timer|lonn-oppsett)(\/|$)/, "ansatte"],
   [/^\/(vakter|tavle|fravaer|ansattgrupper|feriebank|ferie)(\/|$)/, "vaktplan"],

@@ -33,7 +33,7 @@ bank og regnskapssystemer.
 | EHF/Peppol (gjennom hver organisasjons konto hos Recommand) | Ferdig |
 | Innbetalinger fra banken (Enable Banking, flere banker) | Ferdig |
 | AI med Gemini på Vertex AI: assistent med talekommandoer, faktura fra tekst eller tale, forslag på innbetalinger | Ferdig (valgfrie GitHub-variabler `AI_AKTIV`, `AI_REGION`, `AI_MODELL`, `AI_GRENSE`) |
-| Ansatte og timer: ansattregister, egen innlogging for ansatte, timeføring med overtid, levering og godkjenning | Ferdig (slås på under Innstillinger → Ansatte og timer) |
+| Ansatte og timer: ansattregister med faste tillegg på lønnen, import fra lønnssystemet eller Excel/CSV, egen innlogging for ansatte, timeføring med overtid, levering og godkjenning | Ferdig (slås på under Innstillinger → Ansatte og timer) |
 | Vaktplan: planlegging og publisering med varsler, ledige vakter, kopiering av uker, advarsler etter arbeidsmiljøloven | Ferdig |
 | Tavle (ressursfordeling i faser og oppgaver), fravær (sykdom, ferie, permisjon, kurs), vikarer og bemanningskalender med grupper (f.eks. sekretærer og leger) mot behovet | Ferdig |
 | Norske helligdager i kalenderne (bemanningskalenderen, vaktplanen, timene og tavla); de faste arbeidsdagene gjelder ikke på helligdager, og timer da er ekstra | Ferdig |

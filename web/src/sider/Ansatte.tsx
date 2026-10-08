@@ -1,6 +1,7 @@
-// Ansatte: registeret over de ansatte (personalia, ansettelse og lønn) og deres egen innlogging
-// for timeføring (rollen ansatt). Eier og administrator endrer; regnskap ser. Fødselsnummeret
-// lagres kryptert og vises aldri igjen, bare at det er registrert.
+// Ansatte: registeret over de ansatte (personalia, ansettelse og lønn med faste tillegg) og deres
+// egen innlogging for timeføring (rollen ansatt). Eier og administrator endrer og kan importere
+// ansatte fra et annet system (Importer.tsx); regnskap ser. Fødselsnummeret lagres kryptert og
+// vises aldri igjen, bare at det er registrert.
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
@@ -8,7 +9,7 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "
 import { harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag } from "../format";
 import { fnrGyldig, fodselsdato, kontonrGyldig, visKontonr } from "../personnummer";
-import { IkonAnsatte } from "../ikoner";
+import { IkonAnsatte, IkonLukk } from "../ikoner";
 import { tallformat } from "../uke";
 import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
 import { AnsattFravaer, FravaerDialog, type Fravaer } from "./Fravaer";
@@ -40,10 +41,14 @@ type Ansatt = {
   gruppe_id: string | null;
   bursdag_varsel: boolean; // varsle de andre på bursdagen (når organisasjonen har slått på bursdagsvarsler)
   ferie_dager: number | null; // feriedager per år for denne ansatte (null: organisasjonens)
+  tillegg: Tillegg[]; // faste tillegg på lønnen
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
 };
+
+// Fast tillegg på lønnen (f.eks. funksjonstillegg per måned), eventuelt for en periode.
+type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"; fra: string | null; til: string | null };
 
 const ansettelsestype: Record<string, string> = { fast: "Fast", midlertidig: "Midlertidig", tilkalling: "Tilkalling" };
 const belop = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 });
@@ -51,6 +56,13 @@ const tekstTall = (n: number | null | undefined) => (n == null ? "" : belop.form
 const lonn = (a: Ansatt) =>
   a.lonnstype === "maaned" ? (a.maanedslonn != null ? `${belop.format(a.maanedslonn)} kr/mnd` : "") : a.timelonn != null ? `${belop.format(a.timelonn)} kr/t` : "";
 const sluttet = (a: Ansatt) => !a.aktiv || (!!a.ansatt_til && a.ansatt_til < iDag());
+// Tilleggene som gjelder i dag, kort: «+ Funksjonstillegg 1 500 kr/mnd» eller «+ 2 faste tillegg».
+const gjelder = (t: Tillegg) => (!t.fra || t.fra <= iDag()) && (!t.til || t.til >= iDag());
+const tilleggKort = (a: Ansatt) => {
+  const t = (a.tillegg ?? []).filter(gjelder);
+  if (!t.length) return "";
+  return t.length === 1 ? `+ ${t[0]!.navn} ${belop.format(t[0]!.belop)} kr/${t[0]!.per === "time" ? "t" : "mnd"}` : `+ ${t.length} faste tillegg`;
+};
 
 function Merker({ a }: { a: Ansatt }) {
   return (
@@ -100,9 +112,16 @@ export function Ansatte() {
       <div className="topp">
         <h1>Ansatte</h1>
         {endre && (
-          <button type="button" className="primar" onClick={() => settApen({})}>
-            Ny ansatt
-          </button>
+          <div className="knapper">
+            {harFunksjon(org, "import") && (
+              <Link className="knapp" to="/ansatte/importer">
+                Importer
+              </Link>
+            )}
+            <button type="button" className="primar" onClick={() => settApen({})}>
+              Ny ansatt
+            </button>
+          </div>
         )}
       </div>
       <div className="liste-verktoy">
@@ -131,9 +150,16 @@ export function Ansatte() {
               <Link to="/timer">Timer</Link>.
             </p>
             {endre && (
-              <button type="button" className="primar" onClick={() => settApen({})}>
-                Ny ansatt
-              </button>
+              <div className="knapper" style={{ justifyContent: "center" }}>
+                <button type="button" className="primar" onClick={() => settApen({})}>
+                  Ny ansatt
+                </button>
+                {harFunksjon(org, "import") && (
+                  <Link className="knapp" to="/ansatte/importer">
+                    Importer fra et annet system
+                  </Link>
+                )}
+              </div>
             )}
           </Tom>
         </div>
@@ -149,7 +175,7 @@ export function Ansatte() {
               </span>
               <span className="linje">
                 <span className="under">
-                  {[a.stilling, `${belop.format(a.stillingsprosent)} %`, vaktplan ? dagerTekst(a.arbeidsdager ?? []) : "", lonn(a)].filter(Boolean).join(" · ")}
+                  {[a.stilling, `${belop.format(a.stillingsprosent)} %`, vaktplan ? dagerTekst(a.arbeidsdager ?? []) : "", lonn(a), tilleggKort(a)].filter(Boolean).join(" · ")}
                 </span>
                 <Merker a={a} />
               </span>
@@ -183,7 +209,10 @@ export function Ansatte() {
                   <td>{a.stilling}</td>
                   <td className="tall">{belop.format(a.stillingsprosent)} %</td>
                   {vaktplan && <td>{dagerTekst(a.arbeidsdager ?? []) || <span className="dempet">–</span>}</td>}
-                  <td className="tall">{lonn(a)}</td>
+                  <td className="tall">
+                    {lonn(a)}
+                    {tilleggKort(a) && <span className="tillegg-liten">{tilleggKort(a)}</span>}
+                  </td>
                   <td>{dato(a.ansatt_fra)}</td>
                   <td>
                     <Merker a={a} />
@@ -218,8 +247,16 @@ export function Ansatte() {
   );
 }
 
+// Et fast tillegg i skjemaet (tekstfelt til det lagres).
+type TilleggUtkast = { id?: string; navn: string; belop: string; per: "maaned" | "time"; fra: string; til: string };
+const tilUtkast = (liste: Tillegg[] | undefined): TilleggUtkast[] =>
+  (liste ?? []).map((t) => ({ id: t.id, navn: t.navn, belop: tekstTall(t.belop), per: t.per, fra: t.fra ?? "", til: t.til ?? "" }));
+
 function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<Ansatt>; kanEndre: boolean; oppdatert: (a: Ansatt) => void; lukk: () => void }) {
   const { org } = useKonto();
+  const [tillegg, settTillegg] = useState<TilleggUtkast[]>(() => tilUtkast(ansatt.tillegg));
+  const [lagretTillegg, settLagretTillegg] = useState(() => JSON.stringify(tilUtkast(ansatt.tillegg)));
+  const endreTillegg = (i: number, e: Partial<TilleggUtkast>) => settTillegg((l) => l.map((t, j) => (j === i ? { ...t, ...e } : t)));
   const [a, settA] = useState(() => ({
     fornavn: ansatt.fornavn ?? "",
     etternavn: ansatt.etternavn ?? "",
@@ -322,6 +359,11 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     if (a.fjernFnr) kropp.fnr = null;
     else if (a.endreFnr && fnr) kropp.fnr = fnr;
     if (!kropp.fnr) kropp.fodselsdato = a.fodselsdato;
+    // De faste tilleggene sendes når de er endret (hele listen; de som er fjernet, slettes).
+    const brukte = tillegg.filter((t) => t.navn.trim() || t.belop.trim());
+    if (brukte.some((t) => !t.navn.trim() || !t.belop.trim())) return h.settFeil("Fyll ut navn og beløp på de faste tilleggene, eller fjern dem.");
+    if (JSON.stringify(tillegg) !== lagretTillegg)
+      kropp.tillegg = brukte.map((t) => ({ ...(t.id ? { id: t.id } : {}), navn: t.navn.trim(), belop: tall(t.belop), per: t.per, fra: t.fra || null, til: t.til || null }));
     const ny = !ansatt.id;
     const nyPlan = plan && endret(plan) ? tilLagring(plan) : null;
     if (typeof nyPlan === "string") return h.settFeil(nyPlan);
@@ -339,6 +381,8 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     if (!ny) return lukk();
     // Ny ansatt: bli i skjemaet, så man kan gi innlogging med en gang.
     settA({ ...a, fnr: "", endreFnr: !r.har_fnr, fjernFnr: false, fodselsdato: r.fodselsdato ?? "" });
+    settTillegg(tilUtkast(r.tillegg));
+    settLagretTillegg(JSON.stringify(tilUtkast(r.tillegg)));
     settMelding(`${r.fornavn} er lagt inn som ansatt nr. ${r.ansattnummer}.`);
     oppdatert(r);
   }
@@ -556,6 +600,49 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             </label>
           )}
         </div>
+        <h3>Faste tillegg</h3>
+        <p className="felt-hjelp tillegg-hjelp">
+          Betales fast i tillegg til lønnen, f.eks. funksjonstillegg per måned eller fagbrevtillegg per time. Uten datoer gjelder tillegget til det fjernes.
+        </p>
+        {tillegg.map((t, i) => (
+          <div key={i} className="tillegg-rad">
+            <label>
+              Navn
+              <input value={t.navn} placeholder="F.eks. funksjonstillegg" maxLength={100} onChange={(e) => endreTillegg(i, { navn: e.target.value })} />
+            </label>
+            <label>
+              Beløp (kr)
+              <input inputMode="decimal" value={t.belop} onChange={(e) => endreTillegg(i, { belop: e.target.value })} />
+            </label>
+            <label>
+              Per
+              <select value={t.per} onChange={(e) => endreTillegg(i, { per: e.target.value as TilleggUtkast["per"] })}>
+                <option value="maaned">måned</option>
+                <option value="time">time</option>
+              </select>
+            </label>
+            <label>
+              Fra og med
+              <input type="date" value={t.fra} onChange={(e) => endreTillegg(i, { fra: e.target.value })} />
+            </label>
+            <label>
+              Til og med
+              <input type="date" value={t.til} min={t.fra || undefined} onChange={(e) => endreTillegg(i, { til: e.target.value })} />
+            </label>
+            {kanEndre && (
+              <button type="button" className="ikon" aria-label={`Fjern ${t.navn || "tillegget"}`} title="Fjern tillegget" onClick={() => settTillegg((l) => l.filter((_, j) => j !== i))}>
+                <IkonLukk storrelse={16} />
+              </button>
+            )}
+          </div>
+        ))}
+        {kanEndre ? (
+          <button type="button" className="lenke legg-til-tillegg" onClick={() => settTillegg((l) => [...l, { navn: "", belop: "", per: "maaned", fra: "", til: "" }])}>
+            + Legg til fast tillegg
+          </button>
+        ) : (
+          !tillegg.length && <p className="dempet liten">Ingen faste tillegg.</p>
+        )}
         <label>
           Notat
           <textarea rows={2} {...felt("notat")} />

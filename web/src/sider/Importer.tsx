@@ -1,16 +1,16 @@
-// Import av kunder og produkter fra andre systemer: fil (Excel, CSV) eller rader limt inn
-// fra et regneark. Kolonnene kobles til feltene automatisk og kan endres; API-et prøver
+// Import av kunder, produkter og ansatte fra andre systemer: fil (Excel, CSV) eller rader limt
+// inn fra et regneark. Kolonnene kobles til feltene automatisk og kan endres; API-et prøver
 // importen først, så man ser hva som blir nytt, hva som finnes fra før og hva som har feil.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Feil, Laster, useData } from "../felles";
-import { kanSkrive, useKonto } from "../konto";
-import { kr, orgnr } from "../format";
+import { kanPersonal, kanSkrive, useKonto } from "../konto";
+import { dato, kr, orgnr } from "../format";
 import { IkonHake, IkonOpplasting } from "../ikoner";
 import { FELT, gjett, harOverskrifter, koble, lesFil, lesTekst, mal, rensCelle, tilRader, type Importtype, type Innlest } from "../importer";
 
-const MAKS = 5000; // rader per import (API-ets grense)
+const MAKS: Record<Importtype, number> = { kunder: 5000, produkter: 5000, ansatte: 2000 }; // rader per import (API-ets grense)
 const VIS = 200; // rader i forhåndsvisningen
 
 type Status = "ny" | "oppdater" | "hopp" | "feil";
@@ -22,6 +22,7 @@ interface Svar {
 const ORD = {
   kunder: { en: "kunde", flere: "kunder", ny: "ny", liste: "/kunder", likhet: "Samme org.nr., eller samme e-post eller navn når org.nr. mangler." },
   produkter: { en: "produkt", flere: "produkter", ny: "nytt", liste: "/produkter", likhet: "Samme varenummer, eller samme navn når varenummer mangler." },
+  ansatte: { en: "ansatt", flere: "ansatte", ny: "ny", liste: "/ansatte", likhet: "Samme e-post, eller samme navn når e-post mangler." },
 };
 
 const STATUS: Record<Status, { merke: string; klasse: string; fane: string }> = {
@@ -39,6 +40,13 @@ function bokstav(i: number) {
 }
 
 const kort = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+// Lønnen til en ansatt i forhåndsvisningen: månedslønn eller timelønn (verdier som ikke kunne
+// tolkes, vises som de står).
+const lonnTekst = (d: Record<string, any>) => {
+  const vis = (v: unknown, enhet: string) => (typeof v === "number" ? `${kr(v)} kr${enhet}` : String(v));
+  if (d.lonnstype === "time" || (d.timelonn !== undefined && d.maanedslonn === undefined)) return d.timelonn !== undefined ? vis(d.timelonn, "/t") : "";
+  return d.maanedslonn !== undefined ? vis(d.maanedslonn, "/mnd") : "";
+};
 const setning = (d: string[]) => (d.length < 2 ? (d[0] ?? "") : `${d.slice(0, -1).join(", ")} og ${d[d.length - 1]}`) + ".";
 
 export function Importer({ type }: { type: Importtype }) {
@@ -70,8 +78,8 @@ export function Importer({ type }: { type: Importtype }) {
   const radnr = useMemo(() => (ark ? ark.radnr.slice(overskrift ? 1 : 0) : []), [ark, overskrift]);
   const mvaRegistrert = orgData.data?.mva_registrert !== false;
   const rader = useMemo(
-    () => tilRader(type, dataRader, kobling, { kilde: innlest?.kilde ?? "tekst", mvaRegistrert }),
-    [type, dataRader, kobling, innlest, mvaRegistrert],
+    () => tilRader(type, dataRader, kobling, { kilde: innlest?.kilde ?? "tekst", mvaRegistrert, overskrifter: overskrift ? ark?.rader[0] : undefined }),
+    [type, dataRader, kobling, innlest, mvaRegistrert, overskrift, ark],
   );
 
   const har = (f: string) => kobling.includes(f);
@@ -81,12 +89,16 @@ export function Importer({ type }: { type: Importtype }) {
       ? !har("navn") && !har("fornavn") && !har("etternavn")
         ? "Velg hvilken kolonne som har navnet på kunden."
         : null
-      : !har("navn") && !har("beskrivelse")
-        ? "Velg hvilken kolonne som har navnet på produktet."
-        : null;
+      : type === "ansatte"
+        ? !har("navn") && !(har("fornavn") && har("etternavn"))
+          ? "Velg hvilke kolonner som har navnet: hele navnet, eller fornavn og etternavn."
+          : null
+        : !har("navn") && !har("beskrivelse")
+          ? "Velg hvilken kolonne som har navnet på produktet."
+          : null;
   // Uten priskolonne får produktene variabel pris (fylles inn på fakturaen).
   const utenPris = type === "produkter" && ark && !mangler && !har("enhetspris") && !har("pris_inkl");
-  const forMange = rader.length > MAKS;
+  const forMange = rader.length > MAKS[type];
 
   // Prøvekjøring i API-et hver gang radene eller valget for duplikater endres.
   useEffect(() => {
@@ -195,7 +207,9 @@ export function Importer({ type }: { type: Importtype }) {
     }
   }
 
-  if (!kanSkrive(org?.rolle)) return <Feil melding={`Du har ikke tilgang til å importere ${o.flere}.`} />;
+  if (!(type === "ansatte" ? kanPersonal(org?.rolle) : kanSkrive(org?.rolle))) return <Feil melding={`Du har ikke tilgang til å importere ${o.flere}.`} />;
+  if (type === "ansatte" && !org?.personal)
+    return <Feil melding="Ansatte og timer er ikke slått på. Slå det på under Innstillinger → Ansatte og timer." />;
 
   const tittel = <h1>Importer {o.flere}</h1>;
 
@@ -216,6 +230,9 @@ export function Importer({ type }: { type: Importtype }) {
           <h2>Importen er ferdig</h2>
           <p>{deler.length ? setning(deler) : "Ingenting ble importert."}</p>
           {type === "kunder" && a.ny > 0 && <p className="dempet liten">Om de nye kundene kan motta EHF, sjekkes av seg selv i løpet av noen minutter.</p>}
+          {type === "ansatte" && a.ny > 0 && (
+            <p className="dempet liten">Åpne de ansatte for å legge inn faste arbeidsdager eller gi dem egen innlogging, så de kan føre timene sine selv.</p>
+          )}
           <div className="knapper">
             <Link className="knapp primar" to={o.liste}>
               Til {o.flere}
@@ -233,7 +250,10 @@ export function Importer({ type }: { type: Importtype }) {
     return (
       <>
         <div className="topp">{tittel}</div>
-        <p className="undertittel">Hent {o.flere} fra Fiken, Tripletex, Visma, PowerOffice, Excel eller et annet system.</p>
+        <p className="undertittel">
+          Hent {o.flere} fra {type === "ansatte" ? "lønnssystemet (Tripletex, Visma, PowerOffice, Fiken …), Excel" : "Fiken, Tripletex, Visma, PowerOffice, Excel"} eller et annet
+          system.
+        </p>
         <label
           className={`slipp${drar ? " over" : ""}`}
           onDragOver={(e) => {
@@ -372,10 +392,12 @@ export function Importer({ type }: { type: Importtype }) {
           <tbody>
             {Array.from({ length: bredde }, (_, k) => {
               const navn = navnPaKolonne(k);
+              // Fødselsnumre vises ikke i sin helhet (bare fødselsdatoen).
               const eksempler = dataRader
                 .map((r) => rensCelle(r[k] ?? ""))
                 .filter(Boolean)
-                .slice(0, 3);
+                .slice(0, 3)
+                .map((e) => (kobling[k] === "fnr" && /^\d{11}$/.test(e.replace(/[\s.]/g, "")) ? `${e.replace(/[\s.]/g, "").slice(0, 6)}•••••` : e));
               return (
                 <tr key={k} className={kobling[k] ? undefined : "av"}>
                   <td className="tittel hel">{navn}</td>
@@ -405,7 +427,7 @@ export function Importer({ type }: { type: Importtype }) {
       {mangler && <div className="melding info">{mangler}</div>}
       {utenPris && <div className="melding info">Ingen kolonne er koblet til pris. Produktene får variabel pris, som fylles inn når de brukes på en faktura.</div>}
       {!rader.length && <div className="melding info">Det er ingen rader under overskriftene.</div>}
-      {forMange && <Feil melding={`Fila har ${rader.length} rader. Del den opp i filer med høyst ${MAKS} rader.`} />}
+      {forMange && <Feil melding={`Fila har ${rader.length} rader. Del den opp i filer med høyst ${MAKS[type]} rader.`} />}
       <Feil melding={feil} />
       {!plan && kontrollerer && <Laster />}
       {plan && (
@@ -457,6 +479,12 @@ export function Importer({ type }: { type: Importtype }) {
                       <th>E-post</th>
                       <th>Poststed</th>
                     </>
+                  ) : type === "ansatte" ? (
+                    <>
+                      <th>Stilling</th>
+                      <th className="hoyre">Lønn</th>
+                      <th>Ansatt fra</th>
+                    </>
                   ) : (
                     <>
                       <th>Varenr.</th>
@@ -470,11 +498,31 @@ export function Importer({ type }: { type: Importtype }) {
               <tbody>
                 {filtrert.slice(0, VIS).map((p) => {
                   const d = (rader[p.nr - 1] ?? {}) as Record<string, any>;
+                  const navn = type === "ansatte" ? [d.fornavn, d.etternavn].filter(Boolean).join(" ") : d.navn;
                   return (
                     <tr key={p.nr}>
                       <td className="radnr">{radnr[p.nr - 1] ?? p.nr}</td>
-                      <td className="navn">{d.navn || <span className="dempet">(uten navn)</span>}</td>
-                      {type === "kunder" ? (
+                      <td className="navn">{navn || <span className="dempet">(uten navn)</span>}</td>
+                      {type === "ansatte" ? (
+                        <>
+                          <td data-label="Stilling">
+                            {[d.stilling, typeof d.stillingsprosent === "number" ? `${String(d.stillingsprosent).replace(".", ",")} %` : d.stillingsprosent]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </td>
+                          <td data-label="Lønn" className="tall">
+                            {lonnTekst(d)}
+                            {Array.isArray(d.tillegg) &&
+                              d.tillegg.map((t: any, i: number) => (
+                                <span key={i} className="tillegg-liten">
+                                  + {t.navn} {typeof t.belop === "number" ? `${kr(t.belop)} kr` : t.belop}
+                                  {t.per === "time" ? "/t" : "/mnd"}
+                                </span>
+                              ))}
+                          </td>
+                          <td data-label="Ansatt fra">{typeof d.ansatt_fra === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.ansatt_fra) ? dato(d.ansatt_fra) : d.ansatt_fra}</td>
+                        </>
+                      ) : type === "kunder" ? (
                         <>
                           <td data-label="Org.nr.">{typeof d.orgnr === "string" && /^\d{9}$/.test(d.orgnr) ? orgnr(d.orgnr) : d.orgnr}</td>
                           <td data-label="E-post" className="epost">

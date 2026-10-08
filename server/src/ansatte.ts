@@ -9,8 +9,9 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { config } from "./config.js";
 import { alle, en, somBruker, somSystem, type Db } from "./db.js";
-import { ApiFeil } from "./feil.js";
+import { ApiFeil, tilHttp } from "./feil.js";
 import { fnrGyldig, fodselsdato } from "./fnr.js";
+import { ansattFeil, ansattFinnes, ansattnokler, ansattOppslag, planlegg } from "./importer.js";
 import { krypter } from "./kryptering.js";
 import { AML, beregnUke, uke, type Regler, type Ukesum } from "./arbeidstid.js";
 import { dato as visDato, iDag, kontonrGyldig } from "./regler.js";
@@ -43,6 +44,20 @@ const feriedager = z
   .max(60, "Høyst 60 feriedager i året")
   .refine((n) => Number.isInteger(n * 2), "Skriv hele eller halve dager");
 
+// Faste tillegg på lønnen (0052_faste_tillegg.sql): per måned eller per time, eventuelt for en
+// periode. Med id: et tillegg som finnes (endres); uten: et nytt.
+const tilleggSkjema = z
+  .object({
+    id: uuid.optional(),
+    navn: z.string({ error: "Skriv hva tillegget heter" }).trim().min(1, "Skriv hva tillegget heter").max(100, "Navnet på tillegget kan ha høyst 100 tegn"),
+    belop: z.number({ error: "Skriv beløpet for tillegget" }).gt(0, "Beløpet for tillegget må være over 0").max(10_000_000, "Beløpet for tillegget er for stort"),
+    per: z.enum(["maaned", "time"], { error: "Velg om tillegget er per måned eller per time" }).optional(),
+    fra: valgfri(datoS),
+    til: valgfri(datoS),
+  })
+  .refine((t) => !t.fra || !t.til || t.til >= t.fra, "Tillegget slutter før det begynner");
+type Tillegg = z.infer<typeof tilleggSkjema>;
+
 const ansattSkjema = z.object({
   fornavn: z.string({ error: "Skriv fornavnet" }).trim().min(1, "Skriv fornavnet").max(100, "Fornavnet kan ha høyst 100 tegn"),
   etternavn: z.string({ error: "Skriv etternavnet" }).trim().min(1, "Skriv etternavnet").max(100, "Etternavnet kan ha høyst 100 tegn"),
@@ -70,6 +85,8 @@ const ansattSkjema = z.object({
   bursdag_varsel: z.boolean().optional(), // varsle de andre på bursdagen (0045_bursdager.sql)
   // Feriedager per år for denne ansatte (null: organisasjonens, regnet om etter arbeidsdagene; 0050_feriebank.sql).
   ferie_dager: valgfri(feriedager),
+  // Alle de faste tilleggene (de som ikke er med, fjernes). Uten: tilleggene endres ikke.
+  tillegg: z.array(tilleggSkjema).max(20, "Høyst 20 faste tillegg").optional(),
 });
 
 const oppsettSkjema = z.object({
@@ -108,6 +125,10 @@ const ANSATT = `
            where d.org_id = a.org_id
              and d.plan_id = (select p.id from faktura.arbeidsplaner p where p.org_id = a.org_id and p.ansatt_id = a.id and p.gjelder_fra <= faktura.i_dag()
                                order by p.gjelder_fra desc limit 1)) as arbeidsdager,
+         -- De faste tilleggene på lønnen (0052_faste_tillegg.sql).
+         (select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'navn', t.navn, 'belop', t.belop, 'per', t.per, 'fra', t.fra, 'til', t.til)
+                                    order by t.opprettet, t.id), '[]'::jsonb)
+            from faktura.ansatt_tillegg t where t.org_id = a.org_id and t.ansatt_id = a.id) as tillegg,
          a.bruker_id = faktura.bruker_id() as meg,
          case when a.bruker_id is not null
                    and exists (select 1 from faktura.medlemmer m where m.org_id = a.org_id and m.bruker_id = a.bruker_id) then 'koblet'
@@ -232,12 +253,13 @@ export function ansattRuter() {
     return c.json(a);
   });
 
-  // Fødselsnummeret krypteres, og fødselsdatoen hentes fra det.
-  async function felter(b: z.infer<typeof ansattSkjema> | Partial<z.infer<typeof ansattSkjema>>) {
-    const { fnr, ...resten } = b;
+  // Fødselsnummeret krypteres (eller er kryptert på forhånd, i importen), og fødselsdatoen hentes
+  // fra det. De faste tilleggene lagres for seg (lagreTillegg).
+  async function felter(b: z.infer<typeof ansattSkjema> | Partial<z.infer<typeof ansattSkjema>>, kryptert?: Map<string, Buffer>) {
+    const { fnr, tillegg: _tillegg, ...resten } = b;
     const f: Record<string, unknown> = Object.fromEntries(Object.entries(resten).filter(([, v]) => v !== undefined));
     if (fnr !== undefined) {
-      f.fnr_kryptert = fnr ? await krypter(fnr) : null;
+      f.fnr_kryptert = fnr ? (kryptert?.get(fnr) ?? (await krypter(fnr))) : null;
       if (fnr) f.fodselsdato = fodselsdato(fnr);
     }
     if (typeof f.fodselsdato === "string" && f.fodselsdato > iDag()) throw new ApiFeil(400, "Fødselsdatoen kan ikke være fram i tid");
@@ -250,38 +272,168 @@ export function ansattRuter() {
     if (!(await en(db, "select 1 from faktura.ansattgrupper where org_id = $1 and id = $2", [org, f.gruppe_id]))) throw new ApiFeil(400, "Fant ikke gruppen");
   }
 
+  // Ny ansatt (felt: kolonnene fra felter). Uten arbeidstid får den nye ansatte organisasjonens
+  // arbeidstid i full stilling.
+  async function nyAnsatt(db: Db, org: string, f: Record<string, unknown>, fullStilling?: number) {
+    if (f.ukentlig_arbeidstid === undefined) f.ukentlig_arbeidstid = fullStilling ?? (await regler(db, org)).full_stilling;
+    const navn = Object.keys(f);
+    return (await en<{ id: string }>(
+      db,
+      `insert into faktura.ansatte (org_id, ${navn.join(", ")}) values ($1, ${navn.map((_, i) => `$${i + 2}`).join(", ")}) returning id`,
+      [org, ...navn.map((k) => f[k])],
+    ))!.id;
+  }
+
+  // De faste tilleggene til en ansatt. erstatt: listen er alle tilleggene (de med id endres, de
+  // uten legges til, og de som ikke er med, fjernes). Ellers (importen) legges de til, og et
+  // tillegg med samme navn som et som finnes, får beløpet fra fila (og perioden og «per» når de
+  // står der).
+  async function lagreTillegg(db: Db, org: string, ansatt: string, liste: Tillegg[], erstatt: boolean) {
+    const finnes = await alle<{ id: string; navn: string }>(db, "select id, navn from faktura.ansatt_tillegg where org_id = $1 and ansatt_id = $2", [org, ansatt]);
+    const beholdt = new Set<string>();
+    for (const t of liste) {
+      const id = erstatt ? t.id : finnes.find((x) => x.navn.trim().toLowerCase() === t.navn.toLowerCase())?.id;
+      if (id && !finnes.some((x) => x.id === id)) throw new ApiFeil(404, "Fant ikke tillegget");
+      if (id) beholdt.add(id);
+      if (id && erstatt)
+        await db.query("update faktura.ansatt_tillegg set navn = $3, belop = $4, per = $5, fra = $6, til = $7 where org_id = $1 and id = $2", [
+          org,
+          id,
+          t.navn,
+          t.belop,
+          t.per ?? "maaned",
+          t.fra ?? null,
+          t.til ?? null,
+        ]);
+      else if (id)
+        await db.query("update faktura.ansatt_tillegg set belop = $3, per = coalesce($4, per), fra = coalesce($5, fra), til = coalesce($6, til) where org_id = $1 and id = $2", [
+          org,
+          id,
+          t.belop,
+          t.per ?? null,
+          t.fra ?? null,
+          t.til ?? null,
+        ]);
+      else
+        await db.query("insert into faktura.ansatt_tillegg (org_id, ansatt_id, navn, belop, per, fra, til) values ($1, $2, $3, $4, $5, $6, $7)", [
+          org,
+          ansatt,
+          t.navn,
+          t.belop,
+          t.per ?? "maaned",
+          t.fra ?? null,
+          t.til ?? null,
+        ]);
+    }
+    const fjern = erstatt ? finnes.filter((x) => !beholdt.has(x.id)).map((x) => x.id) : [];
+    if (fjern.length) await db.query("delete from faktura.ansatt_tillegg where org_id = $1 and id = any($2::uuid[])", [org, fjern]);
+  }
+
   r.post("/ansatte", async (c) => {
-    const f = await felter(ansattSkjema.parse(await c.req.json().catch(() => ({}))));
+    const b = ansattSkjema.parse(await c.req.json().catch(() => ({})));
+    const f = await felter(b);
     const a = await bruk(c, async (db) => {
       await sjekkGruppe(db, orgId(c), f);
-      // Uten arbeidstid får den nye ansatte organisasjonens arbeidstid i full stilling.
-      if (f.ukentlig_arbeidstid === undefined) f.ukentlig_arbeidstid = (await regler(db, orgId(c))).full_stilling;
-      const navn = Object.keys(f);
-      const ny = await en<{ id: string }>(
-        db,
-        `insert into faktura.ansatte (org_id, ${navn.join(", ")}) values ($1, ${navn.map((_, i) => `$${i + 2}`).join(", ")}) returning id`,
-        [orgId(c), ...navn.map((k) => f[k])],
-      );
-      return en(db, `${ANSATT} where a.org_id = $1 and a.id = $2`, [orgId(c), ny!.id]);
+      const ny = await nyAnsatt(db, orgId(c), f);
+      if (b.tillegg?.length) await lagreTillegg(db, orgId(c), ny, b.tillegg, true);
+      return en(db, `${ANSATT} where a.org_id = $1 and a.id = $2`, [orgId(c), ny]);
     });
     return c.json(a, 201);
   });
 
   r.patch("/ansatte/:id", async (c) => {
-    const f = await felter(ansattSkjema.partial().parse(await c.req.json().catch(() => ({}))));
+    const b = ansattSkjema.partial().parse(await c.req.json().catch(() => ({})));
+    const f = await felter(b);
     const navn = Object.keys(f);
-    if (!navn.length) throw new ApiFeil(400, "Ingen felt å endre");
+    if (!navn.length && !b.tillegg) throw new ApiFeil(400, "Ingen felt å endre");
     const a = await bruk(c, async (db) => {
       await sjekkGruppe(db, orgId(c), f);
-      const res = await db.query(`update faktura.ansatte set ${navn.map((k, i) => `${k} = $${i + 3}`).join(", ")} where org_id = $1 and id = $2`, [
-        orgId(c),
-        id(c),
-        ...navn.map((k) => f[k]),
-      ]);
-      if (!res.rowCount) throw new ApiFeil(404, "Fant ikke den ansatte");
+      if (navn.length) {
+        const res = await db.query(`update faktura.ansatte set ${navn.map((k, i) => `${k} = $${i + 3}`).join(", ")} where org_id = $1 and id = $2`, [
+          orgId(c),
+          id(c),
+          ...navn.map((k) => f[k]),
+        ]);
+        if (!res.rowCount) throw new ApiFeil(404, "Fant ikke den ansatte");
+      } else {
+        await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+        if (!(await en(db, "select 1 from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), id(c)]))) throw new ApiFeil(404, "Fant ikke den ansatte");
+      }
+      if (b.tillegg) await lagreTillegg(db, orgId(c), id(c), b.tillegg, true);
       return en(db, `${ANSATT} where a.org_id = $1 and a.id = $2`, [orgId(c), id(c)]);
     });
     return c.json(a);
+  });
+
+  // --- Import fra andre systemer ------------------------------------------------
+  // Som for kunder og produkter (api.ts): radene er lest og koblet i nettleseren. «proving» gir
+  // bare planen (nye, oppdateres, hoppes over, feil); ellers lagres de gyldige radene samlet,
+  // med de faste tilleggene. Fødselsnumrene krypteres før transaksjonen (Cloud KMS, noen om
+  // gangen), og planen lages på nytt i den, så den stemmer med det som finnes da.
+  const importSkjema = z.object({
+    rader: z.array(z.record(z.string(), z.unknown())).min(1).max(2000, "Høyst 2000 rader om gangen"),
+    duplikater: z.enum(["hopp", "oppdater"]).optional(),
+    proving: z.boolean().optional(),
+  });
+  const ansattSjekk = (a: z.infer<typeof ansattSkjema>) => {
+    const fodt = a.fnr ? fodselsdato(a.fnr) : a.fodselsdato;
+    if (fodt && fodt > iDag()) return "Fødselsdatoen kan ikke være fram i tid";
+    if (a.ansatt_til && a.ansatt_til < (a.ansatt_fra ?? iDag())) return "Sluttdatoen er før startdatoen";
+    return null;
+  };
+  const planleggImport = async (db: Db, org: string, b: z.infer<typeof importSkjema>) => {
+    await db.query("select faktura.krev($1, 'personal')", [org]);
+    const finnes = new Map<string, string>();
+    for (const a of await alle<{ id: string; fornavn: string; etternavn: string; epost: string | null }>(
+      db,
+      "select id, fornavn, etternavn, epost from faktura.ansatte where org_id = $1 order by ansattnummer",
+      [org],
+    ))
+      for (const k of ansattFinnes(a)) if (!finnes.has(k)) finnes.set(k, a.id);
+    return planlegg(b.rader, ansattSkjema, ansattnokler, finnes, b.duplikater ?? "hopp", ansattSjekk, { oppslag: ansattOppslag, melding: ansattFeil });
+  };
+
+  r.post("/ansatte/importer", async (c) => {
+    const b = importSkjema.parse(await c.req.json().catch(() => ({})));
+    let plan = await bruk(c, (db) => planleggImport(db, orgId(c), b));
+    if (!b.proving) {
+      const lagres = (p: (typeof plan)[number]) => p.status === "ny" || p.status === "oppdater";
+      const kryptert = new Map<string, Buffer>();
+      const fnr = [...new Set(plan.filter(lagres).map((p) => p.data!.fnr).filter((x): x is string => !!x))];
+      for (let i = 0; i < fnr.length; i += 8) await Promise.all(fnr.slice(i, i + 8).map(async (x) => kryptert.set(x, await krypter(x))));
+      plan = await bruk(c, async (db) => {
+        const plan = await planleggImport(db, orgId(c), b);
+        const full = (await regler(db, orgId(c))).full_stilling;
+        for (const p of plan.filter(lagres)) {
+          try {
+            const d = p.data!;
+            if (p.status === "ny") {
+              const ny = await nyAnsatt(db, orgId(c), await felter(d, kryptert), full);
+              if (d.tillegg?.length) await lagreTillegg(db, orgId(c), ny, d.tillegg, false);
+              continue;
+            }
+            // Tomme felt i fila sletter ikke det som står fra før, og et notat legges til det
+            // som står der (med mindre det står der allerede).
+            const { notat, ...f } = Object.fromEntries(Object.entries(await felter(d, kryptert)).filter(([, v]) => v !== null && v !== ""));
+            const sett = Object.keys(f).map((k, i) => `${k} = $${i + 3}`);
+            const verdier = Object.values(f);
+            if (notat !== undefined) {
+              verdier.push(notat);
+              const n = `$${verdier.length + 2}::text`;
+              sett.push(`notat = case when coalesce(notat, '') = '' then ${n} when strpos(notat, ${n}) > 0 then notat else notat || E'\\n' || ${n} end`);
+            }
+            if (sett.length) await db.query(`update faktura.ansatte set ${sett.join(", ")} where org_id = $1 and id = $2`, [orgId(c), p.id, ...verdier]);
+            if (d.tillegg?.length) await lagreTillegg(db, orgId(c), p.id!, d.tillegg, false);
+          } catch (e) {
+            throw new ApiFeil(tilHttp(e).status, `Rad ${p.nr}: ${tilHttp(e).error}`);
+          }
+        }
+        return plan;
+      });
+    }
+    const antall = { ny: 0, oppdater: 0, hopp: 0, feil: 0 };
+    for (const p of plan) antall[p.status]++;
+    return c.json({ antall, rader: plan.map(({ nr, status, grunn }) => ({ nr, status, grunn })) });
   });
 
   // Bare ansatte uten timer kan slettes; ellers settes en sluttdato (og den ansatte inaktiv).
