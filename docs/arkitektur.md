@@ -220,10 +220,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   mange timer som var planlagt. Vaktplanen vises per dag, uke eller måned (`?visning=dag`,
   `uke` eller `maaned`): dagen som en tidslinje rolle for rolle (vaktene og de faste dagene som
   streker, hvem som har vakt ledig og hvem som er borte; trykk på en strek åpner vakten, og på en
-  tom linje legges en vakt inn, og «Tavla for dagen» åpner tavla), uka som før, og måneden som
-  bemanningskalenderen (se under; kalenderen er ikke en egen fane lenger, og gamle lenker med
-  `fane=kalender` går til måneden). Trykk på en dato i måneden åpner dagen. «Publiser» gjelder
-  dagen eller uka som vises
+  tom linje legges en vakt inn, og «Tavla for dagen» åpner tavla), uka rolle for rolle (rollen
+  over personene, i rollenes rekkefølge), og måneden som bemanningskalenderen (se under;
+  kalenderen er ikke en egen fane lenger, og gamle lenker med `fane=kalender` går til måneden).
+  Trykk på en dato i måneden åpner dagen. «Publiser» gjelder dagen eller uka som vises. Over
+  planen velges hvilke roller som vises («Vis: Alle | Sekretærer | Leger | Uten rolle»,
+  `Rollevalg` i `Roller.tsx`): det samme valget gjelder dagen, uka og måneden, og tellingene (på
+  jobb, mangler vikar) følger det, mens ledige vakter (uten rolle), advarslene, «Publiser» og
+  «Kopier uka» gjelder alle. Valget huskes på enheten per organisasjon (`localStorage`) og
+  endrer bare visningen
 - `vaktbytter` (`0060_vaktbytte.sql`, `server/src/vaktbytte.ts`): den ansatte gir bort en
   publisert vakt eller en fast arbeidsdag (den blir en vakt med de samme tidene,
   `vakt_fra_plan`), til en bestemt kollega eller til alle med samme rolle (uten rolle: alle), eller

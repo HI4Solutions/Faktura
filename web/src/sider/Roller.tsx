@@ -4,9 +4,10 @@
 // i fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler. Med vaktplanen står
 // rollene ved siden av hverandre i bemanningskalenderen, med hvor mange som er på jobb mot
 // behovet, og en rolle kan stå utenfor tavla (0057_rolle_tavle.sql; f.eks. legene: de står ikke
-// der og fordeles ikke). Rollene settes opp her (fra Ansatte og fra kalenderen), og velges for hver
-// person i skjemaet under Ansatte. Kunder (f.eks. legene kontoret fakturerer) kan hentes inn som
-// rollehavere herfra (HentFraKunder), uten å skrives inn på nytt.
+// der og fordeles ikke). Rollene settes opp her (fra Ansatte og fra måneden i vaktplanen), og velges
+// for hver person i skjemaet under Ansatte. Kunder (f.eks. legene kontoret fakturerer) kan hentes inn
+// som rollehavere herfra (HentFraKunder), uten å skrives inn på nytt. I vaktplanen kan det velges
+// hvilke roller som vises (Rollevalg).
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api, hent } from "../api";
 import { Feil, Laster, tall, useData, useHandling } from "../felles";
@@ -20,6 +21,80 @@ type Person = { id: string; fornavn: string; etternavn: string; aktiv: boolean; 
 // «Sekretær» blir «Sek.» i oppsummeringen i kalenderen, med mindre rollen har en egen forkortelse.
 export const kortNavn = (g: Pick<Rolle, "navn" | "kort">) => g.kort || (g.navn.length > 5 ? `${g.navn.slice(0, 3)}.` : g.navn);
 export const IKKE_ANSATT_HJELP = "med i vaktplanen og fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler";
+
+// --- Rollevalget i vaktplanen ------------------------------------------------------------------
+// Hvilke roller vaktplanen viser (dagen, uka og måneden), f.eks. bare legene; tomt er alle. Valget
+// huskes på enheten for hver organisasjon, og endrer bare hva som vises.
+export const UTEN_ROLLE = "uten";
+export type Rollevalget = { valgt: string[]; velg: (valgt: string[]) => void };
+const ROLLEVALG = "faktura.vaktplan.roller.";
+
+export function useRollevalg(orgId: string | undefined): Rollevalget {
+  const les = () => {
+    try {
+      const v: unknown = JSON.parse(localStorage.getItem(ROLLEVALG + orgId) ?? "[]");
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  };
+  const [valgt, settValgt] = useState<string[]>(les);
+  useEffect(() => {
+    settValgt(les());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId]);
+  const velg = (v: string[]) => {
+    settValgt(v);
+    try {
+      if (v.length) localStorage.setItem(ROLLEVALG + orgId, JSON.stringify(v));
+      else localStorage.removeItem(ROLLEVALG + orgId);
+    } catch {
+      /* ikke kritisk */
+    }
+  };
+  return { valgt, velg };
+}
+
+// Rollene det kan velges mellom (de som noen har, med fargene fra vaktplanen: g0–g4, og g5 for
+// dem uten rolle), og om en person med rollen (gruppe_id) vises. Roller som er slettet, teller ikke.
+export function rollevalg(valgt: string[], roller: Rolle[], personer: { gruppe_id?: string | null; aktiv: boolean }[]) {
+  const kjente = new Set(roller.map((r) => r.id));
+  const valg = [
+    ...roller.map((r, i) => ({ id: r.id, navn: r.navn, farge: i % 5 })).filter((v) => personer.some((a) => a.gruppe_id === v.id)),
+    ...(roller.length && personer.some((a) => a.aktiv && !(a.gruppe_id && kjente.has(a.gruppe_id))) ? [{ id: UTEN_ROLLE, navn: "Uten rolle", farge: 5 }] : []),
+  ];
+  const aktive = valg.length > 1 ? valg.filter((v) => valgt.includes(v.id)).map((v) => v.id) : [];
+  const alle = !aktive.length || aktive.length === valg.length;
+  return {
+    valg,
+    aktive: alle ? [] : aktive,
+    alle,
+    vises: (rolle: string | null | undefined) => alle || aktive.includes(rolle && kjente.has(rolle) ? rolle : UTEN_ROLLE),
+  };
+}
+
+// «Vis: Alle | Sekretærer | Leger»: trykk på en rolle for å se bare den, og på flere for å se dem.
+export function Rollevalg({ valg, aktive, velg }: { valg: { id: string; navn: string; farge: number }[]; aktive: string[]; velg: (valgt: string[]) => void }) {
+  if (valg.length < 2) return null;
+  const veksle = (id: string) => {
+    const neste = aktive.includes(id) ? aktive.filter((x) => x !== id) : [...aktive, id];
+    velg(neste.length === valg.length ? [] : neste);
+  };
+  return (
+    <div className="rollevalg" role="group" aria-label="Roller som vises">
+      <span>Vis</span>
+      <button type="button" aria-pressed={!aktive.length} onClick={() => velg([])}>
+        Alle
+      </button>
+      {valg.map((v) => (
+        <button key={v.id} type="button" className={`rolle g${v.farge}`} aria-pressed={aktive.includes(v.id)} onClick={() => veksle(v.id)}>
+          <span className="rolle-prikk" aria-hidden="true" />
+          {v.navn}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // kalender: med vaktplanen (behov og forkortelse i bemanningskalenderen).
 export function RollerOppsett({ roller, personer, kalender, endret, lukk }: { roller: Rolle[]; personer: Person[]; kalender: boolean; endret: () => void; lukk: () => void }) {

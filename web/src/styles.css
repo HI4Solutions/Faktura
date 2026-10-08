@@ -1402,6 +1402,13 @@ button.lenke.fare:hover:not(:disabled) { background: none; }
    Vaktplan
    -------------------------------------------------------------------------- */
 .utkast-info { margin: -4px 0 12px; }
+/* Rollevalget (Roller.tsx): hvilke roller dagen, uka og måneden viser */
+.rollevalg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -4px 0 12px; }
+.rollevalg > span { font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); margin-right: 2px; }
+.rollevalg button { display: inline-flex; align-items: center; gap: 6px; min-height: 0; padding: 5px 12px; border-radius: 999px; font-size: 0.86rem; }
+.rollevalg .rolle-prikk { flex: none; width: 8px; height: 8px; border-radius: 999px; background: var(--g); }
+.rollevalg button[aria-pressed="true"] { background: var(--aksent-lys); border-color: var(--aksent); color: var(--aksent); }
+.rollevalg button.rolle[aria-pressed="true"] { background: var(--g-lys); border-color: var(--g); color: var(--g); }
 /* Planen på PC: én rad per ansatt, én kolonne per dag */
 .kort.tabell.vaktplan table { table-layout: fixed; min-width: 760px; }
 .vaktplan th:first-child { width: 140px; }
@@ -1475,6 +1482,9 @@ button.vakt-chip.mangler { border-left-color: var(--fare); }
 .vaktplan tfoot td { padding: 8px 4px; background: var(--flate-2); border-top: 1px solid var(--kant-sterk); border-bottom: 0; font-size: 0.82rem; vertical-align: top; }
 .vaktplan tfoot td:first-child { padding-top: 8px; font-weight: 600; }
 .vaktplan tfoot strong { font-variant-numeric: tabular-nums; }
+/* Uka rolle for rolle, med rollen over (i rollens farge, som dagen og måneden) */
+.vaktplan tr.rolle-rad th { width: auto; padding: 8px 10px 6px; background: var(--g-lys); color: var(--g); font-weight: 700; border-bottom-color: color-mix(in srgb, var(--g) 25%, var(--kant)); }
+.vaktplan td.rolle-tom { padding: 14px 12px; font-weight: 450; color: var(--dempet); }
 /* Faste arbeidsdager (fra arbeidsplanen) i vaktplanen: som vakter, med «Fast» */
 .vakt-chip.fast {
   display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; margin: 0 0 4px; padding: 4px 6px;
@@ -2131,6 +2141,11 @@ th.tall .helligdag-navn { margin-left: auto; }
   [data-modul="personal"] .ukevelger .uke-navn strong { font-size: 0.95rem; }
   [data-modul="personal"] .ukevelger .uke-navn span { font-size: 0.75rem; }
   [data-modul="personal"] .knapper.bm-knapper { flex-wrap: nowrap; }
+  /* Rollevalget på én linje, som kan rulles sidelengs når rollene ikke får plass */
+  [data-modul="personal"] .rollevalg { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: -2px 0 8px; gap: 5px; }
+  [data-modul="personal"] .rollevalg::-webkit-scrollbar { display: none; }
+  [data-modul="personal"] .rollevalg > * { flex: none; }
+  [data-modul="personal"] .rollevalg button { padding: 4px 11px; font-size: 0.84rem; }
   [data-modul="personal"] .knapper.bm-knapper > button, [data-modul="personal"] .knapper.bm-knapper > button.primar { flex: 1 1 auto; padding-left: 8px; padding-right: 8px; gap: 5px; }
 
   /* Beskjeder */

@@ -6,11 +6,12 @@
 // høyre står hvor mange med hver rolle som er på jobb mot behovet, så bemanningen kan ses opp mot
 // hverandre, og nederst ekstratimene i måneden per ansatt. Trykk på en rute for å registrere
 // fravær eller sette inn vikar; rollene og behovet settes opp under «Roller» (Roller.tsx), og
-// rapporten over ekstratimene (PDF og CSV) under «Ekstratimer». Trykk på en dato for dagen.
+// rapporten over ekstratimene (PDF og CSV) under «Ekstratimer». Trykk på en dato for dagen. Hvilke
+// roller som vises, velges over tabellen (Rollevalg i Roller.tsx, det samme valget som dagen og uka).
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { api, hent, lastNed } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling, useSmal } from "../felles";
-import { kortNavn, RollerOppsett, type Rolle } from "./Roller";
+import { kortNavn, rollevalg, Rollevalg, RollerOppsett, type Rolle, type Rollevalget } from "./Roller";
 import { erAdmin, useKonto } from "../konto";
 import { dato as visDato, iDag, leggTilDager, leggTilMaaneder } from "../format";
 import { IkonAnsatte, IkonHoyre, IkonRapport, IkonVenstre } from "../ikoner";
@@ -64,6 +65,7 @@ export function Bemanning({
   visningsvalg,
   tilDag,
   tilUke,
+  rollevalget,
 }: {
   maaned: string; // «2026-10»
   velgMaaned: (maaned: string) => void;
@@ -75,6 +77,8 @@ export function Bemanning({
   visningsvalg?: ReactNode;
   tilDag: (dato: string) => void;
   tilUke: (mandag: string) => void;
+  // Rollene som vises (det samme valget i dagen, uka og måneden).
+  rollevalget: Rollevalget;
 }) {
   const smal = useSmal();
   const { org } = useKonto();
@@ -197,6 +201,7 @@ export function Bemanning({
   // Forkortelsen (f.eks. «AB») sparer plass; uten: fornavnet (med etternavnets forbokstav når flere heter det samme).
   const visNavn = (a: Ansatt) => a.forkortelse || ((fornavn.get(a.fornavn) ?? 0) > 1 ? `${a.fornavn} ${a.etternavn.charAt(0)}.` : a.fornavn);
   const kjente = new Set(grupper.data.map((g) => g.id));
+  const rv = rollevalg(rollevalget.valgt, grupper.data, ansatte.data);
   const seksjoner: Seksjon[] = [
     ...grupper.data.map((g, i) => ({ id: g.id, navn: g.navn, kort: kortNavn(g), behov: g.behov, farge: i % FARGER, ansatte: synlige.filter((a) => a.gruppe_id === g.id) })),
     {
@@ -207,7 +212,10 @@ export function Bemanning({
       farge: 5,
       ansatte: synlige.filter((a) => !a.gruppe_id || !kjente.has(a.gruppe_id)),
     },
-  ].filter((s) => s.ansatte.length > 0);
+  ].filter((s) => s.ansatte.length > 0 && rv.vises(s.id));
+  // Bare de valgte rollene teller (vakter uten vikar og utkast); ledige vakter har ingen rolle.
+  const viste = new Set(seksjoner.flatMap((s) => s.ansatte.map((a) => a.id)));
+  const iValget = (id: string | null) => rv.alle || (!!id && viste.has(id));
 
   const ruteFor = (a: Ansatt, d: string): Rute => {
     if (!(a.ansatt_fra <= d && (!a.ansatt_til || a.ansatt_til >= d))) return { art: "utenfor" };
@@ -222,11 +230,11 @@ export function Bemanning({
     return { art: "fri" };
   };
   const paJobb = (s: Seksjon, d: string) => s.ansatte.filter((a) => ruteFor(a, d).art === "jobb").length;
-  const utenVikar = (d: string) => data.vakter.filter((v) => v.dato === d && v.ansatt_id && v.fravaer && !v.har_vikar).length;
+  const utenVikar = (d: string) => data.vakter.filter((v) => v.dato === d && v.ansatt_id && v.fravaer && !v.har_vikar && iValget(v.ansatt_id)).length;
   const ledige = (d: string) => data.vakter.filter((v) => v.dato === d && !v.ansatt_id).length;
   const visUtenVikar = dager.some((d) => utenVikar(d) > 0);
   const visLedige = dager.some((d) => ledige(d) > 0);
-  const harUtkast = data.vakter.some((v) => v.ansatt_id && !v.publisert && v.dato >= forste && v.dato <= siste);
+  const harUtkast = data.vakter.some((v) => v.ansatt_id && !v.publisert && v.dato >= forste && v.dato <= siste && iValget(v.ansatt_id));
   // Helligdagene i måneden (de faste arbeidsdagene gjelder ikke da, og behovet regnes ikke).
   const helligdager = dager.filter((d) => helligdag(d));
   // Ekstratimene i måneden per ansatt (raden nederst).
@@ -329,6 +337,7 @@ export function Bemanning({
   return (
     <>
       {verktoy}
+      <Rollevalg valg={rv.valg} aktive={rv.aktive} velg={rollevalget.velg} />
       {melding && (
         <div className="melding ok" role="status">
           {melding}
@@ -346,6 +355,16 @@ export function Bemanning({
         <div className="kort">
           <Tom ikon={<IkonAnsatte storrelse={22} />} tittel="Ingen ansatte denne måneden">
             <p>Legg inn de ansatte under Ansatte, med de faste arbeidsdagene, eller vaktene i vaktplanen. Da viser vaktplanen hvem som er på jobb hver dag.</p>
+          </Tom>
+        </div>
+      ) : !seksjoner.length ? (
+        <div className="kort">
+          <Tom ikon={<IkonAnsatte storrelse={22} />} tittel="Ingen med de valgte rollene denne måneden">
+            <p>
+              <button type="button" className="lenke" onClick={() => rollevalget.velg([])}>
+                Vis alle
+              </button>
+            </p>
           </Tom>
         </div>
       ) : (
