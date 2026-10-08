@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent, lastOppLogo } from "../api";
 import { EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
 import { erAdmin, harFunksjon, useKonto } from "../konto";
@@ -142,9 +142,20 @@ function SlettOrg() {
 }
 
 // Ansatte og timer: slås på per organisasjon, med grensene for overtid, bursdagsvarslene, om de
-// ansatte kan bytte vakter (Vaktbytte.tsx) og om det er åpent i helgene (0064_helg.sql).
+// ansatte kan bytte vakter (Vaktbytte.tsx), om det er åpent i helgene (0064_helg.sql) og
+// lønnsoppsettet (0065_lonn.sql: sone for arbeidsgiveravgift, OTP, feriepenger, lønnsdag og
+// måneden med halv skatt).
 type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
 type Vaktbytte = "av" | "godkjenning" | "fritt";
+const AGA_SONER: [string, string][] = [
+  ["1", "Sone 1 – 14,1 %"],
+  ["1a", "Sone 1a – 10,6 % til fribeløpet er brukt, deretter 14,1 %"],
+  ["2", "Sone 2 – 10,6 %"],
+  ["3", "Sone 3 – 6,4 %"],
+  ["4", "Sone 4 – 5,1 %"],
+  ["4a", "Sone 4a – 7,9 %"],
+  ["5", "Sone 5 – 0 % (Finnmark og Nord-Troms)"],
+];
 function PersonalOppsett() {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
@@ -158,6 +169,11 @@ function PersonalOppsett() {
     ferie_dager: string;
     vaktbytte: Vaktbytte;
     helg: boolean;
+    aga_sone: string;
+    otp_prosent: string;
+    feriepenger_prosent: string;
+    lonnsdag: string;
+    halv_skatt: "november" | "desember";
   } | null>(null);
   const [lagret, settLagret] = useState(false);
   const h = useHandling();
@@ -174,6 +190,11 @@ function PersonalOppsett() {
         ferie_dager: tekst(data.ferie_dager ?? 25),
         vaktbytte: data.vaktbytte ?? "godkjenning",
         helg: data.helg ?? true,
+        aga_sone: data.aga_sone ?? "1",
+        otp_prosent: tekst(data.otp_prosent ?? 2),
+        feriepenger_prosent: tekst(data.feriepenger_prosent ?? 12),
+        lonnsdag: String(data.lonnsdag ?? 20),
+        halv_skatt: data.halv_skatt ?? "desember",
       });
   }, [data]);
   if (!o) return <Laster />;
@@ -192,6 +213,15 @@ function PersonalOppsett() {
         ferie_dager: tall(o!.ferie_dager),
         vaktbytte: o!.vaktbytte,
         helg: o!.helg,
+        ...(harFunksjon(org, "lonn")
+          ? {
+              aga_sone: o!.aga_sone,
+              otp_prosent: tall(o!.otp_prosent),
+              feriepenger_prosent: tall(o!.feriepenger_prosent),
+              lonnsdag: tall(o!.lonnsdag),
+              halv_skatt: o!.halv_skatt,
+            }
+          : {}),
       }),
     );
     if (!r) return;
@@ -272,6 +302,63 @@ function PersonalOppsett() {
         Arbeidsmiljøloven: arbeid ut over 9 timer per dag eller 40 timer per uke er overtid, med minst 40 % tillegg (§ 10-4 og § 10-6). Har dere tariffavtale
         med andre grenser, skriver du dem her.
       </p>
+      {harFunksjon(org, "lonn") && (
+        <>
+          <h3 id="lonn" className="innstilling-sted">
+            Lønn
+          </h3>
+          <label>
+            Sone for arbeidsgiveravgift
+            <select value={o.aga_sone} onChange={(e) => settO({ ...o, aga_sone: e.target.value })}>
+              {AGA_SONER.map(([v, t]) => (
+                <option key={v} value={v}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <span className="felt-hjelp">Sonen der virksomheten er registrert (kommunen). I sone 1a gjelder den reduserte satsen til den sparte avgiften i året når 850 000 kr.</span>
+          </label>
+          <div className="rad">
+            <label>
+              OTP (%)
+              <input inputMode="decimal" required value={o.otp_prosent} onChange={(e) => settO({ ...o, otp_prosent: e.target.value })} />
+              <span className="felt-hjelp">Obligatorisk tjenestepensjon, minst 2 % fra første krone opp til 12 G. 0 uten OTP.</span>
+            </label>
+            <label>
+              Feriepenger (%)
+              <select
+                value={["10,2", "12"].includes(o.feriepenger_prosent) ? o.feriepenger_prosent : "annen"}
+                onChange={(e) => settO({ ...o, feriepenger_prosent: e.target.value === "annen" ? "14,3" : e.target.value })}
+              >
+                <option value="12">12 % (fem uker ferie)</option>
+                <option value="10,2">10,2 % (lovens fire uker og én dag)</option>
+                <option value="annen">Annen sats</option>
+              </select>
+              {!["10,2", "12"].includes(o.feriepenger_prosent) && (
+                <input inputMode="decimal" aria-label="Feriepengesats (%)" required value={o.feriepenger_prosent} onChange={(e) => settO({ ...o, feriepenger_prosent: e.target.value })} />
+              )}
+            </label>
+          </div>
+          <div className="rad">
+            <label>
+              Lønnsdag (dagen i måneden)
+              <input inputMode="numeric" required value={o.lonnsdag} onChange={(e) => settO({ ...o, lonnsdag: e.target.value })} />
+              <span className="felt-hjelp">Lønnen utbetales virkedagen før når dagen er en helg eller helligdag.</span>
+            </label>
+            <label>
+              Halv skatt i
+              <select value={o.halv_skatt} onChange={(e) => settO({ ...o, halv_skatt: e.target.value as "november" | "desember" })}>
+                <option value="desember">Desember</option>
+                <option value="november">November</option>
+              </select>
+              <span className="felt-hjelp">Med tabelltrekk trekkes det halv skatt én måned i året.</span>
+            </label>
+          </div>
+          <p className="liten dempet">
+            Skattekortet registreres på hver ansatt. Lønnskjøringene er under <Link to="/lonn">Lønn</Link>.
+          </p>
+        </>
+      )}
       <h3>Bursdager</h3>
       <label>
         Varsle om bursdager

@@ -178,7 +178,7 @@ async function pakkUt(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(strom).arrayBuffer());
 }
 
-function lesZip(b: Uint8Array): Map<string, () => Promise<Uint8Array>> {
+export function lesZip(b: Uint8Array): Map<string, () => Promise<Uint8Array>> {
   const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
   let slutt = -1;
   for (let i = b.length - 22; i >= Math.max(0, b.length - 65557); i--) {

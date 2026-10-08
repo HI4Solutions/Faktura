@@ -45,7 +45,8 @@ bank og regnskapssystemer.
 | Stengt i helgene: vaktplanen, tavla, timene og de faste arbeidsdagene viser bare mandag–fredag (helgen bare når noen har vakt eller timer da), og AI-assistenten legger perioder på hverdagene | Ferdig (slås av og på under Innstillinger → Ansatte og timer) |
 | Beskjeder: alle i organisasjonen legger beskjeder til én eller flere roller (f.eks. legene) eller til alle, med push-varsel om de vil; de nye står merket, og tallet på dem vises i menyen | Ferdig (menyen «Beskjeder» når Ansatte og timer er slått på) |
 | Feriebank: feriedager, avviklet, planlagt og gjenstående ferie per ansatt (justeres av seg selv når ferie registreres), og søknad om å overføre dager til neste år som eier eller administrator godkjenner | Ferdig (menyen «Ferie»; feriedager per år under Innstillinger → Ansatte og timer) |
-| Lønnskjøring, a-melding og utbetaling | Planlagt (se veikartet) |
+| Lønnskjøring: en kjøring per måned (og ekstra kjøringer) med lønnsslippene regnet ut fra de ansatte (fastlønn for arbeidsdagene, timelønn, merarbeid og overtid fra de godkjente timene, faste tillegg, sykepenger i arbeidsgiverperioden og omsorgsdager for timelønte), skattetrekk etter skattekortet (tabell, prosent eller frikort; 50 % uten) med Skatteetatens trekktabeller, halv skatt, feriepenger og trekk i lønn for ferie i juni, sluttoppgjør, OTP og arbeidsgiveravgift per sone. Linjene kan endres, fjernes og legges til før godkjenning; de ansatte får varsel og lønnsslippen (også som PDF), og kjøringen lastes ned som CSV | Ferdig (funksjonen «Lønn»; satsene under Innstillinger → Ansatte og timer, skattekortet på den ansatte, trekktabellene under Administrasjon → Drift) |
+| A-melding og utbetaling (betalingsfil til nettbanken) | Planlagt (se veikartet) |
 | Regnskapssystemer | Ikke startet |
 
 Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og veikart.

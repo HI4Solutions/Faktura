@@ -6,7 +6,7 @@ import { dato } from "../format";
 import { IkonBjelle, IkonInstaller } from "../ikoner";
 import { usePwa } from "../Pwa";
 import { erInstallert, erIos, hentAbonnement, installer, pushStotte, slaAvVarsler, slaPaVarsler } from "../pwa";
-import { useKonto } from "../konto";
+import { harFunksjon, useKonto } from "../konto";
 import { foreslattNavn, leggTilPasskey, passkeyFeil } from "../passkey";
 import { bekreftMedServer, biometriNavn, hentPasskeyIder, lagreLaas, lesLaas, lyttPaLaas, merkAktiv, stotterApplaas } from "../applaas";
 import { settTema, useTema, type Tema } from "../tema";
@@ -169,15 +169,17 @@ interface PushData {
 export function AppOgVarsler() {
   const { meg } = useKonto();
   const { data, last } = useData(() => hent<PushData>("/push"), []);
-  // Bare de varslene som gjelder: ansatte får bare varsler om timer, vakter, fravær, bursdager
-  // og beskjeder, og de bare der ansatte og timer er slått på. Bursdager og beskjeder går til
-  // alle i organisasjonen.
+  // Bare de varslene som gjelder: ansatte får bare varsler om timer, vakter, fravær, bursdager,
+  // beskjeder og lønnsslipper, og de bare der ansatte og timer er slått på. Bursdager og
+  // beskjeder går til alle i organisasjonen, lønnsslippen til den som er ansatt (med lønn).
   const orgs = meg?.organisasjoner ?? [];
   const bareAnsatt = orgs.length > 0 && orgs.every((o) => o.rolle === "ansatt");
   const typer = Object.entries(data?.typer ?? {}).filter(([type]) =>
     type === "bursdag" || type === "beskjed"
       ? orgs.some((o) => o.personal)
-      : type === "timer" || type === "vakter" || type === "fravaer"
+      : type === "lonn"
+        ? orgs.some((o) => o.personal && !!o.ansatt_id && harFunksjon(o, "lonn"))
+        : type === "timer" || type === "vakter" || type === "fravaer"
         ? orgs.some((o) => o.personal && (o.rolle === "ansatt" || o.ansatt_id || ["eier", "admin"].includes(o.rolle)))
         : !bareAnsatt,
   );

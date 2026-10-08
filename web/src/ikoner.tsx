@@ -129,6 +129,15 @@ export const IkonKroner = (p: P) => (
     <path d="M6 9.5v.01M18 14.5v.01" />
   </Ikon>
 );
+// Lommebok: lønn og lønnsslipper.
+export const IkonLonn = (p: P) => (
+  <Ikon {...p}>
+    <path d="M5 7.5V6.2A2.2 2.2 0 0 1 7.2 4h10.3" />
+    <rect x="3.5" y="7.5" width="17" height="12.5" rx="2.2" />
+    <path d="M20.5 11.5h-3.8a2 2 0 0 0 0 4h3.8" />
+    <path d="M16.8 13.5h.01" />
+  </Ikon>
+);
 export const IkonUtkast = (p: P) => (
   <Ikon {...p}>
     <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />

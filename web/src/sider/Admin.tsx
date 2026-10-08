@@ -9,6 +9,7 @@ import { dato, orgnr } from "../format";
 import { IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
 import { ModulValg, modulnavn, opplisting, useModuler, type Modul } from "../moduler";
 import { SlettOrganisasjon } from "../slettOrg";
+import { aarFraFilnavn, lesTrekktabellFil } from "../trekktabeller";
 
 type Org = {
   id: string;
@@ -1187,6 +1188,92 @@ function EhfTest() {
   );
 }
 
+// Skatteetatens trekktabeller for tabelltrekket i lønnskjøringen: fila (tekst eller zip) leses i
+// nettleseren, og månedstabellene for lønn sendes i biter (den første tømmer året).
+function Trekktabeller() {
+  const liste = useData(() => hent<{ aar: number; tabeller: number; rader: number }[]>("/admin/trekktabeller"), []);
+  const iAar = new Date().getFullYear();
+  const [aar, settAar] = useState(String(iAar));
+  const [fremdrift, settFremdrift] = useState<string | null>(null);
+  const [ok, settOk] = useState<string | null>(null);
+  const h = useHandling();
+  const BIT = 20_000;
+  async function lastOpp(fil: File) {
+    settOk(null);
+    const lest = await h.kjor(async () => {
+      settFremdrift("Leser fila …");
+      const r = await lesTrekktabellFil(fil);
+      if (!r.rader.length) throw new Error("Fant ingen trekktabeller for lønn per måned i fila. Bruk «Trekktabeller i tekstformat» fra Skatteetaten.");
+      const y = Number(aar) || aarFraFilnavn(fil.name, iAar);
+      for (let i = 0; i < r.rader.length; i += BIT) {
+        settFremdrift(`Laster opp ${Math.min(i + BIT, r.rader.length).toLocaleString("nb-NO")} av ${r.rader.length.toLocaleString("nb-NO")} rader …`);
+        await api("POST", "/admin/trekktabeller", { aar: y, forste: i === 0, rader: r.rader.slice(i, i + BIT) });
+      }
+      return { ...r, aar: y };
+    });
+    settFremdrift(null);
+    if (lest) {
+      settOk(`${lest.tabeller} tabeller (${lest.rader.length.toLocaleString("nb-NO")} rader) er lastet inn for ${lest.aar}.`);
+      void liste.last();
+    }
+  }
+  return (
+    <section className="kort">
+      <h2>Trekktabeller (lønn)</h2>
+      <p className="dempet liten" style={{ marginTop: 0 }}>
+        Skatteetatens trekktabeller i tekstformat for tabelltrekket i lønnskjøringen. Last inn de nye tabellene hvert år (de kommer i desember). Uten tabellene regnes trekket med
+        prosentsatsen på skattekortet.
+      </p>
+      {liste.data && (
+        <div className="admin-tellinger">
+          {liste.data.length ? (
+            liste.data.map((t) => (
+              <span key={t.aar}>
+                <strong>{t.aar}</strong> {t.tabeller} tabeller, {t.rader.toLocaleString("nb-NO")} rader
+              </span>
+            ))
+          ) : (
+            <span className="advarsel-tekst">Ingen trekktabeller er lastet inn.</span>
+          )}
+        </div>
+      )}
+      <div className="ehf-test-rad">
+        <label>
+          År
+          <input inputMode="numeric" maxLength={4} value={aar} onChange={(e) => settAar(e.target.value)} />
+        </label>
+        <label>
+          Fil fra Skatteetaten (.txt eller .zip)
+          <input
+            type="file"
+            accept=".txt,.zip,text/plain,application/zip"
+            disabled={h.opptatt}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) {
+                if (!/20\d\d/.test(aar)) settAar(String(aarFraFilnavn(f.name, iAar)));
+                void lastOpp(f);
+              }
+            }}
+          />
+        </label>
+      </div>
+      {fremdrift && (
+        <p className="liten" role="status">
+          {fremdrift}
+        </p>
+      )}
+      {ok && (
+        <p className="ok-tekst liten" role="status">
+          {ok}
+        </p>
+      )}
+      <Feil melding={h.feil ?? liste.feil} />
+    </section>
+  );
+}
+
 function Drift({ apne }: { apne: (id: string) => void }) {
   const { data: d, feil, last, laster } = useData(() => hent<any>("/admin/drift"), []);
   if (feil) return <Feil melding={feil} />;
@@ -1317,6 +1404,8 @@ function Drift({ apne }: { apne: (id: string) => void }) {
             </>
           )}
         </section>
+
+        <Trekktabeller />
 
         <section className="kort">
           <h2>Integrasjoner og banker</h2>

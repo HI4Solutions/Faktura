@@ -52,6 +52,13 @@ type Ansatt = {
   bursdag_varsel: boolean; // varsle de andre på bursdagen (når organisasjonen har slått på bursdagsvarsler)
   ferie_dager: number | null; // feriedager per år for denne ansatte (null: organisasjonens)
   tillegg: Tillegg[]; // faste tillegg på lønnen
+  // Skattekortet (0065_lonn.sql): tabelltrekk (tabellnummer og prosentsats), prosenttrekk eller
+  // frikort (beløpet), og året. Uten skattekort trekkes 50 %.
+  skattekort: "tabell" | "prosent" | "frikort" | null;
+  skatt_tabell: number | null;
+  skatt_prosent: number | null;
+  skatt_frikort: number | null;
+  skattekort_aar: number | null;
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -330,6 +337,11 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     kunde_id: ansatt.kunde_id ?? "",
     bursdag_varsel: ansatt.bursdag_varsel ?? true,
     ferie_dager: tekstTall(ansatt.ferie_dager),
+    skattekort: (ansatt.skattekort ?? "") as "" | "tabell" | "prosent" | "frikort",
+    skatt_tabell: ansatt.skatt_tabell != null ? String(ansatt.skatt_tabell) : "",
+    skatt_prosent: tekstTall(ansatt.skatt_prosent),
+    skatt_frikort: tekstTall(ansatt.skatt_frikort),
+    skattekort_aar: String(ansatt.skattekort_aar ?? iDag().slice(0, 4)),
   }));
   // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
   const oppsett = useData(() => hent<{ bursdag_varsel: string; full_stilling: number; ferie_dager: number }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
@@ -340,6 +352,8 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   // personen lagres. Med vaktplanen (funksjonene i Administrasjon) også den faste arbeidsplanen
   // (ukedagene personen jobber), som et utkast til den lagres.
   const vaktplan = harFunksjon(org, "vaktplan");
+  // Med lønn (funksjonen «Lønn»): skattekortet og tallene fra et tidligere lønnssystem.
+  const medLonn = harFunksjon(org, "lonn");
   const roller = useData(() => hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`), [org?.id]);
   const [nyRolle, settNyRolle] = useState<{ navn: string; ikke_ansatt: boolean } | null>(null);
   const planer = useData(
@@ -508,6 +522,18 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     if (a.stillingsprosent.trim()) kropp.stillingsprosent = tall(a.stillingsprosent);
     if (a.ukentlig_arbeidstid.trim()) kropp.ukentlig_arbeidstid = tall(a.ukentlig_arbeidstid);
     if (vaktplan) kropp.ferie_dager = a.ferie_dager.trim() ? tall(a.ferie_dager) : null;
+    // Skattekortet (med lønn): bare feltene som hører til typen.
+    if (medLonn && arbeidstaker) {
+      const k = a.skattekort;
+      if (k === "tabell" && (!a.skatt_tabell.trim() || !a.skatt_prosent.trim())) return h.settFeil("Skriv tabellnummeret og prosentsatsen fra skattekortet.");
+      if (k === "prosent" && !a.skatt_prosent.trim()) return h.settFeil("Skriv prosentsatsen fra skattekortet.");
+      if (k === "frikort" && !a.skatt_frikort.trim()) return h.settFeil("Skriv frikortbeløpet fra skattekortet.");
+      kropp.skattekort = k || null;
+      kropp.skatt_tabell = k === "tabell" ? Number(a.skatt_tabell.trim()) : null;
+      kropp.skatt_prosent = k === "tabell" || k === "prosent" ? tall(a.skatt_prosent) : null;
+      kropp.skatt_frikort = k === "frikort" ? tall(a.skatt_frikort) : null;
+      kropp.skattekort_aar = k && a.skattekort_aar.trim() ? Number(a.skattekort_aar) : null;
+    }
     // Fødselsnummeret sendes bare når det er skrevet inn eller skal fjernes; ellers fødselsdatoen.
     if (a.fjernFnr) kropp.fnr = null;
     else if (a.endreFnr && fnr) kropp.fnr = fnr;
@@ -899,6 +925,56 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           ) : (
             !tillegg.length && <p className="dempet liten">Ingen faste tillegg.</p>
           )}
+          {medLonn && (
+            <>
+              <h3>Skattekort</h3>
+              <div className="rad">
+                <label>
+                  Skattetrekk
+                  <select {...felt("skattekort")}>
+                    <option value="">Ikke registrert (50 % trekk)</option>
+                    <option value="tabell">Tabelltrekk</option>
+                    <option value="prosent">Prosenttrekk</option>
+                    <option value="frikort">Frikort</option>
+                  </select>
+                </label>
+                {a.skattekort === "tabell" && (
+                  <label>
+                    Tabellnummer
+                    <input inputMode="numeric" maxLength={4} placeholder="F.eks. 7100" {...felt("skatt_tabell")} />
+                  </label>
+                )}
+                {(a.skattekort === "tabell" || a.skattekort === "prosent") && (
+                  <label>
+                    Prosentsats (%)
+                    <input inputMode="decimal" {...felt("skatt_prosent")} />
+                  </label>
+                )}
+                {a.skattekort === "frikort" && (
+                  <label>
+                    Frikortbeløp (kr)
+                    <input inputMode="decimal" {...felt("skatt_frikort")} />
+                  </label>
+                )}
+                {a.skattekort && (
+                  <label>
+                    For året
+                    <input inputMode="numeric" maxLength={4} {...felt("skattekort_aar")} />
+                  </label>
+                )}
+              </div>
+              <p className="felt-hjelp tillegg-hjelp">
+                {a.skattekort === "tabell"
+                  ? "Lønnen trekkes etter tabellen; prosentsatsen brukes i ekstra kjøringer og på feriepengene for den ekstra ferieuka."
+                  : a.skattekort === "frikort"
+                    ? "Ingen trekk til frikortbeløpet er brukt opp i året; deretter 50 %."
+                    : a.skattekort === "prosent"
+                      ? "Prosentsatsen trekkes av all lønn."
+                      : "Uten skattekort trekkes 50 %."}{" "}
+                Skattekortet hentes i Altinn (eller den ansatte gir deg det).
+              </p>
+            </>
+          )}
           </>
         )}
         <label>
@@ -913,6 +989,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
         )}
       </fieldset>
       {ansatt.id && vaktplan && <AnsattFravaer ansattId={ansatt.id} versjon={fravaerVersjon} kanEndre={kanEndre} apne={settFravaer} />}
+      {ansatt.id && medLonn && arbeidstaker && <TidligereLonn ansattId={ansatt.id} kanEndre={kanEndre} />}
       {ansatt.id && <Tilgang ansatt={ansatt as Ansatt} kanEndre={kanEndre} epostEndret={(a.epost.trim().toLowerCase() || null) !== (ansatt.epost ?? null)} oppdatert={oppdatert} />}
       <Feil melding={h.feil} />
       <div className="knapper">
@@ -944,6 +1021,125 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       />
     )}
     </>
+  );
+}
+
+// Tall fra et tidligere lønnssystem per år (0065_lonn.sql): feriepengegrunnlaget og
+// feriepengene som er utbetalt for opptjeningsåret (feriepengene utbetales året etter), og
+// trekkpliktig lønn og forskuddstrekk i året (frikortet og tallene hittil i år på lønnsslippen).
+type Inngaende = { aar: number; feriepengegrunnlag: number; feriepenger_utbetalt: number; trekkpliktig: number; forskuddstrekk: number };
+const INNGAENDE: [keyof Omit<Inngaende, "aar">, string][] = [
+  ["feriepengegrunnlag", "Feriepengegrunnlag"],
+  ["feriepenger_utbetalt", "Feriepenger utbetalt"],
+  ["trekkpliktig", "Trekkpliktig lønn"],
+  ["forskuddstrekk", "Forskuddstrekk"],
+];
+function TidligereLonn({ ansattId, kanEndre }: { ansattId: string; kanEndre: boolean }) {
+  const { org } = useKonto();
+  const liste = useData(() => hent<Inngaende[]>(`/org/${org!.id}/lonn/inngaende/${ansattId}`), [org?.id, ansattId]);
+  const [skjema, settSkjema] = useState<Record<string, string> | null>(null);
+  const h = useHandling();
+  const ny = () => settSkjema({ aar: String(Number(iDag().slice(0, 4))), feriepengegrunnlag: "", feriepenger_utbetalt: "", trekkpliktig: "", forskuddstrekk: "" });
+  const endre = (i: Inngaende) =>
+    settSkjema({ aar: String(i.aar), ...Object.fromEntries(INNGAENDE.map(([k]) => [k, i[k] ? tekstTall(i[k]) : ""])) });
+  async function lagre() {
+    if (!skjema) return;
+    const aar = Number(skjema.aar);
+    if (!Number.isInteger(aar) || aar < 2000 || aar > 2100) return h.settFeil("Skriv året, f.eks. 2026");
+    const kropp = Object.fromEntries(INNGAENDE.map(([k]) => [k, skjema[k]?.trim() ? tall(skjema[k]!) : 0]));
+    if (Object.values(kropp).some((v) => !Number.isFinite(v) || v < 0)) return h.settFeil("Skriv beløpene med siffer, uten minus");
+    const ok = await h.kjor(async () => (await api("PUT", `/org/${org!.id}/lonn/inngaende/${ansattId}/${aar}`, kropp), true));
+    if (ok) {
+      settSkjema(null);
+      void liste.last();
+    }
+  }
+  return (
+    <details className="tidligere-lonn" open={!!liste.data?.length || !!skjema}>
+      <summary>Fra tidligere lønnssystem</summary>
+      <p className="felt-hjelp">
+        Når lønnen er kjørt i et annet system før: feriepengegrunnlaget og feriepengene som er utbetalt for hvert opptjeningsår, og trekkpliktig lønn og forskuddstrekk i
+        året (til frikortet og tallene hittil i år).
+      </p>
+      {liste.feil && <Feil melding={liste.feil} />}
+      {!!liste.data?.length && (
+        <div className="tabell">
+          <table>
+            <thead>
+              <tr>
+                <th>År</th>
+                {INNGAENDE.map(([k, n]) => (
+                  <th key={k} className="hoyre">
+                    {n}
+                  </th>
+                ))}
+                {kanEndre && <th aria-label="Handlinger" />}
+              </tr>
+            </thead>
+            <tbody>
+              {liste.data.map((i) => (
+                <tr key={i.aar}>
+                  <td>{i.aar}</td>
+                  {INNGAENDE.map(([k]) => (
+                    <td key={k} className="tall">
+                      {belop.format(i[k])}
+                    </td>
+                  ))}
+                  {kanEndre && (
+                    <td className="hoyre">
+                      <button type="button" className="lenke" onClick={() => endre(i)}>
+                        Endre
+                      </button>{" "}
+                      <button
+                        type="button"
+                        className="lenke"
+                        onClick={async () => {
+                          if (!confirm(`Fjerne tallene for ${i.aar}?`)) return;
+                          if (await h.kjor(async () => (await api("DELETE", `/org/${org!.id}/lonn/inngaende/${ansattId}/${i.aar}`), true))) void liste.last();
+                        }}
+                      >
+                        Fjern
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {skjema ? (
+        <div className="tidligere-skjema">
+          <div className="rad">
+            <label>
+              År
+              <input inputMode="numeric" maxLength={4} value={skjema.aar} onChange={(e) => settSkjema({ ...skjema, aar: e.target.value })} />
+            </label>
+            {INNGAENDE.map(([k, n]) => (
+              <label key={k}>
+                {n} (kr)
+                <input inputMode="decimal" value={skjema[k]} onChange={(e) => settSkjema({ ...skjema, [k]: e.target.value })} />
+              </label>
+            ))}
+          </div>
+          <div className="knapper">
+            <button type="button" className="primar" disabled={h.opptatt} onClick={lagre}>
+              Lagre tallene
+            </button>
+            <button type="button" onClick={() => settSkjema(null)}>
+              Avbryt
+            </button>
+          </div>
+        </div>
+      ) : (
+        kanEndre && (
+          <button type="button" className="lenke" onClick={ny}>
+            + Legg til tall for et år
+          </button>
+        )
+      )}
+      <Feil melding={h.feil} />
+    </details>
   );
 }
 

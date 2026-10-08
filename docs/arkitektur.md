@@ -178,8 +178,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   «eier eller aksjonær» (tilknytningen per person fra 0054 er erstattet av rollene i 0056).
   Faste tillegg på lønnen (`ansatt_tillegg`: f.eks. funksjonstillegg per måned eller
   fagbrevtillegg per time, eventuelt for en periode) ligger på den ansatte og vises som lønnen
-  (eier, administrator, regnskap og den ansatte selv); lønnskjøringen skal ta dem med som faste
-  tillegg i a-meldingen. Ansatte kan importeres fra lønnssystemet eller et regneark, som kunder
+  (eier, administrator, regnskap og den ansatte selv); lønnskjøringen tar dem med (se under), og
+  a-meldingen skal få dem som faste tillegg. Ansatte kan importeres fra lønnssystemet eller et regneark, som kunder
   og produkter (Excel eller CSV, kolonnene kjennes igjen; «Etternavn, Fornavn», norske datoer,
   prosent og årslønn tolkes): samme e-post, eller samme navn når e-posten mangler, er samme
   ansatt, fødselsnumrene krypteres før lagringen, og et fast tillegg i fila legges til eller
@@ -379,7 +379,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med engelsk språk, der nettleserens eget klokkeslettfelt ville vist AM og PM. Feltet
   (`Klokkeslett` i `web/src/uke.tsx`) tar også «730», «7.30» og «1530» og retter dem til 07:30
   og 15:30
-- Personalmodulen på mobil (Ansatte, Vaktplan, Timer, Ferie og Beskjeder; `main[data-modul="personal"]` i
+- Personalmodulen på mobil (Ansatte, Vaktplan, Timer, Ferie, Lønn og Beskjeder; `main[data-modul="personal"]` i
   `web/src/styles.css`) er tettere enn resten av appen, så det blir mindre å rulle: mindre knapper,
   felt og rader (fortsatt 16 px tekst i feltene, så iPhone ikke zoomer), vaktplanen én dag om
   gangen med en dagvelger (ukedagene med hvor mange som er på jobb, og «!» når en vakt mangler
@@ -421,7 +421,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   en prikk på «Mer»); siden henter nye beskjeder hvert minutt mens den er åpen
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
   bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
-  Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer),
+  Disk, ansatte og timer, vaktplan og bemanning, lønn; vaktplanen og lønnen bygger på ansatte og timer),
   gruppert i modulene Faktura og Bemanning. Fakturaer, kunder og produkter har alle. Plattformadministratoren slår dem av og på i
   detaljene for organisasjonen (Administrasjon → Organisasjoner) og velger standarden for nye
   organisasjoner nederst samme sted; de som fantes da funksjonene kom, beholdt alt. API-et avviser rutene
@@ -444,7 +444,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   organisasjonen de er med i (søket finner også en bruker), detaljer med behandling,
   funksjonene, brukerne (moduler, passkeys og de andre organisasjonene de er med i), bruk,
   integrasjoner, logg og sletting, og nederst brukere uten organisasjon, funksjonene for nye
-  organisasjoner og de slettede. Drift: e-post, EHF, banker og utboksen. Gamle lenker til
+  organisasjoner og de slettede. Drift: e-post, EHF, AI, trekktabellene, banker og utboksen. Gamle lenker til
   Venter, Funksjoner og Brukere går til Oversikt og Organisasjoner
 - `slettede_organisasjoner` og `organisasjoner.slettet_at`: sletting av organisasjoner. Eieren
   (Innstillinger → Organisasjon) eller plattformadministratoren (detaljene i Administrasjon)
@@ -460,6 +460,48 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   borte, og vises under Administrasjon → Organisasjoner → Slettede organisasjoner. Sletter
   eieren, får plattformadministratorene e-post med grunnen; sletter plattformadministratoren,
   får eierne det (`0046_slett_organisasjon.sql`, `server/src/slettOrg.ts`)
+- `lonnskjoringer`, `lonnsslipper`, `lonnslinjer` (`0065_lonn.sql`, `server/src/lonn.ts`,
+  `server/src/lonnsberegning.ts`, `server/src/lonnsarter.ts`, siden «Lønn»): lønnskjøringen
+  (funksjonen «Lønn», som bygger på ansatte og timer). Eier og administrator lager en kjøring
+  for en måned (én vanlig per måned, og ekstra kjøringer, f.eks. for en bonus), og API-et regner
+  ut en lønnsslipp for hver ansatt (`arbeidstaker`) med linjer etter lønnsartene: fastlønn for
+  arbeidsdagene den ansatte er ansatt (og aktiv), timelønn, merarbeid og overtid fra de godkjente
+  timene som ikke er lønnet (for hver uke det som er godkjent i alt minus det som er lønnet før,
+  så overtiden regnes på hele uka; en uke hører til måneden den begynner i), faste tillegg per
+  måned (for dagene) og per time, sykepenger i arbeidsgiverperioden (16 kalenderdager, etter fire
+  ukers ansettelse) og omsorgsdager for sykt barn (10 i året) for dem med timelønn, med de
+  planlagte timene (vakter og faste dager), og feriepenger for i fjor med trekk i lønn for ferie
+  (årslønn / 260 per feriedag) for dem med fastlønn i juni (eller når det krysses av), og
+  sluttoppgjør med feriepengene for den som slutter i måneden. Skattetrekket følger skattekortet
+  på den ansatte (`ansatte.skattekort`, `skatt_tabell`, `skatt_prosent`, `skatt_frikort`,
+  `skattekort_aar`): tabelltrekk etter Skatteetatens trekktabeller (`trekktabeller`, månedstabellene
+  for lønn, som plattformadministratoren laster inn fra tekstfila under Administrasjon → Drift;
+  `trekktabell_last`), halvt trekk i november eller desember, ikke tabelltrekk av feriepenger i
+  ferieåret, og prosentsatsen i ekstra kjøringer og når tabellene for året mangler (med merknad);
+  prosenttrekk; frikort til beløpet er brukt opp i året, deretter 50 %; og 50 % uten skattekort.
+  OTP (`lonn_oppsett.otp_prosent`, minst 2 % opp til 12 G i året), opptjente feriepenger
+  (`feriepenger_prosent`, 10,2 eller 12 %, og 2,3 % av inntil 6 G det året den ansatte fyller 60)
+  og arbeidsgiveravgift per sone (`aga_sone`; i sone 1a redusert sats til den sparte avgiften i
+  året når 850 000 kr) regnes på hver slipp, og satsene (G fra 1. mai) står i
+  `lonnsberegning.ts`. Utbetalingsdatoen er lønnsdagen (`lonnsdag`) eller virkedagen før, og
+  kjøringen viser fristene: skattetrekket til Skatteetaten første virkedag etter utbetalingen (fra
+  2026) og arbeidsgiveravgiften den 15. annenhver måned. Linjene kan endres (en utregnet linje
+  blir da manuell og regnes ikke ut på nytt; «Angre» gjør den utregnet igjen), fjernes og legges
+  til, og skattetrekket kan settes for hånd; en ny utregning beholder det. Det som bør sjekkes
+  (mangler skattekort, kontonummer eller lønn, frikortet brukt opp, syk etter arbeidsgiverperioden
+  osv.), står som merknader på slippen. Når kjøringen godkjennes (`lonn_godkjenn`), regnes den ut
+  på nytt, kontonummeret lagres på slippene, timene merkes som lønnet
+  (`timeforinger.lonnskjoring_id`; lønnede timer kan ikke endres, avvises eller slettes), og
+  kjøringen låses (`lonn_laast`); de ansatte med innlogging får varsel (varseltypen `lonn`) og ser
+  lønnsslippen under «Lønnsslipper», med tallene hittil i år, også som PDF
+  (`server/src/lonnsslippPdf.ts`). En godkjent kjøring kan åpnes igjen (`lonn_gjenapne`), og
+  lastes ned som CSV (til regnskapet og nettbanken). Tall fra et tidligere lønnssystem per ansatt
+  og år (`lonn_inngaende`: feriepengegrunnlag og utbetalte feriepenger for opptjeningsåret,
+  trekkpliktig lønn og forskuddstrekk i året) tas med i feriepengene, frikortet og tallene hittil
+  i år. Kjøringene ses av eier, administrator og regnskap; en ansatt ser bare sine egne slipper i
+  godkjente kjøringer (`min_lonnsslipp`). En ansatt med lønnsslipper i godkjente kjøringer kan
+  ikke slettes, og en organisasjon med godkjente kjøringer stenges i stedet for å slettes
+  (oppbevares fem år etter siste utbetaling)
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
@@ -479,6 +521,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Legge beskjeder til rollene eller alle, og se dem som er til en selv | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Se alle beskjedene | ✓ | ✓ | | ✓ | | |
 | Slette andres beskjeder | ✓ | ✓ | | | | |
+| Se lønnskjøringene og alle lønnsslippene | ✓ | ✓ | | ✓ | | |
+| Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
+| Se egne lønnsslipper (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 ² Så lenge den ansatte er aktiv (ikke etter at de har sluttet).
@@ -497,7 +542,8 @@ fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, notater og t
 utkast i vaktplanen eller revisjonsloggen. Varsler til hele organisasjonen og
 Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter (Mine vakter,
 Ledige vakter og Bytter, og fanene Vaktplan og Tavle), Vaktplan og Tavle som egne punkter i
-sidemenyen (lenker til de samme fanene), Ferie, Beskjeder og Innstillinger (egen konto og app).
+sidemenyen (lenker til de samme fanene), Ferie, Lønnsslipper (sine egne, når kjøringen er godkjent),
+Beskjeder og Innstillinger (egen konto og app).
 
 De ansatte ser planen (`0063_ansatte_ser_planen.sql`): `faktura.kan(org, 'plan')` er eier,
 administrator og regnskap, og de aktive ansatte med innlogging (`min_ansatt`; ikke etter at de har
@@ -590,8 +636,10 @@ og hastighetsgrenser i API-et.
       fravær (sykdom meldt av den ansatte, ferie, permisjon og kurs), vikarer,
       bemanningskalender med de ansatte i grupper mot behovet, faste arbeidsdager per
       ansatt og rapport over ekstratimer (PDF og CSV)
-   3. Lønnskjøring: lønnsarter, skattetrekk (tabell eller prosent fra skattekortet),
-      feriepenger, OTP, arbeidsgiveravgift per sone, sykepenger og lønnsslipp som PDF
+   3. ~~Lønnskjøring~~ Ferdig: lønnsarter, skattetrekk etter skattekortet (tabell med
+      Skatteetatens trekktabeller, prosent eller frikort), feriepenger og ferietrekk, OTP,
+      arbeidsgiveravgift per sone, sykepenger i arbeidsgiverperioden, sluttoppgjør,
+      godkjenning med låsing og lønnsslipp som PDF
    4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og
       arbeidsgiveravgift, feriepengeliste og årsoversikt for den ansatte
    5. Utbetaling: betalingsfil (pain.001) til nettbanken først, direkte bankintegrasjon senere

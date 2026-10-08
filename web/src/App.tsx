@@ -24,6 +24,7 @@ import { Timer } from "./sider/Timer";
 import { Vakter } from "./sider/Vakter";
 import { Ferie } from "./sider/Ferie";
 import { Beskjeder, useUlesteBeskjeder } from "./sider/Beskjeder";
+import { Lonn } from "./sider/Lonn";
 import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
@@ -32,7 +33,7 @@ import { installer } from "./pwa";
 import { Assistent } from "./assistent";
 import { iFakturadelen } from "./fakturameny";
 import {
-  IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonMeny, IkonMineVakter, IkonNokkel, IkonOversikt, IkonPluss,
+  IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonNokkel, IkonOversikt, IkonPluss,
   IkonProdukter, IkonRapport, IkonSkjold, IkonTavle, IkonVelg,
 } from "./ikoner";
 
@@ -175,11 +176,14 @@ function Ramme() {
   // Beskjeder til rollene: alle i organisasjonen, når Ansatte og timer er slått på. Telleren viser
   // de nye (ikke mens man er på siden).
   const visBeskjeder = !!org?.personal;
+  // Lønn: eier, administrator og regnskap ser lønnskjøringene, og den som er ansatt, sine egne
+  // lønnsslipper (funksjonen «Lønn» bygger på ansatte og timer).
+  const visLonn = harFunksjon(org, "lonn") && !!org?.personal && ((!ansatt && kanSePersonal(org.rolle)) || !!org.ansatt_id);
   const uleste = useUlesteBeskjeder(org?.id, visBeskjeder);
   const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
   // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
   // og bunnmenyen viser personaldelen i stedet for fakturadelen der.
-  const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder)(\/|$)/.test(sted.pathname);
+  const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder|lonn)(\/|$)/.test(sted.pathname);
   // De ansatte har Vaktplan og Tavle som egne punkter i sidemenyen (fanene på /vakter), ved siden av
   // Vakter (egne og ledige vakter og vaktbytter); ikke en som har sluttet (ser_planen).
   const ansattSerPlanen = ansatt && visVakter && org?.ser_planen !== false;
@@ -375,6 +379,12 @@ function Ramme() {
                 Ferie
               </NavLink>
             )}
+            {visLonn && (
+              <NavLink to="/lonn">
+                <IkonLonn />
+                Lønnsslipper
+              </NavLink>
+            )}
             {visBeskjeder && (
               <NavLink to="/beskjeder">
                 <IkonBjelle />
@@ -439,6 +449,12 @@ function Ramme() {
                 Ferie
               </NavLink>
             )}
+            {visLonn && (
+              <NavLink to="/lonn">
+                <IkonLonn />
+                Lønn
+              </NavLink>
+            )}
             {visBeskjeder && (
               <NavLink to="/beskjeder">
                 <IkonBjelle />
@@ -493,6 +509,7 @@ function Ramme() {
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vakter"><Vakter /></Krever>} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
+            <Route path="/lonn" element={<Krever kode="lonn" navn="Lønnsslipper"><Lonn /></Krever>} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
@@ -522,6 +539,7 @@ function Ramme() {
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vaktplan"><Vakter /></Krever>} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
+            <Route path="/lonn" element={<Krever kode="lonn" navn="Lønn"><Lonn /></Krever>} />
             <Route path="/timer" element={<Timer />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />

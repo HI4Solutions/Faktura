@@ -2256,3 +2256,73 @@ th.tall .helligdag-navn { margin-left: auto; }
   [data-modul="personal"] .dialog-innhold { padding: 12px 14px calc(16px + env(safe-area-inset-bottom)); }
   [data-modul="personal"] .rad { gap: 0 8px; }
 }
+
+/* --------------------------------------------------------------------------
+   Lønn (sider/Lonn.tsx)
+   -------------------------------------------------------------------------- */
+.tilbake-lenke { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 10px; font-size: 0.9rem; }
+.lonn-knapper { margin-bottom: 16px; }
+.lonn-merke { margin-left: 8px; vertical-align: 1px; }
+.lonn-notat {
+  margin: -0.6rem 0 1rem; padding: 8px 12px; border-left: 3px solid var(--aksent); background: var(--flate-2);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0; font-size: 0.92rem;
+}
+.lonn-tall .verdi { font-size: 1.35rem; margin-top: 6px; }
+.lonn-slipper { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.kort.lonn-slipp { padding: 0; margin: 0; overflow: hidden; }
+.lonn-slipp-topp {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 20px; border: 0; border-radius: 0;
+  box-shadow: none; background: transparent; text-align: left; font-weight: 450;
+}
+.lonn-slipp-topp:hover:not(:disabled) { background: var(--flate-2); }
+.lonn-slipp-topp:active:not(:disabled) { transform: none; }
+.lonn-slipp.apen .lonn-slipp-topp { border-bottom: 1px solid var(--kant); }
+.lonn-slipp-navn { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.lonn-slipp-navn strong, .lonn-slipp-navn .liten { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lonn-slipp-tall { display: flex; gap: 18px; flex: none; font-variant-numeric: tabular-nums; }
+.lonn-slipp-tall > span { display: flex; flex-direction: column; align-items: flex-end; min-width: 92px; font-weight: 550; }
+.lonn-slipp-tall small { font-size: 0.7rem; color: var(--dempet); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.lonn-slipp-tall .sterk { font-weight: 700; }
+.lonn-slipp-innhold { padding: 14px 20px 18px; }
+.lonn-merknader { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.lonn-merknader li {
+  display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; border-radius: var(--radius-s);
+  background: var(--advarsel-lys); color: var(--advarsel); font-size: 0.88rem;
+}
+.lonn-merknader li svg { flex: none; margin-top: 2px; }
+table.lonn-linjer th, table.lonn-linjer td { padding: 8px; }
+table.lonn-linjer th:first-child, table.lonn-linjer td:first-child { padding-left: 0; }
+table.lonn-linjer th:last-child, table.lonn-linjer td:last-child { padding-right: 0; }
+table.lonn-linjer th { background: transparent; }
+table.lonn-linjer tr.fjernet td { color: var(--dempet); }
+table.lonn-linjer tr.fjernet td:not(:last-child) { text-decoration: line-through; }
+.lonn-art { display: block; font-size: 0.78rem; color: var(--dempet); }
+.lonn-handlinger { white-space: nowrap; text-align: right; }
+.lonn-handlinger button + button { margin-left: 12px; }
+button.lenke.fare-lenke { color: var(--fare); }
+.lonn-slipp-bunn { display: flex; gap: 18px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin: 14px 0; }
+.lonn-opptjent { display: flex; flex-direction: column; gap: 3px; }
+.summer.lonn-summer { min-width: 260px; margin-left: auto; }
+.summer.lonn-summer span { display: inline-flex; align-items: center; }
+button.lenke.lonn-pdf { padding: 0 16px; flex: none; }
+.dialog-innhold .summer.lonn-summer { margin: 0 0 14px; max-width: none; }
+.lonn-visning h3 { margin: 18px 0 8px; font-size: 0.95rem; }
+.lonn-visning .summer.lonn-summer { margin: 10px 0 0 auto; }
+@media (max-width: 700px) {
+  .lonn-slipp-topp { flex-wrap: wrap; padding: 12px 14px; gap: 6px 10px; }
+  .lonn-slipp-tall { width: 100%; justify-content: space-between; gap: 8px; }
+  .lonn-slipp-tall > span { min-width: 0; align-items: flex-start; }
+  .lonn-slipp-tall > span:last-child { align-items: flex-end; }
+  .lonn-slipp-innhold { padding: 12px 14px 14px; }
+  .summer.lonn-summer { min-width: 0; width: 100%; }
+  .lonn-sats { display: none; }
+  .lonn-handlinger { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .lonn-handlinger button + button { margin-left: 0; }
+}
+
+/* Tall fra et tidligere lønnssystem på ansattkortet */
+.tidligere-lonn { margin: 14px 0; border-top: 1px solid var(--kant); padding-top: 10px; }
+.tidligere-lonn > summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; padding: 4px 0; color: var(--tekst); }
+.tidligere-lonn table { margin: 8px 0; font-size: 0.88rem; }
+.tidligere-lonn td.hoyre { white-space: nowrap; }
+.tidligere-skjema { margin-top: 10px; }
