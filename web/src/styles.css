@@ -1522,6 +1522,24 @@ fieldset.arbeidsplan { padding: 12px 16px 6px; margin: 0 0 16px; }
 }
 
 /* --------------------------------------------------------------------------
+   Vaktbytte: tilbudene, svarene og godkjenningen (Vaktbytte.tsx)
+   -------------------------------------------------------------------------- */
+h2.bytte-overskrift { margin: 1.1rem 0 0.5rem; }
+h2.bytte-overskrift:first-child { margin-top: 0.25rem; }
+.bytte-rad .linje { align-items: flex-start; }
+.bytte-rad .tittel { white-space: normal; }
+.liste-rad .under.bryt { white-space: normal; overflow-wrap: anywhere; }
+.liste-rad .under.hindring { color: var(--advarsel); white-space: normal; }
+.bytte-advarsler { display: grid; gap: 3px; margin: 2px 0 0; padding: 0; list-style: none; font-size: 0.84rem; color: var(--advarsel); }
+.bytte-advarsler li { display: flex; align-items: flex-start; gap: 6px; }
+.bytte-advarsler svg { flex: none; margin-top: 3px; }
+.knapper.bytte-knapper { margin-top: 6px; }
+.knapper.bytte-knapper button { min-height: 34px; padding: 6px 14px; }
+.bytte-avvis { margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--kant); }
+.bytte-avvis label { margin-bottom: 8px; }
+p.bytte-vakt { margin: 0 0 12px; }
+
+/* --------------------------------------------------------------------------
    Tavle (ressursfordeling)
    -------------------------------------------------------------------------- */
 .ukevelger .uke-navn.dag-navn-lang { min-width: 168px; }

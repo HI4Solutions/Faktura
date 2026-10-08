@@ -141,8 +141,10 @@ function SlettOrg() {
   );
 }
 
-// Ansatte og timer: slås på per organisasjon, med grensene for overtid og bursdagsvarslene.
+// Ansatte og timer: slås på per organisasjon, med grensene for overtid, bursdagsvarslene og om de
+// ansatte kan bytte vakter (Vaktbytte.tsx).
 type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
+type Vaktbytte = "av" | "godkjenning" | "fritt";
 function PersonalOppsett() {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
@@ -154,6 +156,7 @@ function PersonalOppsett() {
     bursdag_varsel: Bursdagsvarsel;
     full_stilling: string;
     ferie_dager: string;
+    vaktbytte: Vaktbytte;
   } | null>(null);
   const [lagret, settLagret] = useState(false);
   const h = useHandling();
@@ -168,6 +171,7 @@ function PersonalOppsett() {
         bursdag_varsel: data.bursdag_varsel ?? "av",
         full_stilling: tekst(data.full_stilling ?? 37.5),
         ferie_dager: tekst(data.ferie_dager ?? 25),
+        vaktbytte: data.vaktbytte ?? "godkjenning",
       });
   }, [data]);
   if (!o) return <Laster />;
@@ -184,6 +188,7 @@ function PersonalOppsett() {
         bursdag_varsel: o!.bursdag_varsel,
         full_stilling: tall(o!.full_stilling),
         ferie_dager: tall(o!.ferie_dager),
+        vaktbytte: o!.vaktbytte,
       }),
     );
     if (!r) return;
@@ -219,6 +224,20 @@ function PersonalOppsett() {
             <span className="felt-hjelp">
               Feriebanken regnes av dette: 25 er fem uker, 21 er lovens fire uker og én dag. Ansatte som jobber færre dager i uka får like mange uker, regnet i
               dagene de jobber, og fra året de fyller 60 en uke ekstra. Hver ansatt kan ha sin egen avtale.
+            </span>
+          </label>
+          <h3>Vaktbytte</h3>
+          <label>
+            Ansatte kan bytte vakter
+            <select value={o.vaktbytte} onChange={(e) => settO({ ...o, vaktbytte: e.target.value as Vaktbytte })}>
+              <option value="godkjenning">Ja, og du godkjenner byttene</option>
+              <option value="fritt">Ja, uten godkjenning</option>
+              <option value="av">Nei</option>
+            </select>
+            <span className="felt-hjelp">
+              Under Mine vakter kan de ansatte gi bort en vakt eller en fast arbeidsdag, eller bytte den mot en vakt en kollega med samme rolle har. Når
+              kollegaen sier ja, flyttes vakten, og plassen på tavla følger med. Med godkjenning må eier eller administrator godkjenne byttet først, og ser da
+              advarslene etter arbeidsmiljøloven byttet gir.
             </span>
           </label>
         </>

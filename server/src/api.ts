@@ -27,6 +27,7 @@ import { lonnsslippRuter } from "./aiLonnsslipp.js";
 import { paaminnelseRuter } from "./paaminnelser.js";
 import { ansattRuter } from "./ansatte.js";
 import { vaktRuter } from "./vakter.js";
+import { vaktbytteRuter } from "./vaktbytte.js";
 import { tavleRuter } from "./tavle.js";
 import { fravaerRuter } from "./fravaer.js";
 import { ferieRuter } from "./ferie.js";
@@ -408,6 +409,7 @@ export function lagApi() {
   org.route("/", paaminnelseRuter());
   org.route("/", ansattRuter());
   org.route("/", vaktRuter());
+  org.route("/", vaktbytteRuter());
   org.route("/", tavleRuter());
   org.route("/", fravaerRuter());
   org.route("/", ferieRuter());

@@ -26,7 +26,7 @@ const RUTER: [RegExp, string][] = [
   [/^\/ansatte\/[^/]+\/arbeidsplan(\/|$)/, "vaktplan"],
   // Rollene (ansattgrupper) hører til de ansatte: om personen er ansatt, følger rollen.
   [/^\/(ansatte|ansattgrupper|timer|lonn-oppsett)(\/|$)/, "ansatte"],
-  [/^\/(vakter|tavle|fravaer|feriebank|ferie)(\/|$)/, "vaktplan"],
+  [/^\/(vakter|vaktbytter|tavle|fravaer|feriebank|ferie)(\/|$)/, "vaktplan"],
   [/^\/ekstratimer(\.csv|\.pdf)?$/, "vaktplan"],
 ];
 

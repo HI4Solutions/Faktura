@@ -1,10 +1,11 @@
 // Vaktplan: eier og administrator planlegger uka (tabell på PC, dag for dag på mobil),
 // publiserer den og kopierer uker; regnskap ser planen. Ansatte ser sine egne vakter og de
-// ledige, som de kan ta, og melder seg syke. Advarslene etter arbeidsmiljøloven (hviletid,
-// overtid) kommer fra serveren (server/src/vaktregler.ts). Tavla (Tavle.tsx), kalenderen
-// (Bemanning.tsx) og fraværet (Fravaer.tsx) er egne faner.
+// ledige, som de kan ta, melder seg syke, og gir bort eller bytter vakter (Vaktbytte.tsx).
+// Advarslene etter arbeidsmiljøloven (hviletid, overtid) kommer fra serveren
+// (server/src/vaktregler.ts). Tavla (Tavle.tsx), kalenderen (Bemanning.tsx), fraværet
+// (Fravaer.tsx) og vaktbyttene er egne faner.
 //
-// Fanen står i adressen (?fane=plan|tavle|kalender|fravaer|mine|ledige), uka med mandagen
+// Fanen står i adressen (?fane=plan|tavle|kalender|fravaer|mine|ledige|bytter), uka med mandagen
 // (?uke=2026-10-12), dagen på tavla (?dato=2026-10-14) og måneden i kalenderen (?maaned=2026-10).
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -19,6 +20,7 @@ import { iFasen, Tavle } from "./Tavle";
 import { Bemanning, gyldigMaaned } from "./Bemanning";
 import { ArbeidsplanDialog, fastTid, fastTider } from "./Arbeidsplan";
 import { helligdag } from "../helligdager";
+import { aapentPaa, ByttDialog, Bytter, fraKolleger, type ByttSvar, type ByttVakt, type Bytte, type Innstilling } from "./Vaktbytte";
 
 export type Vakt = {
   id: string;
@@ -60,6 +62,9 @@ type Ansatt = { id: string; fornavn: string; etternavn: string; ansatt_fra: stri
 
 const tid = (v: Pick<Vakt, "fra" | "til">) => `${v.fra}–${v.til}`;
 const fornavn = (navn: string) => navn.split(" ")[0];
+// Har vakten begynt (norsk tid)? En hel dag begynner kl. 08.
+const klokka = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/Oslo" }); // «14:05»
+const begynt = (dato: string, fra: string | null) => dato < iDag() || (dato === iDag() && (fra ?? "08:00") <= klokka.format(new Date()));
 
 // Forrige vakt som ble lagret på denne enheten: nye vakter starter med samme tider.
 const SIST = "faktura.vakt.sist";
@@ -87,6 +92,7 @@ const TITLER: Record<string, string> = {
   fravaer: "Fravær",
   mine: "Vakter",
   ledige: "Vakter",
+  bytter: "Vaktbytte",
 };
 
 export function Vakter() {
@@ -109,6 +115,17 @@ export function Vakter() {
     [org?.id, org?.personal, egen, versjon],
   );
   const ledige = (egne.data?.vakter ?? []).filter((v) => !v.ansatt_id && v.publisert && v.dato >= fra);
+  // Vaktbyttene (Vaktbytte.tsx): for den ansatte og for dem som ser hele planen.
+  const bytter = useData(
+    () => ((egen || seHelePlanen) && org?.personal ? hent<ByttSvar>(`/org/${org.id}/vaktbytter`) : Promise.resolve(null)),
+    [org?.id, org?.personal, egen, seHelePlanen, versjon],
+  );
+  const innstilling: Innstilling = bytter.data?.innstilling ?? "av";
+  const kollegaTilbud = fraKolleger(bytter.data?.bytter, egen);
+  const tilSvar =
+    (bytter.data?.bytter ?? []).filter((b) => b.status === "tilbudt" && !!egen && b.til_ansatt === egen).length +
+    (kanPersonal(org?.rolle) ? (bytter.data?.bytter ?? []).filter((b) => b.status === "akseptert").length : 0);
+  const tilGodkjenning = kanPersonal(org?.rolle) ? (bytter.data?.bytter ?? []).filter((b) => b.status === "akseptert").length : 0;
 
   const faner: [string, ReactNode][] = [];
   if (seHelePlanen) faner.push(["plan", "Vaktplan"], ["tavle", "Tavle"], ["kalender", "Kalender"], ["fravaer", "Fravær"]);
@@ -119,10 +136,18 @@ export function Vakter() {
         "ledige",
         <>
           Ledige vakter
-          {ledige.length > 0 && <span className="teller">{ledige.length}</span>}
+          {ledige.length + kollegaTilbud.length > 0 && <span className="teller">{ledige.length + kollegaTilbud.length}</span>}
         </>,
       ],
     );
+  if (bytter.data && (bytter.data.innstilling !== "av" || (bytter.data.bytter?.length ?? 0) > 0))
+    faner.push([
+      "bytter",
+      <>
+        Bytter
+        {tilSvar > 0 && <span className="teller">{tilSvar}</span>}
+      </>,
+    ]);
   const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? faner[0]?.[0] ?? null;
   const uke = mandag(gyldigDato(sok.get("uke")) ? sok.get("uke")! : iDag());
   const dato = gyldigDato(sok.get("dato")) ? sok.get("dato")! : iDag();
@@ -168,7 +193,17 @@ export function Vakter() {
           ))}
         </div>
       )}
-      {fane === "plan" && <Vaktplan uke={uke} velgUke={(u) => ga({ uke: u === mandag(iDag()) ? null : u })} kanPlanlegge={kanPersonal(org.rolle)} versjon={versjon} endret={endret} />}
+      {fane === "plan" && (
+        <Vaktplan
+          uke={uke}
+          velgUke={(u) => ga({ uke: u === mandag(iDag()) ? null : u })}
+          kanPlanlegge={kanPersonal(org.rolle)}
+          versjon={versjon}
+          endret={endret}
+          tilGodkjenning={tilGodkjenning}
+          tilBytter={() => ga({ fane: "bytter" })}
+        />
+      )}
       {fane === "tavle" && <Tavle dato={dato} velgDato={(d) => ga({ dato: d === iDag() ? null : d })} kanEndre={kanPersonal(org.rolle)} />}
       {fane === "kalender" && (
         <Bemanning
@@ -186,12 +221,20 @@ export function Vakter() {
           feil={egne.feil}
           egen={egen!}
           plasser={plasser.data ?? []}
-          ledige={ledige.length}
+          ledige={ledige.length + kollegaTilbud.length}
           tilLedige={() => ga({ fane: "ledige" })}
+          bytter={bytter.data?.bytter}
+          innstilling={innstilling}
+          tilBytter={() => ga({ fane: "bytter" })}
           endret={endret}
         />
       )}
-      {fane === "ledige" && <LedigeVakter vakter={egne.data ? ledige : undefined} feil={egne.feil} endret={endret} />}
+      {fane === "ledige" && (
+        <LedigeVakter vakter={egne.data ? ledige : undefined} tilbud={kollegaTilbud} innstilling={innstilling} feil={egne.feil} endret={endret} />
+      )}
+      {fane === "bytter" && (
+        <Bytter svar={bytter.data ?? undefined} feil={bytter.feil} egen={egen} leder={kanPersonal(org.rolle)} seAlle={seHelePlanen} endret={endret} />
+      )}
     </>
   );
 }
@@ -200,7 +243,23 @@ export function Vakter() {
 
 const DAGNAVN = ["Ma", "Ti", "On", "To", "Fr", "Lø", "Sø"];
 
-function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string; velgUke: (mandag: string) => void; kanPlanlegge: boolean; versjon: number; endret: () => void }) {
+function Vaktplan({
+  uke,
+  velgUke,
+  kanPlanlegge,
+  versjon,
+  endret,
+  tilGodkjenning,
+  tilBytter,
+}: {
+  uke: string;
+  velgUke: (mandag: string) => void;
+  kanPlanlegge: boolean;
+  versjon: number;
+  endret: () => void;
+  tilGodkjenning: number;
+  tilBytter: () => void;
+}) {
   const { org } = useKonto();
   const til = leggTilDager(uke, 6);
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon]);
@@ -442,6 +501,14 @@ function Vaktplan({ uke, velgUke, kanPlanlegge, versjon, endret }: { uke: string
         </div>
       )}
       <Feil melding={h.feil} />
+      {tilGodkjenning > 0 && (
+        <div className="melding info venter">
+          <span>{tilGodkjenning === 1 ? "Ett vaktbytte venter" : `${tilGodkjenning} vaktbytter venter`} på godkjenning.</span>
+          <button type="button" className="lenke" onClick={tilBytter}>
+            Se {tilGodkjenning === 1 ? "det" : "dem"}
+          </button>
+        </div>
+      )}
       {kanPlanlegge && data.upubliserte > 0 && (
         <p className="liten dempet utkast-info">
           {data.upubliserte === 1 ? "Én vakt" : `${data.upubliserte} vakter`} med stiplet kant er ikke publisert. De ansatte ser dem først når du publiserer.
@@ -923,6 +990,9 @@ function MineVakter({
   plasser,
   ledige,
   tilLedige,
+  bytter,
+  innstilling,
+  tilBytter,
   endret,
 }: {
   svar?: VaktSvar;
@@ -931,8 +1001,14 @@ function MineVakter({
   plasser: MinPlass[];
   ledige: number;
   tilLedige: () => void;
+  bytter?: Bytte[];
+  innstilling: Innstilling;
+  tilBytter: () => void;
   endret: () => void;
 }) {
+  // Vakten (eller den faste arbeidsdagen) som gis bort eller byttes (Vaktbytte.tsx).
+  const [bytt, settBytt] = useState<ByttVakt | null>(null);
+  const [melding, settMelding] = useState<string | null>(null);
   if (feil) return <Feil melding={feil} />;
   if (!svar) return <Laster />;
   const mine = svar.vakter.filter((v) => v.ansatt_id === egen && v.publisert);
@@ -948,8 +1024,40 @@ function MineVakter({
       .filter((p) => p.dato === v.dato && iFasen(v, { id: "", navn: p.fase, fra: p.fra, til: p.til }))
       .map((p) => `${p.fase}: ${p.oppgave}`)
       .join(" · ");
+  // Kan byttes: vaktbytte er på, den ansatte er ikke borte, og vakten har ikke begynt (og har ikke
+  // vikar eller førte timer).
+  const kanBytte = (v: Vakt | Fast) => innstilling !== "av" && !v.fravaer && !begynt(v.dato, v.fra) && (!erVakt(v) || (!v.fort && !v.har_vikar));
+  // Et åpent tilbud på vakten: kort tekst, og trykk for å se det under Bytter.
+  const tilbudTekst = (b: Bytte) =>
+    b.status === "akseptert"
+      ? "Venter på godkjenning"
+      : b.mot_vakt_id
+        ? `Bytte foreslått for ${fornavn(b.til_navn ?? "")}`
+        : b.til_ansatt
+          ? `Tilbudt ${fornavn(b.til_navn ?? "")}`
+          : "Tilbudt kollegaene";
+  const byttKnapp = (v: Vakt | Fast) => {
+    const tilbud = erVakt(v) ? aapentPaa(bytter, v.id) : undefined;
+    if (tilbud)
+      return (
+        <button type="button" className="lenke" onClick={tilBytter}>
+          {tilbudTekst(tilbud)}
+        </button>
+      );
+    if (!kanBytte(v)) return null;
+    return (
+      <button type="button" className="lenke" onClick={() => settBytt({ id: erVakt(v) ? v.id : null, dato: v.dato, fra: v.fra, til: v.til, timer: Number(v.timer) })}>
+        Bytt
+      </button>
+    );
+  };
   return (
     <>
+      {melding && (
+        <div className="melding ok" role="status">
+          {melding}
+        </div>
+      )}
       <MittFravaer fravaer={svar.fravaer.filter((f) => f.ansatt_id === egen)} endret={endret} />
       {ledige > 0 && (
         <div className="melding info venter">
@@ -988,11 +1096,12 @@ function MineVakter({
                     {!v.fravaer && (
                       <span className="linje">
                         <span className="under">Fast arbeidsdag</span>
-                        {v.dato <= iDag() && (
-                          <Link className="liten" to={`/timer?uke=${mandag(v.dato)}`}>
-                            Før timer
-                          </Link>
-                        )}
+                        {byttKnapp(v) ??
+                          (v.dato <= iDag() && (
+                            <Link className="liten" to={`/timer?uke=${mandag(v.dato)}`}>
+                              Før timer
+                            </Link>
+                          ))}
                       </span>
                     )}
                   </div>
@@ -1007,17 +1116,18 @@ function MineVakter({
                     {v.fravaer ? <span className={`merke ${fravaerKlasse[v.fravaer]}`}>{fravaerTekst[v.fravaer]}</span> : <span className="belop">{timer(v.timer)}</span>}
                   </span>
                   {plass && <span className="under plass">{plass}</span>}
-                  {(v.oppgave || v.notat || v.fort) && !v.fravaer && (
+                  {(v.oppgave || v.notat || v.fort || byttKnapp(v)) && !v.fravaer && (
                     <span className="linje">
                       <span className="under">{[v.oppgave, v.notat].filter(Boolean).join(" · ")}</span>
                       {v.fort ? (
                         <span className="merke merke-ok">Ført</span>
                       ) : (
-                        v.dato <= iDag() && (
+                        (byttKnapp(v) ??
+                        (v.dato <= iDag() && (
                           <Link className="liten" to={`/timer?uke=${mandag(v.dato)}`}>
                             Før timer
                           </Link>
-                        )
+                        )))
                       )}
                     </span>
                   )}
@@ -1027,11 +1137,34 @@ function MineVakter({
           </div>
         ))
       )}
+      <ByttDialog
+        vakt={bytt}
+        innstilling={innstilling}
+        lukk={() => settBytt(null)}
+        ferdig={(m) => {
+          settBytt(null);
+          settMelding(m);
+          endret();
+        }}
+      />
     </>
   );
 }
 
-function LedigeVakter({ vakter, feil, endret }: { vakter?: Vakt[]; feil: string | null; endret: () => void }) {
+// Ledige vakter, og vakter kolleger med samme rolle gir bort (Vaktbytte.tsx).
+function LedigeVakter({
+  vakter,
+  tilbud,
+  innstilling,
+  feil,
+  endret,
+}: {
+  vakter?: Vakt[];
+  tilbud: Bytte[];
+  innstilling: Innstilling;
+  feil: string | null;
+  endret: () => void;
+}) {
   const { org } = useKonto();
   const h = useHandling();
   const [melding, settMelding] = useState<string | null>(null);
@@ -1044,6 +1177,21 @@ function LedigeVakter({ vakter, feil, endret }: { vakter?: Vakt[]; feil: string 
       settMelding(`Vakten ${visDag(v.dato)} ${tid(v)} er din.`);
       endret();
     });
+  const taFra = (b: Bytte) =>
+    h.kjor(async () => {
+      if (!confirm(`Ta vakten ${visDag(b.dato)} ${tid(b)} fra ${b.fra_navn}?`)) return;
+      await api("POST", `/org/${org!.id}/vaktbytter/${b.id}/svar`, { ja: true });
+      settMelding(
+        innstilling === "godkjenning"
+          ? `Du har tatt vakten ${visDag(b.dato)} ${tid(b)}. Den blir din når lederen har godkjent byttet.`
+          : `Vakten ${visDag(b.dato)} ${tid(b)} er din.`,
+      );
+      endret();
+    });
+  // Ledige vakter og tilbudene fra kolleger, etter dato.
+  const rader = [...vakter.map((v) => ({ dato: v.dato, fra: v.fra, v })), ...tilbud.map((b) => ({ dato: b.dato, fra: b.fra, b }))].sort(
+    (x, y) => x.dato.localeCompare(y.dato) || x.fra.localeCompare(y.fra),
+  );
   return (
     <>
       {melding && (
@@ -1052,30 +1200,48 @@ function LedigeVakter({ vakter, feil, endret }: { vakter?: Vakt[]; feil: string 
         </div>
       )}
       <Feil melding={h.feil} />
-      {!vakter.length ? (
+      {!rader.length ? (
         <div className="kort">
           <Tom ikon={<IkonKalender storrelse={22} />} tittel="Ingen ledige vakter nå">
-            <p>Du får varsel når det kommer ledige vakter.</p>
+            <p>Du får varsel når det kommer ledige vakter, eller en kollega gir bort en vakt.</p>
           </Tom>
         </div>
       ) : (
         <div className="kort liste">
-          {vakter.map((v) => (
-            <div key={v.id} className="liste-rad statisk ledig-vakt">
-              <span className="linje">
-                <span className="tittel">
-                  {visDag(v.dato)} · {tid(v)}
+          {rader.map((r) =>
+            "v" in r ? (
+              <div key={r.v.id} className="liste-rad statisk ledig-vakt">
+                <span className="linje">
+                  <span className="tittel">
+                    {visDag(r.v.dato)} · {tid(r.v)}
+                  </span>
+                  <button type="button" className="primar" disabled={h.opptatt} onClick={() => ta(r.v)}>
+                    Ta vakten
+                  </button>
                 </span>
-                <button type="button" className="primar" disabled={h.opptatt} onClick={() => ta(v)}>
-                  Ta vakten
-                </button>
-              </span>
-              <span className="under">{[timer(v.timer), v.oppgave, v.notat].filter(Boolean).join(" · ")}</span>
-            </div>
-          ))}
+                <span className="under">{[timer(r.v.timer), r.v.oppgave, r.v.notat].filter(Boolean).join(" · ")}</span>
+              </div>
+            ) : (
+              <div key={r.b.id} className="liste-rad statisk ledig-vakt">
+                <span className="linje">
+                  <span className="tittel">
+                    {visDag(r.b.dato)} · {tid(r.b)}
+                  </span>
+                  <button type="button" className="primar" disabled={h.opptatt || !!r.b.hindring} onClick={() => taFra(r.b)}>
+                    Ta vakten
+                  </button>
+                </span>
+                <span className="under">{[`Fra ${r.b.fra_navn}`, timer(r.b.timer), r.b.oppgave, r.b.melding && `«${r.b.melding}»`].filter(Boolean).join(" · ")}</span>
+                {r.b.hindring && <span className="under hindring">{r.b.hindring}</span>}
+              </div>
+            ),
+          )}
         </div>
       )}
-      <p className="liten dempet">Den første som tar en ledig vakt, får den. Du kan ikke ta en vakt som overlapper en av dine egne.</p>
+      <p className="liten dempet">
+        Den første som tar en ledig vakt, får den. Du kan ikke ta en vakt som overlapper en av dine egne.
+        {tilbud.length > 0 && innstilling === "godkjenning" ? " En vakt fra en kollega blir din når lederen har godkjent byttet." : ""}
+      </p>
     </>
   );
 }

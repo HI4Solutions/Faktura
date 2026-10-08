@@ -391,7 +391,9 @@ export function vaktRuter() {
       if (finnes) return finnes;
       const a = await en<{ ukentlig_arbeidstid: number }>(db, "select ukentlig_arbeidstid from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), b.ansatt_id]);
       const dag = helligdag(b.dato) ? undefined : planFor((await hentPlaner(db, orgId(c), b.ansatt_id)).get(b.ansatt_id), b.dato)?.dager.find((d) => d.ukedag === ukedag(b.dato));
-      if (!a || !dag) throw new ApiFeil(400, "Den ansatte har ingen fast arbeidsdag denne dagen");
+      // Gitt bort i et vaktbytte (0060): fri den dagen.
+      const fri = await en(db, "select 1 from faktura.arbeidsplan_fri where org_id = $1 and ansatt_id = $2 and dato = $3", [orgId(c), b.ansatt_id, b.dato]);
+      if (!a || !dag || fri) throw new ApiFeil(400, "Den ansatte har ingen fast arbeidsdag denne dagen");
       const slutt = 8 * 60 + Math.round(dagTimer(dag, a.ukentlig_arbeidstid) * 60);
       const kl = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
       const ny = (await en<{ id: string }>(

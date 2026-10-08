@@ -217,6 +217,30 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   uke etter grensene i oppsettet, overlappende vakter og vakter utenfor ansettelsen. Timene
   kan føres fra vakten (`timeforinger.vakt_id`), og timelisten og godkjenningen viser hvor
   mange timer som var planlagt
+- `vaktbytter` (`0060_vaktbytte.sql`, `server/src/vaktbytte.ts`): den ansatte gir bort en
+  publisert vakt eller en fast arbeidsdag (den blir en vakt med de samme tidene,
+  `vakt_fra_plan`), til en bestemt kollega eller til alle med samme rolle (uten rolle: alle), eller
+  bytter den mot en vakt eller fast dag en kollega har. Kollegaene er de aktive med innlogging og
+  samme rolle (`vaktbytte_kollega`); åpne tilbud står blant de ledige vaktene deres. Kollegaen tar
+  vakten (et åpent tilbud: den første får den, raden låses), bytter eller sier nei takk, og kan
+  angre mens byttet venter. `lonn_oppsett.vaktbytte`: `godkjenning` (standard: eier eller
+  administrator godkjenner eller avviser med en grunn, og ser advarslene etter
+  arbeidsmiljøloven byttet gir de to), `fritt` (gjennom med en gang) eller `av`. Alt sjekkes
+  når tilbudet lages, når kollegaen svarer og når byttet gjøres (`vaktbytte_utfor`): vakten har
+  ikke begynt, den som gir den bort, er ikke borte og har ikke vikar (vakten står for
+  sykepengene, og lederen setter inn vikar), og den som tar den, er aktiv, ansatt den dagen, ikke
+  borte og har ingen annen vakt eller fast dag som overlapper (`vaktbytte_hindring`; om
+  kollegaer sies bare «annen vakt» eller at de ikke kan, siden fraværet er skjult). Når byttet går
+  gjennom, flyttes vakten (ved bytte begge), en fast dag samme dag hos den som får vakten blir en
+  vakt først, og plassene på tavla følger med (`vaktbytte_tavle`: plassene i fasene vakten
+  dekker, og den faste oppgaven, som for en vikar). Den som gir bort en vakt på en fast
+  arbeidsdag, får fri den dagen (`arbeidsplan_fri`), så den faste dagen ikke kommer tilbake; ved
+  et bytte flyttes timene i planen til dagen de fikk igjen (`byttet_til`), så byttet ikke blir
+  ekstratimer. Endrer lederen dag, tid eller ansatt på en vakt med et åpent tilbud, er tilbudet
+  utgått; et tilbud som ikke er besvart når vakten begynner, vises som utgått. De to, kollegaene
+  (åpne tilbud) og eier og administrator (til godkjenning) får push-varsler (`vakter`). Den
+  ansatte ser byttene de er med i og de åpne tilbudene fra kolleger (`vaktbytte_liste`), eier,
+  administrator og regnskap alle; alt annet går gjennom funksjonene
 - `fravaer`: sykdom, sykt barn, ferie, permisjon, kurs og annet fravær per ansatt (fra og med, til
   og med). Eier og administrator registrerer alt; den ansatte melder selv sykdom (fra og med
   i går) og kan bare endre sluttdatoen på den etterpå. Melder den ansatte seg syk, får eier og
@@ -299,9 +323,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   ansatte fri, og timene en vakt gir den dagen, er ekstra), og den vises i
   bemanningskalenderen, vaktplanen, på tavla og i timelisten (med «Før timer»), og teller som
   planlagt arbeid. Vikar for en fast dag gir en vakt etter planen (`POST /vakter/fra-plan`) som
-  vikaren dekker. Ekstratimer (`server/src/arbeidsplan.ts`): med plan timene utover planen
-  den dagen; uten plan timene utover avtalt arbeidstid i uka (alle timene for
-  tilkallingsvikarer); vakter den ansatte er borte fra, teller ikke. Rapporten over
+  vikaren dekker. En fast dag som er gitt bort i et vaktbytte, gjelder ikke (`arbeidsplan_fri`).
+  Ekstratimer (`server/src/arbeidsplan.ts`): med plan timene utover planen den dagen (en dag
+  med fri har ingen timer i planen, og timene fra en fast dag som er byttet, er flyttet til
+  dagen den ansatte fikk igjen); uten plan timene utover avtalt arbeidstid i uka (alle timene
+  for tilkallingsvikarer); vakter den ansatte er borte fra, teller ikke. Rapporten over
   ekstratimer per ansatt i en periode tas ut som PDF eller CSV (`/ekstratimer.pdf|.csv`)
 - Bemanningsdataene registreres ett sted og brukes overalt: stillingsprosenten, arbeidstiden og
   de faste dagene ligger på den ansatte (`ansatte`, `arbeidsplaner`), og fraværet og ferien i
@@ -412,7 +438,8 @@ begge parter kan trekke den. Byråets ansatte med rollen `ansatt` får ikke tilg
 klientene.
 
 Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort,
-sine egne publiserte vakter, de publiserte ledige vakter, sitt eget fravær, sine egne plasser
+sine egne publiserte vakter, de publiserte ledige vakter, vaktbyttene de er med i og de åpne
+tilbudene fra kolleger med samme rolle (`vaktbytte_liste`), sitt eget fravær, sine egne plasser
 på tavla (og fasene og oppgavene) og sine egne timer (`faktura.kan(org, 'medlem')`,
 `faktura.er_meg` og `faktura.min_ansatt`), aldri fakturadata, andre medlemmer, andres vakter
 og fravær eller revisjonsloggen. Varsler til hele organisasjonen og
@@ -486,7 +513,8 @@ og hastighetsgrenser i API-et.
    1. ~~Ansatte og timer~~ Ferdig: ansattregister, egen innlogging for ansatte, timeføring
       med overtid og merarbeid, levering og godkjenning med push-varsler
    2. ~~Vaktplan~~ Ferdig: vakter per uke og ansatt med publisering og varsler, ledige vakter
-      som de ansatte tar, kopiering av uker, advarsler etter arbeidsmiljøloven, og timer
+      som de ansatte tar, vaktbytte mellom kolleger med samme rolle (med eller uten
+      godkjenning), kopiering av uker, advarsler etter arbeidsmiljøloven, og timer
       ført fra vakten. Tavle (ressursfordeling i egne faser og oppgaver med behov, og
       rullering som fordeler de ansatte etter tur),
       fravær (sykdom meldt av den ansatte, ferie, permisjon og kurs), vikarer,

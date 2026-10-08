@@ -22,7 +22,7 @@ export const VARSELTYPER = {
   bank: "Innbetalinger fra banken",
   paaminnelse: "Påminnelser om å lage fakturaer",
   timer: "Timelister levert, godkjent og avvist",
-  vakter: "Vaktplan: nye, endrede og ledige vakter",
+  vakter: "Vaktplan: nye, endrede og ledige vakter og vaktbytter",
   fravaer: "Sykdom og fravær",
   bursdag: "Bursdager i organisasjonen",
 } as const;

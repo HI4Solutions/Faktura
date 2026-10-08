@@ -5,9 +5,12 @@
 //
 // - En fast dag er en dag i planen uten en vakt i vaktplanen (vakten gjelder da i stedet), og
 //   aldri en helligdag (helligdager.ts): da har den ansatte fri, og timene den dagen er ekstra.
+//   Har den ansatte gitt bort vakten eller den faste dagen i et vaktbytte (0060_vaktbytte.sql),
+//   har de fri den dagen (arbeidsplan_fri), og den faste dagen kommer ikke tilbake.
 // - Ekstratimer: med plan timene utover planen den dagen; uten plan timene utover avtalt
 //   arbeidstid i uka (alle timene for tilkallingsvikarer). Vakter den ansatte er borte fra,
-//   teller ikke.
+//   teller ikke. Ved et vaktbytte er timene i planen flyttet til dagen den ansatte fikk igjen,
+//   så byttet ikke blir ekstratimer.
 import { Hono, type Context } from "hono";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { z } from "zod";
@@ -45,6 +48,8 @@ type Ansatt = {
 };
 type Vakt = { ansatt_id: string; dato: string; fra: string; til: string; timer: number; borte: boolean };
 export type Fast = { ansatt_id: string; dato: string; fra: string | null; til: string | null; pause_min: number; timer: number; fravaer: string | null };
+// En fast dag den ansatte har fri (gitt bort i et vaktbytte), og dagen timene er flyttet til.
+export type Fri = { ansatt_id: string; dato: string; byttet_til: string | null };
 
 const DAG = 86_400_000;
 const leggTil = (iso: string, n: number) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * DAG).toISOString().slice(0, 10);
@@ -99,6 +104,7 @@ export function beregnEkstra(
   ansatte: (Pick<Ansatt, "id" | "ukentlig_arbeidstid" | "stillingsprosent" | "ansettelsestype"> & { arbeidstaker?: boolean })[],
   planer: Map<string, Plan[]>,
   vakter: Vakt[],
+  fri: Fri[] = [],
 ) {
   const ut = new Map<string, number>();
   const legg = (k: string, t: number) => t > 0.01 && ut.set(k, rund((ut.get(k) ?? 0) + t));
@@ -106,6 +112,12 @@ export function beregnEkstra(
     if (a.arbeidstaker === false) continue;
     const p = planer.get(a.id);
     const egne = vakter.filter((v) => v.ansatt_id === a.id && !v.borte).sort((x, y) => x.dato.localeCompare(y.dato) || x.fra.localeCompare(y.fra));
+    const egenFri = fri.filter((f) => f.ansatt_id === a.id);
+    // Timene i planen en dag (ingen på en helligdag, da gjelder ikke planen).
+    const planTimer = (d: string) => {
+      const dag = helligdag(d) ? undefined : planFor(p, d)?.dager.find((x) => x.ukedag === ukedag(d));
+      return dag ? dagTimer(dag, a.ukentlig_arbeidstid) : 0;
+    };
     // Med plan: timene utover planen den dagen.
     const perDag = new Map<string, number>();
     const utenPlan: Vakt[] = [];
@@ -114,9 +126,10 @@ export function beregnEkstra(
       else utenPlan.push(v);
     }
     for (const [d, t] of perDag) {
-      // På en helligdag gjelder ikke planen: alle timene er ekstra.
-      const dag = helligdag(d) ? undefined : planFor(p, d)!.dager.find((x) => x.ukedag === ukedag(d));
-      legg(`${a.id}|${d}`, t - (dag ? dagTimer(dag, a.ukentlig_arbeidstid) : 0));
+      // En dag med fri (byttet bort) har ingen timer i planen; dagene som er byttet hit, har sine.
+      const plan = egenFri.some((f) => f.dato === d) ? 0 : planTimer(d);
+      const flyttet = egenFri.filter((f) => f.byttet_til === d).reduce((sum, f) => sum + planTimer(f.dato), 0);
+      legg(`${a.id}|${d}`, t - plan - flyttet);
     }
     // Uten plan: timene utover avtalt arbeidstid i uka, i rekkefølge.
     const grense = a.ansettelsestype === "tilkalling" ? 0 : (Number(a.ukentlig_arbeidstid) * Number(a.stillingsprosent)) / 100;
@@ -163,18 +176,25 @@ export async function beregnBemanning(db: Db, org: string, fra: string, til: str
   );
   const borte = (a: string, d: string) => fravaer.find((f) => f.ansatt_id === a && f.fra <= d && f.til >= d)?.type ?? null;
   const harVakt = new Set(vakter.map((v) => `${v.ansatt_id}|${v.dato}`));
+  // Faste dager gitt bort i et vaktbytte (og dagene timene er flyttet til, for ekstratimene).
+  const fri = await alle<Fri>(
+    db,
+    "select ansatt_id, dato, byttet_til from faktura.arbeidsplan_fri where org_id = $1 and (dato between $2 and $3 or byttet_til between $2 and $3) and ($4::uuid is null or ansatt_id = $4)",
+    [org, ufra, util, ansatt ?? null],
+  );
+  const harFri = new Set(fri.map((f) => `${f.ansatt_id}|${f.dato}`));
   const faste: Fast[] = [];
   for (const a of ansatte) {
     const p = planer.get(a.id);
     if (!p || !a.aktiv) continue;
     for (let d = ufra; d <= util; d = leggTil(d, 1)) {
       // Ingen fast dag på en helligdag (helligdager.ts).
-      if (d < a.ansatt_fra || (a.ansatt_til && d > a.ansatt_til) || harVakt.has(`${a.id}|${d}`) || helligdag(d)) continue;
+      if (d < a.ansatt_fra || (a.ansatt_til && d > a.ansatt_til) || harVakt.has(`${a.id}|${d}`) || harFri.has(`${a.id}|${d}`) || helligdag(d)) continue;
       const dag = planFor(p, d)?.dager.find((x) => x.ukedag === ukedag(d));
       if (dag) faste.push({ ansatt_id: a.id, dato: d, fra: dag.fra, til: dag.til, pause_min: dag.pause_min, timer: dagTimer(dag, a.ukentlig_arbeidstid), fravaer: borte(a.id, d) });
     }
   }
-  return { ansatte, planer, vakter, faste, ekstra: beregnEkstra(ansatte, planer, vakter), ufra, util };
+  return { ansatte, planer, vakter, faste, fri, ekstra: beregnEkstra(ansatte, planer, vakter, fri), ufra, util };
 }
 
 // --- Rapporten over ekstratimer --------------------------------------------------------------
