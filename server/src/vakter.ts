@@ -44,7 +44,7 @@ const VAKT = `
          (select o.fornavn || ' ' || o.etternavn from faktura.vakter ov join faktura.ansatte o on o.org_id = ov.org_id and o.id = ov.ansatt_id
            where ov.org_id = v.org_id and ov.id = v.vikar_for) as vikar_for_navn,
          exists (select 1 from faktura.vakter x where x.org_id = v.org_id and x.vikar_for = v.id) as har_vikar,
-         (select f.type from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer,
+         (select faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer,
          exists (select 1 from faktura.timeforinger t where t.org_id = v.org_id and t.vakt_id = v.id) as fort
     from faktura.vakter v
     left join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id`;
@@ -121,7 +121,8 @@ export function vaktRuter() {
         // Fraværet i perioden (den ansatte ser bare sitt eget).
         const fravaer = await alle(
           db,
-          `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, f.type, f.fra, f.til, f.notat
+          `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.fra, f.til,
+                  case when faktura.ser_fravaertype(f.org_id, f.ansatt_id) then f.notat end as notat
              from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
             where f.org_id = $1 and f.til >= $2 and f.fra <= $3 and ($4::uuid is null or f.ansatt_id = $4)
             order by f.fra`,

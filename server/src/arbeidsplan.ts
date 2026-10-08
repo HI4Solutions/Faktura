@@ -147,7 +147,8 @@ export async function beregnBemanning(db: Db, org: string, fra: string, til: str
   );
   const fravaer = await alle<{ ansatt_id: string; fra: string; til: string; type: string }>(
     db,
-    "select ansatt_id, fra, til, type from faktura.fravaer where org_id = $1 and til >= $2 and fra <= $3 and ($4::uuid is null or ansatt_id = $4)",
+    // Typen bare for dem som ser den (0047_fravaer_skjult.sql); ellers «fravaer».
+    "select ansatt_id, fra, til, faktura.fravaer_type(org_id, ansatt_id, type) as type from faktura.fravaer where org_id = $1 and til >= $2 and fra <= $3 and ($4::uuid is null or ansatt_id = $4)",
     [org, ufra, util, ansatt ?? null],
   );
   const borte = (a: string, d: string) => fravaer.find((f) => f.ansatt_id === a && f.fra <= d && f.til >= d)?.type ?? null;

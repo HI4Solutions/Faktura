@@ -9,17 +9,28 @@ import { iDag, leggTilDager } from "../format";
 import { IkonKalender } from "../ikoner";
 import { visDag } from "../uke";
 
-export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "kurs" | "annet";
+// «fravaer»: typen er skjult. Bare eier, administrator og den ansatte selv ser hva slags fravær det
+// er (0047_fravaer_skjult.sql); andre ser bare at den ansatte er borte (F).
+export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "kurs" | "annet" | "fravaer";
 export type Fravaer = { id: string; ansatt_id: string; ansatt_navn: string; type: FravaerType; fra: string; til: string; notat?: string | null };
 export type Ansatt = { id: string; fornavn: string; etternavn: string; ansatt_fra: string; ansatt_til: string | null; aktiv: boolean };
 type BerortVakt = { id: string; dato: string; fra: string; til: string; oppgave: string | null };
 
 export const FRAVAERTYPER: FravaerType[] = ["ferie", "syk", "sykt_barn", "permisjon", "kurs", "annet"];
-export const fravaerTekst: Record<FravaerType, string> = { syk: "Syk", sykt_barn: "Sykt barn", ferie: "Ferie", permisjon: "Permisjon", kurs: "Kurs", annet: "Annet fravær" };
-// Forkortelsene i bemanningskalenderen.
-export const fravaerKode: Record<FravaerType, string> = { ferie: "F", syk: "S", sykt_barn: "SB", permisjon: "P", kurs: "K", annet: "A" };
-// Hver type har sin farge (styles.css: --fv-ferie osv.), samme i merker, vaktplan og kalender.
-export const fravaerKlasse = Object.fromEntries(FRAVAERTYPER.map((t) => [t, `merke-fravaer fravaer-${t}`])) as Record<FravaerType, string>;
+export const fravaerTekst: Record<FravaerType, string> = {
+  syk: "Syk",
+  sykt_barn: "Sykt barn",
+  ferie: "Ferie",
+  permisjon: "Permisjon",
+  kurs: "Kurs",
+  annet: "Annet fravær",
+  fravaer: "Fravær",
+};
+// Forkortelsene i bemanningskalenderen. F er fravær uten type (det andre ser).
+export const fravaerKode: Record<FravaerType, string> = { ferie: "Fe", syk: "S", sykt_barn: "SB", permisjon: "P", kurs: "K", annet: "A", fravaer: "F" };
+// Hver type har sin farge (styles.css: --fv-ferie osv.), samme i merker, vaktplan og kalender;
+// fravær uten type er grått, så fargen ikke røper typen.
+export const fravaerKlasse = Object.fromEntries([...FRAVAERTYPER, "fravaer"].map((t) => [t, `merke-fravaer fravaer-${t}`])) as Record<FravaerType, string>;
 // «Ola Nordmann har ferie denne dagen.»
 export const borteTekst: Record<FravaerType, string> = {
   syk: "er syk",
@@ -28,6 +39,7 @@ export const borteTekst: Record<FravaerType, string> = {
   permisjon: "har permisjon",
   kurs: "er på kurs",
   annet: "er borte",
+  fravaer: "har fravær",
 };
 
 export const fravaerPeriode = (f: Pick<Fravaer, "fra" | "til">) => (f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)} – ${visDag(f.til)}`);

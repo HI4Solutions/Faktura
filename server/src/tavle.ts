@@ -154,7 +154,7 @@ export function tavleRuter() {
           `select v.id, v.ansatt_id, a.fornavn || ' ' || a.etternavn as navn, to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til,
                   v.oppgave, v.publisert_at is not null as publisert, v.vikar_for,
                   exists (select 1 from faktura.vakter x where x.org_id = v.org_id and x.vikar_for = v.id) as har_vikar,
-                  (select f.type from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer
+                  (select faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer
              from faktura.vakter v
              join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id
             where v.org_id = $1 and v.dato = $2
@@ -190,7 +190,7 @@ export function tavleRuter() {
           plasseringer: await alle(db, "select id, fase_id, oppgave_id, ansatt_id from faktura.tavle_plasseringer where org_id = $1 and dato = $2", [orgId(c), dato]),
           fravaer: await alle(
             db,
-            `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as navn, f.type, f.fra, f.til
+            `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.fra, f.til
                from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
               where f.org_id = $1 and $2 between f.fra and f.til order by a.etternavn, a.fornavn`,
             [orgId(c), dato],

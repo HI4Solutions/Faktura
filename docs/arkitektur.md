@@ -164,8 +164,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   administrator varsel med hvor mange vakter som trenger vikar; registrerer leder fravær, får
   den ansatte beskjed. Den som er borte, tas ut av ressursene: vaktene er merket med fraværet,
   teller ikke i advarslene eller som planlagt arbeid, og står som «mangler vikar». Fravær er
-  helseopplysninger: bare eier, administrator, regnskap og den ansatte selv ser det, også i
-  revisjonsloggen
+  helseopplysninger: bare eier, administrator, regnskap og den ansatte selv ser det. Hva slags
+  fravær det er (syk, sykt barn, ferie, permisjon, kurs, annet) og notatet ser bare eier og
+  administrator, som registrerer og følger opp fraværet, og den ansatte selv. Alle andre (f.eks.
+  regnskap) ser bare at den ansatte har fravær («F») i fraværslista, vaktplanen, på tavla og i
+  bemanningskalenderen, og fraværet står ikke i revisjonsloggen for dem
+  (`faktura.fravaer_type`, `0047_fravaer_skjult.sql`)
 - `vakter.vikar_for`: en vikar settes inn som en egen vakt med samme tid og oppgave som vakten
   til den som er borte (den beholder sin). Vikarvakten publiseres med en gang med varsel til
   vikaren, tar over plassene på tavla, og kopieres ikke til neste uke. Vikaren kan være en ny
@@ -208,8 +212,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `ansattgrupper` og `ansatte.gruppe_id`: grupper av ansatte (f.eks. sekretærer og leger) med
   hvor mange som trengs på jobb per dag. Bemanningskalenderen (i appen, fra de faste
   arbeidsplanene, vaktplanen og fraværet) viser måneden med datoene nedover og de ansatte
-  bortover, gruppe for gruppe: på jobb (✓), fri (–), fravær (F ferie, S syk, SB sykt barn,
-  P permisjon, K kurs, A annet) eller ekstratimer, nederst ekstratimene i måneden per ansatt,
+  bortover, gruppe for gruppe: på jobb (✓), fri (–), fravær (for eier og administrator Fe
+  ferie, S syk, SB sykt barn, P permisjon, K kurs, A annet; for andre bare F) eller
+  ekstratimer, nederst ekstratimene i måneden per ansatt,
   og til høyre hvor mange som er på jobb i hver gruppe mot behovet, vakter uten vikar og ledige
   vakter. Grupper kan lages fra stillingene
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,

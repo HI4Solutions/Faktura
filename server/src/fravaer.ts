@@ -29,8 +29,11 @@ const skjema = z.object({
   notat: valgfri(tekst(500, "Notatet")),
 });
 
+// Typen og notatet ser bare eier, administrator og den ansatte selv (0047_fravaer_skjult.sql);
+// andre får typen «fravaer» og ikke notatet.
 const FRAVAER = `
-  select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, f.type, f.fra, f.til, f.notat,
+  select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.fra, f.til,
+         case when faktura.ser_fravaertype(f.org_id, f.ansatt_id) then f.notat end as notat,
          f.opprettet, f.opprettet_av = faktura.bruker_id() as min
     from faktura.fravaer f
     join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id`;

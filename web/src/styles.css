@@ -1640,6 +1640,7 @@ table.behov-tabell tbody tr:last-child td { border-bottom: 0; }
   --fv-permisjon: #7d5d00; --fv-permisjon-lys: #fcf1c6;
   --fv-kurs: #0e7068; --fv-kurs-lys: #daf3ee;
   --fv-annet: #6b2fd0; --fv-annet-lys: #efe7fd;
+  --fv-fravaer: #475569; --fv-fravaer-lys: #e8edf3;
   --fv-ekstra: #0f7a47; --fv-ekstra-lys: #e2f6ea;
 }
 :root[data-tema="mork"] {
@@ -1649,6 +1650,7 @@ table.behov-tabell tbody tr:last-child td { border-bottom: 0; }
   --fv-permisjon: #f0d061; --fv-permisjon-lys: #33290f;
   --fv-kurs: #62d6c6; --fv-kurs-lys: #0f2f2b;
   --fv-annet: #c6a9ff; --fv-annet-lys: #2a1f47;
+  --fv-fravaer: #a8b3c4; --fv-fravaer-lys: #222a36;
   --fv-ekstra: #5fd39a; --fv-ekstra-lys: #12301f;
 }
 .fravaer-ferie { --fv: var(--fv-ferie); --fv-lys: var(--fv-ferie-lys); }
@@ -1657,6 +1659,7 @@ table.behov-tabell tbody tr:last-child td { border-bottom: 0; }
 .fravaer-permisjon { --fv: var(--fv-permisjon); --fv-lys: var(--fv-permisjon-lys); }
 .fravaer-kurs { --fv: var(--fv-kurs); --fv-lys: var(--fv-kurs-lys); }
 .fravaer-annet { --fv: var(--fv-annet); --fv-lys: var(--fv-annet-lys); }
+.fravaer-fravaer { --fv: var(--fv-fravaer); --fv-lys: var(--fv-fravaer-lys); }
 .merke-fravaer { background: var(--fv-lys); color: var(--fv); }
 
 /* --------------------------------------------------------------------------

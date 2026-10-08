@@ -9,7 +9,7 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { api, hent, lastNed } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles";
-import { useKonto } from "../konto";
+import { erAdmin, useKonto } from "../konto";
 import { dato as visDato, iDag, leggTilDager, leggTilMaaneder } from "../format";
 import { IkonAnsatte, IkonHoyre, IkonNed, IkonOpp, IkonPluss, IkonRapport, IkonVenstre } from "../ikoner";
 import { gyldigDato, mandag, middag, tallformat, timer, ukenr, visDag } from "../uke";
@@ -68,6 +68,8 @@ export function Bemanning({
   tilUke: (mandag: string) => void;
 }) {
   const { org } = useKonto();
+  // Bare eier og administrator ser hva slags fravær det er; andre ser F (0047_fravaer_skjult.sql).
+  const serType = erAdmin(org?.rolle);
   const forste = `${maaned}-01`;
   const siste = leggTilDager(leggTilMaaneder(forste, 1), -1);
   // Hele uker, så ukene i kantene av måneden kommer med.
@@ -293,7 +295,7 @@ export function Bemanning({
             <span>
               <span className="bm-tegn">–</span> Fri
             </span>
-            {FRAVAERTYPER.map((t) => (
+            {(serType ? FRAVAERTYPER : (["fravaer"] as const)).map((t) => (
               <span key={t}>
                 <span className={`bm-tegn fravaer-${t}`}>{fravaerKode[t]}</span> {t === "annet" ? "Annet" : fravaerTekst[t]}
               </span>
@@ -302,7 +304,7 @@ export function Bemanning({
               <span className="bm-tegn ekstra">2t</span> Ekstratimer
             </span>
             <span>
-              <span className="bm-tegn fravaer-syk uten-vikar">S</span> Vakten mangler vikar
+              <span className={`bm-tegn uten-vikar fravaer-${serType ? "syk" : "fravaer"}`}>{serType ? "S" : "F"}</span> Vakten mangler vikar
             </span>
             {harUtkast && (
               <span>
