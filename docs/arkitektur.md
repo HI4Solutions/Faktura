@@ -282,7 +282,13 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   teller med (en plass som flyttes for hånd, er ikke lenger rullert); med `behold: false`
   fordeles også de. `tavle_utelatt`: hvem rulleringen ikke setter i en oppgave (uten rad
   kan alle; uten noen oppgave er den ansatte utenfor rulleringen), styrt i oppsettet av
-  tavla; for hånd kan alle plasseres. Appen viser et forslag (dagene med fasene og
+  tavla; for hånd kan alle plasseres. `tavle_fast_oppgave` (`0059_tavle_fast_oppgave.sql`): en
+  ansatt kan ha en fast oppgave (f.eks. laben), valgt i oppsettet av tavla eller ved å trykke på
+  navnet. Rulleringen setter dem alltid der, i alle fasene de er på jobb og oppgaven trengs (også
+  når behovet er dekket; der den ikke trengs, står de uten plass), og de rulleres ikke. Uten en
+  plass i fasen står de der likevel, på tavla («Fast»), i «Mine vakter» og for AI-assistenten
+  (regnet ut i API-et, `fastePlasser`, og ikke lagret); en plass satt for hånd en dag står foran,
+  og en vikar tar over plassen. En rolle som tas ut av tavla, tar også den faste oppgaven. Appen viser et forslag (dagene med fasene og
   oppgavene, behovet som mangler og fordelingen per ansatt) før det lagres
 - `arbeidsplaner` og `arbeidsplan_dager`: den faste arbeidsplanen til en ansatt, lagt inn i
   ansattskjemaet ved stillingsprosenten: ukedagene den ansatte jobber, med klokkeslett (og

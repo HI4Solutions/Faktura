@@ -14,7 +14,7 @@ import { beregnBemanning } from "./arbeidsplan.js";
 import { regler } from "./ansatte.js";
 import { FRAVAERTYPER, periode } from "./fravaer.js";
 import { iFasen } from "./rullering.js";
-import { kjorRullering } from "./tavle.js";
+import { egnePlasser, kjorRullering } from "./tavle.js";
 import { sammeNavn } from "./bank.js";
 import { helligdag } from "./helligdager.js";
 
@@ -890,14 +890,8 @@ async function vakter(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSva
     (v) => v.publisert || k.p.kan.se,
   );
   const faste = (await beregnBemanning(k.db, k.orgId, fra, til, h.a.id)).faste.filter((f) => f.dato >= fra && f.dato <= til);
-  const plasser = await alle<{ dato: string; fase: string; oppgave: string }>(
-    k.db,
-    `select p.dato, f.navn as fase, o.navn as oppgave from faktura.tavle_plasseringer p
-       join faktura.tavle_faser f on f.org_id = p.org_id and f.id = p.fase_id
-       join faktura.tavle_oppgaver o on o.org_id = p.org_id and o.id = p.oppgave_id
-      where p.org_id = $1 and p.ansatt_id = $2 and p.dato between $3 and $4 order by p.dato, f.rekkefolge`,
-    [k.orgId, h.a.id, fra, til],
-  );
+  // Plassene på tavla, også de som kommer av den faste oppgaven (0059_tavle_fast_oppgave.sql).
+  const plasser = await egnePlasser(k.db, k.orgId, h.a.id, fra, til);
   const tavle = (d: string) => {
     const x = plasser.filter((y) => y.dato === d).map((y) => `${y.oppgave}${plasser.filter((z) => z.dato === d).length > 1 ? ` ${y.fase.toLowerCase()}` : ""}`);
     return x.length ? ` – ${liste(x)}` : "";

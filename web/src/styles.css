@@ -1593,6 +1593,9 @@ button.ressurs:active:not(:disabled) { transform: none; }
 .flytt-valg button.valgt { border-color: var(--aksent); background: var(--aksent-lys); color: var(--aksent); box-shadow: inset 0 0 0 1px var(--aksent); }
 .flytt-antall { font-variant-numeric: tabular-nums; color: var(--dempet); font-weight: 600; font-size: 0.85rem; }
 .flytt .melding { margin-bottom: 12px; }
+/* Den faste oppgaven nederst i dialogen, og i «Hvem kan ta oppgavene» */
+.flytt label.fast-oppgave { margin: 14px 0 8px; padding-top: 12px; border-top: 1px solid var(--kant); }
+table.hvem-kan select.fast-valg { width: auto; min-width: 96px; min-height: 0; padding: 4px 26px 4px 8px; font-size: 0.85rem; background-position: right 6px center; }
 /* Oppsett: faser og oppgaver */
 .oppsett-del + .oppsett-del { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--kant); }
 .oppsett-del h3 { margin: 0 0 2px; font-size: 1rem; }

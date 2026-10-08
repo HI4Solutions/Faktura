@@ -13,6 +13,9 @@
 //   (den ansatte er jo på ett sted); med «samme oppgave hele dagen» gjelder det alle fasene.
 // - Ingen settes i en oppgave de er utelatt fra, og plassene som står (satt for hånd), teller
 //   med i behovet og i rulleringen.
+// - De med fast oppgave (0059_tavle_fast_oppgave.sql) rulleres ikke: de settes i oppgaven i alle
+//   fasene de er på jobb og den trengs (også når behovet er dekket), og teller med i behovet. Der
+//   oppgaven ikke trengs (behov 0), står de uten plass.
 //
 // Hver fase fordeles som en tilordning med lavest mulig samlet «kostnad» (den ungarske metoden),
 // så den er den beste for fasen og ikke bare grådig, og den blir lik hver gang for de samme
@@ -35,6 +38,8 @@ export type RInn = {
   oppgaver: ROppgave[];
   behov: RBehov[];
   utelatt: { ansatt_id: string; oppgave_id: string }[];
+  // Faste oppgaver: den ansatte får alltid denne.
+  fast?: { ansatt_id: string; oppgave_id: string }[];
   dager: RDag[];
   // Plassene før perioden (uten dem den ansatte var borte fra).
   historikk: RPlass[];
@@ -160,6 +165,8 @@ export function rullere(inn: RInn): RUt {
   const kan = (a: string, o: string) => !utelatt.has(`${a}|${o}`);
   const iRulleringen = (a: string) => inn.oppgaver.some((o) => kan(a, o.id));
   const trengs = (f: string, o: ROppgave) => inn.behov.find((b) => b.fase_id === f && b.oppgave_id === o.id)?.antall ?? o.behov;
+  // Den faste oppgaven (når oppgaven finnes på tavla).
+  const fast = new Map((inn.fast ?? []).flatMap((x) => (oppgaveNr.has(x.oppgave_id) ? [[x.ansatt_id, inn.oppgaver[oppgaveNr.get(x.oppgave_id)!]!] as const] : [])));
   const historikk = [...inn.historikk];
 
   for (const dag of [...inn.dager].sort((x, y) => x.dato.localeCompare(y.dato))) {
@@ -206,9 +213,20 @@ export function rullere(inn: RInn): RUt {
       const her = new Set(paJobb);
       const staar = dag.faste.filter((p) => p.fase_id === f.id && her.has(p.ansatt_id));
       const laast = new Set(dag.faste.filter((p) => p.fase_id === f.id).map((p) => p.ansatt_id));
-      const folk = paJobb.filter((a) => !laast.has(a) && iRulleringen(a)).sort();
       const fylt = new Map<string, number>();
       for (const p of staar) fylt.set(p.oppgave_id, (fylt.get(p.oppgave_id) ?? 0) + 1);
+      // De med fast oppgave: i oppgaven når den trengs i fasen, ellers uten plass.
+      for (const a of paJobb.filter((x) => !laast.has(x) && fast.has(x)).sort()) {
+        const o = fast.get(a)!;
+        if (trengs(f.id, o) === 0) {
+          ut.ikkePlassert.push({ dato: dag.dato, fase_id: f.id, ansatt_id: a });
+          continue;
+        }
+        ut.plasser.push({ dato: dag.dato, fase_id: f.id, oppgave_id: o.id, ansatt_id: a });
+        fylt.set(o.id, (fylt.get(o.id) ?? 0) + 1);
+        leggTil(a, f, o.id);
+      }
+      const folk = paJobb.filter((a) => !laast.has(a) && !fast.has(a) && iRulleringen(a)).sort();
 
       // Plassene: behovet i runder (den første i hver oppgave, så den andre ...), deretter resten
       // jevnt på oppgavene uten behov.

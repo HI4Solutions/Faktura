@@ -6,14 +6,16 @@
 // fase (vakten overlapper fasens tidsrom), finner appen ut. Eier og administrator plasserer
 // de ansatte i oppgavene, for hånd eller med rulleringen (/tavle/rullering, 0051); regnskap ser
 // tavla, og den ansatte ser sine egne plasser (/tavle/mine). De med en rolle som ikke er med på
-// tavla (f.eks. legene, 0057_rolle_tavle.sql), står ikke der og fordeles ikke.
+// tavla (f.eks. legene, 0057_rolle_tavle.sql), står ikke der og fordeles ikke. En ansatt kan ha
+// en fast oppgave (0059_tavle_fast_oppgave.sql): rulleringen setter dem alltid der, og uten en
+// plass i fasen står de der likevel (fastePlasser, regnes ut og lagres ikke).
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { datoS, klokke, tekst } from "./ansatte.js";
 import { beregnBemanning } from "./arbeidsplan.js";
-import { iFasen, rullere, type RDag, type RTid } from "./rullering.js";
+import { iFasen, rullere, type RBehov, type RDag, type RTid } from "./rullering.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -47,6 +49,49 @@ async function utenforTavla(db: Db, org: string) {
     [org],
   );
   return new Set(rader.map((x) => x.id));
+}
+
+const FASTE = "select ansatt_id, oppgave_id from faktura.tavle_fast_oppgave where org_id = $1 and ($2::uuid is null or ansatt_id = $2)";
+type Plass = { dato: string; fase_id: string; oppgave_id: string; ansatt_id: string };
+
+// Plassene til dem med fast oppgave (0059_tavle_fast_oppgave.sql) som ikke har noen plass i fasen
+// (satt for hånd eller av rulleringen): i alle fasene de er på jobb og ikke borte, når oppgaven
+// trengs der. De lagres ikke; tavla, «Mine vakter», vikaren og AI-assistenten regner med dem.
+export async function fastePlasser(db: Db, org: string, fra: string, til: string, ansatt?: string | null): Promise<Plass[]> {
+  const faste = await alle<{ ansatt_id: string; oppgave_id: string }>(db, FASTE, [org, ansatt ?? null]);
+  if (!faste.length) return [];
+  const faser = await alle<RTid & { id: string }>(db, FASER, [org]);
+  const oppgaver = new Map((await alle<{ id: string; behov: number | null }>(db, OPPGAVER, [org])).map((o) => [o.id, o]));
+  const behov = await alle<RBehov>(db, BEHOV, [org]);
+  const trengs = (f: string, o: string) => behov.find((b) => b.fase_id === f && b.oppgave_id === o)?.antall ?? oppgaver.get(o)?.behov ?? null;
+  const utenfor = await utenforTavla(db, org);
+  const bem = await beregnBemanning(db, org, fra, til, ansatt);
+  const person = new Map(bem.ansatte.map((a) => [a.id, a]));
+  const lagret = new Set(
+    (
+      await alle<Plass>(db, "select dato, fase_id, ansatt_id from faktura.tavle_plasseringer where org_id = $1 and dato between $2 and $3 and ($4::uuid is null or ansatt_id = $4)", [
+        org,
+        fra,
+        til,
+        ansatt ?? null,
+      ])
+    ).map((p) => `${p.dato}|${p.fase_id}|${p.ansatt_id}`),
+  );
+  const ut: Plass[] = [];
+  for (const { ansatt_id: a, oppgave_id: o } of faste) {
+    const x = person.get(a);
+    if (!x || !x.aktiv || utenfor.has(a) || !oppgaver.has(o)) continue;
+    for (let d = fra; d <= til; d = leggTilDager(d, 1)) {
+      if (d < x.ansatt_fra || (x.ansatt_til && d > x.ansatt_til)) continue;
+      const tider: RTid[] = [
+        ...bem.vakter.filter((v) => v.ansatt_id === a && v.dato === d && !v.borte),
+        ...bem.faste.filter((f) => f.ansatt_id === a && f.dato === d && !f.fravaer),
+      ];
+      for (const f of faser)
+        if (tider.some((t) => iFasen(t, f)) && trengs(f.id, o) !== 0 && !lagret.has(`${d}|${f.id}|${a}`)) ut.push({ dato: d, fase_id: f.id, oppgave_id: o, ansatt_id: a });
+    }
+  }
+  return ut;
 }
 
 export function tavleRuter() {
@@ -205,13 +250,25 @@ export function tavleRuter() {
           ressurser: [...ressurser.values()].sort(
             (x, y) => (x.vakter[0]?.fra ?? "00:00").localeCompare(y.vakter[0]?.fra ?? "00:00") || x.navn.localeCompare(y.navn, "nb"),
           ),
-          plasseringer: (
-            await alle<{ ansatt_id: string }>(db, "select id, fase_id, oppgave_id, ansatt_id, rullert from faktura.tavle_plasseringer where org_id = $1 and dato = $2", [
-              orgId(c),
-              dato,
-            ])
-          ).filter((p) => !utenfor.has(p.ansatt_id)),
+          plasseringer: [
+            ...(
+              await alle<{ ansatt_id: string }>(db, "select id, fase_id, oppgave_id, ansatt_id, rullert from faktura.tavle_plasseringer where org_id = $1 and dato = $2", [
+                orgId(c),
+                dato,
+              ])
+            ).filter((p) => !utenfor.has(p.ansatt_id)),
+            // De med fast oppgave og uten plass i fasen står der (fast: regnet ut, ikke lagret).
+            ...(await fastePlasser(db, orgId(c), dato, dato)).map((p) => ({
+              id: `fast:${p.fase_id}:${p.ansatt_id}`,
+              fase_id: p.fase_id,
+              oppgave_id: p.oppgave_id,
+              ansatt_id: p.ansatt_id,
+              rullert: false,
+              fast: true,
+            })),
+          ],
           utelatt: await alle(db, UTELATT, [orgId(c)]),
+          fast_oppgave: (await alle<{ ansatt_id: string }>(db, FASTE, [orgId(c), null])).filter((x) => !utenfor.has(x.ansatt_id)),
           fravaer: (
             await alle<{ ansatt_id: string }>(
               db,
@@ -229,25 +286,48 @@ export function tavleRuter() {
     );
   });
 
-  // Den innloggedes egne plasser i perioden (for «Mine vakter»).
+  // Den innloggedes egne plasser i perioden (for «Mine vakter»), også de som kommer av den faste
+  // oppgaven.
   r.get("/tavle/mine", async (c) => {
     const q = z.object({ fra: datoS, til: datoS }).parse(c.req.query());
     if (q.til < q.fra) throw new ApiFeil(400, "Slutten er før starten");
     if (Date.parse(q.til) - Date.parse(q.fra) > 93 * 86_400_000) throw new ApiFeil(400, "Velg en periode på høyst tre måneder");
     return c.json(
-      await bruk(c, (db) =>
-        alle(
-          db,
-          `select p.dato, f.navn as fase, to_char(f.fra, 'HH24:MI') as fra, to_char(f.til, 'HH24:MI') as til, o.navn as oppgave
-             from faktura.tavle_plasseringer p
-             join faktura.tavle_faser f on f.org_id = p.org_id and f.id = p.fase_id
-             join faktura.tavle_oppgaver o on o.org_id = p.org_id and o.id = p.oppgave_id
-            where p.org_id = $1 and p.ansatt_id = faktura.min_ansatt($1) and p.dato between $2 and $3
-            order by p.dato, f.rekkefolge, f.opprettet`,
-          [orgId(c), q.fra, q.til],
-        ),
-      ),
+      await bruk(c, async (db) => {
+        const meg = (await en<{ id: string | null }>(db, "select faktura.min_ansatt($1) as id", [orgId(c)]))?.id;
+        if (!meg) return [];
+        return egnePlasser(db, orgId(c), meg, q.fra, q.til);
+      }),
     );
+  });
+
+  // Fast oppgave for en ansatt (null: ingen). Rulleringen setter dem alltid der, og uten en plass
+  // i fasen står de der på tavla.
+  r.put("/tavle/fast-oppgave", async (c) => {
+    const b = z.object({ ansatt_id: uuid, oppgave_id: uuid.nullable() }).parse(await c.req.json().catch(() => ({})));
+    await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      const a = await en<{ navn: string; rolle: string | null; tavle: boolean }>(
+        db,
+        `select a.fornavn || ' ' || a.etternavn as navn, g.navn as rolle, coalesce(g.tavle, true) as tavle
+           from faktura.ansatte a left join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id
+          where a.org_id = $1 and a.id = $2`,
+        [orgId(c), b.ansatt_id],
+      );
+      if (!a) throw new ApiFeil(404, "Fant ikke den ansatte");
+      if (!b.oppgave_id) {
+        await db.query("delete from faktura.tavle_fast_oppgave where org_id = $1 and ansatt_id = $2", [orgId(c), b.ansatt_id]);
+        return;
+      }
+      if (!a.tavle) throw new ApiFeil(400, `${a.navn} er ikke med på tavla (rollen ${a.rolle})`);
+      if (!(await en(db, "select 1 from faktura.tavle_oppgaver where org_id = $1 and id = $2", [orgId(c), b.oppgave_id]))) throw new ApiFeil(404, "Fant ikke oppgaven");
+      await db.query(
+        `insert into faktura.tavle_fast_oppgave (org_id, ansatt_id, oppgave_id) values ($1, $2, $3)
+         on conflict (org_id, ansatt_id) do update set oppgave_id = excluded.oppgave_id`,
+        [orgId(c), b.ansatt_id, b.oppgave_id],
+      );
+    });
+    return c.body(null, 204);
   });
 
   // Plasser en ansatt i en oppgave i en fase (eller ta den ut, med oppgave_id null). En plass
@@ -340,6 +420,44 @@ export function tavleRuter() {
   return r;
 }
 
+// Plassene den faste oppgaven gir i et tidsrom en dag (f.eks. vakten til en som er borte, som en
+// vikar tar over): fasene tidsrommet overlapper og oppgaven trengs i, uten dem den ansatte har en
+// plass i (den kopieres for seg).
+export async function fasteFaser(db: Db, org: string, ansatt: string, dato: string, tid: RTid) {
+  const fast = await en<{ oppgave_id: string }>(db, FASTE, [org, ansatt]);
+  if (!fast) return [];
+  const faser = await alle<RTid & { id: string }>(db, FASER, [org]);
+  const oppgave = await en<{ behov: number | null }>(db, "select behov from faktura.tavle_oppgaver where org_id = $1 and id = $2", [org, fast.oppgave_id]);
+  const behov = await alle<RBehov>(db, BEHOV, [org]);
+  const har = new Set(
+    (await alle<{ fase_id: string }>(db, "select fase_id from faktura.tavle_plasseringer where org_id = $1 and dato = $2 and ansatt_id = $3", [org, dato, ansatt])).map((p) => p.fase_id),
+  );
+  const trengs = (f: string) => behov.find((b) => b.fase_id === f && b.oppgave_id === fast.oppgave_id)?.antall ?? oppgave?.behov ?? null;
+  return faser.filter((f) => iFasen(tid, f) && !har.has(f.id) && trengs(f.id) !== 0).map((f) => ({ fase_id: f.id, oppgave_id: fast.oppgave_id }));
+}
+
+// Plassene til én ansatt i perioden: de lagrede og de som kommer av den faste oppgaven, med
+// navnet på fasen og oppgaven («Mine vakter» og AI-assistenten).
+export async function egnePlasser(db: Db, org: string, ansatt: string, fra: string, til: string) {
+  const lagret = await alle<{ dato: string; fase_id: string; oppgave_id: string }>(
+    db,
+    "select dato, fase_id, oppgave_id from faktura.tavle_plasseringer where org_id = $1 and ansatt_id = $2 and dato between $3 and $4",
+    [org, ansatt, fra, til],
+  );
+  const alleP = [...lagret, ...(await fastePlasser(db, org, fra, til, ansatt))];
+  if (!alleP.length) return [];
+  const faser = await alle<{ id: string; navn: string; fra: string | null; til: string | null }>(db, FASER, [org]);
+  const oppgaver = new Map((await alle<{ id: string; navn: string }>(db, OPPGAVER, [org])).map((o) => [o.id, o.navn]));
+  const nr = new Map(faser.map((f, i) => [f.id, i]));
+  return alleP
+    .filter((p) => nr.has(p.fase_id) && oppgaver.has(p.oppgave_id))
+    .sort((x, y) => x.dato.localeCompare(y.dato) || nr.get(x.fase_id)! - nr.get(y.fase_id)!)
+    .map((p) => {
+      const f = faser[nr.get(p.fase_id)!]!;
+      return { dato: p.dato, fase: f.navn, fra: f.fra, til: f.til, oppgave: oppgaver.get(p.oppgave_id)! };
+    });
+}
+
 export type RulleringValg = { fra: string; til: string; behold?: boolean; samme_hele_dagen?: boolean; lagre?: boolean };
 
 // Rulleringen for perioden (også for AI-assistenten, som viser et sammendrag før den lagres).
@@ -395,6 +513,7 @@ export async function kjorRullering(db: Db, org: string, b: RulleringValg) {
     oppgaver,
     behov: await alle(db, BEHOV, [org]),
     utelatt: await alle(db, UTELATT, [org]),
+    fast: (await alle<{ ansatt_id: string; oppgave_id: string }>(db, FASTE, [org, null])).filter((x) => !utenfor.has(x.ansatt_id)),
     dager,
     historikk,
     sammeHeleDagen: !!b.samme_hele_dagen,

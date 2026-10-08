@@ -5,7 +5,8 @@
 // vikar» til en vikar er satt inn (vikaren tar over plassene). Behovet (hvor mange som trengs)
 // står på oppgaven og kan settes per fase. Eier og administrator flytter de ansatte mellom
 // oppgavene: dra og slipp på PC, eller trykk på navnet, eller fordeler dem med rulleringen
-// (Rullering.tsx), så alle får gjøre alt etter tur. Regnskap ser tavla.
+// (Rullering.tsx), så alle får gjøre alt etter tur. En ansatt kan ha en fast oppgave (f.eks. laben):
+// de står der hver dag uten en annen plass, og rulleringen setter dem alltid der. Regnskap ser tavla.
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
@@ -24,8 +25,9 @@ type Oppgave = { id: string; navn: string; behov: number | null };
 // En fast arbeidsdag fra arbeidsplanen står som en vakt med fast: true (en hel dag uten klokkeslett).
 type TavleVakt = { id: string; fra: string | null; til: string | null; oppgave: string | null; vikar: boolean; publisert: boolean; fast?: boolean; timer?: number };
 type Ressurs = { ansatt_id: string; navn: string; fravaer: FravaerType | null; vakter: TavleVakt[] };
-// rullert: satt av rulleringen (byttes ut når den kjøres igjen); ellers satt for hånd.
-type Plassering = { fase_id: string; oppgave_id: string; ansatt_id: string; rullert?: boolean };
+// rullert: satt av rulleringen (byttes ut når den kjøres igjen); fast: den faste oppgaven (regnet
+// ut, uten en annen plass i fasen); ellers satt for hånd.
+type Plassering = { fase_id: string; oppgave_id: string; ansatt_id: string; rullert?: boolean; fast?: boolean };
 type Behov = { fase_id: string; oppgave_id: string; antall: number };
 type ManglerVikar = { vakt_id: string; ansatt_id: string; navn: string; fra: string; til: string; oppgave: string | null; type: FravaerType };
 type TavleSvar = {
@@ -35,8 +37,9 @@ type TavleSvar = {
   behov: Behov[];
   ressurser: Ressurs[];
   plasseringer: Plassering[];
-  // Hvem rulleringen ikke setter i en oppgave.
+  // Hvem rulleringen ikke setter i en oppgave, og de faste oppgavene.
   utelatt: { oppgave_id: string; ansatt_id: string }[];
+  fast_oppgave: { ansatt_id: string; oppgave_id: string }[];
   fravaer: { id: string; ansatt_id: string; navn: string; type: FravaerType; fra: string; til: string }[];
   mangler_vikar: ManglerVikar[];
 };
@@ -187,7 +190,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
       {data.faser.length > 0 && data.oppgaver.length > 0 && <BehovPerFase faser={data.faser} oppgaver={data.oppgaver} behov={data.behov} endret={last} />}
       {data.oppgaver.length > 0 && ansatte.data && (
         // De med en rolle som ikke er med på tavla, står ikke her.
-        <HvemKan oppgaver={data.oppgaver} ansatte={ansatte.data.filter((a) => a.tavle !== false)} utelatt={data.utelatt} endret={last} />
+        <HvemKan oppgaver={data.oppgaver} ansatte={ansatte.data.filter((a) => a.tavle !== false)} utelatt={data.utelatt} faste={data.fast_oppgave} endret={last} />
       )}
       <div className="knapper oppsett-ferdig">
         <button type="button" className="primar" onClick={() => settOppsett(false)}>
@@ -239,6 +242,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
     ...data.ressurser.map((r) => [r.ansatt_id, r.navn] as const),
   ]);
   const ressurs = new Map(data.ressurser.map((r) => [r.ansatt_id, r]));
+  const fastFor = new Map((data.fast_oppgave ?? []).map((x) => [x.ansatt_id, x.oppgave_id]));
   const paJobb = data.ressurser.filter((r) => !r.fravaer);
   const kandidater = (f: Fase) => paJobb.filter((r) => r.vakter.some((v) => iFasen(v, f)));
   const plassert = (fase: string, oppgave: string) =>
@@ -261,12 +265,15 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
     const vakter = (r?.vakter ?? []).filter((v) => iFasen(v, f));
     const utenVakt = !borte && !vakter.length;
     const utkast = vakter.length > 0 && vakter.every((v) => !v.publisert);
-    const rullert = data.plasseringer.some((p) => p.fase_id === f.id && p.ansatt_id === a && p.rullert);
+    const plass = data.plasseringer.find((p) => p.fase_id === f.id && p.ansatt_id === a);
+    const rullert = !!plass?.rullert;
+    // Står i den faste oppgaven (regnet ut, eller satt der av rulleringen).
+    const fast = !!plass && fastFor.get(a) === plass.oppgave_id && (plass.fast || plass.rullert);
     const tittel = [
       borte ? `${fravaerTekst[borte]}: plassen teller ikke` : "",
       utenVakt ? "Har ikke vakt i denne fasen" : "",
       utkast ? "Vakten er ikke publisert" : "",
-      rullert ? "Satt av rulleringen" : "",
+      fast ? "Fast oppgave" : rullert ? "Satt av rulleringen" : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -276,6 +283,7 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
         <span className="ressurs-navn">{navn.get(a) ?? "Ukjent"}</span>
         {vakter.length > 0 && <span className="ressurs-tid">{vakter.map(tidKort).join(", ")}</span>}
         {vakter.some((v) => v.vikar) && <span className="ressurs-merke">Vikar</span>}
+        {fast && <span className="ressurs-merke">Fast</span>}
         {borte && <span className="ressurs-merke fare">{fravaerTekst[borte]}</span>}
       </>
     );
@@ -515,6 +523,20 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
               settValgt(null);
               settVikar(m);
             }}
+            fastOppgave={fastFor.get(v.ansatt) ?? null}
+            endreFast={async (oppgave) => {
+              const a = v.ansatt;
+              settValgt(null);
+              const ok = await h.kjor(async () => {
+                await api("PUT", `/org/${org!.id}/tavle/fast-oppgave`, { ansatt_id: a, oppgave_id: oppgave });
+                return true;
+              });
+              if (!ok) return;
+              const fornavn = (navn.get(a) ?? "").split(" ")[0];
+              const o = data.oppgaver.find((x) => x.id === oppgave);
+              settMelding(o ? `${o.navn} er fast oppgave for ${fornavn}.` : `${fornavn} har ikke lenger fast oppgave, og er med i rulleringen.`);
+              last();
+            }}
             registrerFravaer={
               kanEndre
                 ? async () => {
@@ -586,6 +608,8 @@ function Flytt({
   antall,
   flytt,
   settInnVikar,
+  fastOppgave,
+  endreFast,
   registrerFravaer,
   endrePlan,
 }: {
@@ -596,6 +620,9 @@ function Flytt({
   antall: (f: Fase, oppgave: string) => number;
   flytt: (faser: string[], oppgave: string | null) => void;
   settInnVikar: (m: ManglerVikar) => void;
+  // Den faste oppgaven (null: ingen), og å endre den.
+  fastOppgave: string | null;
+  endreFast: (oppgave: string | null) => void;
   // Fravær og faste dager for den ansatte (samme som i ansattkortet).
   registrerFravaer?: () => void;
   endrePlan?: () => void;
@@ -648,10 +675,17 @@ function Flytt({
                 </span>
               </button>
             ))}
-            <button type="button" role="radio" aria-checked={na === null} className={`ingen${na === null ? " valgt" : ""}`} onClick={() => flytt(faser, null)}>
-              Ikke plassert
-            </button>
+            {!fastOppgave && (
+              <button type="button" role="radio" aria-checked={na === null} className={`ingen${na === null ? " valgt" : ""}`} onClick={() => flytt(faser, null)}>
+                Ikke plassert
+              </button>
+            )}
           </div>
+          {fastOppgave && (
+            <p className="felt-hjelp">
+              {data.oppgaver.find((o) => o.id === fastOppgave)?.navn} er fast oppgave for {navn.split(" ")[0]}. En annen oppgave gjelder bare denne dagen.
+            </p>
+          )}
           {andre.length > 0 && (
             <label>
               <input type="checkbox" checked={alle} onChange={(e) => settAlle(e.target.checked)} />
@@ -660,6 +694,18 @@ function Flytt({
           )}
         </>
       )}
+      <label className="fast-oppgave">
+        Fast oppgave
+        <select value={fastOppgave ?? ""} onChange={(e) => endreFast(e.target.value || null)}>
+          <option value="">Ingen (rulleres)</option>
+          {data.oppgaver.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.navn}
+            </option>
+          ))}
+        </select>
+        <span className="felt-hjelp">Med fast oppgave står {navn.split(" ")[0]} der hver dag uten en annen plass, og rulleringen setter dem alltid der.</span>
+      </label>
       {(registrerFravaer || endrePlan) && (
         <p className="vakt-lenker liten">
           {registrerFravaer && (

@@ -112,6 +112,32 @@ describe("rulleringen", () => {
     expect(fikk(r.plasser, d(0), "mellomvakt", "b")).toBe("T");
   });
 
+  it("fast oppgave: alltid den, også utover behovet; der den ikke trengs, ingen plass, og en plass for hånd står", () => {
+    const r = kjor({
+      faser: [F("for", "08:00", "12:00"), F("etter", "12:00", "16:00")],
+      oppgaver: [O("T", 1), O("L", 1)],
+      behov: [{ fase_id: "etter", oppgave_id: "L", antall: 0 }],
+      fast: [
+        { ansatt_id: "a", oppgave_id: "L" },
+        { ansatt_id: "b", oppgave_id: "L" },
+      ],
+      dager: [
+        dag(d(0), ["a", "b", "c"], { fra: "08:00", til: "16:00" }),
+        dag(d(1), ["a", "b", "c"], { fra: "08:00", til: "16:00" }, [{ fase_id: "for", oppgave_id: "T", ansatt_id: "a" }]),
+      ],
+    });
+    // a og b i laben om formiddagen (to, selv om behovet er én), og c tar telefonen.
+    expect(["a", "b", "c"].map((x) => fikk(r.plasser, d(0), "for", x))).toEqual(["L", "L", "T"]);
+    // Etter lunsj trengs ikke laben: a og b står uten plass (de rulleres ikke), og c tar telefonen.
+    expect(["a", "b"].map((x) => fikk(r.plasser, d(0), "etter", x))).toEqual([undefined, undefined]);
+    expect(r.ikkePlassert.filter((p) => p.dato === d(0) && p.fase_id === "etter").map((p) => p.ansatt_id)).toEqual(["a", "b"]);
+    expect(fikk(r.plasser, d(0), "etter", "c")).toBe("T");
+    // Dag to står a i telefonen (satt for hånd), b i laben (fast), og c får ingen plass (behovet er dekket).
+    expect(["a", "b", "c"].map((x) => fikk(r.plasser, d(1), "for", x))).toEqual([undefined, "L", undefined]);
+    expect(r.ikkePlassert.filter((p) => p.dato === d(1) && p.fase_id === "for").map((p) => p.ansatt_id)).toEqual(["c"]);
+    expect(r.mangler).toEqual([]);
+  });
+
   it("den som har hatt en oppgave mye i det siste, får en annen", () => {
     const historikk: RPlass[] = [1, 2, 3, 4, 5].map((n) => ({ dato: d(-n), fase_id: "dag", oppgave_id: "T", ansatt_id: "a" }));
     historikk.push(...[1, 2, 3, 4, 5].map((n) => ({ dato: d(-n), fase_id: "dag", oppgave_id: "L", ansatt_id: "b" })));
@@ -285,6 +311,58 @@ describe.skipIf(!process.env.DATABASE_URL)("rullering i API-et", () => {
     expect((await utelat({ ansatt_id: id.Per, kan: true })).status).toBe(204);
     expect((await utelat({ ansatt_id: id.Kari, kan: true })).status).toBe(204);
     expect((await kall("GET", `/api/org/${org}/tavle/oppsett`)).data.utelatt).toEqual([]);
+  });
+
+  it("fast oppgave: står der hver dag uten en annen plass, rulleringen setter dem alltid der, og vikaren tar over", async () => {
+    let N = d(7);
+    while ([0, 1].map((i) => pluss(N, i)).some(helligdag)) N = pluss(N, 7);
+    const fast = (k: Record<string, unknown>, hvem = eier) => kall("PUT", `/api/org/${org}/tavle/fast-oppgave`, k, hvem);
+    expect((await fast({ ansatt_id: id.Ola, oppgave_id: id.Lab })).status).toBe(204);
+    expect((await fast({ ansatt_id: id.Ola, oppgave_id: id.Lab }, ola)).status).toBe(403);
+    expect((await fast({ ansatt_id: id.Ola, oppgave_id: id.Kari })).data.error).toBe("Fant ikke oppgaven");
+
+    // Uten noen plass står Ola i laben både før og etter lunsj (regnet ut, ikke lagret).
+    const t = await tavle(N);
+    expect(t.fast_oppgave).toEqual([{ ansatt_id: id.Ola, oppgave_id: id.Lab }]);
+    expect(t.plasseringer.map((p: any) => [p.fase_id, p.oppgave_id, p.ansatt_id, p.fast])).toEqual([
+      [id["Før lunsj"], id.Lab, id.Ola, true],
+      [id["Etter lunsj"], id.Lab, id.Ola, true],
+    ]);
+    // Ola ser det under Mine vakter.
+    expect((await kall("GET", `/api/org/${org}/tavle/mine?fra=${N}&til=${N}`, undefined, ola)).data.map((p: any) => [p.fase, p.oppgave])).toEqual([
+      ["Før lunsj", "Lab"],
+      ["Etter lunsj", "Lab"],
+    ]);
+
+    // Rulleringen setter Ola i laben hele uka, og de andre deler resten.
+    const r = (await kall("POST", `/api/org/${org}/tavle/rullering`, { fra: N, til: pluss(N, 4) })).data;
+    const alle = (r.dager as Dag[]).flatMap((x) => x.plasser);
+    expect(alle.filter((p) => p.ansatt_id === id.Ola).map((p) => p.oppgave_id)).toEqual(new Array(10).fill(id.Lab));
+    expect(alle.filter((p) => p.ansatt_id !== id.Ola && p.oppgave_id === id.Lab)).toEqual([]);
+
+    // En plass for hånd står foran den faste oppgaven, bare den dagen og den fasen.
+    expect((await kall("PUT", `/api/org/${org}/tavle/plassering`, { dato: N, fase_id: id["Før lunsj"], ansatt_id: id.Ola, oppgave_id: id.Telefon })).status).toBe(204);
+    expect((await tavle(N)).plasseringer.map((p: any) => [p.fase_id, p.oppgave_id, !!p.fast])).toEqual([
+      [id["Før lunsj"], id.Telefon, false],
+      [id["Etter lunsj"], id.Lab, true],
+    ]);
+
+    // Ola er syk dagen etter: vikaren (Per) tar over plassene i laben.
+    const N1 = pluss(N, 1);
+    const vakt = (await kall("POST", `/api/org/${org}/vakter`, { ansatt_id: id.Ola, dato: N1, fra: "08:00", til: "16:00" })).data;
+    expect((await kall("POST", `/api/org/${org}/fravaer`, { ansatt_id: id.Ola, type: "syk", fra: N1, til: N1 })).status).toBe(201);
+    expect((await kall("POST", `/api/org/${org}/vakter/${vakt.id}/vikar`, { ansatt_id: id.Per, publiser: false })).status).toBe(201);
+    const t1 = await tavle(N1);
+    expect(t1.plasseringer.filter((p: any) => p.ansatt_id === id.Ola)).toEqual([]);
+    expect(t1.plasseringer.filter((p: any) => p.ansatt_id === id.Per).map((p: any) => [p.fase_id, p.oppgave_id, !!p.fast])).toEqual([
+      [id["Før lunsj"], id.Lab, false],
+      [id["Etter lunsj"], id.Lab, false],
+    ]);
+
+    // Uten fast oppgave er Ola med i rulleringen igjen, og står ikke i laben av seg selv.
+    expect((await fast({ ansatt_id: id.Ola, oppgave_id: null })).status).toBe(204);
+    expect((await tavle(N)).plasseringer.map((p: any) => [p.fase_id, p.oppgave_id])).toEqual([[id["Før lunsj"], id.Telefon]]);
+    expect((await tavle(N)).fast_oppgave).toEqual([]);
   });
 
   it("bare eier og administrator kjører rulleringen, for høyst 31 dager", async () => {

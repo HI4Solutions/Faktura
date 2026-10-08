@@ -254,18 +254,36 @@ export function HvemKan({
   oppgaver,
   ansatte,
   utelatt,
+  faste,
   endret,
 }: {
   oppgaver: { id: string; navn: string }[];
   ansatte: Ansatt[];
   utelatt: { oppgave_id: string; ansatt_id: string }[];
+  // De faste oppgavene (0059_tavle_fast_oppgave.sql): de rulleres ikke.
+  faste: { ansatt_id: string; oppgave_id: string }[];
   endret: () => Promise<void>;
 }) {
   const { org } = useKonto();
   const h = useHandling();
   // Endringene vises med en gang; tavla hentes på nytt i bakgrunnen.
   const [ute, settUte] = useState(() => new Set(utelatt.map((u) => `${u.ansatt_id}|${u.oppgave_id}`)));
+  const [fast, settFast] = useState(() => new Map(faste.map((x) => [x.ansatt_id, x.oppgave_id])));
   const aktive = ansatte.filter((a) => a.aktiv);
+
+  async function settFastOppgave(ansatt: string, oppgave: string | null) {
+    const forrige = fast;
+    const neste = new Map(fast);
+    if (oppgave) neste.set(ansatt, oppgave);
+    else neste.delete(ansatt);
+    settFast(neste);
+    const ok = await h.kjor(async () => {
+      await api("PUT", `/org/${org!.id}/tavle/fast-oppgave`, { ansatt_id: ansatt, oppgave_id: oppgave });
+      return true;
+    });
+    if (!ok) settFast(forrige);
+    else void endret();
+  }
 
   async function sett(ansatt: string, oppgave: string | undefined, kan: boolean) {
     const forrige = ute;
@@ -288,8 +306,8 @@ export function HvemKan({
     <section className="oppsett-del">
       <h3>Hvem kan ta oppgavene</h3>
       <p className="liten dempet">
-        For rulleringen: den ansatte settes bare i oppgavene med kryss. Uten kryss ved «Med» er den ansatte ikke med i rulleringen. For hånd kan alle plasseres
-        hvor som helst.
+        For rulleringen: den ansatte settes bare i oppgavene med kryss. Uten kryss ved «Med» er den ansatte ikke med i rulleringen. Med en fast oppgave står den
+        ansatte der hver dag uten en annen plass, og rulleringen setter dem alltid der. For hånd kan alle plasseres hvor som helst.
       </p>
       <div className="tabell">
         <table className="hvem-kan">
@@ -300,6 +318,7 @@ export function HvemKan({
               {oppgaver.map((o) => (
                 <th key={o.id}>{o.navn}</th>
               ))}
+              <th>Fast oppgave</th>
             </tr>
           </thead>
           <tbody>
@@ -307,14 +326,16 @@ export function HvemKan({
               const navn = `${a.fornavn} ${a.etternavn}`;
               const kan = oppgaver.map((o) => !ute.has(`${a.id}|${o.id}`));
               const noe = kan.some(Boolean);
+              const harFast = fast.get(a.id) ?? "";
               return (
-                <tr key={a.id} className={noe ? undefined : "utenfor"}>
+                <tr key={a.id} className={noe || harFast ? undefined : "utenfor"} title={harFast ? "Fast oppgave: rulleres ikke" : undefined}>
                   <td>{navn}</td>
                   <td>
                     <input
                       type="checkbox"
                       aria-label={`${navn} er med i rulleringen`}
                       checked={noe}
+                      disabled={!!harFast}
                       ref={(el) => {
                         if (el) el.indeterminate = noe && !kan.every(Boolean);
                       }}
@@ -323,9 +344,25 @@ export function HvemKan({
                   </td>
                   {oppgaver.map((o, i) => (
                     <td key={o.id}>
-                      <input type="checkbox" aria-label={`${navn} kan ta ${o.navn}`} checked={kan[i]} onChange={(e) => sett(a.id, o.id, e.target.checked)} />
+                      <input
+                        type="checkbox"
+                        aria-label={`${navn} kan ta ${o.navn}`}
+                        checked={kan[i]}
+                        disabled={!!harFast}
+                        onChange={(e) => sett(a.id, o.id, e.target.checked)}
+                      />
                     </td>
                   ))}
+                  <td>
+                    <select className="fast-valg" value={harFast} aria-label={`Fast oppgave for ${navn}`} onChange={(e) => settFastOppgave(a.id, e.target.value || null)}>
+                      <option value="">Ingen</option>
+                      {oppgaver.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.navn}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                 </tr>
               );
             })}

@@ -14,6 +14,7 @@ import { datoS, klokke, regler, tekst, valgfri, varslePersonal } from "./ansatte
 import { beregnBemanning, dagTimer, hentPlaner, planFor, ukedag } from "./arbeidsplan.js";
 import { leggIKo } from "./tjenester.js";
 import { helligdag } from "./helligdager.js";
+import { fasteFaser } from "./tavle.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -352,13 +353,21 @@ export function vaktRuter() {
          returning id`,
         [orgId(c), id(c), b.ansatt_id, o.ansatt_navn ? `Vikar for ${o.ansatt_navn}` : "Vikar"],
       ))!;
-      if (o.ansatt_id)
+      if (o.ansatt_id) {
         await db.query(
           `insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id)
            select org_id, dato, fase_id, oppgave_id, $4 from faktura.tavle_plasseringer where org_id = $1 and dato = $2 and ansatt_id = $3
            on conflict (org_id, dato, fase_id, ansatt_id) do nothing`,
           [orgId(c), o.dato, o.ansatt_id, b.ansatt_id],
         );
+        // Og den faste oppgaven til den som er borte (0059), i fasene vakten overlapper.
+        for (const p of await fasteFaser(db, orgId(c), o.ansatt_id, o.dato, { fra: o.fra, til: o.til }))
+          await db.query(
+            `insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id) values ($1, $2, $3, $4, $5)
+             on conflict (org_id, dato, fase_id, ansatt_id) do nothing`,
+            [orgId(c), o.dato, p.fase_id, p.oppgave_id, b.ansatt_id],
+          );
+      }
       const publiser = b.publiser !== false;
       if (publiser) await db.query("select faktura.publiser_vakt($1, $2)", [orgId(c), ny.id]);
       const vakt = (await en<Vakt>(db, `${VAKT} where v.id = $1`, [ny.id]))!;

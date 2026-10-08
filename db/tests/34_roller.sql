@@ -72,6 +72,16 @@ insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansat
 select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 1::bigint, 'med rollen på tavla igjen kan han plasseres');
 update faktura.ansattgrupper set tavle = false where id = :'overlege';
 select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 0::bigint, 'rollen tas ut av tavla');
+-- Den faste oppgaven (0059_tavle_fast_oppgave.sql) forsvinner også når rollen tas ut av tavla, og
+-- når personen får en rolle som ikke er med.
+update faktura.ansattgrupper set tavle = true where id = :'overlege';
+insert into faktura.tavle_fast_oppgave (org_id, ansatt_id, oppgave_id) values (:'org', :'ola', :'opp');
+update faktura.ansattgrupper set tavle = false where id = :'overlege';
+select test.er((select count(*) from faktura.tavle_fast_oppgave where ansatt_id = :'ola'), 0::bigint, 'uten tavla, ingen fast oppgave');
+update faktura.ansatte set gruppe_id = null where id = :'ola';
+insert into faktura.tavle_fast_oppgave (org_id, ansatt_id, oppgave_id) values (:'org', :'ola', :'opp');
+update faktura.ansatte set gruppe_id = :'overlege' where id = :'ola';
+select test.er((select count(*) from faktura.tavle_fast_oppgave where ansatt_id = :'ola'), 0::bigint, 'en rolle utenfor tavla tar den faste oppgaven');
 
 -- Kunder som rollehavere (0058_kunder_som_rollehavere.sql): personen kobles til en kunde i samme
 -- organisasjon, og slettes kunden, står personen uten kobling.
