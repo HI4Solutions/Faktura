@@ -62,7 +62,7 @@ async function status(db: Db, org: string) {
   // dagen organisasjonen ble opprettet).
   const start = await en<{ fra: string | null; satt: boolean; ai_aktiv: boolean }>(
     db,
-    "select faktura.bank_fra(id) as fra, bank_fra is not null as satt, ai_aktiv from faktura.organisasjoner where id = $1",
+    "select faktura.bank_fra(id) as fra, bank_fra is not null as satt, ai_aktiv and faktura.har_funksjon(id, 'ai') as ai_aktiv from faktura.organisasjoner where id = $1",
     [org],
   );
   return {

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { alle, en, somBruker, somSystem, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
+import { ikkePaa } from "./funksjoner.js";
 import { leggIKo } from "./tjenester.js";
 
 // drive.file gir bare tilgang til filer appen selv lager; e-post viser hvilken konto som er koblet.
@@ -129,7 +130,7 @@ export function diskRuter() {
           `select o.id, o.navn, o.direkte_medlem, coalesce(d.aktiv, false) as aktiv, d.sist_kopiert
              from faktura.mine_organisasjoner o
              left join faktura.disk_organisasjoner d on d.org_id = o.id and d.bruker_id = faktura.bruker_id()
-            where o.rolle is distinct from 'ansatt'
+            where o.rolle is distinct from 'ansatt' and 'google_disk' = any(o.funksjoner)
             order by o.direkte_medlem desc, o.navn`,
         ),
       })),
@@ -188,6 +189,7 @@ export function diskRuter() {
     await somBruker(b.id, async (db) => {
       if (!(await en(db, "select 1 from faktura.disk_koblinger where bruker_id = faktura.bruker_id()"))) throw new ApiFeil(409, "Koble til Google Disk først");
       if (!(await en(db, "select faktura.kan($1, 'les') as k", [org]))!.k) throw new ApiFeil(403, "Ingen tilgang");
+      if (aktiv && !(await en(db, "select faktura.har_funksjon($1, 'google_disk') as k", [org]))!.k) throw ikkePaa("google_disk");
       await db.query(
         `insert into faktura.disk_organisasjoner (bruker_id, org_id, aktiv) values (faktura.bruker_id(), $1, $2)
          on conflict (bruker_id, org_id) do update set aktiv = excluded.aktiv`,
@@ -240,7 +242,8 @@ export function googleCallback() {
         return alle<{ id: string }>(
           db,
           `insert into faktura.disk_organisasjoner (bruker_id, org_id)
-           select faktura.bruker_id(), m.org_id from faktura.medlemmer m where m.bruker_id = faktura.bruker_id() and m.rolle <> 'ansatt'
+           select faktura.bruker_id(), m.org_id from faktura.medlemmer m
+            where m.bruker_id = faktura.bruker_id() and m.rolle <> 'ansatt' and faktura.har_funksjon(m.org_id, 'google_disk')
            returning org_id as id`,
         );
       });
@@ -335,7 +338,7 @@ export async function kopierTilDisk(fakturaId: string, hentPdf: HentPdf, filnavn
     const mottakere = await alle(
       db,
       `select d.* from faktura.disk_organisasjoner d join faktura.disk_koblinger k on k.bruker_id = d.bruker_id
-        where d.org_id = $1 and d.aktiv and k.status = 'aktiv'`,
+        where d.org_id = $1 and d.aktiv and k.status = 'aktiv' and faktura.har_funksjon(d.org_id, 'google_disk')`,
       [f.org_id],
     );
     for (const d of mottakere) {
@@ -361,7 +364,10 @@ export async function kopierTilDisk(fakturaId: string, hentPdf: HentPdf, filnavn
 export async function synkOrganisasjon(brukerId: string, orgId: string, hentPdf: HentPdf, filnavn: Filnavn) {
   if (!diskKonfigurert()) return;
   await somSystem(async (db) => {
-    const d = await en(db, "select * from faktura.disk_organisasjoner where bruker_id = $1 and org_id = $2 and aktiv", [brukerId, orgId]);
+    const d = await en(db, "select * from faktura.disk_organisasjoner where bruker_id = $1 and org_id = $2 and aktiv and faktura.har_funksjon(org_id, 'google_disk')", [
+      brukerId,
+      orgId,
+    ]);
     if (!d) return;
     if (!(await en(db, "select faktura.bruker_kan_lese($1, $2) as k", [brukerId, orgId]))!.k) return;
     const org = await en(db, "select navn from faktura.organisasjoner where id = $1", [orgId]);

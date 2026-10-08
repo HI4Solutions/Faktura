@@ -417,7 +417,10 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
         ),
         await egneKontoer(db, orgId),
         (await en<{ fra: string | null }>(db, "select faktura.bank_fra($1)::text as fra", [orgId]))?.fra ?? null,
-        Boolean((await en<{ ai_aktiv: boolean }>(db, "select ai_aktiv from faktura.organisasjoner where id = $1", [orgId]))?.ai_aktiv),
+        Boolean(
+          (await en<{ ai_aktiv: boolean }>(db, "select ai_aktiv and faktura.har_funksjon(id, 'ai') as ai_aktiv from faktura.organisasjoner where id = $1", [orgId]))
+            ?.ai_aktiv,
+        ),
       ] as const,
   );
   if (!app) return resultat;
@@ -506,7 +509,7 @@ export async function planleggBankhenting(naa = new Date()): Promise<number> {
                                                      union select e.kontonr from faktura.kontoer e where e.org_id = k.org_id)) as skal_hentes
          from faktura.bankkoblinger k
          join faktura.integrasjoner i on i.org_id = k.org_id and i.type = 'bank' and i.status <> 'frakoblet'
-        where k.status = 'aktiv' and k.okt_id is not null
+        where k.status = 'aktiv' and k.okt_id is not null and faktura.har_funksjon(k.org_id, 'bank')
           and ((k.sist_hentet is null or k.sist_hentet < $1::timestamptz)
                or ($2 and k.gyldig_til < $3::timestamptz and k.varslet_utlop is null))`,
       [hentetid?.toISOString() ?? null, dagtid, uke],

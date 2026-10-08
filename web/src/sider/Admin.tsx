@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
-import { dato, kr, orgnr } from "../format";
+import { dato, orgnr } from "../format";
 import { IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
 
 type Org = {
@@ -18,8 +18,10 @@ type Org = {
   sperret_grunn: string | null;
   opprettet: string;
   eier_epost: string | null;
+  // Ingen beløp: bare hvor mange fakturaer, og hvor mange av dem på e-post og som EHF.
   antall_fakturaer: number;
-  sum_fakturert: number;
+  antall_epost: number;
+  antall_ehf: number;
   venter_manuell: boolean;
   notat: string | null;
   antall_medlemmer: number;
@@ -35,7 +37,13 @@ type Bruker = {
   sist_passkey: string | null;
   sist_aktiv: string | null;
 };
-type Fane = "oversikt" | "venter" | "organisasjoner" | "brukere" | "drift";
+type Fane = "oversikt" | "venter" | "organisasjoner" | "funksjoner" | "brukere" | "drift";
+// Funksjonene organisasjonene kan ha tilgang til (0041_funksjoner.sql).
+type Funksjon = { kode: string; navn: string; beskrivelse: string; krever: string | null; standard: boolean };
+type Funksjonsoversikt = {
+  funksjoner: Funksjon[];
+  organisasjoner: { id: string; navn: string; orgnr: string | null; type: string; verifisering: Org["verifisering"]; aktive: string[]; endret: string | null }[];
+};
 
 const statusMerke: Record<string, string> = { ny: "merke-advarsel", verifisert: "merke-ok", sperret: "merke-fare" };
 const statusTekst: Record<string, string> = { ny: "Ikke verifisert", verifisert: "Verifisert", sperret: "Sperret" };
@@ -80,7 +88,7 @@ const kontonrTekst = (k: string | null | undefined) => k?.replace(/^(\d{4})(\d{2
 
 export function Admin() {
   const [sok, settSok] = useSearchParams();
-  const fane = (["oversikt", "venter", "organisasjoner", "brukere", "drift"].includes(sok.get("fane") ?? "") ? sok.get("fane") : "oversikt") as Fane;
+  const fane = (["oversikt", "venter", "organisasjoner", "funksjoner", "brukere", "drift"].includes(sok.get("fane") ?? "") ? sok.get("fane") : "oversikt") as Fane;
   const orgs = useData(() => hent<Org[]>("/admin/organisasjoner"), []);
   const [valgt, settValgt] = useState<string | null>(null);
   const velgFane = (f: Fane) => settSok(f === "oversikt" ? {} : { fane: f }, { replace: true });
@@ -91,6 +99,7 @@ export function Admin() {
     ["oversikt", "Oversikt"],
     ["venter", `Venter${venter.length ? ` (${venter.length})` : ""}`],
     ["organisasjoner", "Organisasjoner"],
+    ["funksjoner", "Funksjoner"],
     ["brukere", "Brukere"],
     ["drift", "Drift"],
   ];
@@ -121,6 +130,8 @@ export function Admin() {
         )
       ) : fane === "organisasjoner" ? (
         <Organisasjoner orgs={orgs.data} apne={settValgt} />
+      ) : fane === "funksjoner" ? (
+        <Funksjoner apne={settValgt} />
       ) : fane === "brukere" ? (
         <Brukere apneOrg={settValgt} />
       ) : (
@@ -197,11 +208,11 @@ function Oversikt({ orgs, apne, velgFane }: { orgs: Org[]; apne: (id: string) =>
         </div>
         <div className="kort">
           <div className="etikett">
-            <span className="ikonboks"><IkonFaktura /></span> Fakturert siste 30 dager
+            <span className="ikonboks"><IkonFaktura /></span> Fakturaer siste 30 dager
           </div>
-          <div className="verdi">{kr(data.fakturaer.sum_30)}</div>
+          <div className="verdi">{data.fakturaer.antall_30}</div>
           <div className="under">
-            {data.fakturaer.antall_30} fakturaer · totalt {kr(data.fakturaer.sum)}
+            {data.fakturaer.epost_30} på e-post · {data.fakturaer.ehf_30} som EHF · totalt {data.fakturaer.totalt}
           </div>
         </div>
         <div className="kort">
@@ -242,8 +253,20 @@ function Organisasjoner({ orgs, apne }: { orgs: Org[]; apne: (id: string) => voi
   );
   const eksporter = () =>
     lastNedCsv(`organisasjoner-${new Date().toISOString().slice(0, 10)}.csv`, [
-      ["Navn", "Org.nr.", "Type", "Status", "Eier", "Medlemmer", "Fakturaer", "Fakturert", "Opprettet", "Sist aktiv"],
-      ...rader.map((o) => [o.navn, o.orgnr, o.type, statusTekst[o.verifisering], o.eier_epost, o.antall_medlemmer, o.antall_fakturaer, o.sum_fakturert, o.opprettet.slice(0, 10), o.sist_aktiv?.slice(0, 10)]),
+      ["Navn", "Org.nr.", "Type", "Status", "Eier", "Medlemmer", "Fakturaer", "På e-post", "Som EHF", "Opprettet", "Sist aktiv"],
+      ...rader.map((o) => [
+        o.navn,
+        o.orgnr,
+        o.type,
+        statusTekst[o.verifisering],
+        o.eier_epost,
+        o.antall_medlemmer,
+        o.antall_fakturaer,
+        o.antall_epost,
+        o.antall_ehf,
+        o.opprettet.slice(0, 10),
+        o.sist_aktiv?.slice(0, 10),
+      ]),
     ]);
 
   return (
@@ -278,10 +301,12 @@ function OrgListe({ rader, apne, enkel }: { rader: Org[]; apne: (id: string) => 
                 {o.navn}
                 {o.type === "regnskapsbyraa" && <span className="dempet"> (byrå)</span>}
               </span>
-              <span className="belop">{kr(o.sum_fakturert)}</span>
+              <span className="belop">{o.antall_fakturaer} fakt.</span>
             </span>
             <span className="linje">
-              <span className="under">{[orgnr(o.orgnr) || "uten org.nr.", o.eier_epost, `aktiv ${siden(o.sist_aktiv)}`].filter(Boolean).join(" · ")}</span>
+              <span className="under">
+                {[orgnr(o.orgnr) || "uten org.nr.", o.antall_fakturaer ? `${o.antall_epost} e-post · ${o.antall_ehf} EHF` : "", `aktiv ${siden(o.sist_aktiv)}`].filter(Boolean).join(" · ")}
+              </span>
               <span className="merker">
                 <OrgStatus o={o} />
               </span>
@@ -300,7 +325,9 @@ function OrgListe({ rader, apne, enkel }: { rader: Org[]; apne: (id: string) => 
           <th>Eier</th>
           <th>Opprettet</th>
           <th>Sist aktiv</th>
-          <th className="hoyre">Fakturert</th>
+          <th className="hoyre">Fakturaer</th>
+          <th className="hoyre">E-post</th>
+          <th className="hoyre">EHF</th>
           <th>Status</th>
         </tr>
       </thead>
@@ -315,9 +342,9 @@ function OrgListe({ rader, apne, enkel }: { rader: Org[]; apne: (id: string) => 
             <td className="liten">{o.eier_epost}</td>
             <td className="hel-linje">{dato(o.opprettet)}</td>
             <td className="liten hel-linje">{siden(o.sist_aktiv)}</td>
-            <td className="tall">
-              {kr(o.sum_fakturert)} <span className="dempet liten">({o.antall_fakturaer})</span>
-            </td>
+            <td className="tall">{o.antall_fakturaer}</td>
+            <td className="tall">{o.antall_epost}</td>
+            <td className="tall">{o.antall_ehf}</td>
             <td>
               <span className="merker">
                 <OrgStatus o={o} />
@@ -327,7 +354,7 @@ function OrgListe({ rader, apne, enkel }: { rader: Org[]; apne: (id: string) => 
         ))}
         {rader.length === 0 && (
           <tr>
-            <td colSpan={7} className="dempet">
+            <td colSpan={9} className="dempet">
               Ingenting her.
             </td>
           </tr>
@@ -421,8 +448,8 @@ function OrgDetaljer({ id, endret }: { id: string; endret: () => void }) {
         <h3>Bruk</h3>
         <Fakta
           rader={[
-            ["Fakturert", `${kr(o.fakturert)} (${o.antall.fakturaer} fakturaer${o.antall.kreditnotaer ? `, ${o.antall.kreditnotaer} kreditnotaer` : ""})`],
-            ["Utestående", kr(o.utestaende)],
+            ["Fakturaer", `${o.antall.fakturaer} (${o.antall.epost} på e-post, ${o.antall.ehf} som EHF)`],
+            ["Kreditnotaer", o.antall.kreditnotaer || null],
             ["Siste faktura", o.siste_faktura ? dato(o.siste_faktura) : null],
             ["Utkast", o.antall.utkast],
             ["Gjentakende", o.antall.gjentakelser],
@@ -430,6 +457,8 @@ function OrgDetaljer({ id, endret }: { id: string; endret: () => void }) {
           ]}
         />
       </section>
+
+      <OrgFunksjoner id={o.id} funksjoner={o.funksjoner ?? []} />
 
       <section>
         <h3>Medlemmer ({o.medlemmer.length})</h3>
@@ -532,6 +561,199 @@ function OrgDetaljer({ id, endret }: { id: string; endret: () => void }) {
         </section>
       )}
     </div>
+  );
+}
+
+// Funksjonene én organisasjon har tilgang til: slå av og på (lagres med en gang).
+function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: (Omit<Funksjon, "standard"> & { aktiv: boolean })[] }) {
+  const [aktive, settAktive] = useState(() => new Set(funksjoner.filter((f) => f.aktiv).map((f) => f.kode)));
+  const h = useHandling();
+  if (!funksjoner.length) return null;
+  // Vises med en gang, og rettes etter svaret (eller tilbake om det feiler).
+  const sett = async (kode: string, aktiv: boolean) => {
+    const for_ = aktive;
+    settAktive(new Set(aktiv ? [...aktive, kode] : [...aktive].filter((k) => k !== kode)));
+    const r = await h.kjor(() => api<{ aktive: string[] }>("PUT", `/admin/organisasjoner/${id}/funksjoner`, { [kode]: aktiv }));
+    settAktive(r ? new Set(r.aktive) : for_);
+  };
+  return (
+    <section>
+      <h3>Funksjoner</h3>
+      <p className="liten dempet" style={{ marginTop: 0 }}>
+        Hva organisasjonen har tilgang til. Fakturaer, kunder og produkter har alle. Endringen gjelder med en gang.
+      </p>
+      <ul className="admin-rader funksjon-liste">
+        {funksjoner.map((f) => {
+          const mangler = f.krever && !aktive.has(f.krever) ? funksjoner.find((x) => x.kode === f.krever)?.navn : null;
+          return (
+            <li key={f.kode}>
+              <label className={mangler ? "dempet" : undefined}>
+                <input type="checkbox" checked={aktive.has(f.kode)} onChange={(e) => void sett(f.kode, e.target.checked)} />
+                <span>
+                  <strong>{f.navn}</strong>
+                  <span className="dempet liten"> · {f.beskrivelse}</span>
+                  {mangler && <span className="liten advarsel-tekst"> · virker bare med {mangler}</span>}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <Feil melding={h.feil} />
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Funksjoner: hvilke organisasjoner som har tilgang til hvilke funksjoner
+// ---------------------------------------------------------------------------
+
+// Kort navn i kolonneoverskriftene (hele navnet og beskrivelsen står i hjelpeteksten).
+const kortFunksjon: Record<string, string> = {
+  gjentakende: "Gjentak.",
+  paaminnelser: "Påminn.",
+  google_disk: "Disk",
+  ansatte: "Ansatte",
+  vaktplan: "Vaktplan",
+  rapporter: "Rapporter",
+};
+
+function Funksjoner({ apne }: { apne: (id: string) => void }) {
+  const { data, settData, feil } = useData(() => hent<Funksjonsoversikt>("/admin/funksjoner"), []);
+  const [sok, settSok] = useState("");
+  const h = useHandling();
+  if (feil) return <Feil melding={feil} />;
+  if (!data) return <Laster />;
+  const s = sok.trim().toLowerCase();
+  const rader = data.organisasjoner.filter((o) => !s || `${o.navn} ${o.orgnr ?? ""}`.toLowerCase().includes(s) || (o.orgnr ?? "").includes(s.replace(/\s/g, "")));
+  const navn = new Map(data.funksjoner.map((f) => [f.kode, f.navn]));
+
+  // Endringene vises med en gang, og rettes etter svaret (eller tilbake om det feiler).
+  const medAktive = (d: Funksjonsoversikt, id: string, aktive: string[]) => ({ ...d, organisasjoner: d.organisasjoner.map((o) => (o.id === id ? { ...o, aktive } : o)) });
+  const settOrg = async (id: string, kode: string, aktiv: boolean) => {
+    const for_ = data.organisasjoner.find((o) => o.id === id)!.aktive;
+    settData(medAktive(data, id, aktiv ? [...new Set([...for_, kode])] : for_.filter((k) => k !== kode)));
+    const r = await h.kjor(() => api<{ aktive: string[] }>("PUT", `/admin/organisasjoner/${id}/funksjoner`, { [kode]: aktiv }));
+    settData((d) => (d ? medAktive(d, id, r ? r.aktive : for_) : d));
+  };
+  const settStandard = async (kode: string, standard: boolean) => {
+    const medStandard = (d: Funksjonsoversikt, s: boolean) => ({ ...d, funksjoner: d.funksjoner.map((f) => (f.kode === kode ? { ...f, standard: s } : f)) });
+    settData(medStandard(data, standard));
+    const ok = await h.kjor(async () => (await api("PUT", `/admin/funksjoner/${kode}`, { standard }), true));
+    if (!ok) settData((d) => (d ? medStandard(d, !standard) : d));
+  };
+  // Slå en funksjon av eller på for alle organisasjonene som vises.
+  const alle = (f: Funksjon, aktiv: boolean) =>
+    h.kjor(async () => {
+      const berorte = rader.filter((o) => o.aktive.includes(f.kode) !== aktiv);
+      if (!berorte.length) return;
+      if (!confirm(`${aktiv ? "Slå på" : "Slå av"} ${f.navn} for ${berorte.length} ${berorte.length === 1 ? "organisasjon" : "organisasjoner"}?`)) return;
+      const svar = new Map<string, string[]>();
+      for (const o of berorte) svar.set(o.id, (await api<{ aktive: string[] }>("PUT", `/admin/organisasjoner/${o.id}/funksjoner`, { [f.kode]: aktiv })).aktive);
+      settData((d) => (d ? { ...d, organisasjoner: d.organisasjoner.map((o) => (svar.has(o.id) ? { ...o, aktive: svar.get(o.id)! } : o)) } : d));
+    });
+
+  return (
+    <>
+      <p className="dempet" style={{ marginTop: 0 }}>
+        Velg hvilke organisasjoner som har tilgang til hvilke funksjoner. Fakturaer, kunder og produkter har alle. Det som ikke er slått på, vises ikke i
+        appen, og bakgrunnsjobbene (bank, gjentakende fakturaer, EHF, påminnelser og Google Disk) hopper over organisasjonen. Raden øverst er standarden for nye
+        organisasjoner.
+      </p>
+      <div className="admin-verktoy">
+        <input type="search" placeholder="Søk på navn eller org.nr." aria-label="Søk i organisasjoner" value={sok} onChange={(e) => settSok(e.target.value)} />
+        <span className="liten dempet">{rader.length === data.organisasjoner.length ? `${rader.length} organisasjoner` : `${rader.length} av ${data.organisasjoner.length}`}</span>
+      </div>
+      <Feil melding={h.feil} />
+      <div className="kort funksjon-ramme">
+        <table className="funksjon-tabell">
+          <thead>
+            <tr>
+              <th className="funksjon-org">Organisasjon</th>
+              {data.funksjoner.map((f) => (
+                <th key={f.kode} title={`${f.navn}: ${f.beskrivelse}${f.krever ? ` (krever ${navn.get(f.krever)})` : ""}`}>
+                  {kortFunksjon[f.kode] ?? f.navn}
+                </th>
+              ))}
+            </tr>
+            <tr className="funksjon-standard">
+              <th className="funksjon-org" title="Funksjonene nye organisasjoner får">
+                Nye organisasjoner
+              </th>
+              {data.funksjoner.map((f) => (
+                <td key={f.kode}>
+                  <input type="checkbox" aria-label={`${f.navn} for nye organisasjoner`} checked={f.standard} onChange={(e) => void settStandard(f.kode, e.target.checked)} />
+                </td>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rader.map((o) => (
+              <tr key={o.id}>
+                <th className="funksjon-org" scope="row">
+                  <button type="button" className="lenke" onClick={() => apne(o.id)}>
+                    {o.navn}
+                  </button>
+                  <span className="dempet liten">{[orgnr(o.orgnr), o.type === "regnskapsbyraa" ? "byrå" : ""].filter(Boolean).join(" · ") || "uten org.nr."}</span>
+                </th>
+                {data.funksjoner.map((f) => {
+                  const pa = o.aktive.includes(f.kode);
+                  const virkerIkke = pa && !!f.krever && !o.aktive.includes(f.krever);
+                  return (
+                    <td key={f.kode} className={virkerIkke ? "virker-ikke" : undefined}>
+                      <input
+                        type="checkbox"
+                        aria-label={`${f.navn} for ${o.navn}`}
+                        title={virkerIkke ? `Virker bare med ${navn.get(f.krever!)}` : undefined}
+                        checked={pa}
+                        onChange={(e) => void settOrg(o.id, f.kode, e.target.checked)}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {!rader.length && (
+              <tr>
+                <td colSpan={data.funksjoner.length + 1} className="dempet">
+                  Ingen organisasjoner passer søket.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          {rader.length > 1 && (
+            <tfoot>
+              <tr>
+                <th className="funksjon-org">Alle som vises</th>
+                {data.funksjoner.map((f) => (
+                  <td key={f.kode}>
+                    <span className="funksjon-alle">
+                      <button type="button" className="lenke" disabled={h.opptatt} title={`Slå på ${f.navn} for alle som vises`} onClick={() => alle(f, true)}>
+                        På
+                      </button>
+                      <button type="button" className="lenke" disabled={h.opptatt} title={`Slå av ${f.navn} for alle som vises`} onClick={() => alle(f, false)}>
+                        Av
+                      </button>
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+      <dl className="admin-fakta funksjon-forklaring">
+        {data.funksjoner.map((f) => (
+          <div key={f.kode}>
+            <dt>{f.navn}</dt>
+            <dd className="liten">
+              {f.beskrivelse}
+              {f.krever ? ` (krever ${navn.get(f.krever)})` : ""}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </>
   );
 }
 

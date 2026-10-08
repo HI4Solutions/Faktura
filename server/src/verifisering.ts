@@ -4,6 +4,7 @@ import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { config } from "./config.js";
 import { alle, en, somBetrodd, somBruker } from "./db.js";
+import { funksjonAdminRuter } from "./funksjoner.js";
 import { ApiFeil } from "./feil.js";
 import {
   epostHorerTilForetaket,
@@ -205,6 +206,9 @@ export function adminRuter() {
   });
 
   const id = (c: Context) => z.string().uuid().parse(c.req.param("id"));
+
+  // Funksjoner per organisasjon og standarden for nye.
+  r.route("/", funksjonAdminRuter());
 
   // Tellinger for oversikten, og driftsstatus.
   r.get("/oversikt", async (c) => c.json((await somBetrodd(c.get("bruker").id, (db) => en(db, "select faktura.admin_oversikt() as d")))!.d));

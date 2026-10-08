@@ -5,7 +5,7 @@ import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 import { fraProdukt, harRabatt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
-import { kanSkrive, useKonto } from "../konto";
+import { harFunksjon, kanSkrive, useKonto } from "../konto";
 import { dato, iDag, kr, summer } from "../format";
 import { Paaminnelser } from "./Paaminnelser";
 
@@ -14,16 +14,19 @@ const intervallTekst: Record<string, string> = { maaned: "Hver måned", kvartal:
 // To faner: gjentakende fakturaer (sendes av seg selv) og påminnelser (for fakturaer man lager
 // selv, for eksempel når beløpet varierer). Fanen står i adressen (?fane=paaminnelser).
 export function Gjentakende() {
+  const { org } = useKonto();
   const [sok, settSok] = useSearchParams();
-  const fane = sok.get("fane") === "paaminnelser" ? "paaminnelser" : "fakturaer";
-  const faner = (
+  // Bare fanene organisasjonen har funksjonene til (Administrasjon → Funksjoner).
+  const synlige = (
+    [
+      ["fakturaer", "Fakturaer", harFunksjon(org, "gjentakende")],
+      ["paaminnelser", "Påminnelser", harFunksjon(org, "paaminnelser")],
+    ] as const
+  ).filter(([, , vis]) => vis);
+  const fane = synlige.some(([v]) => v === "paaminnelser") && (sok.get("fane") === "paaminnelser" || !synlige.some(([v]) => v === "fakturaer")) ? "paaminnelser" : "fakturaer";
+  const faner = synlige.length < 2 ? null : (
     <div className="faner" role="tablist">
-      {(
-        [
-          ["fakturaer", "Fakturaer"],
-          ["paaminnelser", "Påminnelser"],
-        ] as const
-      ).map(([v, t]) => (
+      {synlige.map(([v, t]) => (
         <button key={v} role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : ""} onClick={() => settSok(v === "fakturaer" ? {} : { fane: v }, { replace: true })}>
           {t}
         </button>

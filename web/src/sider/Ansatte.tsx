@@ -5,7 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
-import { kanPersonal, kanSePersonal, useKonto } from "../konto";
+import { harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag } from "../format";
 import { fnrGyldig, fodselsdato, kontonrGyldig, visKontonr } from "../personnummer";
 import { IkonAnsatte } from "../ikoner";
@@ -66,6 +66,7 @@ export function Ansatte() {
   const { data, feil, last } = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte${alle ? "" : "?aktiv=true"}`), [org?.id, alle]);
   const smal = useSmal();
   const endre = kanPersonal(org?.rolle);
+  const vaktplan = harFunksjon(org, "vaktplan");
 
   if (!kanSePersonal(org?.rolle) || !org?.personal)
     return (
@@ -144,7 +145,7 @@ export function Ansatte() {
               </span>
               <span className="linje">
                 <span className="under">
-                  {[a.stilling, `${belop.format(a.stillingsprosent)} %`, dagerTekst(a.arbeidsdager ?? []), lonn(a)].filter(Boolean).join(" · ")}
+                  {[a.stilling, `${belop.format(a.stillingsprosent)} %`, vaktplan ? dagerTekst(a.arbeidsdager ?? []) : "", lonn(a)].filter(Boolean).join(" · ")}
                 </span>
                 <Merker a={a} />
               </span>
@@ -161,7 +162,7 @@ export function Ansatte() {
                 <th>Navn</th>
                 <th>Stilling</th>
                 <th className="tall">Stilling %</th>
-                <th>Faste dager</th>
+                {vaktplan && <th>Faste dager</th>}
                 <th className="tall">Lønn</th>
                 <th>Ansatt fra</th>
                 <th></th>
@@ -177,7 +178,7 @@ export function Ansatte() {
                   </td>
                   <td>{a.stilling}</td>
                   <td className="tall">{belop.format(a.stillingsprosent)} %</td>
-                  <td>{dagerTekst(a.arbeidsdager ?? []) || <span className="dempet">–</span>}</td>
+                  {vaktplan && <td>{dagerTekst(a.arbeidsdager ?? []) || <span className="dempet">–</span>}</td>}
                   <td className="tall">{lonn(a)}</td>
                   <td>{dato(a.ansatt_fra)}</td>
                   <td>
@@ -187,7 +188,7 @@ export function Ansatte() {
               ))}
               {!liste.length && (
                 <tr>
-                  <td colSpan={8} className="dempet">
+                  <td colSpan={vaktplan ? 8 : 7} className="dempet">
                     Ingen ansatte passer søket.
                   </td>
                 </tr>
@@ -241,10 +242,15 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     notat: ansatt.notat ?? "",
     gruppe_id: ansatt.gruppe_id ?? "",
   }));
-  // Gruppene i bemanningskalenderen (f.eks. sekretærer og leger), hvis noen er laget.
-  const grupper = useData(() => hent<{ id: string; navn: string }[]>(`/org/${org!.id}/ansattgrupper`), [org?.id]);
-  // Den faste arbeidsplanen (ukedagene den ansatte jobber), som et utkast til den lagres.
-  const planer = useData(() => (ansatt.id ? hent<Plan[]>(`/org/${org!.id}/ansatte/${ansatt.id}/arbeidsplan`) : Promise.resolve([] as Plan[])), [org?.id, ansatt.id]);
+  // Med vaktplanen (Administrasjon → Funksjoner): gruppene i bemanningskalenderen (f.eks.
+  // sekretærer og leger), hvis noen er laget, og den faste arbeidsplanen (ukedagene den ansatte
+  // jobber), som et utkast til den lagres.
+  const vaktplan = harFunksjon(org, "vaktplan");
+  const grupper = useData(() => (vaktplan ? hent<{ id: string; navn: string }[]>(`/org/${org!.id}/ansattgrupper`) : Promise.resolve([])), [org?.id]);
+  const planer = useData(
+    () => (ansatt.id && vaktplan ? hent<Plan[]>(`/org/${org!.id}/ansatte/${ansatt.id}/arbeidsplan`) : Promise.resolve([] as Plan[])),
+    [org?.id, ansatt.id],
+  );
   const [plan, settPlan] = useState<PlanUtkast | null>(null);
   useEffect(() => {
     if (planer.data) settPlan(lagUtkast(planer.data, ansatt.ansatt_fra));
@@ -465,7 +471,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           </label>
         </div>
       </fieldset>
-      {plan ? (
+      {!vaktplan ? null : plan ? (
         <ArbeidsplanFelt
           utkast={plan}
           endre={settPlan}

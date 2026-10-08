@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, hent, lastOppLogo } from "../api";
 import { EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, harFunksjon, useKonto } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
@@ -27,9 +27,9 @@ export function Innstillinger() {
   if (admin) {
     faner.push(["organisasjon", "Organisasjon"]);
     if (!byraa) faner.push(["faktura", "Faktura"], ["betaling", "Betaling"]);
-    if (!byraa && org?.type !== "privatperson") faner.push(["ehf", "EHF"]);
+    if (!byraa && org?.type !== "privatperson" && harFunksjon(org, "ehf")) faner.push(["ehf", "EHF"]);
     faner.push(["brukere", "Brukere"]);
-    if (org?.type !== "privatperson") faner.push(["personal", "Ansatte og timer"]);
+    if (org?.type !== "privatperson" && harFunksjon(org, "ansatte")) faner.push(["personal", "Ansatte og timer"]);
   }
   faner.push(["konto", "Min konto"], ["app", "App"]);
   // Tilbake fra Google (Google Disk-koblingen): «Min konto».
@@ -53,7 +53,7 @@ export function Innstillinger() {
       {fane === "betaling" && (
         <>
           <Kontoer />
-          <BankKobling />
+          {harFunksjon(org, "bank") && <BankKobling />}
         </>
       )}
       {fane === "ehf" && <EhfSending />}
@@ -498,6 +498,7 @@ function Passkeys() {
 }
 
 function GoogleDisk() {
+  const { meg } = useKonto();
   const { data, last } = useData(() => hent("/disk"), []);
   const h = useHandling();
   const resultat = new URLSearchParams(window.location.search).get("disk");
@@ -509,6 +510,9 @@ function GoogleDisk() {
   }, [Boolean(velger)]);
 
   if (!data || (!data.tilgjengelig && !data.kobling)) return null;
+  // Uten noen organisasjon med Google Disk (Administrasjon → Funksjoner) vises det bare for å
+  // koble fra en kobling som finnes.
+  if (!data.kobling && !(meg?.organisasjoner ?? []).some((o) => harFunksjon(o, "google_disk"))) return null;
   const k = data.kobling;
 
   const byttMappe = () =>

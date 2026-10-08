@@ -176,6 +176,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   P permisjon, K kurs, A annet) eller ekstratimer, nederst ekstratimene i måneden per ansatt,
   og til høyre hvor mange som er på jobb i hver gruppe mot behovet, vakter uten vikar og ledige
   vakter. Grupper kan lages fra stillingene
+- `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
+  bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
+  Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer).
+  Fakturaer, kunder og produkter har alle. Plattformadministratoren slår dem av og på under
+  Administrasjon → Funksjoner (eller i detaljene for en organisasjon) og velger standarden
+  for nye organisasjoner; de som fantes da funksjonene kom, beholdt alt. API-et avviser rutene
+  til en funksjon organisasjonen ikke har (`server/src/funksjoner.ts`, med svaret husket et
+  halvt minutt), bakgrunnsjobbene hopper over organisasjonen (bankhenting, gjentakende
+  fakturaer, EHF-sending, som da går på e-post, påminnelser og Google Disk), og appen
+  skjuler det som ikke er slått på (`mine_organisasjoner.funksjoner`)
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
@@ -238,6 +248,10 @@ det kommer med i forespørselen om manuell godkjenning, og adminsiden viser roll
 på medlemmenes navn. Navnet alene verifiserer ikke, siden det kan skrives av hvem som helst;
 helt automatisk verifisering av personer krever BankID (bekreftet navn og fødselsdato mot
 rollene i Brreg).
+
+Adminsiden viser ikke hvor mye organisasjonene fakturerer for (ingen beløp, heller ikke
+utestående), bare hvor mange fakturaer de har sendt, og hvor mange av dem som gikk på e-post
+og som EHF (`0042_admin_uten_belop.sql`).
 
 Et organisasjonsnummer kan bare være verifisert hos én organisasjon. Andre grenser:
 maks fem uverifiserte organisasjoner per bruker, reCAPTCHA Enterprise ved registrering,

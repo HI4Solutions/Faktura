@@ -8,7 +8,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, kanPersonal, kanSePersonal, useKonto } from "../konto";
+import { erAdmin, harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag, leggTilDager } from "../format";
 import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
 import { gyldigDato, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
@@ -251,7 +251,11 @@ function Ukeside({
   const til = leggTilDager(uke, 6);
   const ansatt = useData(() => hent<Ansatt>(`/org/${org!.id}/ansatte/${ansattId}`), [org?.id, ansattId, versjon]);
   const { data, feil } = useData(() => hent<TimerSvar>(`/org/${org!.id}/timer?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
-  const vaktsvar = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${uke}&til=${til}&ansatt=${ansattId}`), [org?.id, ansattId, uke, versjon]);
+  // Vaktene, de faste dagene og fraværet (med vaktplanen slått på for organisasjonen).
+  const vaktsvar = useData(
+    () => (harFunksjon(org, "vaktplan") ? hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${uke}&til=${til}&ansatt=${ansattId}`) : Promise.resolve(null)),
+    [org?.id, ansattId, uke, versjon],
+  );
   const vakter = (vaktsvar.data?.vakter ?? []).filter((v) => v.publisert);
   // De faste arbeidsdagene etter arbeidsplanen (dager uten vakt).
   const faste = (vaktsvar.data?.faste ?? []).filter((f) => f.ansatt_id === ansattId);

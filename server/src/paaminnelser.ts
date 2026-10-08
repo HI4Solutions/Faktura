@@ -7,6 +7,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { config } from "./config.js";
 import { alle, en, somBruker, somSystem, type Db } from "./db.js";
+import { harFunksjon } from "./funksjoner.js";
 import { ApiFeil } from "./feil.js";
 import { sendVarsel } from "./push.js";
 import { dato, iDag } from "./regler.js";
@@ -136,6 +137,8 @@ export async function sendPaaminnelser(): Promise<number> {
   const tatt = await somSystem((db) => alle<Tatt>(db, "select * from faktura.ta_paaminnelser()"));
   for (const p of tatt) {
     try {
+      // Uten funksjonen (Administrasjon → Funksjoner) sendes ingen påminnelse.
+      if (!(await harFunksjon(p.org_id, "paaminnelser"))) continue;
       await varsle(p);
     } catch (e) {
       logg("ERROR", "Påminnelse kunne ikke sendes", { paaminnelse: p.id, org_id: p.org_id, feil: (e as Error).message });

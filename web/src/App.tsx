@@ -1,10 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { updateProfile } from "firebase/auth";
 import { hentAuth } from "./firebase";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
-import { Feil, Laster } from "./felles";
-import { KontoProvider, erAnsatt, kanSePersonal, kanSkrive, useKonto } from "./konto";
+import { Feil, Laster, Tom } from "./felles";
+import { KontoProvider, erAnsatt, harFunksjon, kanSePersonal, kanSkrive, useKonto, type Funksjon } from "./konto";
 import { BekreftEpost, Innlogging } from "./sider/Innlogging";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
@@ -42,6 +42,22 @@ const initialer = (navn: string) =>
     .join("");
 
 const orgType: Record<string, string> = { foretak: "Foretak", regnskapsbyraa: "Regnskapsbyrå", privatperson: "Privatperson" };
+
+// En side som hører til en funksjon organisasjonen ikke har (Administrasjon → Funksjoner).
+function Krever({ kode, navn, children }: { kode: Funksjon | Funksjon[]; navn: string; children: ReactNode }) {
+  const { org } = useKonto();
+  if ((Array.isArray(kode) ? kode : [kode]).some((k) => harFunksjon(org, k))) return <>{children}</>;
+  return (
+    <>
+      <h1>{navn}</h1>
+      <div className="kort">
+        <Tom ikon={<IkonSkjold storrelse={22} />} tittel={`${navn} er ikke slått på`}>
+          <p>Funksjonen er ikke slått på for {org?.navn}. Ta kontakt med HI4 Faktura hvis dere vil ha den.</p>
+        </Tom>
+      </div>
+    </>
+  );
+}
 
 function Invitasjon() {
   const { token } = useParams();
@@ -148,6 +164,7 @@ function Ramme() {
   const ansatt = erAnsatt(org?.rolle);
   const visAnsatte = !ansatt && !!org?.personal && kanSePersonal(org.rolle);
   const visTimer = ansatt || (!!org?.personal && (kanSePersonal(org.rolle) || !!org.ansatt_id));
+  const visVakter = harFunksjon(org, "vaktplan");
 
   if (ny || orgs.length === 0) {
     return (
@@ -190,10 +207,12 @@ function Ramme() {
               <IkonKlokke storrelse={22} />
               <span>Timer</span>
             </NavLink>
-            <NavLink to="/vakter">
-              <IkonKalender storrelse={22} />
-              <span>Vakter</span>
-            </NavLink>
+            {visVakter && (
+              <NavLink to="/vakter">
+                <IkonKalender storrelse={22} />
+                <span>Vakter</span>
+              </NavLink>
+            )}
           </>
         ) : (
           <NavLink to="/" end>
@@ -265,10 +284,12 @@ function Ramme() {
               <IkonKlokke />
               Timer
             </NavLink>
-            <NavLink to="/vakter">
-              <IkonKalender />
-              Vakter
-            </NavLink>
+            {visVakter && (
+              <NavLink to="/vakter">
+                <IkonKalender />
+                Vakter
+              </NavLink>
+            )}
           </>
         ) : (
           <NavLink to="/" end>
@@ -282,14 +303,18 @@ function Ramme() {
               <IkonFaktura />
               Fakturaer
             </NavLink>
-            <NavLink to="/innbetalinger">
-              <IkonKroner />
-              Innbetalinger
-            </NavLink>
-            <NavLink to="/gjentakende">
-              <IkonGjenta />
-              Gjentakende
-            </NavLink>
+            {harFunksjon(org, "bank") && (
+              <NavLink to="/innbetalinger">
+                <IkonKroner />
+                Innbetalinger
+              </NavLink>
+            )}
+            {(harFunksjon(org, "gjentakende") || harFunksjon(org, "paaminnelser")) && (
+              <NavLink to="/gjentakende">
+                <IkonGjenta />
+                Gjentakende
+              </NavLink>
+            )}
             <NavLink to="/kunder">
               <IkonKunder />
               Kunder
@@ -298,10 +323,12 @@ function Ramme() {
               <IkonProdukter />
               Produkter
             </NavLink>
-            <NavLink to="/rapporter">
-              <IkonRapport />
-              Rapporter
-            </NavLink>
+            {harFunksjon(org, "rapporter") && (
+              <NavLink to="/rapporter">
+                <IkonRapport />
+                Rapporter
+              </NavLink>
+            )}
           </>
         )}
         {!ansatt && (visAnsatte || visTimer) && (
@@ -313,7 +340,7 @@ function Ramme() {
                 Ansatte
               </NavLink>
             )}
-            {visTimer && (
+            {visTimer && visVakter && (
               <NavLink to="/vakter">
                 <IkonKalender />
                 Vaktplan
@@ -369,7 +396,7 @@ function Ramme() {
         {org && ansatt && (
           <Routes>
             <Route path="/timer" element={<Timer />} />
-            <Route path="/vakter" element={<Vakter />} />
+            <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vakter"><Vakter /></Krever>} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
@@ -381,21 +408,21 @@ function Ramme() {
             <Route path="/" element={<Oversikt />} />
             <Route path="/fakturaer" element={<Fakturaliste />} />
             <Route path="/fakturaer/ny" element={<NyFaktura />} />
-            <Route path="/fakturaer/flere" element={<FlereFakturaer />} />
+            <Route path="/fakturaer/flere" element={<Krever kode="flere" navn="Flere fakturaer"><FlereFakturaer /></Krever>} />
             <Route path="/fakturaer/:id/endre" element={<FakturaSkjema />} />
             <Route path="/fakturaer/:id" element={<FakturaVisning />} />
-            <Route path="/gjentakende" element={<Gjentakende />} />
+            <Route path="/gjentakende" element={<Krever kode={["gjentakende", "paaminnelser"]} navn="Gjentakende fakturaer"><Gjentakende /></Krever>} />
             <Route path="/paaminnelser" element={<Navigate to="/gjentakende?fane=paaminnelser" replace />} />
-            <Route path="/paaminnelser/:id" element={<SendFraPaaminnelse />} />
-            <Route path="/innbetalinger" element={<Innbetalinger />} />
-            <Route path="/bank/tilbake" element={<BankTilbake />} />
+            <Route path="/paaminnelser/:id" element={<Krever kode="paaminnelser" navn="Påminnelser"><SendFraPaaminnelse /></Krever>} />
+            <Route path="/innbetalinger" element={<Krever kode="bank" navn="Innbetalinger"><Innbetalinger /></Krever>} />
+            <Route path="/bank/tilbake" element={<Krever kode="bank" navn="Bank"><BankTilbake /></Krever>} />
             <Route path="/kunder" element={<Kunder />} />
-            <Route path="/kunder/importer" element={<Importer key="kunder" type="kunder" />} />
-            <Route path="/rapporter" element={<Rapporter />} />
+            <Route path="/kunder/importer" element={<Krever kode="import" navn="Importer kunder"><Importer key="kunder" type="kunder" /></Krever>} />
+            <Route path="/rapporter" element={<Krever kode="rapporter" navn="Rapporter"><Rapporter /></Krever>} />
             <Route path="/produkter" element={<Produkter />} />
-            <Route path="/produkter/importer" element={<Importer key="produkter" type="produkter" />} />
+            <Route path="/produkter/importer" element={<Krever kode="import" navn="Importer produkter"><Importer key="produkter" type="produkter" /></Krever>} />
             <Route path="/ansatte" element={<Ansatte />} />
-            <Route path="/vakter" element={<Vakter />} />
+            <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vaktplan"><Vakter /></Krever>} />
             <Route path="/timer" element={<Timer />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />

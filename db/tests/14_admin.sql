@@ -1,5 +1,6 @@
--- Plattformadministrasjon (0029_admin.sql): oversikt, detaljer om én organisasjon og
--- driftsstatus, bare for betrodde kall.
+-- Plattformadministrasjon (0029_admin.sql, 0042_admin_uten_belop.sql): oversikt, detaljer om
+-- én organisasjon og driftsstatus, bare for betrodde kall. Ingen beløp: bare hvor mange
+-- fakturaer, og hvor mange av dem som gikk på e-post og som EHF.
 
 \set QUIET on
 \set ON_ERROR_STOP on
@@ -24,6 +25,13 @@ insert into faktura.kunder (org_id, navn) values (:'org', 'Kari Hansen') returni
 insert into faktura.fakturaer (org_id, kunde_id) values (:'org', :'k') returning id as f \gset
 insert into faktura.faktura_linjer (org_id, faktura_id, beskrivelse, enhetspris, mva_sats) values (:'org', :'f', 'Husleie', 1000, 0);
 select faktura.utsted(:'f');
+-- To fakturaer til: én sendt som EHF, én ikke sendt.
+insert into faktura.fakturaer (org_id, kunde_id) values (:'org', :'k') returning id as f2 \gset
+insert into faktura.faktura_linjer (org_id, faktura_id, beskrivelse, enhetspris, mva_sats) values (:'org', :'f2', 'Husleie', 2000, 0);
+select faktura.utsted(:'f2');
+insert into faktura.fakturaer (org_id, kunde_id) values (:'org', :'k') returning id as f3 \gset
+insert into faktura.faktura_linjer (org_id, faktura_id, beskrivelse, enhetspris, mva_sats) values (:'org', :'f3', 'Husleie', 3000, 0);
+select faktura.utsted(:'f3');
 select set_config('test.org', :'org', false);
 
 -- Uten betrodd kall: ingen tilgang, heller ikke for eieren.
@@ -43,13 +51,25 @@ do $$ begin
 exception when sqlstate 'FA403' then null;
 end $$;
 
+-- Workeren logger at den første gikk på e-post og den andre som EHF (og en EHF som feilet på
+-- den første, før e-posten).
+\c :worker
+select faktura.logg_epost(:'org', :'f', null, 'admin-test-1', 'kari@test.no', 'Faktura 1');
+insert into faktura.ehf_sendinger (org_id, faktura_id, oppgave_id, mottaker, status) values (:'org', :'f', 'admin-ehf-1', '0192:923609016', 'feilet');
+insert into faktura.ehf_sendinger (org_id, faktura_id, oppgave_id, mottaker, status) values (:'org', :'f2', 'admin-ehf-2', '0192:923609016', 'levert');
+
+\c :api
+select set_config('app.bruker_id', :'u', false);
 -- Betrodd (API-et for en plattformadministrator).
 select set_config('app.betrodd', 'on', false);
 select faktura.admin_organisasjon(:'org') as d \gset
 select set_config('test.d', :'d', false);
-select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'fakturaer')::int, 1, 'antall fakturaer');
-select test.er((current_setting('test.d')::jsonb ->> 'fakturert')::numeric, 1000::numeric, 'fakturert');
-select test.er((current_setting('test.d')::jsonb ->> 'utestaende')::numeric, 1000::numeric, 'utestående');
+select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'fakturaer')::int, 3, 'antall fakturaer');
+select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'epost')::int, 1, 'på e-post');
+select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'ehf')::int, 1, 'som EHF');
+select test.er(current_setting('test.d')::jsonb ?| array['fakturert', 'utestaende'], false, 'ingen beløp');
+select test.er((select count(*)::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'funksjoner') x where (x ->> 'aktiv')::boolean), 11,
+               'alle funksjonene er på');
 select test.er(current_setting('test.d')::jsonb -> 'medlemmer' -> 0 ->> 'epost', 'adminside@test.no', 'eieren er medlem');
 select test.er(current_setting('test.d')::jsonb -> 'medlemmer' -> 0 ->> 'rolle', 'eier', 'som eier');
 select test.er(current_setting('test.d')::jsonb -> 'kontonr_endringer' -> 0 ->> 'fra', '86011117947', 'siste kontonummerendring fra');
@@ -58,15 +78,19 @@ select test.er(current_setting('test.d')::jsonb -> 'kontonr_endringer' -> 0 ->> 
 select test.er((select count(*)::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'aktivitet') a where a ->> 'tabell' = 'faktura_linjer'), 0,
                'fakturalinjene er ikke med i aktiviteten');
 select test.er((select count(*)::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'aktivitet') a
-                 where a ->> 'tabell' = 'fakturaer' and a ->> 'status' = 'utstedt'), 1, 'utstedelsen er med i aktiviteten');
+                 where a ->> 'tabell' = 'fakturaer' and a ->> 'status' = 'utstedt'), 3, 'utstedelsene er med i aktiviteten');
 select test.er(faktura.admin_organisasjon(gen_random_uuid()), null, 'ukjent organisasjon');
 select test.er((faktura.admin_oversikt() -> 'organisasjoner' ->> 'totalt')::int >= 1, true, 'oversikten teller organisasjoner');
-select test.er((faktura.admin_oversikt() -> 'fakturaer' ->> 'antall_30')::int >= 1, true, 'fakturaer siste 30 dager');
+select test.er((faktura.admin_oversikt() -> 'fakturaer' ->> 'antall_30')::int >= 3, true, 'fakturaer siste 30 dager');
+select test.er((faktura.admin_oversikt() -> 'fakturaer' ->> 'ehf_30')::int >= 1, true, 'som EHF siste 30 dager');
+select test.er(faktura.admin_oversikt() -> 'fakturaer' ?| array['sum', 'sum_30'], false, 'oversikten har ingen beløp');
 select test.er((faktura.admin_oversikt() -> 'brukere' ->> 'aktive_30')::int >= 1, true, 'aktive brukere');
 select test.er(faktura.admin_oversikt() -> 'problemer' ? 'banker', true, 'problemer per område');
 select test.er(faktura.admin_drift() ?& array['utboks', 'epost', 'ehf', 'integrasjoner', 'banker'], true, 'driftsstatus');
 select test.er((select sist_aktiv is not null and antall_medlemmer = 1 from faktura.admin_organisasjoner() where id = :'org'), true,
                'organisasjonen sist aktiv');
+select test.er((select array[antall_fakturaer, antall_epost, antall_ehf] from faktura.admin_organisasjoner() where id = :'org'), array[3, 1, 1]::bigint[],
+               'fakturaer, e-post og EHF i lista');
 select test.er((select sist_aktiv is not null from faktura.admin_brukere() where id = :'u'), true, 'brukeren sist aktiv');
 
 \c :migrator

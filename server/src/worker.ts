@@ -176,7 +176,10 @@ export async function gjenta() {
 
   const sendteGjentakende: string[] = [];
   const gjentakelser = await somSystem((db) =>
-    alle<{ id: string }>(db, "select id from faktura.gjentakelser where aktiv and neste_dato <= faktura.i_dag() order by neste_dato"),
+    alle<{ id: string }>(
+      db,
+      "select id from faktura.gjentakelser where aktiv and neste_dato <= faktura.i_dag() and faktura.har_funksjon(org_id, 'gjentakende') order by neste_dato",
+    ),
   );
   for (const { id } of gjentakelser) {
     // Har kjøringen stått stille, tas opptil tre perioder igjen.

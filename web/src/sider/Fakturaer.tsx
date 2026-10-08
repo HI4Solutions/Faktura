@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apnePdf, hent, lastNed, type Vedlegg } from "../api";
 import { dataEndret, Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, kanBokfore, kanSkrive, useKonto } from "../konto";
+import { erAdmin, harFunksjon, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dagerMellom, dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, orgnr, summer } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
@@ -44,9 +44,11 @@ export function Fakturaliste() {
         <h1>Fakturaer</h1>
         {kanSkrive(org?.rolle) && (
           <div className="knapper">
-            <Link className="knapp" to="/fakturaer/flere">
-              Flere på én gang
-            </Link>
+            {harFunksjon(org, "flere") && (
+              <Link className="knapp" to="/fakturaer/flere">
+                Flere på én gang
+              </Link>
+            )}
             <Link className="knapp primar" to="/fakturaer/ny">
               <IkonPluss storrelse={16} /> Ny faktura
             </Link>
@@ -66,7 +68,7 @@ export function Fakturaliste() {
           </button>
         ))}
       </div>
-      {utkast.length > 0 && kanSkrive(org?.rolle) && (
+      {utkast.length > 0 && kanSkrive(org?.rolle) && harFunksjon(org, "flere") && (
         <div className="knapper" style={{ marginBottom: 14 }}>
           <button type="button" onClick={() => settSendUtkast(true)}>
             Send flere utkast …
@@ -390,7 +392,8 @@ export function FakturaSkjema() {
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
   const kunder = useData(() => hent(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
   const produkter = useData(() => hent(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
-  const ehf = useData(() => hent(`/org/${org!.id}/ehf`), [org?.id]);
+  // Uten funksjonen EHF går fakturaene på e-post.
+  const ehf = useData(() => (harFunksjon(org, "ehf") ? hent(`/org/${org!.id}/ehf`) : Promise.resolve(null)), [org?.id]);
   const kopiId = id ? null : sporring.get("kopi"); // ny faktura som kopi av en tidligere
   const paaminnelseId = id || kopiId ? null : sporring.get("paaminnelse"); // ny faktura fra en påminnelse
   // Fra siden for påminnelsen («Åpne i fullt skjema»): det som ble skrevet der.
@@ -628,7 +631,7 @@ export function FakturaSkjema() {
     <>
       <div className="topp">
         <h1>{id ? "Endre utkast" : "Ny faktura"}</h1>
-        {!id && !kopiId && (
+        {!id && !kopiId && harFunksjon(org, "flere") && (
           <Link className="knapp" to="/fakturaer/flere">
             Flere på én gang
           </Link>
@@ -787,6 +790,7 @@ export function FakturaSkjema() {
         </div>
       </div>
 
+      {harFunksjon(org, "gjentakende") && (
       <GjentaValg
         gjenta={gjenta}
         endre={(g, nesteEndret) => {
@@ -798,6 +802,7 @@ export function FakturaSkjema() {
         forfall={forfall}
         standardDager={orgData.data.standard_dager_foer_forfall ?? 14}
       />
+      )}
       <NotatFelt verdi={f.kommentar} endre={(v) => settF({ ...f, kommentar: v })} />
       <VedleggFelt orgId={org!.id} vedlegg={vedlegg} endre={settVedlegg} opptatt={settLasterOpp} />
       {gjenta && vedlegg.length > 0 && (
@@ -914,7 +919,7 @@ export function FakturaVisning() {
         )}
         <div className="knapper handlinger">
           <button onClick={() => h.kjor(() => apnePdf(org!.id, f.id))}>{f.status === "utkast" ? "Forhåndsvis PDF" : "PDF"}</button>
-          {f.status !== "utkast" && f.selger?.orgnr && f.kunde?.orgnr && (
+          {f.status !== "utkast" && f.selger?.orgnr && f.kunde?.orgnr && harFunksjon(org, "ehf") && (
             <button title="Last ned fakturaen som EHF (elektronisk faktura)" onClick={() => h.kjor(() => lastNed(`/org/${org!.id}/fakturaer/${f.id}/ehf`, `${f.type === "kreditnota" ? "Kreditnota" : "Faktura"}-${f.fakturanummer}.xml`))}>
               EHF
             </button>
@@ -1244,7 +1249,7 @@ function SendPaNytt({ faktura, ferdig }: { faktura: any; ferdig: () => void }) {
   const { org } = useKonto();
   const kunde = useData(() => hent(`/org/${org!.id}/kunder/${faktura.kunde_id}`), [org?.id, faktura.kunde_id]);
   const orgData = useData(() => hent(`/org/${org!.id}`), [org?.id]);
-  const ehfOppsett = useData(() => hent(`/org/${org!.id}/ehf`), [org?.id]);
+  const ehfOppsett = useData(() => (harFunksjon(org, "ehf") ? hent(`/org/${org!.id}/ehf`) : Promise.resolve({ tilkoblet: false })), [org?.id]);
   const [kopi, settKopi] = useState((faktura.kopi_til ?? []).join(", "));
   const [sendt, settSendt] = useState(false);
   const h = useHandling();

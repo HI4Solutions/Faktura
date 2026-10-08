@@ -30,6 +30,7 @@ import { tavleRuter } from "./tavle.js";
 import { fravaerRuter } from "./fravaer.js";
 import { bemanningRuter } from "./bemanning.js";
 import { arbeidsplanRuter } from "./arbeidsplan.js";
+import { krevFunksjoner } from "./funksjoner.js";
 import { aiPaa } from "./ai.js";
 
 const uuid = z.string().uuid();
@@ -298,6 +299,8 @@ export function lagApi() {
     c.set("org", uuid.parse(c.req.param("org")));
     await next();
   });
+  // Rutene til funksjoner organisasjonen ikke har (Administrasjon → Funksjoner), avvises.
+  org.use("*", krevFunksjoner());
   const orgId = (c: Context) => c.get("org") as string;
 
   org.get("/", async (c) => {
@@ -313,8 +316,10 @@ export function lagApi() {
       if (!(await en<{ k: boolean }>(db, "select faktura.kan($1, 'les') as k", [orgId(c)]))!.k) throw new ApiFeil(403, "Ingen tilgang");
       const direkte = await en(db, "select 1 from faktura.medlemmer where org_id = $1 and bruker_id = faktura.bruker_id()", [orgId(c)]);
       if (!direkte) await db.query("select faktura.logg_oppslag($1, 'organisasjon')", [orgId(c)]);
-      // ai_tilgjengelig: AI er satt opp for plattformen (og ai_aktiv: slått på for organisasjonen).
-      return { ...o, rolle: (await en(db, "select faktura.rolle($1) as r", [orgId(c)]))!.r, ai_tilgjengelig: aiPaa() };
+      // ai_tilgjengelig: AI er satt opp for plattformen og organisasjonen har funksjonen (og
+      // ai_aktiv: slått på av organisasjonen selv).
+      const r = (await en<{ r: string; ai: boolean }>(db, "select faktura.rolle($1) as r, faktura.har_funksjon($1, 'ai') as ai", [orgId(c)]))!;
+      return { ...o, rolle: r.r, ai_tilgjengelig: aiPaa() && r.ai };
     });
     return c.json(o);
   });

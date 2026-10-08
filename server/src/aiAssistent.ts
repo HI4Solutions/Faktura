@@ -277,7 +277,8 @@ async function nyFaktura(k: Kontekst, ai: AiKommando): Promise<Partial<Assistent
     const m = await en<{ epost: string | null; ehf: boolean | null; orgnr: string | null; ehf_paa: boolean }>(
       k.db,
       `select k.epost, k.ehf, k.orgnr,
-              exists (select 1 from faktura.integrasjoner i where i.org_id = k.org_id and i.type = 'peppol' and i.status = 'aktiv') as ehf_paa
+              exists (select 1 from faktura.integrasjoner i where i.org_id = k.org_id and i.type = 'peppol' and i.status = 'aktiv')
+                and faktura.har_funksjon(k.org_id, 'ehf') as ehf_paa
          from faktura.kunder k where k.id = $1`,
       [kunde!.id],
     );

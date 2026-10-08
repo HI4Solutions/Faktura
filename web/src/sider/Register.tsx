@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
-import { kanSkrive, useKonto } from "../konto";
+import { harFunksjon, kanSkrive, useKonto } from "../konto";
 import { dato, kr, orgnr } from "../format";
 import { AvsenderKonto } from "./AvsenderKonto";
 
@@ -20,9 +20,11 @@ export function Kunder() {
         <h1>Kunder</h1>
         {kanSkrive(org?.rolle) && (
           <div className="knapper">
-            <Link className="knapp" to="/kunder/importer">
-              Importer
-            </Link>
+            {harFunksjon(org, "import") && (
+              <Link className="knapp" to="/kunder/importer">
+                Importer
+              </Link>
+            )}
             <button className="primar" onClick={() => settRedigerer({ type: "firma", aktiv: true })}>
               Ny kunde
             </button>
@@ -50,7 +52,7 @@ export function Kunder() {
               </span>
             </button>
           ))}
-          {data?.length === 0 && <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org?.rolle)} sok={sok} />}
+          {data?.length === 0 && <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org?.rolle) && harFunksjon(org, "import")} sok={sok} />}
         </div>
       ) : (
         <div className="kort tabell">
@@ -80,7 +82,7 @@ export function Kunder() {
               {data?.length === 0 && (
                 <tr>
                   <td colSpan={5}>
-                    <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org?.rolle)} sok={sok} />
+                    <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org?.rolle) && harFunksjon(org, "import")} sok={sok} />
                   </td>
                 </tr>
               )}
@@ -174,7 +176,7 @@ export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; la
           </label>
         )}
       </div>
-      {k.type === "firma" && <EhfStatus kunde={k} lagretOrgnr={kunde?.orgnr} oppdatert={(ny) => settK({ ...k, ehf: ny.ehf, ehf_sjekket: ny.ehf_sjekket })} />}
+      {k.type === "firma" && harFunksjon(org, "ehf") && <EhfStatus kunde={k} lagretOrgnr={kunde?.orgnr} oppdatert={(ny) => settK({ ...k, ehf: ny.ehf, ehf_sjekket: ny.ehf_sjekket })} />}
       <label>
         Navn
         <input required {...felt("navn")} />
@@ -314,9 +316,11 @@ export function Produkter() {
         <h1>Produkter og tjenester</h1>
         {kanSkrive(org?.rolle) && (
           <div className="knapper">
-            <Link className="knapp" to="/produkter/importer">
-              Importer
-            </Link>
+            {harFunksjon(org, "import") && (
+              <Link className="knapp" to="/produkter/importer">
+                Importer
+              </Link>
+            )}
             <button className="primar" onClick={() => settRedigerer({ enhet: "stk", mva_sats: 25, aktiv: true })}>
               Nytt produkt
             </button>
@@ -345,7 +349,7 @@ export function Produkter() {
               </span>
             </button>
           ))}
-          {data?.length === 0 && <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org?.rolle)} />}
+          {data?.length === 0 && <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org?.rolle) && harFunksjon(org, "import")} />}
         </div>
       ) : (
         <div className="kort tabell">
@@ -377,7 +381,7 @@ export function Produkter() {
               {data?.length === 0 && (
                 <tr>
                   <td colSpan={6}>
-                    <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org?.rolle)} />
+                    <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org?.rolle) && harFunksjon(org, "import")} />
                   </td>
                 </tr>
               )}
@@ -497,7 +501,7 @@ export function ProduktSkjema({ produkt, lagret, avbryt }: { produkt: any; lagre
         <input type="checkbox" checked={p.aktiv !== false} onChange={(e) => settP({ ...p, aktiv: e.target.checked })} />
         Aktiv
       </label>
-      {!p.variabel && <Indeksregulering p={p} settP={settP} />}
+      {!p.variabel && harFunksjon(org, "gjentakende") && <Indeksregulering p={p} settP={settP} />}
       <Feil melding={feil} />
       <div className="knapper">
         <button className="primar" disabled={opptatt}>

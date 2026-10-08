@@ -17,7 +17,13 @@ export interface MinOrg {
   personal: boolean;
   // Den innloggedes egen ansattrad her (fører egne timer), eller null.
   ansatt_id: string | null;
+  // Funksjonene organisasjonen har tilgang til (Administrasjon → Funksjoner).
+  funksjoner?: Funksjon[];
 }
+
+export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan";
+// Om organisasjonen har funksjonen. Uten lista (eldre API) er alt på.
+export const harFunksjon = (org: Pick<MinOrg, "funksjoner"> | null | undefined, kode: Funksjon) => !!org && (!org.funksjoner || org.funksjoner.includes(kode));
 
 interface Meg {
   bruker: { id: string; epost: string; navn: string | null };

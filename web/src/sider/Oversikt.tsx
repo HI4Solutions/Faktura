@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { hent } from "../api";
 import { Feil, Laster, Tom, useData } from "../felles";
-import { kanBokfore, kanSkrive, useKonto } from "../konto";
+import { harFunksjon, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { IkonFaktura, IkonHake, IkonKlokke, IkonKroner, IkonKunder, IkonPluss, IkonUtkast, IkonVarsel } from "../ikoner";
 import { Fakturatabell } from "./Fakturaer";
@@ -12,7 +12,10 @@ export function Oversikt() {
   const { org, meg, velgOrg } = useKonto();
   const nav = useNavigate();
   const { data, feil } = useData(() => hent<any[]>(`/org/${org!.id}/fakturaer`), [org?.id], { oppdater: true });
-  const bank = useData(() => (org?.type === "regnskapsbyraa" ? Promise.resolve(null) : hent<BankStatus>(`/org/${org!.id}/bank`).catch(() => null)), [org?.id]);
+  const bank = useData(
+    () => (org?.type === "regnskapsbyraa" || !harFunksjon(org, "bank") ? Promise.resolve(null) : hent<BankStatus>(`/org/${org!.id}/bank`).catch(() => null)),
+    [org?.id],
+  );
 
   // Regnskapsbyrå: felles oversikt over klientene.
   if (org?.type === "regnskapsbyraa") {

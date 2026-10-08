@@ -17,7 +17,12 @@ export type EhfKobling = { selskapId: string; nokkel: RecommandNokkel };
 
 // Organisasjonens kobling med hemmeligheten dekryptert (bare workeren kan dekryptere).
 export async function ehfKobling(db: Db, orgId: string): Promise<EhfKobling | null> {
-  const k = await en(db, "select konfig, hemmelighet_kryptert from faktura.integrasjoner where org_id = $1 and type = 'peppol' and status = 'aktiv'", [orgId]);
+  // Uten funksjonen EHF (Administrasjon → Funksjoner) går fakturaene på e-post.
+  const k = await en(
+    db,
+    "select konfig, hemmelighet_kryptert from faktura.integrasjoner where org_id = $1 and type = 'peppol' and status = 'aktiv' and faktura.har_funksjon(org_id, 'ehf')",
+    [orgId],
+  );
   if (!k?.hemmelighet_kryptert || k.konfig?.leverandor !== "recommand" || !k.konfig.selskap_id || !k.konfig.nokkel_id) return null;
   return { selskapId: k.konfig.selskap_id, nokkel: { nokkelId: k.konfig.nokkel_id, hemmelighet: await dekrypter(k.hemmelighet_kryptert) } };
 }
