@@ -218,6 +218,13 @@ export function lonnsslippRuter() {
     const data = new Uint8Array(await c.req.arrayBuffer());
     if (data.length < 100) throw new ApiFeil(422, "Fila er tom.");
     if (data.length > MAKS_SLIPP) throw forStor();
+    if (mime === "application/pdf") {
+      const fil = Buffer.from(data);
+      if (!fil.subarray(0, 1024).includes("%PDF")) throw new ApiFeil(422, "Fila er ikke en PDF. Velg lønnsslippen som PDF eller bilde.");
+      // Lønnsslipper på e-post er ofte passordbeskyttet (kryptert), og da kan de ikke leses.
+      if (fil.includes("/Encrypt"))
+        throw new ApiFeil(422, "PDF-en er passordbeskyttet, så den kan ikke leses. Åpne den med passordet, lagre eller skriv den ut som en ny PDF uten passord, og prøv igjen.");
+    }
     const svar = await medKvote(kjor, orgId(c), "lonnsslipp", () =>
       generer<AiSlipper>(slippForesporsel({ mimeType: mime, data: Buffer.from(data).toString("base64") })),
     );

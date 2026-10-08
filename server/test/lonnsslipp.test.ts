@@ -124,6 +124,11 @@ describe.skipIf(!process.env.DATABASE_URL)("Lønnsslipper lest med AI", () => {
     expect(foresporsler.at(-1)!.contents[0].parts.find((p: any) => p.inlineData).inlineData.mimeType).toBe("image/jpeg");
     expect((await send(pdf, "text/plain")).data.error).toBe("Lønnsslippen må være en PDF eller et bilde (JPG, PNG, WebP eller HEIC).");
     expect((await send(new Uint8Array(50))).data.error).toBe("Fila er tom.");
+    const kryptert = new TextEncoder().encode(`%PDF-1.7\n${"x".repeat(500)}\ntrailer << /Size 9 /Root 1 0 R /Encrypt 5 0 R >>\n%%EOF`);
+    expect((await send(kryptert)).data.error).toBe(
+      "PDF-en er passordbeskyttet, så den kan ikke leses. Åpne den med passordet, lagre eller skriv den ut som en ny PDF uten passord, og prøv igjen.",
+    );
+    expect((await send(new Uint8Array(500).fill(65))).data.error).toBe("Fila er ikke en PDF. Velg lønnsslippen som PDF eller bilde.");
     neste = { ansatte: [ansatt({ stilling: "Bare stilling" })], merknader: [] };
     expect(await send(pdf)).toEqual({
       status: 422,
