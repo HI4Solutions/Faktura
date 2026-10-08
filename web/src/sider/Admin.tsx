@@ -1300,12 +1300,14 @@ function Drift({ apne }: { apne: (id: string) => void }) {
                         <Org p={p} />{" "}
                         <span className="dempet liten">
                           · {p.faktura} fakturautkast · {p.innbetaling} {p.innbetaling === 1 ? "innbetaling" : "innbetalinger"} · {p.assistent ?? 0} til
-                          assistenten
+                          assistenten{p.lonnsslipp ? ` · ${p.lonnsslipp} med lønnsslipper` : ""}
                         </span>
                       </span>
                       <span className="merker">
-                        <span className={`merke ${p.faktura + p.innbetaling + (p.assistent ?? 0) >= d.ai.grense * 0.8 ? "merke-advarsel" : "merke-noytral"}`}>
-                          {p.faktura + p.innbetaling + (p.assistent ?? 0)} av {d.ai.grense}
+                        <span
+                          className={`merke ${p.faktura + p.innbetaling + (p.assistent ?? 0) + (p.lonnsslipp ?? 0) >= d.ai.grense * 0.8 ? "merke-advarsel" : "merke-noytral"}`}
+                        >
+                          {p.faktura + p.innbetaling + (p.assistent ?? 0) + (p.lonnsslipp ?? 0)} av {d.ai.grense}
                         </span>
                       </span>
                     </li>

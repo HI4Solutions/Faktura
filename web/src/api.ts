@@ -65,6 +65,18 @@ export async function sendLyd<T = any>(sti: string, lyd: Blob): Promise<T> {
   return data;
 }
 
+// Sender en fil (f.eks. lønnsslipper til AI) rått i kroppen, med filtypen.
+export async function sendFil<T = any>(sti: string, fil: Blob, forStor = "Fila er for stor."): Promise<T> {
+  const r = await fetch(`/api${sti}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${await token()}`, "content-type": fil.type || "application/octet-stream" },
+    body: fil,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiFeil(r.status, data.error ?? (r.status === 413 ? forStor : `Feil ${r.status}`));
+  return data;
+}
+
 export type Vedlegg = { id: string; filnavn: string; type: string; storrelse: number };
 
 // Laster opp et vedlegg. Det står uten faktura til utkastet lagres med det.

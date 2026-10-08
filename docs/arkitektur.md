@@ -141,7 +141,14 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   kommandoer som tekst: Gemini
   velger handling og fyller ut feltene, serveren slår opp og svarer (betalinger, utestående),
   og alt som endrer noe (sende faktura eller utkast, registrere betaling, purre) blir forslag
-  som appen utfører med de vanlige rutene når brukeren bekrefter. Avviser Gemini svarskjemaet
+  som appen utfører med de vanlige rutene når brukeren bekrefter. Lønnsslipper (PDF eller
+  bilde, gjerne mange i én PDF) leses til opplysningene om de ansatte (`…/ai/lonnsslipp`,
+  funksjonen `lonnsslipp`, bare eier og administrator): navn, adresse, fødselsnummer,
+  kontonummer, stilling, stillingsprosent, lønn, faste tillegg og andre opplysninger lønnen
+  trenger (skattetrekk, feriepenger, pensjon, som havner i notatet). Fødselsnummer og
+  kontonummer med feil kontrollsiffer tas ut og sies fra om; svaret er rader til importen av
+  ansatte (forhåndsvisningen før noe lagres) eller fyller ut skjemaet for én ansatt, og fila
+  lagres ikke. Avviser Gemini svarskjemaet
   (400, eller 500 for innviklede skjemaer), prøver serveren én gang til uten det, med
   skjemaet i systemteksten; svaret tilpasses skjemaet og sjekkes som ellers. Plattform-
   administratorene ser svaret fra Google i feilmeldingene, og «Test AI» på adminsiden prøver

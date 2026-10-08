@@ -3,12 +3,28 @@
 // importen først, så man ser hva som blir nytt, hva som finnes fra før og hva som har feil.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, hent } from "../api";
+import { api, hent, sendFil } from "../api";
 import { Feil, Laster, useData } from "../felles";
-import { kanPersonal, kanSkrive, useKonto } from "../konto";
+import { harFunksjon, kanPersonal, kanSkrive, useKonto } from "../konto";
 import { dato, kr, orgnr } from "../format";
 import { IkonHake, IkonOpplasting } from "../ikoner";
-import { FELT, gjett, harOverskrifter, koble, lesFil, lesTekst, mal, rensCelle, tilRader, type Importtype, type Innlest } from "../importer";
+import {
+  erLonnsslipp,
+  FELT,
+  gjett,
+  harOverskrifter,
+  koble,
+  lesFil,
+  lesTekst,
+  mal,
+  rensCelle,
+  slippBlob,
+  SLIPP_ACCEPT,
+  tilRader,
+  type Importtype,
+  type Innlest,
+  type Lonnsslipper,
+} from "../importer";
 
 const MAKS: Record<Importtype, number> = { kunder: 5000, produkter: 5000, ansatte: 2000 }; // rader per import (API-ets grense)
 const VIS = 200; // rader i forhåndsvisningen
@@ -70,20 +86,23 @@ export function Importer({ type }: { type: Importtype }) {
   const [filter, settFilter] = useState<Status | "alle">("alle");
   const [importerer, settImporterer] = useState(false);
   const [ferdig, settFerdig] = useState<Svar | null>(null);
+  // Ansatte fra lønnsslipper (PDF eller bilde), lest med AI: radene er ferdige, uten kolonner å koble.
+  const [slipp, settSlipp] = useState<Lonnsslipper | null>(null);
   const foresporsel = useRef(0);
+  const aiPaa = type === "ansatte" && harFunksjon(org, "ai") && Boolean(orgData.data?.ai_tilgjengelig && orgData.data?.ai_aktiv);
 
   const ark = innlest?.ark[arkNr];
   const bredde = ark ? Math.max(0, ...ark.rader.map((r) => r.length)) : 0;
   const dataRader = useMemo(() => (ark ? ark.rader.slice(overskrift ? 1 : 0) : []), [ark, overskrift]);
-  const radnr = useMemo(() => (ark ? ark.radnr.slice(overskrift ? 1 : 0) : []), [ark, overskrift]);
+  const radnr = useMemo(() => (slipp ? slipp.ansatte.map((_, i) => i + 1) : ark ? ark.radnr.slice(overskrift ? 1 : 0) : []), [ark, overskrift, slipp]);
   const mvaRegistrert = orgData.data?.mva_registrert !== false;
   const rader = useMemo(
-    () => tilRader(type, dataRader, kobling, { kilde: innlest?.kilde ?? "tekst", mvaRegistrert, overskrifter: overskrift ? ark?.rader[0] : undefined }),
-    [type, dataRader, kobling, innlest, mvaRegistrert, overskrift, ark],
+    () => slipp?.ansatte ?? tilRader(type, dataRader, kobling, { kilde: innlest?.kilde ?? "tekst", mvaRegistrert, overskrifter: overskrift ? ark?.rader[0] : undefined }),
+    [type, dataRader, kobling, innlest, mvaRegistrert, overskrift, ark, slipp],
   );
 
   const har = (f: string) => kobling.includes(f);
-  const mangler = !ark
+  const mangler = !ark || slipp
     ? null
     : type === "kunder"
       ? !har("navn") && !har("fornavn") && !har("etternavn")
@@ -103,7 +122,7 @@ export function Importer({ type }: { type: Importtype }) {
   // Prøvekjøring i API-et hver gang radene eller valget for duplikater endres.
   useEffect(() => {
     const nr = ++foresporsel.current;
-    if (!ark || mangler || !rader.length || forMange) {
+    if ((!ark && !slipp) || mangler || !rader.length || forMange) {
       settPlan(null);
       settKontrollerer(false);
       return;
@@ -159,6 +178,15 @@ export function Importer({ type }: { type: Importtype }) {
     settLeser(true);
     settLesFeil(null);
     try {
+      if (aiPaa && erLonnsslipp(fil)) {
+        const s = await sendFil<Lonnsslipper>(`/org/${org!.id}/ai/lonnsslipp`, slippBlob(fil), "Fila er for stor. Lønnsslipper kan være høyst 12 MB (del opp en stor PDF).");
+        settFeil(null);
+        settFilter("alle");
+        settFilnavn(fil.name);
+        settSlipp(s);
+        return;
+      }
+      if (erLonnsslipp(fil) && type === "ansatte") throw new Error("Lønnsslipper (PDF eller bilde) kan leses når AI er slått på for organisasjonen. Bruk en Excel- eller CSV-fil i stedet.");
       ta(await lesFil(fil), fil.name);
     } catch (e) {
       settLesFeil((e as Error).message);
@@ -168,6 +196,7 @@ export function Importer({ type }: { type: Importtype }) {
   }
 
   function nullstill() {
+    settSlipp(null);
     settInnlest(null);
     settFilnavn("");
     settKobling([]);
@@ -246,7 +275,7 @@ export function Importer({ type }: { type: Importtype }) {
     );
   }
 
-  if (!innlest || !ark) {
+  if ((!innlest || !ark) && !slipp) {
     return (
       <>
         <div className="topp">{tittel}</div>
@@ -270,11 +299,12 @@ export function Importer({ type }: { type: Importtype }) {
           <span className="ikonboks">
             <IkonOpplasting storrelse={24} />
           </span>
-          <strong>{leser ? "Leser fila …" : "Velg en fil, eller dra den hit"}</strong>
-          <span className="dempet">Excel (.xlsx) eller CSV</span>
+          <strong>{leser ? (aiPaa ? "Leser fila … (lønnsslipper tar litt tid)" : "Leser fila …") : "Velg en fil, eller dra den hit"}</strong>
+          <span className="dempet">{aiPaa ? "Excel (.xlsx), CSV eller lønnsslipper (PDF eller bilde)" : "Excel (.xlsx) eller CSV"}</span>
           <input
             type="file"
-            accept=".xlsx,.csv,.txt,.tsv,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            disabled={leser}
+            accept={`.xlsx,.csv,.txt,.tsv,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet${aiPaa ? `,${SLIPP_ACCEPT}` : ""}`}
             onChange={(e) => {
               brukFil(e.target.files?.[0]);
               e.target.value = "";
@@ -318,6 +348,12 @@ export function Importer({ type }: { type: Importtype }) {
             <li>Velg fila her. Kolonnene kjennes igjen automatisk, og du kan endre koblingen.</li>
             <li>Se hva som blir nytt, hva som finnes fra før og hva som har feil, før noe lagres.</li>
           </ol>
+          {aiPaa && (
+            <p className="liten">
+              Har du lønnsslipper fra lønnssystemet (PDF eller bilde, gjerne alle de ansatte i én PDF)? Velg dem her, så leser AI ut navn, adresse, fødselsnummer,
+              kontonummer, stilling, lønn, faste tillegg og andre opplysninger lønnen trenger (de havner i notatet). Du ser alt før noe lagres.
+            </p>
+          )}
           <p className="liten dempet">
             Har du ingen fil?{" "}
             <button type="button" className="lenke" onClick={lastNedMal}>
@@ -331,9 +367,10 @@ export function Importer({ type }: { type: Importtype }) {
   }
 
   const tellFinnes = plan?.rader.filter((r) => r.grunn === "Finnes fra før").length ?? 0;
+  if (!ark && !slipp) return null;
   const lagres = plan ? plan.antall.ny + plan.antall.oppdater : 0;
   const filtrert = plan ? plan.rader.filter((r) => filter === "alle" || r.status === filter) : [];
-  const navnPaKolonne = (k: number) => (overskrift ? rensCelle(ark.rader[0]?.[k] ?? "") : "") || `Kolonne ${bokstav(k)}`;
+  const navnPaKolonne = (k: number) => (overskrift ? rensCelle(ark?.rader[0]?.[k] ?? "") : "") || `Kolonne ${bokstav(k)}`;
   const brukerFelt = (f: string, unntatt: number) => {
     const k = kobling.findIndex((x, i) => x === f && i !== unntatt);
     return k >= 0 ? navnPaKolonne(k) : null;
@@ -342,86 +379,118 @@ export function Importer({ type }: { type: Importtype }) {
   return (
     <>
       <div className="topp">{tittel}</div>
-      <div className="kort import-fil">
-        <div className="import-filnavn">
-          <strong>{filnavn}</strong>
-          <span className="dempet">
-            {" "}
-            · {dataRader.length} {dataRader.length === 1 ? "rad" : "rader"}
-          </span>
-        </div>
-        {innlest.ark.length > 1 && (
-          <label>
-            Ark
-            <select value={arkNr} onChange={(e) => velgArk(innlest, Number(e.target.value))}>
-              {innlest.ark.map((a, i) => (
-                <option key={i} value={i}>
-                  {a.navn}
-                </option>
+      {slipp ? (
+        <>
+          <div className="kort import-fil">
+            <div className="import-filnavn">
+              <strong>{filnavn}</strong>
+              <span className="dempet">
+                {" "}
+                · {slipp.ansatte.length} {slipp.ansatte.length === 1 ? "ansatt" : "ansatte"} lest fra lønnsslippene med AI
+              </span>
+            </div>
+            <button type="button" onClick={nullstill}>
+              Bytt fil
+            </button>
+          </div>
+          <p className="undertittel liten">
+            Sjekk opplysningene før du importerer. Andre opplysninger fra lønnsslippene (skattetrekk, feriepenger, pensjon …) legges i notatet på den ansatte.
+          </p>
+          {slipp.merknader.length > 0 && (
+            <div className="melding info">
+              {slipp.merknader.map((m) => (
+                <div key={m}>{m}</div>
               ))}
-            </select>
-          </label>
-        )}
-        <label>
-          <input
-            type="checkbox"
-            checked={overskrift}
-            onChange={(e) => {
-              settOverskrift(e.target.checked);
-              settKobling(lagKobling(ark.rader, e.target.checked));
-            }}
-          />
-          Første rad er overskrifter
-        </label>
-        <button type="button" onClick={nullstill}>
-          Bytt fil
-        </button>
-      </div>
+            </div>
+          )}
+        </>
+      ) : (
+        ark &&
+        innlest && (
+          <>
+            <div className="kort import-fil">
+              <div className="import-filnavn">
+                <strong>{filnavn}</strong>
+                <span className="dempet">
+                  {" "}
+                  · {dataRader.length} {dataRader.length === 1 ? "rad" : "rader"}
+                </span>
+              </div>
+              {innlest.ark.length > 1 && (
+                <label>
+                  Ark
+                  <select value={arkNr} onChange={(e) => velgArk(innlest, Number(e.target.value))}>
+                    {innlest.ark.map((a, i) => (
+                      <option key={i} value={i}>
+                        {a.navn}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label>
+                <input
+                  type="checkbox"
+                  checked={overskrift}
+                  onChange={(e) => {
+                    settOverskrift(e.target.checked);
+                    settKobling(lagKobling(ark.rader, e.target.checked));
+                  }}
+                />
+                Første rad er overskrifter
+              </label>
+              <button type="button" onClick={nullstill}>
+                Bytt fil
+              </button>
+            </div>
 
-      <h2>Kolonner</h2>
-      <p className="undertittel liten">Velg hva hver kolonne skal bli. Kolonner du ikke trenger, lar du stå som «Ikke importer».</p>
-      <div className="kort tabell">
-        <table className="stabel import-kolonner">
-          <thead>
-            <tr>
-              <th style={{ width: "28%" }}>Kolonne i fila</th>
-              <th>Eksempler</th>
-              <th style={{ width: 290 }}>Importer som</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: bredde }, (_, k) => {
-              const navn = navnPaKolonne(k);
-              // Fødselsnumre vises ikke i sin helhet (bare fødselsdatoen).
-              const eksempler = dataRader
-                .map((r) => rensCelle(r[k] ?? ""))
-                .filter(Boolean)
-                .slice(0, 3)
-                .map((e) => (kobling[k] === "fnr" && /^\d{11}$/.test(e.replace(/[\s.]/g, "")) ? `${e.replace(/[\s.]/g, "").slice(0, 6)}•••••` : e));
-              return (
-                <tr key={k} className={kobling[k] ? undefined : "av"}>
-                  <td className="tittel hel">{navn}</td>
-                  <td className="hel eksempler">{eksempler.length ? eksempler.map((e) => kort(e)).join(" · ") : "(tom)"}</td>
-                  <td className="hel">
-                    <select aria-label={`Importer «${navn}» som`} value={kobling[k] ?? ""} onChange={(e) => velgFelt(k, e.target.value || null)}>
-                      <option value="">Ikke importer</option>
-                      {FELT[type].map((f) => {
-                        const annen = brukerFelt(f.id, k);
-                        return (
-                          <option key={f.id} value={f.id}>
-                            {f.navn}
-                            {annen ? ` (nå: ${kort(annen, 24)})` : ""}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+            <h2>Kolonner</h2>
+            <p className="undertittel liten">Velg hva hver kolonne skal bli. Kolonner du ikke trenger, lar du stå som «Ikke importer».</p>
+            <div className="kort tabell">
+              <table className="stabel import-kolonner">
+                <thead>
+                  <tr>
+                    <th style={{ width: "28%" }}>Kolonne i fila</th>
+                    <th>Eksempler</th>
+                    <th style={{ width: 290 }}>Importer som</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: bredde }, (_, k) => {
+                    const navn = navnPaKolonne(k);
+                    // Fødselsnumre vises ikke i sin helhet (bare fødselsdatoen).
+                    const eksempler = dataRader
+                      .map((r) => rensCelle(r[k] ?? ""))
+                      .filter(Boolean)
+                      .slice(0, 3)
+                      .map((e) => (kobling[k] === "fnr" && /^\d{11}$/.test(e.replace(/[\s.]/g, "")) ? `${e.replace(/[\s.]/g, "").slice(0, 6)}•••••` : e));
+                    return (
+                      <tr key={k} className={kobling[k] ? undefined : "av"}>
+                        <td className="tittel hel">{navn}</td>
+                        <td className="hel eksempler">{eksempler.length ? eksempler.map((e) => kort(e)).join(" · ") : "(tom)"}</td>
+                        <td className="hel">
+                          <select aria-label={`Importer «${navn}» som`} value={kobling[k] ?? ""} onChange={(e) => velgFelt(k, e.target.value || null)}>
+                            <option value="">Ikke importer</option>
+                            {FELT[type].map((f) => {
+                              const annen = brukerFelt(f.id, k);
+                              return (
+                                <option key={f.id} value={f.id}>
+                                  {f.navn}
+                                  {annen ? ` (nå: ${kort(annen, 24)})` : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )
+      )}
 
       <h2>Forhåndsvisning</h2>
       {mangler && <div className="melding info">{mangler}</div>}

@@ -22,6 +22,26 @@ export interface Innlest {
 // Lesing
 // ---------------------------------------------------------------------------
 
+// Lønnsslipper (PDF eller bilde) leses med AI i stedet for som tabell (server/src/aiLonnsslipp.ts).
+const SLIPPTYPER: Record<string, string> = {
+  pdf: "application/pdf",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+};
+export const SLIPP_ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
+export const erLonnsslipp = (fil: File) => Object.values(SLIPPTYPER).includes(fil.type) || /\.(pdf|jpe?g|png|webp|heic|heif)$/i.test(fil.name);
+// Fila med riktig type (bilder fra iPhone kan komme uten type i nettleseren).
+export function slippBlob(fil: File): Blob {
+  if (Object.values(SLIPPTYPER).includes(fil.type)) return fil;
+  return new Blob([fil], { type: SLIPPTYPER[fil.name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/pdf" });
+}
+// Det AI-en leste fra lønnsslippene: rader til importen av ansatte, og det den var usikker på.
+export type Lonnsslipper = { ansatte: Record<string, unknown>[]; merknader: string[] };
+
 export async function lesFil(fil: File): Promise<Innlest> {
   const b = new Uint8Array(await fil.arrayBuffer());
   if (b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) return { ark: await lesXlsx(b), kilde: "xlsx" };

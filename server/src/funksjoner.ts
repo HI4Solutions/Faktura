@@ -16,6 +16,7 @@ const RUTER: [RegExp, string][] = [
   [/^\/(bank|banktransaksjoner)(\/|$)/, "bank"],
   [/^\/ai(\/|$)/, "ai"],
   [/^\/banktransaksjoner\/[^/]+\/ai$/, "ai"],
+  [/^\/ai\/lonnsslipp$/, "ansatte"],
   [/^\/(gjentakelser|prisreguleringer)(\/|$)/, "gjentakende"],
   [/^\/produkter\/[^/]+\/indeksregulering$/, "gjentakende"],
   [/^\/fakturaer\/(flere|utsted-flere)$/, "flere"],

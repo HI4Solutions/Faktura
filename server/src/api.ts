@@ -23,6 +23,7 @@ import { ehfRuter } from "./ehfRuter.js";
 import { bankRuter } from "./bankRuter.js";
 import { aiRuter } from "./aiFaktura.js";
 import { assistentRuter } from "./aiAssistent.js";
+import { lonnsslippRuter } from "./aiLonnsslipp.js";
 import { paaminnelseRuter } from "./paaminnelser.js";
 import { ansattRuter } from "./ansatte.js";
 import { vaktRuter } from "./vakter.js";
@@ -403,6 +404,7 @@ export function lagApi() {
   org.route("/", bankRuter());
   org.route("/", aiRuter());
   org.route("/", assistentRuter());
+  org.route("/", lonnsslippRuter());
   org.route("/", paaminnelseRuter());
   org.route("/", ansattRuter());
   org.route("/", vaktRuter());

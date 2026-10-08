@@ -629,6 +629,11 @@ ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 .hentetider strong { font-weight: 600; font-variant-numeric: tabular-nums; }
 .hentetider .liten { margin-top: 2px; }
 .kort .hentetider { margin: 12px 0; }
+/* «Fyll ut fra lønnsslipp» øverst i ansattskjemaet. */
+.fra-slipp { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; padding: 10px 12px; border: 1px dashed var(--kant); border-radius: var(--radius-s); }
+.fra-slipp button { display: inline-flex; align-items: center; gap: 6px; }
+.fra-slipp button svg { color: var(--aksent); }
+
 /* Faste tillegg på lønnen i ansattskjemaet: én rad per tillegg (to kolonner på mobil). */
 .tillegg-hjelp { margin: -2px 0 10px; }
 .tillegg-rad { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 1.25fr) 36px; gap: 0 10px; align-items: end; }

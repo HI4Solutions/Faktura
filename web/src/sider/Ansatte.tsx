@@ -1,15 +1,17 @@
 // Ansatte: registeret over de ansatte (personalia, ansettelse og lønn med faste tillegg) og deres
 // egen innlogging for timeføring (rollen ansatt). Eier og administrator endrer og kan importere
-// ansatte fra et annet system (Importer.tsx); regnskap ser. Fødselsnummeret lagres kryptert og
-// vises aldri igjen, bare at det er registrert.
-import { useEffect, useState, type FormEvent } from "react";
+// ansatte fra et annet system (Importer.tsx), eller fylle ut skjemaet fra en lønnsslipp som AI
+// leser (server/src/aiLonnsslipp.ts); regnskap ser. Fødselsnummeret lagres kryptert og vises
+// aldri igjen, bare at det er registrert.
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, hent } from "../api";
+import { api, hent, sendFil } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
 import { harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag } from "../format";
 import { fnrGyldig, fodselsdato, kontonrGyldig, visKontonr } from "../personnummer";
-import { IkonAnsatte, IkonLukk } from "../ikoner";
+import { IkonAnsatte, IkonGnist, IkonLukk } from "../ikoner";
+import { slippBlob, SLIPP_ACCEPT, type Lonnsslipper } from "../importer";
 import { tallformat } from "../uke";
 import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
 import { AnsattFravaer, FravaerDialog, type Fravaer } from "./Fravaer";
@@ -314,6 +316,91 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
   const [fravaerVersjon, settFravaerVersjon] = useState(0);
   const h = useHandling();
+  // Lønnsslipp (PDF eller bilde) lest med AI: fyller ut skjemaet, som brukeren ser over og lagrer.
+  const orgData = useData(() => (kanEndre ? hent<{ ai_tilgjengelig: boolean; ai_aktiv: boolean }>(`/org/${org!.id}`) : Promise.resolve(null)), [org?.id]);
+  const aiPaa = kanEndre && harFunksjon(org, "ai") && Boolean(orgData.data?.ai_tilgjengelig && orgData.data?.ai_aktiv);
+  const slippFelt = useRef<HTMLInputElement>(null);
+  const [leserSlipp, settLeserSlipp] = useState(false);
+  const [slippMerknader, settSlippMerknader] = useState<string[]>([]);
+  async function fraLonnsslipp(fil: File) {
+    settLeserSlipp(true);
+    settMelding(null);
+    settSlippMerknader([]);
+    h.settFeil(null);
+    try {
+      const s = await sendFil<Lonnsslipper>(`/org/${org!.id}/ai/lonnsslipp`, slippBlob(fil), "Fila er for stor. En lønnsslipp kan være høyst 12 MB.");
+      // Flere slipper i fila: den med samme navn som i skjemaet, ellers den første.
+      const navn = (x: Record<string, unknown>) => `${x.fornavn ?? ""} ${x.etternavn ?? ""}`.trim().toLowerCase();
+      const x = (s.ansatte.find((y) => navn(y) === `${a.fornavn} ${a.etternavn}`.trim().toLowerCase()) ?? s.ansatte[0]) as Record<string, any>;
+      const ny: Partial<typeof a> = {};
+      const fylt: string[] = [];
+      const tekstfelt = (felt: "fornavn" | "etternavn" | "adresse" | "postnr" | "poststed" | "stilling" | "ansatt_fra", navn: string) => {
+        if (typeof x[felt] === "string" && x[felt]) {
+          ny[felt] = x[felt];
+          if (!fylt.includes(navn)) fylt.push(navn);
+        }
+      };
+      tekstfelt("fornavn", "navn");
+      tekstfelt("etternavn", "navn");
+      tekstfelt("adresse", "adresse");
+      tekstfelt("postnr", "adresse");
+      tekstfelt("poststed", "adresse");
+      if (x.fnr) {
+        Object.assign(ny, { fnr: x.fnr, endreFnr: true, fjernFnr: false, fodselsdato: fodselsdato(x.fnr) ?? a.fodselsdato });
+        fylt.push("fødselsnummer");
+      } else if (x.fodselsdato) {
+        ny.fodselsdato = x.fodselsdato;
+        fylt.push("fødselsdato");
+      }
+      if (x.kontonr) {
+        ny.kontonr = visKontonr(x.kontonr);
+        fylt.push("kontonummer");
+      }
+      tekstfelt("stilling", "stilling");
+      if (typeof x.stillingsprosent === "number") {
+        ny.stillingsprosent = tekstTall(x.stillingsprosent);
+        fylt.push("stillingsprosent");
+      }
+      tekstfelt("ansatt_fra", "ansatt fra");
+      if (x.lonnstype) ny.lonnstype = x.lonnstype;
+      if (typeof x.maanedslonn === "number") ny.maanedslonn = tekstTall(x.maanedslonn);
+      if (typeof x.timelonn === "number") ny.timelonn = tekstTall(x.timelonn);
+      if (x.lonnstype || x.maanedslonn != null || x.timelonn != null) fylt.push("lønn");
+      if (typeof x.notat === "string" && x.notat && !a.notat.includes(x.notat)) {
+        ny.notat = a.notat.trim() ? `${a.notat.trim()}\n${x.notat}` : x.notat;
+        fylt.push("notat (andre opplysninger)");
+      }
+      // Faste tillegg: et med samme navn får beløpet fra slippen, de andre legges til.
+      const fraSlipp = (Array.isArray(x.tillegg) ? x.tillegg : []) as { navn: string; belop: number; per: "maaned" | "time" }[];
+      if (fraSlipp.length) {
+        settTillegg((l) => {
+          const liste = [...l];
+          for (const t of fraSlipp) {
+            const i = liste.findIndex((y) => y.navn.trim().toLowerCase() === t.navn.toLowerCase());
+            if (i >= 0) liste[i] = { ...liste[i]!, belop: tekstTall(t.belop), per: t.per };
+            else liste.push({ navn: t.navn, belop: tekstTall(t.belop), per: t.per, fra: "", til: "" });
+          }
+          return liste;
+        });
+        fylt.push(fraSlipp.length === 1 ? "1 fast tillegg" : `${fraSlipp.length} faste tillegg`);
+      }
+      settA((gammel) => ({ ...gammel, ...ny }));
+      settMelding(fylt.length ? `Fylt ut fra lønnsslippen: ${fylt.join(", ")}. Sjekk feltene, og trykk Lagre.` : "Fant ingen opplysninger å fylle ut i lønnsslippen.");
+      // Merknader om de andre i fila (f.eks. et kontonummer som ikke stemmer) gjelder ikke her.
+      const valgt = `${x.fornavn ?? ""} ${x.etternavn ?? ""}`.trim();
+      const andre = s.ansatte.map((y) => `${y.fornavn ?? ""} ${y.etternavn ?? ""}`.trim()).filter((n) => n && n !== valgt);
+      settSlippMerknader([
+        ...(s.ansatte.length > 1
+          ? [`Fila hadde ${s.ansatte.length} lønnsslipper. Opplysningene til ${valgt} er brukt; bruk Importer på Ansatte-siden for å legge inn alle.`]
+          : []),
+        ...s.merknader.filter((m) => m.includes(valgt) || !andre.some((n) => m.includes(n))),
+      ]);
+    } catch (e) {
+      h.settFeil((e as Error).message);
+    } finally {
+      settLeserSlipp(false);
+    }
+  }
   const sett = (e: Partial<typeof a>) => settA({ ...a, ...e });
   const felt = (navn: keyof typeof a) => ({
     value: String(a[navn] ?? ""),
@@ -396,9 +483,35 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   return (
     <>
     <form onSubmit={lagre}>
+      {aiPaa && (
+        <div className="fra-slipp">
+          <button type="button" disabled={leserSlipp || h.opptatt} onClick={() => slippFelt.current?.click()}>
+            {leserSlipp ? <span className="spinner" /> : <IkonGnist storrelse={16} />} {leserSlipp ? "Leser lønnsslippen …" : "Fyll ut fra lønnsslipp"}
+          </button>
+          <span className="liten dempet">PDF eller bilde. AI leser opplysningene, og du ser over dem før du lagrer.</span>
+          <input
+            ref={slippFelt}
+            type="file"
+            hidden
+            accept={SLIPP_ACCEPT}
+            onChange={(e) => {
+              const fil = e.target.files?.[0];
+              e.target.value = "";
+              if (fil) void fraLonnsslipp(fil);
+            }}
+          />
+        </div>
+      )}
       {melding && (
         <div className="melding ok" role="status">
           {melding}
+        </div>
+      )}
+      {slippMerknader.length > 0 && (
+        <div className="melding info">
+          {slippMerknader.map((m) => (
+            <div key={m}>{m}</div>
+          ))}
         </div>
       )}
       <fieldset className="naken" disabled={!kanEndre}>
