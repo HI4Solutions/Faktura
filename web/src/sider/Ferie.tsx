@@ -5,7 +5,7 @@
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
-import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../felles";
+import { Dialog, Feil, Laster, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
 import { erAdmin, useKonto } from "../konto";
 import { dato, iDag } from "../format";
 import { IkonHoyre, IkonVenstre } from "../ikoner";
@@ -104,6 +104,7 @@ function Ferieoversikt({ aar, velg }: { aar: number; velg: (aar: number) => void
   const [valgt, settValgt] = useState<Saldo | null>(null);
   const [melding, settMelding] = useState<string | null>(null);
   const oppdater = () => settVersjon((v) => v + 1);
+  useNarDataEndres(oppdater);
 
   return (
     <>
@@ -267,6 +268,7 @@ export function AnsattFerie({ ansattId, aar, leder, endret }: { ansattId: string
   const { org } = useKonto();
   const [versjon, settVersjon] = useState(0);
   const d = useData(() => hent<Detaljer>(`/org/${org!.id}/feriebank/${ansattId}?aar=${aar}`), [org?.id, ansattId, aar, versjon]);
+  useNarDataEndres(() => settVersjon((v) => v + 1));
   const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
   const [melding, settMelding] = useState<string | null>(null);
   const oppdater = (m?: string) => {

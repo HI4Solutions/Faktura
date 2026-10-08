@@ -1,15 +1,21 @@
 // AI-assistenten: en kommando med tekst (eller tale, som skrives ned og vises først, se
 // aiTale.ts) fra hvor som helst i appen («send faktura
 // til Kari for husleie oktober», «har Fjordline betalt?», «registrer betaling på faktura
-// 1043», «send purring på alle forfalte»). Gemini finner ut hva brukeren vil og fyller ut
+// 1043», «send purring på alle forfalte»), og for personalmodulen («Kari er syk i dag»,
+// «før 7,5 timer i dag», se aiPersonal.ts). Gemini finner ut hva brukeren vil og fyller ut
 // feltene; her slås kunder og fakturaer opp, spørsmål besvares, og alt som endrer noe blir
 // et forslag som brukeren bekrefter i appen. Forslagene utføres med de vanlige rutene i
 // API-et, med brukerens tilgang og de samme kontrollene som ellers.
+//
+// Hva assistenten kan, følger brukeren: med tilgang til fakturaene (alle roller unntatt
+// ansatt) fakturadelen, og med personalmodulen slått på personaldelen (for dem som ser de
+// ansatte, og for den som selv er ansatt). Den ansatte (rollen ansatt) får bare personaldelen,
+// uten kunder og fakturaer. Hver kombinasjon har sitt eget faste svarskjema.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
-import { aiPaa, enLinje, generer, medKvote, type Del, type Skjema } from "./ai.js";
+import { aiPaa, enLinje, generer, iDagOslo, medKvote, type Del, type Skjema } from "./ai.js";
 import {
   datoOgSelger,
   fakturaRegler,
@@ -25,14 +31,34 @@ import {
 import { gammelApp, taleRute } from "./aiTale.js";
 import { sammeNavn } from "./bank.js";
 import { dato, iDag, kr, summer } from "./regler.js";
+import {
+  hentPersonal,
+  personalFelt,
+  PERSONAL_HANDLINGER,
+  PERSONAL_SIDER,
+  personalHandlingtekst,
+  personalHjelp,
+  personalRegister,
+  personalRegler,
+  personalVis,
+  utforPersonal,
+  visPersonal,
+  type PersonalGrunnlag,
+  type PersonalHandling,
+  type PersonalKommando,
+  type PForslag,
+} from "./aiPersonal.js";
 
-export const HANDLINGER = ["ny_faktura", "send_utkast", "send_igjen", "sjekk_betaling", "registrer_betaling", "send_purring", "utestaende", "vis", "annet"] as const;
-export const SIDER = ["ingen", "faktura", "fakturaer", "utkast", "ubetalte", "ny_faktura", "innbetalinger", "kunder", "produkter", "gjentakende", "rapporter", "innstillinger", "oversikt"] as const;
-type Handling = (typeof HANDLINGER)[number];
-type Side = (typeof SIDER)[number];
+export const FAKTURA_HANDLINGER = ["ny_faktura", "send_utkast", "send_igjen", "sjekk_betaling", "registrer_betaling", "send_purring", "utestaende"] as const;
+export const HANDLINGER = [...FAKTURA_HANDLINGER, "vis", "annet"] as const;
+const FAKTURA_SIDER = ["faktura", "fakturaer", "utkast", "ubetalte", "ny_faktura", "innbetalinger", "kunder", "produkter", "gjentakende", "rapporter", "innstillinger", "oversikt"] as const;
+export const SIDER = ["ingen", ...FAKTURA_SIDER] as const;
+type FakturaHandling = (typeof FAKTURA_HANDLINGER)[number];
+type Handling = FakturaHandling | PersonalHandling | "vis" | "annet";
+type Side = (typeof SIDER)[number] | (typeof PERSONAL_SIDER)[number];
 
-// Svaret fra modellen.
-export type AiKommando = {
+// Svaret fra modellen (personalfeltene bare når personaldelen er med).
+export type AiKommando = Partial<PersonalKommando> & {
   handling: Handling;
   kunde: string | null;
   kunde_navn: string | null;
@@ -60,7 +86,8 @@ export type Forslag =
   | { type: "send_utkast"; tekst: string; knapp: string; faktura_id: string }
   | { type: "send_igjen"; tekst: string; knapp: string; faktura_id: string; fakturanummer: number }
   | { type: "betaling"; tekst: string; knapp: string; faktura_id: string; fakturanummer: number; belop: number; dato: string }
-  | { type: "purring"; tekst: string; knapp: string; faktura_id: string; fakturanummer: number; purring: "paaminnelse" | "inkassovarsel" };
+  | { type: "purring"; tekst: string; knapp: string; faktura_id: string; fakturanummer: number; purring: "paaminnelse" | "inkassovarsel" }
+  | PForslag;
 export type Lenke = { tekst: string; til: string };
 export type AssistentSvar = {
   tekst: string;
@@ -73,63 +100,80 @@ export type AssistentSvar = {
 const tekst = (beskrivelse: string, nullable = true): Skjema => ({ type: "STRING", nullable, description: beskrivelse });
 const u = utkastSkjema.properties!;
 
-export const assistentSkjema: Skjema = {
-  type: "OBJECT",
-  properties: {
-    handling: { type: "STRING", enum: [...HANDLINGER], description: "Hva brukeren vil" },
-    kunde: tekst("Id-en til kunden i kundelisten (K1, K2 …), eller null"),
-    kunde_navn: tekst("Kunden slik brukeren sa det, eller null"),
-    betaler: tekst("Navnet på den brukeren spør om har betalt, når det ikke er en kunde i listen, ellers null"),
-    fakturanumre: { type: "ARRAY", items: { type: "INTEGER" }, description: "Fakturanumrene brukeren nevner, eller som samtalen viser til" },
-    alle_forfalte: { type: "BOOLEAN", description: "true når brukeren vil purre alle forfalte fakturaer" },
-    belop: { type: "NUMBER", nullable: true, description: "Beløp i kroner brukeren sier at er betalt, eller null" },
-    dato: tekst("Betalingsdatoen brukeren sier (ÅÅÅÅ-MM-DD), eller null"),
-    send: { type: "BOOLEAN", description: "ny_faktura: true når fakturaen skal sendes med en gang, false for et utkast" },
-    side: { type: "STRING", enum: [...SIDER], description: "vis: siden brukeren vil åpne, ellers ingen" },
-    linjer: u.linjer,
-    fakturadato: u.fakturadato,
-    forfallsdato: u.forfallsdato,
-    periode_fra: u.periode_fra,
-    periode_til: u.periode_til,
-    deres_referanse: u.deres_referanse,
-    kommentar: u.kommentar,
-    svar: tekst("annet: et kort svar på norsk til brukeren, ellers null"),
-    merknader: { type: "ARRAY", items: { type: "STRING" }, description: "Korte setninger om det brukeren bør sjekke" },
-  },
-  required: [
-    "handling", "kunde", "kunde_navn", "betaler", "fakturanumre", "alle_forfalte", "belop", "dato", "send", "side", "linjer",
-    "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "svar", "merknader",
-  ],
-  propertyOrdering: [
-    "handling", "kunde", "kunde_navn", "betaler", "fakturanumre", "alle_forfalte", "belop", "dato", "send", "side", "linjer",
-    "fakturadato", "forfallsdato", "periode_fra", "periode_til", "deres_referanse", "kommentar", "svar", "merknader",
-  ],
+const fakturaFoer: Record<string, Skjema> = {
+  kunde: tekst("Id-en til kunden i kundelisten (K1, K2 …), eller null"),
+  kunde_navn: tekst("Kunden slik brukeren sa det, eller null"),
+  betaler: tekst("Navnet på den brukeren spør om har betalt, når det ikke er en kunde i listen, ellers null"),
+  fakturanumre: { type: "ARRAY", items: { type: "INTEGER" }, description: "Fakturanumrene brukeren nevner, eller som samtalen viser til" },
+  alle_forfalte: { type: "BOOLEAN", description: "true når brukeren vil purre alle forfalte fakturaer" },
+  belop: { type: "NUMBER", nullable: true, description: "Beløp i kroner brukeren sier at er betalt, eller null" },
+  dato: tekst("Betalingsdatoen brukeren sier (ÅÅÅÅ-MM-DD), eller null"),
+  send: { type: "BOOLEAN", description: "ny_faktura: true når fakturaen skal sendes med en gang, false for et utkast" },
+};
+const fakturaEtter: Record<string, Skjema> = {
+  linjer: u.linjer!,
+  fakturadato: u.fakturadato!,
+  forfallsdato: u.forfallsdato!,
+  periode_fra: u.periode_fra!,
+  periode_til: u.periode_til!,
+  deres_referanse: u.deres_referanse!,
+  kommentar: u.kommentar!,
 };
 
-export function assistentSystem(g: Grunnlag, naa = new Date()): string {
+// Svarskjemaet for fakturaer, personal eller begge. Hver variant er en fast verdi, så det
+// huskes riktig når Gemini avviser et skjema (ai.ts).
+function lagSkjema(faktura: boolean, personal: boolean): Skjema {
+  const handlinger = [...(faktura ? FAKTURA_HANDLINGER : []), ...(personal ? PERSONAL_HANDLINGER : []), "vis", "annet"];
+  const sider = ["ingen", ...(faktura ? FAKTURA_SIDER : []), ...(personal ? PERSONAL_SIDER : [])];
+  const properties: Record<string, Skjema> = {
+    handling: { type: "STRING", enum: handlinger, description: "Hva brukeren vil" },
+    ...(faktura ? fakturaFoer : {}),
+    side: { type: "STRING", enum: sider, description: "vis: siden brukeren vil åpne, ellers ingen" },
+    ...(faktura ? fakturaEtter : {}),
+    ...(personal ? personalFelt : {}),
+    svar: tekst("annet: et kort svar på norsk til brukeren, ellers null"),
+    merknader: { type: "ARRAY", items: { type: "STRING" }, description: "Korte setninger om det brukeren bør sjekke" },
+  };
+  return { type: "OBJECT", properties, required: Object.keys(properties), propertyOrdering: Object.keys(properties) };
+}
+export const SKJEMAER = { faktura: lagSkjema(true, false), personal: lagSkjema(false, true), begge: lagSkjema(true, true) };
+export const assistentSkjema = SKJEMAER.faktura;
+export type Modus = keyof typeof SKJEMAER;
+// Det assistenten har å gå på: registrene for fakturaer og for personal (null: ikke med).
+export type AssistentGrunnlag = { g: Grunnlag | null; p: PersonalGrunnlag | null };
+const modus = (gr: AssistentGrunnlag): Modus => (gr.g && gr.p ? "begge" : gr.p ? "personal" : "faktura");
+
+export function assistentSystem(gr: AssistentGrunnlag, naa = new Date()): string {
+  const { g, p } = gr;
+  const { dato: idag, ukedag } = iDagOslo(naa);
   return [
-    "Du er assistenten i fakturaprogrammet HI4 Faktura. Brukeren gir en kommando eller stiller et spørsmål (skrevet eller sagt og skrevet ned). Finn ut hva brukeren vil, og fyll ut feltene. Svar bare med JSON etter skjemaet. Du utfører ingenting selv: appen slår opp, svarer og ber brukeren bekrefte alt som endrer noe.",
+    `Du er assistenten i HI4 Faktura${g && p ? ", for fakturaer og for personal (ansatte, vakter, fravær, timer og ferie)" : p ? " for personal: ansatte, vakter, fravær, timer og ferie" : ", et fakturaprogram"}. Brukeren gir en kommando eller stiller et spørsmål (skrevet eller sagt og skrevet ned). Finn ut hva brukeren vil, og fyll ut feltene. Svar bare med JSON etter skjemaet. Du utfører ingenting selv: appen slår opp, svarer og ber brukeren bekrefte alt som endrer noe.`,
     "",
-    datoOgSelger(g, naa),
+    g ? datoOgSelger(g, naa) : `Dagens dato er ${idag} (${ukedag}).`,
     "",
     "handling (velg én):",
-    "- ny_faktura: lage eller sende en ny faktura («send faktura til Kari for husleie oktober», «lag en faktura til Fjordline på tre timer konsulent»). send er true når brukeren vil sende den med en gang («send», «fakturer»), false når brukeren vil lage et utkast («lag», «sett opp»).",
-    "- send_utkast: sende et utkast som allerede er laget («send utkastet til Kari», «send fakturaen jeg laget til Fjordline»). Utkast har ikke fakturanummer.",
-    "- send_igjen: sende en faktura som allerede er sendt, på nytt («send faktura 1043 igjen», «send 1043 på nytt»).",
-    "- sjekk_betaling: spørsmål om betaling («har Kari betalt?», «har det kommet penger fra Fjordline?», «er faktura 1043 betalt?», «har det kommet noen betalinger?»).",
-    "- registrer_betaling: registrere en betaling («registrer betaling på faktura 1043», «Kari har betalt 5000 kontant i går»). belop og dato bare når brukeren sier dem.",
-    "- send_purring: sende purring eller betalingspåminnelse («send purring på 1043», «purr Kari»). «Send purring til alle som ikke har betalt» gir alle_forfalte = true.",
-    "- utestaende: oversikt over det kundene skylder («hvem skylder oss penger?», «hvor mye er utestående?», «hvilke fakturaer har forfalt?»).",
-    "- vis: åpne noe i appen («åpne faktura 1043» gir side faktura, «gå til innbetalinger», «vis utkastene» gir utkast, «vis ubetalte fakturaer» gir ubetalte).",
-    "- annet: alt annet, også spørsmål om hva assistenten kan, og det den ikke kan gjøre (kreditere, slette, endre innstillinger eller kunder). Skriv da et kort, vennlig svar på norsk i svar, gjerne med hvor i appen det gjøres.",
+    ...(g
+      ? [
+          "- ny_faktura: lage eller sende en ny faktura («send faktura til Kari for husleie oktober», «lag en faktura til Fjordline på tre timer konsulent»). send er true når brukeren vil sende den med en gang («send», «fakturer»), false når brukeren vil lage et utkast («lag», «sett opp»).",
+          "- send_utkast: sende et utkast som allerede er laget («send utkastet til Kari», «send fakturaen jeg laget til Fjordline»). Utkast har ikke fakturanummer.",
+          "- send_igjen: sende en faktura som allerede er sendt, på nytt («send faktura 1043 igjen», «send 1043 på nytt»).",
+          "- sjekk_betaling: spørsmål om betaling («har Kari betalt?», «har det kommet penger fra Fjordline?», «er faktura 1043 betalt?», «har det kommet noen betalinger?»).",
+          "- registrer_betaling: registrere en betaling («registrer betaling på faktura 1043», «Kari har betalt 5000 kontant i går»). belop og dato bare når brukeren sier dem.",
+          "- send_purring: sende purring eller betalingspåminnelse («send purring på 1043», «purr Kari»). «Send purring til alle som ikke har betalt» gir alle_forfalte = true.",
+          "- utestaende: oversikt over det kundene skylder («hvem skylder oss penger?», «hvor mye er utestående?», «hvilke fakturaer har forfalt?»).",
+        ]
+      : []),
+    ...(p ? personalHandlingtekst : []),
+    `- vis: åpne noe i appen (${[g ? "«åpne faktura 1043» gir side faktura, «gå til innbetalinger», «vis utkastene» gir utkast, «vis ubetalte fakturaer» gir ubetalte" : "", p ? personalVis : ""].filter(Boolean).join("; ")}).`,
+    `- annet: alt annet, også spørsmål om hva assistenten kan, og det den ikke kan gjøre (${[g ? "kreditere, slette, endre innstillinger eller kunder" : "", p ? "slette vakter eller fravær, endre de ansatte, lønnen eller den faste arbeidsplanen" : ""].filter(Boolean).join("; ")}). Skriv da et kort, vennlig svar på norsk i svar, gjerne med hvor i appen det gjøres.`,
     "",
     "Regler:",
-    "- fakturanumre: bare numre brukeren sier, eller som står i samtalen før («den», «den fakturaen»). Aldri gjett et nummer.",
+    ...(g ? ["- fakturanumre: bare numre brukeren sier, eller som står i samtalen før («den», «den fakturaen»). Aldri gjett et nummer."] : []),
     "- Bruk samtalen før til å forstå «den», «henne», «samme kunde» og lignende.",
     "- Datoer som ÅÅÅÅ-MM-DD. Regn om «i går», «på fredag» og «om 14 dager» fra dagens dato.",
     "- Felt som ikke gjelder handlingen: null, tom liste, false, eller side ingen.",
-    "- For ny_faktura gjelder også reglene for fakturaer:",
-    ...fakturaRegler,
+    ...(p ? personalRegler : []),
+    ...(g ? ["- For ny_faktura gjelder også reglene for fakturaer:", ...fakturaRegler] : []),
     "- merknader: korte setninger på norsk om noe du var usikker på. Tom liste når alt er klart.",
   ].join("\n");
 }
@@ -138,12 +182,14 @@ export type Melding = { rolle: "bruker" | "assistent"; tekst: string };
 
 // Forespørselen til modellen: registrene, samtalen så langt og kommandoen (ruten under og
 // «Test AI» på adminsiden).
-export function assistentForesporsel(g: Grunnlag, kommando: string, historikk: Melding[] = [], naa = new Date()): { system: string; deler: Del[]; skjema: Skjema } {
-  const deler: Del[] = [{ text: registertekst(g) }];
+export function assistentForesporsel(gr: AssistentGrunnlag, kommando: string, historikk: Melding[] = [], naa = new Date()): { system: string; deler: Del[]; skjema: Skjema } {
+  const deler: Del[] = [];
+  if (gr.g) deler.push({ text: registertekst(gr.g) });
+  if (gr.p) deler.push({ text: personalRegister(gr.p) });
   if (historikk.length)
     deler.push({ text: `Samtalen så langt:\n${historikk.map((h) => `${h.rolle === "bruker" ? "Brukeren" : "Assistenten"}: ${enLinje(h.tekst, 600)}`).join("\n")}` });
   deler.push({ text: `Kommandoen:\n${kommando}` });
-  return { system: assistentSystem(g, naa), deler, skjema: assistentSkjema };
+  return { system: assistentSystem(gr, naa), deler, skjema: SKJEMAER[modus(gr)] };
 }
 
 // ---------------------------------------------------------------------------
@@ -532,7 +578,7 @@ async function utestaende(k: Kontekst): Promise<Partial<AssistentSvar>> {
   return { tekst: deler.join(" "), lenker: [{ tekst: "Ubetalte fakturaer", til: "/fakturaer?status=utstedt" }, { tekst: "Reskontro", til: "/rapporter" }] };
 }
 
-const SIDEADRESSER: Record<Exclude<Side, "ingen" | "faktura">, [string, string]> = {
+const SIDEADRESSER: Record<Exclude<(typeof SIDER)[number], "ingen" | "faktura">, [string, string]> = {
   fakturaer: ["/fakturaer", "fakturaene"],
   utkast: ["/fakturaer?status=utkast", "utkastene"],
   ubetalte: ["/fakturaer?status=utstedt", "de ubetalte fakturaene"],
@@ -553,10 +599,8 @@ async function vis(k: Kontekst, ai: AiKommando, kunde: Kunde | null): Promise<Pa
     if (!funnet.length) return { tekst: mangler ?? "Fant ikke fakturaen." };
     return { tekst: `Åpner faktura ${funnet[0].fakturanummer} til ${funnet[0].kunde}.`, gaa_til: `/fakturaer/${funnet[0].id}` };
   }
-  if (ai.side !== "ingen" && ai.side !== "faktura" && SIDEADRESSER[ai.side]) {
-    const [til, navn] = SIDEADRESSER[ai.side];
-    return { tekst: `Åpner ${navn}.`, gaa_til: til };
-  }
+  const side = SIDEADRESSER[ai.side as keyof typeof SIDEADRESSER];
+  if (side) return { tekst: `Åpner ${side[1]}.`, gaa_til: side[0] };
   if (kunde) return sjekkBetaling(k, { ...ai, fakturanumre: [] }, kunde);
   return { tekst: "Hva vil du åpne? Si for eksempel «åpne faktura 1043» eller «gå til innbetalinger»." };
 }
@@ -564,28 +608,43 @@ async function vis(k: Kontekst, ai: AiKommando, kunde: Kunde | null): Promise<Pa
 export const HJELP =
   "Jeg kan lage og sende fakturaer, sende utkast, sjekke om noen har betalt, registrere betalinger, sende purringer og vise hva som er utestående. Si for eksempel «Send faktura til Kari Hansen for husleie oktober» eller «Har Fjordline betalt?».";
 
-// Gjør svaret fra modellen om til det appen viser.
-export async function utfor(k: Kontekst, ai: AiKommando): Promise<AssistentSvar> {
+// Fakturadelen.
+async function utforFaktura(k: Kontekst, handling: FakturaHandling, ai: AiKommando): Promise<Partial<AssistentSvar>> {
   const kunde = finnKunde(ai, k.g);
-  const handling: Handling = HANDLINGER.includes(ai.handling) ? ai.handling : "annet";
   // En kunde som ikke finnes, sies tydelig (unntatt for nye fakturaer, som kan åpnes i skjemaet).
-  const ukjent = !kunde && enLinje(ai.kunde_navn, 200) && handling !== "ny_faktura" && handling !== "annet" && !numre(ai).length;
+  const ukjent = !kunde && enLinje(ai.kunde_navn, 200) && handling !== "ny_faktura" && !numre(ai).length;
+  if (ukjent && handling !== "sjekk_betaling") return { tekst: `Fant ikke «${enLinje(ai.kunde_navn, 200)}» i kunderegisteret.` };
+  if (handling === "ny_faktura") return nyFaktura(k, ai);
+  if (handling === "send_utkast") return sendUtkast(k, ai, kunde);
+  if (handling === "send_igjen") return sendIgjen(k, ai, kunde);
+  if (handling === "sjekk_betaling") return sjekkBetaling(k, ukjent ? { ...ai, betaler: ai.betaler ?? ai.kunde_navn } : ai, kunde);
+  if (handling === "registrer_betaling") return registrerBetaling(k, ai, kunde);
+  if (handling === "send_purring") return sendPurring(k, ai, kunde);
+  return kunde ? sjekkBetaling(k, ai, kunde) : utestaende(k);
+}
+
+// Alt assistenten har for brukeren: fakturadelen (f) og personaldelen (p), null når de ikke er med.
+export type Felles = { db: Db; orgId: string; iDag: string; f: { g: Grunnlag; kan: Rettigheter; org: Org } | null; p: PersonalGrunnlag | null };
+const hjelp = (s: Felles) => [s.f ? HJELP : "", s.p ? personalHjelp(s.p) : ""].filter(Boolean).join(" ");
+const erFaktura = (h: string): h is FakturaHandling => (FAKTURA_HANDLINGER as readonly string[]).includes(h);
+const erPersonal = (h: string): h is PersonalHandling => (PERSONAL_HANDLINGER as readonly string[]).includes(h);
+
+// Gjør svaret fra modellen om til det appen viser.
+export async function utfor(s: Felles, ai: AiKommando): Promise<AssistentSvar> {
+  const k: Kontekst | null = s.f ? { db: s.db, orgId: s.orgId, iDag: s.iDag, ...s.f } : null;
+  const h = typeof ai.handling === "string" ? ai.handling : "annet";
   let r: Partial<AssistentSvar>;
-  if (ukjent && handling !== "sjekk_betaling") r = { tekst: `Fant ikke «${enLinje(ai.kunde_navn, 200)}» i kunderegisteret.` };
-  else if (handling === "ny_faktura") r = await nyFaktura(k, ai);
-  else if (handling === "send_utkast") r = await sendUtkast(k, ai, kunde);
-  else if (handling === "send_igjen") r = await sendIgjen(k, ai, kunde);
-  else if (handling === "sjekk_betaling") r = await sjekkBetaling(k, ukjent ? { ...ai, betaler: ai.betaler ?? ai.kunde_navn } : ai, kunde);
-  else if (handling === "registrer_betaling") r = await registrerBetaling(k, ai, kunde);
-  else if (handling === "send_purring") r = await sendPurring(k, ai, kunde);
-  else if (handling === "utestaende") r = kunde ? await sjekkBetaling(k, ai, kunde) : await utestaende(k);
-  else if (handling === "vis") r = await vis(k, ai, kunde);
-  else r = { tekst: enLinje(ai.svar, 600) || HJELP };
-  return { tekst: r.tekst || HJELP, forslag: r.forslag ?? [], lenker: (r.lenker ?? []).slice(0, 5), gaa_til: r.gaa_til ?? null, utkast: r.utkast ?? null };
+  if (k && erFaktura(h)) r = await utforFaktura(k, h, ai);
+  else if (s.p && erPersonal(h)) r = await utforPersonal({ db: s.db, orgId: s.orgId, p: s.p, iDag: s.iDag }, h, ai);
+  else if (h === "vis") {
+    const side = s.p && ai.side && ai.side !== "ingen" ? visPersonal(s.p, ai.side) : null;
+    r = side ?? (k ? await vis(k, ai, finnKunde(ai, k.g)) : { tekst: "Hva vil du åpne? Si for eksempel «åpne tavla» eller «gå til timene»." });
+  } else r = { tekst: enLinje(ai.svar, 600) || hjelp(s) };
+  return { tekst: r.tekst || hjelp(s), forslag: r.forslag ?? [], lenker: (r.lenker ?? []).slice(0, 5), gaa_til: r.gaa_til ?? null, utkast: r.utkast ?? null };
 }
 
 // ---------------------------------------------------------------------------
-// Ruten
+// Rutene
 // ---------------------------------------------------------------------------
 
 const kroppSkjema = z.object({
@@ -598,8 +657,26 @@ const kroppSkjema = z.object({
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
 
+// Fakturadelen er med for dem som har tilgang til fakturaene (ikke i regnskapsbyråets egen
+// organisasjon, som ikke fakturerer i appen); personaldelen når personalmodulen er slått på.
+async function hvaBrukerenHar(db: Db, org: string) {
+  await db.query("select faktura.krev($1, 'medlem')", [org]);
+  const o = (await en<{ les: boolean; type: string; ai_aktiv: boolean }>(db, "select faktura.kan(id, 'les') as les, type, ai_aktiv from faktura.organisasjoner where id = $1", [org]))!;
+  return { faktura: o.les && o.type !== "regnskapsbyraa", ai_aktiv: o.ai_aktiv, p: await hentPersonal(db, org) };
+}
+
 export function assistentRuter() {
   const r = new Hono();
+
+  // Hva assistenten kan for brukeren (appen viser knappen og eksemplene etter det).
+  r.get("/ai/assistent/status", async (c) => {
+    const h = await somBruker(c.get("bruker").id, (db) => hvaBrukerenHar(db, orgId(c)));
+    return c.json({
+      tilgjengelig: aiPaa() && h.ai_aktiv && (h.faktura || !!h.p),
+      faktura: h.faktura,
+      personal: h.p ? { leder: h.p.kan.personal, se: h.p.kan.se, ansatt: !!h.p.meg, vaktplan: h.p.vaktplan, tavle: h.p.oppgaver.length > 0 } : null,
+    });
+  });
 
   r.post("/ai/assistent", async (c) => {
     if (!aiPaa()) throw new ApiFeil(503, "AI er ikke satt opp");
@@ -608,16 +685,22 @@ export function assistentRuter() {
     const b = kroppSkjema.parse(kropp);
 
     const kjor = <X>(fn: (db: Db) => Promise<X>) => somBruker<X>(c.get("bruker").id, fn);
-    const { g, kan, org } = await kjor(async (db) => {
-      await db.query("select faktura.krev($1, 'les')", [orgId(c)]);
-      return {
-        g: await hentGrunnlag(db, orgId(c)),
-        kan: (await en<Rettigheter>(db, "select faktura.kan($1, 'skriv') as skriv, faktura.kan($1, 'utsted') as utsted, faktura.kan($1, 'bokfor') as bokfor", [orgId(c)]))!,
-        org: (await en<Org>(db, "select kontonr, standard_forfall_dager, standard_gebyr from faktura.organisasjoner where id = $1", [orgId(c)]))!,
-      };
+    const { f, p } = await kjor(async (db) => {
+      const h = await hvaBrukerenHar(db, orgId(c));
+      if (!h.faktura && !h.p) throw new ApiFeil(403, "Ingen tilgang");
+      const f = h.faktura
+        ? {
+            g: await hentGrunnlag(db, orgId(c)),
+            kan: (await en<Rettigheter>(db, "select faktura.kan($1, 'skriv') as skriv, faktura.kan($1, 'utsted') as utsted, faktura.kan($1, 'bokfor') as bokfor", [orgId(c)]))!,
+            org: (await en<Org>(db, "select kontonr, standard_forfall_dager, standard_gebyr from faktura.organisasjoner where id = $1", [orgId(c)]))!,
+          }
+        : null;
+      return { f, p: h.p };
     });
-    const svar = await medKvote(kjor, orgId(c), "assistent", () => generer<AiKommando>(assistentForesporsel(g, b.tekst, (b.historikk ?? []).slice(-8))));
-    const resultat = await kjor((db) => utfor({ db, orgId: orgId(c), g, kan, org, iDag: iDag() }, svar.data));
+    const svar = await medKvote(kjor, orgId(c), "assistent", () =>
+      generer<AiKommando>(assistentForesporsel({ g: f?.g ?? null, p }, b.tekst, (b.historikk ?? []).slice(-8))),
+    );
+    const resultat = await kjor((db) => utfor({ db, orgId: orgId(c), iDag: iDag(), f, p }, svar.data));
     return c.json(resultat satisfies AssistentSvar);
   });
 

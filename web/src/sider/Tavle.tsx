@@ -94,7 +94,7 @@ const OPPGAVEFORSLAG = ["Telefon", "Resepsjon", "Lab"];
 
 export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (dato: string) => void; kanEndre: boolean }) {
   const { org } = useKonto();
-  const { data, feil, last, settData } = useData(() => hent<TavleSvar>(`/org/${org!.id}/tavle?dato=${dato}`), [org?.id, dato]);
+  const { data, feil, last, settData } = useData(() => hent<TavleSvar>(`/org/${org!.id}/tavle?dato=${dato}`), [org?.id, dato], { oppdater: true });
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id]);
   const [oppsett, settOppsett] = useState(false);
   const [kopierer, settKopierer] = useState(false);

@@ -7,7 +7,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
-import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
+import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
 import { erAdmin, harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag, leggTilDager } from "../format";
 import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
@@ -102,6 +102,7 @@ export function Timer() {
   const [sok, settSok] = useSearchParams();
   const [versjon, settVersjon] = useState(0);
   const endret = () => settVersjon((v) => v + 1);
+  useNarDataEndres(endret); // f.eks. timer som er ført eller godkjent med AI-assistenten
   const egen = org?.ansatt_id ?? null;
   const personal = kanPersonal(org?.rolle);
   const seAlle = kanSePersonal(org?.rolle);

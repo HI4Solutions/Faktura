@@ -196,6 +196,10 @@ describe("Gemini på Vertex AI", () => {
     expect(etterSkjema({ handling: "utestående" }, valg)).toEqual({ handling: "utestaende" });
     expect(etterSkjema({ handling: "fly" }, valg)).toEqual({ handling: "" });
     expect(etterSkjema(null, valg)).toEqual({ handling: "" });
+    // Ja/nei som kan være null (godkjent eller ikke), blir ikke false når det mangler.
+    const jaNei: Skjema = { type: "OBJECT", properties: { godkjent: { type: "BOOLEAN", nullable: true }, send: { type: "BOOLEAN" } } };
+    expect(etterSkjema({}, jaNei)).toEqual({ godkjent: null, send: false });
+    expect(etterSkjema({ godkjent: "false", send: "true" }, jaNei)).toEqual({ godkjent: false, send: true });
   });
 });
 
@@ -475,6 +479,12 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
           fakturadato: null, forfallsdato: "2026-10-21", periode_fra: null, periode_til: null, deres_referanse: null, kommentar: null, merknader: [],
         });
       }
+      if (system.startsWith("Du er assistenten") && tekstIForesporsel(f).includes("Kari er syk")) {
+        // Personaldelen, med det største skjemaet (fakturaer og personal).
+        expect(tekstIForesporsel(f)).toContain("A2: Kari Berg");
+        expect(f.kropp.generationConfig.responseSchema?.properties?.handling.enum ?? ["fravaer"]).toContain("fravaer");
+        return svar({ handling: "fravaer", ansatt: "A2", vikar: "A3" });
+      }
       if (system.startsWith("Du er assistenten")) {
         expect(tekstIForesporsel(f)).toContain("Kommandoen:\nHar Kari Hansen betalt?");
         return svar({ handling: "sjekk_betaling", kunde: "K1" });
@@ -483,11 +493,12 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
     };
     modell = (f) => modellSvar(f);
     const ok = (await kall("POST", "/api/admin/ai-test", undefined, admin)).data;
-    expect(ok).toMatchObject({ ok: true, svar: "Hei fra Gemini", modell: "gemini-3.5-flash", region: "europe-west3", tokens_inn: 4000, tokens_ut: 280, feil: null });
+    expect(ok).toMatchObject({ ok: true, svar: "Hei fra Gemini", modell: "gemini-3.5-flash", region: "europe-west3", tokens_inn: 5000, tokens_ut: 350, feil: null });
     expect(ok.tester).toMatchObject([
       { navn: "Enkelt svar", ok: true, svar: "Hei fra Gemini", skjemafeil: null },
       { navn: "Fakturautkast", ok: true, svar: "Kari Hansen: Husleie oktober (14500), forfall 2026-10-21", skjemafeil: null },
       { navn: "Assistent", ok: true, svar: "sjekk_betaling (K1)", skjemafeil: null },
+      { navn: "Assistent for personal", ok: true, svar: "fravaer (A2, vikar A3)", skjemafeil: null },
       { navn: "Tale (stille opptak)", ok: true, svar: "Ingen tale, som ventet", skjemafeil: null },
     ]);
     // Finner AI-en tale i stillheten, er det en feil.
@@ -503,6 +514,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
       ["Enkelt svar", true, null],
       ["Fakturautkast", true, "400: too many states"],
       ["Assistent", true, "400: too many states"],
+      ["Assistent for personal", true, "400: too many states"],
       ["Tale (stille opptak)", true, null],
     ]);
 
@@ -513,7 +525,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
       feil: "Enkelt svar: AI-tjenesten er ikke tilgjengelig akkurat nå.",
       detaljer: "404: Publisher Model `gemini-3.5-flash` was not found or your project does not have access to it.",
     });
-    expect(feil.tester.map((t: any) => t.ok)).toEqual([false, false, false, false]);
+    expect(feil.tester.map((t: any) => t.ok)).toEqual([false, false, false, false, false]);
     (config as any).aiProsjekt = undefined;
     expect((await kall("POST", "/api/admin/ai-test", undefined, admin)).data).toMatchObject({ ok: false, feil: "AI er ikke satt opp (AI_PROSJEKT mangler)." });
     expect((await kall("POST", "/api/admin/ai-test")).status).toBe(403);

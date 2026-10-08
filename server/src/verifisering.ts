@@ -23,6 +23,7 @@ import { leggIKo } from "./tjenester.js";
 import { AiFeil, aiPaa, generer, type AiSvar } from "./ai.js";
 import { tilUtkast, utkastForesporsel, type AiUtkast, type Grunnlag } from "./aiFaktura.js";
 import { assistentForesporsel, type AiKommando } from "./aiAssistent.js";
+import type { PersonalGrunnlag } from "./aiPersonal.js";
 import { taleForesporsel, talefra, type Tale } from "./aiTale.js";
 import { testEhf } from "./peppol.js";
 
@@ -63,6 +64,20 @@ const TESTREGISTER: Grunnlag = {
 };
 const TESTFAKTURA = "Husleie for oktober til Kari Hansen, og to timer konsulent. Forfall om 14 dager.";
 const TESTKOMMANDO = "Har Kari Hansen betalt?";
+// Personaldelen, med det største svarskjemaet (fakturaer og personal).
+const TESTPERSONAL: PersonalGrunnlag = {
+  ansatte: [
+    { id: "test-ansatt-1", navn: "Ola Nordmann" },
+    { id: "test-ansatt-2", navn: "Kari Berg" },
+    { id: "test-ansatt-3", navn: "Per Olsen" },
+  ],
+  meg: "test-ansatt-1",
+  faser: [{ id: "test-fase-1", navn: "Formiddag", fra: "08:00", til: "12:00" }],
+  oppgaver: [{ id: "test-oppgave-1", navn: "Kasse" }],
+  kan: { personal: true, se: true, ferie: true },
+  vaktplan: true,
+};
+const TESTPERSONALKOMMANDO = "Kari er syk i dag, og Per tar vaktene hennes";
 
 // Et opptak uten tale: to sekunder svak sus, som i et stille rom (WAV, 16 kHz). AI-en skal
 // svare at det ikke er tale, ikke gjette.
@@ -269,8 +284,13 @@ export function adminRuter() {
       ),
       test<AiKommando>(
         "Assistent",
-        () => generer({ ...assistentForesporsel(TESTREGISTER, TESTKOMMANDO), husk: false }),
+        () => generer({ ...assistentForesporsel({ g: TESTREGISTER, p: null }, TESTKOMMANDO), husk: false }),
         (d) => `${d.handling}${d.kunde ? ` (${d.kunde})` : ""}`,
+      ),
+      test<AiKommando>(
+        "Assistent for personal",
+        () => generer({ ...assistentForesporsel({ g: TESTREGISTER, p: TESTPERSONAL }, TESTPERSONALKOMMANDO), husk: false }),
+        (d) => `${d.handling}${d.ansatt ? ` (${d.ansatt}${d.vikar ? `, vikar ${d.vikar}` : ""})` : ""}`,
       ),
       test<Tale>(
         "Tale (stille opptak)",

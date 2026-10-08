@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-// Noe er endret utenfor siden (f.eks. av AI-assistenten): sider som viser fakturaer og
-// innbetalinger henter dem på nytt.
+// Noe er endret utenfor siden (f.eks. av AI-assistenten): sider som viser fakturaer,
+// innbetalinger, vakter, timer og ferie henter dem på nytt.
 export const DATA_ENDRET = "hi4:data-endret";
 export const dataEndret = () => window.dispatchEvent(new Event(DATA_ENDRET));
+
+// For sider som laster på nytt med sin egen teller (vaktplanen, timene og ferien).
+export function useNarDataEndres(fn: () => void) {
+  const ref = useRef(fn);
+  ref.current = fn;
+  useEffect(() => {
+    const f = () => ref.current();
+    window.addEventListener(DATA_ENDRET, f);
+    return () => window.removeEventListener(DATA_ENDRET, f);
+  }, []);
+}
 
 // Henter data og gir laster/feil/last-på-nytt. oppdater: hent på nytt når data er endret.
 export function useData<T>(fn: () => Promise<T>, avhengigheter: unknown[], valg: { oppdater?: boolean } = {}) {

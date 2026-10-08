@@ -32,7 +32,7 @@ bank og regnskapssystemer.
 | Google Disk | Ferdig, krever OAuth-klient (`GOOGLE_OAUTH_CLIENT_ID`) |
 | EHF/Peppol (gjennom hver organisasjons konto hos Recommand) | Ferdig |
 | Innbetalinger fra banken (Enable Banking, flere banker) | Ferdig |
-| AI med Gemini på Vertex AI: assistent med talekommandoer, faktura fra tekst eller tale, forslag på innbetalinger, lønnsslipper (PDF eller bilde) lest til ansattopplysninger | Ferdig (valgfrie GitHub-variabler `AI_AKTIV`, `AI_REGION`, `AI_MODELL`, `AI_GRENSE`) |
+| AI med Gemini på Vertex AI: assistent med tale og tekst for fakturaene og for personalet (fravær og vikarer, vakter, tavla og rullering, timer og ferie; de ansatte melder seg syk, tar ledige vakter og fører timene sine), faktura fra tekst eller tale, forslag på innbetalinger, lønnsslipper (PDF eller bilde) lest til ansattopplysninger | Ferdig (valgfrie GitHub-variabler `AI_AKTIV`, `AI_REGION`, `AI_MODELL`, `AI_GRENSE`) |
 | Ansatte og timer: ansattregister med faste tillegg på lønnen, også personer som ikke er ansatt (aksjonærer, selvstendige, innleide), import fra lønnssystemet eller Excel/CSV, egen innlogging for ansatte, timeføring med overtid, levering og godkjenning | Ferdig (slås på under Innstillinger → Ansatte og timer) |
 | Vaktplan: planlegging og publisering med varsler, ledige vakter, kopiering av uker, advarsler etter arbeidsmiljøloven | Ferdig |
 | Tavle (ressursfordeling i faser og oppgaver), fravær (sykdom, ferie, permisjon, kurs), vikarer og bemanningskalender med grupper (f.eks. sekretærer og leger) mot behovet | Ferdig |

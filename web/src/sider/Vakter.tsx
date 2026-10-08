@@ -9,7 +9,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
-import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
+import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
 import { erAdmin, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
 import { IkonKalender, IkonPluss, IkonVarsel } from "../ikoner";
@@ -94,6 +94,7 @@ export function Vakter() {
   const [sok, settSok] = useSearchParams();
   const [versjon, settVersjon] = useState(0);
   const endret = () => settVersjon((v) => v + 1);
+  useNarDataEndres(endret); // f.eks. vakter, fravær og vikarer fra AI-assistenten
   const seHelePlanen = kanSePersonal(org?.rolle);
   const egen = org?.ansatt_id ?? null;
 

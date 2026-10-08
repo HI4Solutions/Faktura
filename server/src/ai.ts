@@ -116,6 +116,8 @@ export function etterSkjema(v: unknown, s: Skjema): unknown {
     case "ARRAY":
       return (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => (s.items ? etterSkjema(x, s.items) : x));
     case "BOOLEAN":
+      // Et felt som kan være null (f.eks. godkjent eller ikke), blir ikke false når det mangler.
+      if (s.nullable && (v === null || v === undefined || v === "")) return null;
       return v === true || (typeof v === "string" && v.trim().toLowerCase() === "true");
     case "NUMBER":
     case "INTEGER": {

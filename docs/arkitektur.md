@@ -138,10 +138,18 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   lagres. Innbetalinger reglene ikke fant noen faktura for, får et forslag fra Gemini når den
   er rimelig sikker (`foresla_banktransaksjon`); forslag registreres aldri uten at en person
   bekrefter. AI-assistenten (knappen på alle sider; man velger å snakke eller skrive) tar
-  kommandoer som tekst: Gemini
-  velger handling og fyller ut feltene, serveren slår opp og svarer (betalinger, utestående),
-  og alt som endrer noe (sende faktura eller utkast, registrere betaling, purre) blir forslag
-  som appen utfører med de vanlige rutene når brukeren bekrefter. Lønnsslipper (PDF eller
+  kommandoer som tekst: Gemini velger handling og fyller ut feltene, serveren slår opp og
+  svarer (betalinger, utestående, hvem som jobber og er borte, vakter, timer, feriedager), og
+  alt som endrer noe (sende faktura eller utkast, registrere betaling, purre; melde fravær og
+  sette inn vikarer, legge inn og publisere vakter, plassere på tavla og lagre rulleringen,
+  føre, levere og godkjenne timer, søke om og svare på overføring av ferie) blir forslag som
+  appen utfører med de vanlige rutene og brukerens tilgang når brukeren bekrefter. Hva
+  assistenten kan, følger brukeren (`GET …/ai/assistent/status`): fakturadelen for dem som har
+  tilgang til fakturaene, og personaldelen når ansatte og timer er slått på (vakter, tavle,
+  fravær og ferie med Vaktplan), for dem som ser de ansatte og for den som selv er ansatt (også
+  rollen `ansatt`, som melder seg syk, tar ledige vakter, fører og leverer timene sine, søker
+  om å overføre ferie og spør om sitt eget). Hver kombinasjon har sitt eget faste svarskjema,
+  og assistenten er åpen for alle medlemmer (`ai_krev`). Lønnsslipper (PDF eller
   bilde, gjerne mange i én PDF) leses til opplysningene om de ansatte (`…/ai/lonnsslipp`,
   funksjonen `lonnsslipp`, bare eier og administrator): navn, adresse, fødselsnummer,
   kontonummer, stilling, stillingsprosent, lønn, faste tillegg og andre opplysninger lønnen

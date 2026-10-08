@@ -454,7 +454,8 @@ function Ramme() {
           </Routes>
         )}
       </main>
-      {org && !ansatt && <Assistent key={org.id} />}
+      {/* AI-assistenten: for de ansatte bare personaldelen (serveren avgjør hva den kan). */}
+      {org && <Assistent key={org.id} />}
     </div>
   );
 }

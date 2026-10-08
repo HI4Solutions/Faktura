@@ -78,7 +78,7 @@ export function Bemanning({
   const til = leggTilDager(mandag(siste), 6);
   const [versjon, settVersjon] = useState(0);
   const [oppsettVersjon, settOppsettVersjon] = useState(0);
-  const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${fra}&til=${til}`), [org?.id, fra, til, versjon]);
+  const { data, feil } = useData(() => hent<VaktSvar>(`/org/${org!.id}/vakter?fra=${fra}&til=${til}`), [org?.id, fra, til, versjon], { oppdater: true });
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon, oppsettVersjon]);
   const grupper = useData(() => hent<Gruppe[]>(`/org/${org!.id}/ansattgrupper`), [org?.id, oppsettVersjon]);
   const [rute, settRute] = useState<{ a: Ansatt; d: string } | null>(null);
