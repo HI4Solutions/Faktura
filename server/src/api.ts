@@ -3,7 +3,7 @@ import { z } from "zod";
 import { krevBekreftetEpost, krevInnlogging, krevMfa } from "./auth.js";
 import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil, feilhandterer, tilHttp } from "./feil.js";
-import { hentFaktura, pdfData, pdfFilnavn, sikrePdf } from "./dokument.js";
+import { hentFaktura, makstakLinjer, pdfData, pdfFilnavn, sikrePdf } from "./dokument.js";
 import { lagPdf } from "./pdf.js";
 import { erPng, normaliserLogo } from "./logo.js";
 import { config } from "./config.js";
@@ -108,6 +108,9 @@ const orgSkjema = z.object({
   ai_aktiv: z.boolean().optional(), // AI (Gemini): fakturautkast og forslag på innbetalinger
 });
 
+// Makstak: summen å betale (inkl. mva) på én faktura blir aldri høyere (0049_makstak.sql).
+const makstakS = z.number().gt(0, "Makstaket må være mer enn 0 kr").max(99_999_999_999, "Makstaket er for høyt");
+
 const kundeSkjema = z.object({
   type: z.enum(["person", "firma"]).optional(),
   navn: tekstS(200).min(1),
@@ -121,6 +124,7 @@ const kundeSkjema = z.object({
   deres_referanse: valgfriTekst(100),
   notat: valgfriTekst(2000),
   aktiv: z.boolean().optional(),
+  makstak: makstakS.nullish(), // aldri mer enn dette å betale på én faktura (følger med til nye fakturaer)
 });
 
 const produktSkjema = z.object({
@@ -179,6 +183,8 @@ const fakturaSkjema = z.object({
   konto_id: uuid.nullish(),
   avsender: z.enum(["firma", "innehaver"]).nullish(),
   kopi_til: epostliste(10).optional(), // får fakturaen sammen med kunden
+  // Makstak for fakturaen. Utelatt: kundens makstak. null: uten makstak.
+  makstak: makstakS.nullish(),
   // Gjør fakturaen gjentakende: gjentakelsen opprettes når fakturaen sendes.
   gjenta: z
     .object({
@@ -197,6 +203,11 @@ const fakturaSkjema = z.object({
     .refine((l) => l.length <= MAKS_ANTALL, `Høyst ${MAKS_ANTALL} vedlegg på en faktura`)
     .optional(),
 });
+
+// Makstaket på en ny faktura eller gjentakelse: kundens når det ikke er oppgitt ($n: «ikke
+// oppgitt», $n+1: makstaket), og ingen når det er oppgitt som null.
+const MAKSTAK_SQL = (n: number, kunde: number) =>
+  `case when $${n}::boolean then (select k.makstak from faktura.kunder k where k.id = $${kunde}) else $${n + 1}::numeric end`;
 
 async function skrivLinjer(db: Db, orgId: string, fakturaId: string, linjer: z.infer<typeof linjeSkjema>[], gebyr: boolean) {
   await db.query("delete from faktura.faktura_linjer where faktura_id = $1", [fakturaId]);
@@ -666,9 +677,7 @@ export function lagApi() {
           db,
           `select f.id, f.fakturanummer, f.type, f.status, f.kunde_id, coalesce(f.kunde->>'navn', k.navn) as kunde_navn,
                   f.fakturadato, f.forfallsdato, f.betalt_belop, f.kreditert_belop, f.refusjon_belop,
-                  coalesce(f.sum_inkl_mva, (select sum(round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop), 2)
-                                                     + round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop) * l.mva_sats / 100, 2))
-                                              from faktura.faktura_linjer l where l.faktura_id = f.id)) as sum_inkl_mva,
+                  coalesce(f.sum_inkl_mva, faktura.utkast_sum(f.id)) as sum_inkl_mva,
                   case when f.status = 'utkast' then (select count(*)::int from faktura.faktura_linjer l where l.faktura_id = f.id) end as antall_linjer,
                   case when f.status = 'utkast' then k.epost end as kunde_epost,
                   f.sendt_at, f.kreditnota_for, f.planlagt_sending,
@@ -696,12 +705,13 @@ export function lagApi() {
         const purringer = await alle(db, "select * from faktura.purringer where faktura_id = $1 order by nummer", [f.id]);
         const eposter = await alle(db, "select id, purring_id, til, kopi, emne, status, detaljer, siste_hendelse_at, opprettet from faktura.eposter where faktura_id = $1 order by opprettet", [f.id]);
         const ehf = await alle(db, "select id, mottaker, status, feil_kategori, detaljer, opprettet, oppdatert from faktura.ehf_sendinger where faktura_id = $1 order by opprettet", [f.id]);
-        // Et utkast får neste nummer i serien når det sendes.
+        // Et utkast får neste nummer i serien når det sendes, og fratrekket for makstaket da.
         const neste =
           f.status === "utkast"
             ? ((await en(db, "select neste_fakturanummer from faktura.nummerserier where org_id = $1", [orgId(c)]))?.neste_fakturanummer ?? null)
             : null;
-        return { ...f, betalinger, kreditnotaer, purringer, eposter, ehf, neste_fakturanummer: neste };
+        const makstak_linjer = f.status === "utkast" ? await makstakLinjer(db, f) : [];
+        return { ...f, betalinger, kreditnotaer, purringer, eposter, ehf, neste_fakturanummer: neste, makstak_linjer };
       }),
     ),
   );
@@ -712,11 +722,11 @@ export function lagApi() {
       const f = await en(
         db,
         `insert into faktura.fakturaer (org_id, kunde_id, fakturadato, forfallsdato, periode_fra, periode_til,
-                                        deres_referanse, var_referanse, notat, kommentar, planlagt_sending, konto_id, avsender, kopi_til, gjenta, opprettet_av)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, faktura.bruker_id()) returning id`,
+                                        deres_referanse, var_referanse, notat, kommentar, planlagt_sending, konto_id, avsender, kopi_til, gjenta, makstak, opprettet_av)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, ${MAKSTAK_SQL(16, 2)}, faktura.bruker_id()) returning id`,
         [orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
          b.deres_referanse, b.var_referanse, b.notat, b.kommentar, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? [],
-         b.gjenta ? JSON.stringify(b.gjenta) : null],
+         b.gjenta ? JSON.stringify(b.gjenta) : null, b.makstak === undefined, b.makstak ?? null],
       );
       await skrivLinjer(db, orgId(c), f.id, b.linjer, b.gebyr ?? false);
       await skrivVedlegg(db, orgId(c), f.id, b.vedlegg);
@@ -732,11 +742,11 @@ export function lagApi() {
       const r = await db.query(
         `update faktura.fakturaer set kunde_id = $3, fakturadato = $4, forfallsdato = $5, periode_fra = $6, periode_til = $7,
                 deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11, konto_id = $12, avsender = $13,
-                kopi_til = coalesce($14, kopi_til), kommentar = $15, gjenta = $16
+                kopi_til = coalesce($14, kopi_til), kommentar = $15, gjenta = $16, makstak = ${MAKSTAK_SQL(17, 3)}
           where id = $1 and org_id = $2 and status = 'utkast'`,
         [id, orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
          b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? null,
-         b.kommentar, b.gjenta ? JSON.stringify(b.gjenta) : null],
+         b.kommentar, b.gjenta ? JSON.stringify(b.gjenta) : null, b.makstak === undefined, b.makstak ?? null],
       );
       if (!r.rowCount) throw new ApiFeil(409, "Bare utkast kan endres");
       await skrivLinjer(db, orgId(c), id, b.linjer, b.gebyr ?? false);
@@ -858,9 +868,7 @@ export function lagApi() {
     alle(
       db,
       `select f.id, f.fakturanummer, f.status, f.kunde_id, coalesce(f.kunde->>'navn', k.navn) as kunde_navn, k.epost as kunde_epost,
-              coalesce(f.sum_inkl_mva, (select sum(round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop), 2)
-                                                     + round(faktura.linje_netto(l.antall, l.enhetspris, l.rabatt_prosent, l.rabatt_belop) * l.mva_sats / 100, 2))
-                                          from faktura.faktura_linjer l where l.faktura_id = f.id)) as sum_inkl_mva
+              coalesce(f.sum_inkl_mva, faktura.utkast_sum(f.id)) as sum_inkl_mva
          from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id
         where f.id = any($1::uuid[]) order by array_position($1::uuid[], f.id)`,
       [ider],
@@ -897,6 +905,7 @@ export function lagApi() {
           avsender: z.enum(["firma", "innehaver"]).nullish(),
           konto_id: uuid.nullish(),
           kommentar: valgfriTekst(1000).optional(),
+          makstak: makstakS.nullish(), // utelatt: kundens makstak
           linjer: z.array(linjeSkjema).min(1, "Fakturaen trenger minst én linje").max(100),
         }),
       )
@@ -919,11 +928,12 @@ export function lagApi() {
           const f = await en(
             db,
             `insert into faktura.fakturaer (org_id, kunde_id, fakturadato, forfallsdato, periode_fra, periode_til,
-                                            deres_referanse, var_referanse, konto_id, avsender, kopi_til, kommentar, opprettet_av)
-             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, faktura.bruker_id()) returning id`,
+                                            deres_referanse, var_referanse, konto_id, avsender, kopi_til, kommentar, makstak, opprettet_av)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ${MAKSTAK_SQL(13, 2)}, faktura.bruker_id()) returning id`,
             [orgId(c), x.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
              x.deres_referanse, b.var_referanse, x.konto_id === undefined ? (b.konto_id ?? null) : x.konto_id,
-             x.avsender === undefined ? (b.avsender ?? null) : x.avsender, x.kopi_til ?? [], x.kommentar === undefined ? b.kommentar : x.kommentar],
+             x.avsender === undefined ? (b.avsender ?? null) : x.avsender, x.kopi_til ?? [], x.kommentar === undefined ? b.kommentar : x.kommentar,
+             x.makstak === undefined, x.makstak ?? null],
           );
           await skrivLinjer(db, orgId(c), f.id, x.linjer, b.gebyr ?? false);
           if (b.utsted) await db.query("select faktura.utsted($1)", [f.id]);
@@ -1097,6 +1107,7 @@ export function lagApi() {
     konto_id: uuid.nullish(),
     avsender: z.enum(["firma", "innehaver"]).nullish(),
     kopi_til: epostliste(10).optional(),
+    makstak: makstakS.nullish(), // utelatt: kundens makstak (når kunden endres: den nye kundens)
   });
 
   org.get("/gjentakelser", async (c) =>
@@ -1119,11 +1130,12 @@ export function lagApi() {
         en(
           db,
           `insert into faktura.gjentakelser (org_id, kunde_id, linjer, intervall, forfall_dag, neste_forfall, send_dager_foer,
-                                            slutt_dato, aktiv, deres_referanse, konto_id, avsender, kopi_til, kommentar, opprettet_av)
+                                            slutt_dato, aktiv, deres_referanse, konto_id, avsender, kopi_til, kommentar, makstak, opprettet_av)
            values ($1, $2, $3, $4, $5, $6, coalesce($7, (select standard_dager_foer_forfall from faktura.organisasjoner where id = $1)),
-                   $8, coalesce($9, true), $10, $11, $12, $13, $14, faktura.bruker_id()) returning *`,
+                   $8, coalesce($9, true), $10, $11, $12, $13, $14, ${MAKSTAK_SQL(15, 2)}, faktura.bruker_id()) returning *`,
           [orgId(c), b.kunde_id, JSON.stringify(b.linjer), b.intervall, b.forfall_dag, b.neste_forfall, b.send_dager_foer ?? null,
-           b.slutt_dato ?? null, b.aktiv ?? null, b.deres_referanse, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? [], b.kommentar],
+           b.slutt_dato ?? null, b.aktiv ?? null, b.deres_referanse, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? [], b.kommentar,
+           b.makstak === undefined, b.makstak ?? null],
         ),
       ),
       201,
@@ -1133,9 +1145,14 @@ export function lagApi() {
   org.patch("/gjentakelser/:id", async (c) => {
     const b = await kropp(c, gjentakelseSkjema.partial());
     const data: Record<string, unknown> = { ...b, linjer: b.linjer ? JSON.stringify(b.linjer) : undefined };
-    const s = settFelter(data, 3);
-    if (s.tom) throw new ApiFeil(400, "Ingen felt å endre");
-    const r = await bruk(c, (db) => en(db, `update faktura.gjentakelser set ${s.sql} where id = $1 and org_id = $2 returning *`, [uuid.parse(c.req.param("id")), orgId(c), ...s.verdier]));
+    const r = await bruk(c, async (db) => {
+      // Ny kunde uten makstak oppgitt: den nye kundens makstak.
+      if (b.kunde_id !== undefined && b.makstak === undefined)
+        data.makstak = (await en<{ makstak: string | null }>(db, "select makstak from faktura.kunder where id = $1 and org_id = $2", [b.kunde_id, orgId(c)]))?.makstak ?? null;
+      const s = settFelter(data, 3);
+      if (s.tom) throw new ApiFeil(400, "Ingen felt å endre");
+      return en(db, `update faktura.gjentakelser set ${s.sql} where id = $1 and org_id = $2 returning *`, [uuid.parse(c.req.param("id")), orgId(c), ...s.verdier]);
+    });
     if (!r) throw new ApiFeil(404, "Finnes ikke");
     return c.json(r);
   });

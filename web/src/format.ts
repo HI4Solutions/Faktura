@@ -59,6 +59,75 @@ export function summer(linjer: Tallinje[]) {
   return { eks: rund(eks), mva: rund(mva), inkl: rund(eks + mva) };
 }
 
+// Deler og runder halvt bort fra null, som round() på numeric i Postgres.
+const delRund = (t: bigint, n: bigint): bigint => {
+  const a = t < 0n ? -t : t;
+  const b = n < 0n ? -n : n;
+  const q = a / b + (2n * (a % b) >= b ? 1n : 0n);
+  return (t < 0n) !== (n < 0n) ? -q : q;
+};
+
+// Fratrekket som tar summen å betale ned til makstaket, regnet som faktura.makstak_fordel i
+// databasen (i øre, så det blir likt på øret): én linje per mva-sats, fordelt etter hvor mye
+// satsen utgjør av summen inkl. mva. Beløpene er negative. Tomt når summen er under makstaket.
+export function makstakFratrekk(linjer: Tallinje[], tak: number | null | undefined): { mva_sats: number; eks: number; mva: number }[] {
+  if (tak == null || !(tak > 0)) return [];
+  const ore = (n: number) => BigInt(Math.round(n * 100));
+  const grupper = new Map<number, bigint>();
+  for (const l of linjer) {
+    const netto = l.antall * l.enhetspris - linjerabatt(l);
+    const sats = Number(l.mva_sats);
+    grupper.set(sats, (grupper.get(sats) ?? 0n) + ore(rund(netto)) + ore(rund((netto * sats) / 100)));
+  }
+  const satser = [...grupper.entries()].sort((a, b) => b[0] - a[0]);
+  const total = satser.reduce((s, [, v]) => s + v, 0n);
+  const rest = total - ore(tak);
+  if (rest <= 0n) return [];
+  const positiv = satser.reduce((s, [, v]) => (v > 0n ? s + v : s), 0n);
+  // Satsen som tar øreavrundingen: 0 % når den får minst 1 kr av fratrekket, ellers den største.
+  let siste = -1;
+  satser.forEach(([, v], i) => {
+    if (v > 0n && (siste < 0 || v > satser[siste]![1])) siste = i;
+  });
+  satser.forEach(([sats, v], i) => {
+    if (v > 0n && sats === 0 && rest * v >= positiv * 100n) siste = i;
+  });
+  const hundredeler = (sats: number) => BigInt(Math.round(sats * 100)); // 25 % -> 2500
+  const mvaAv = (e: bigint, s: bigint) => delRund(e * s, 10000n);
+  const ut: { mva_sats: number; eks: number; mva: number }[] = [];
+  const legg = (sats: number, e: bigint, m: bigint) => {
+    if (e !== 0n || m !== 0n) ut.push({ mva_sats: sats, eks: Number(-e) / 100, mva: Number(-m) / 100 });
+  };
+  let trukket = 0n;
+  satser.forEach(([sats, v], i) => {
+    if (v <= 0n || i === siste) return;
+    const s = hundredeler(sats);
+    const e = delRund(delRund(rest * v, positiv) * 10000n, 10000n + s);
+    const m = mvaAv(e, s);
+    trukket += e + m;
+    legg(sats, e, m);
+  });
+  // Resten på den siste satsen: det minste beløpet som med mvaen tar minst resten (aldri over makstaket).
+  const sats = satser[siste]![0];
+  const s = hundredeler(sats);
+  const r = rest - trukket;
+  const e0 = delRund(r * 10000n, 10000n + s);
+  let best: bigint | null = null;
+  for (let d = -3n; d <= 3n; d++) if (e0 + d + mvaAv(e0 + d, s) >= r && (best === null || e0 + d < best)) best = e0 + d;
+  const e = best! < 0n ? 0n : best!;
+  legg(sats, e, mvaAv(e, s));
+  return ut.sort((a, b) => b.mva_sats - a.mva_sats);
+}
+
+// Summene etter fratrekket for makstaket.
+export function summerMedMakstak(linjer: Tallinje[], tak: number | null | undefined) {
+  const sum = summer(linjer);
+  const fratrekk = makstakFratrekk(linjer, tak);
+  const eks = rund(fratrekk.reduce((s, f) => s + f.eks, 0));
+  const mva = rund(fratrekk.reduce((s, f) => s + f.mva, 0));
+  return { ...sum, fratrekk: rund(eks + mva), eks: rund(sum.eks + eks), mva: rund(sum.mva + mva), inkl: rund(sum.inkl + eks + mva), foer: sum.inkl };
+}
+
 export const statusTekst: Record<string, string> = {
   utkast: "Utkast",
   utstedt: "Sendt",

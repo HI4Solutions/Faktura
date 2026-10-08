@@ -6,6 +6,7 @@ import { Dialog, Feil, Laster, tall, useData, useHandling, useSmal } from "../fe
 import { harFunksjon, kanSkrive, useKonto } from "../konto";
 import { dato, kr, orgnr } from "../format";
 import { AvsenderKonto } from "./AvsenderKonto";
+import { lesMakstak, tallTekst } from "../linjer";
 
 export function Kunder() {
   const { org } = useKonto();
@@ -127,7 +128,9 @@ function IngenEnna({ hva, sti, kanImportere, sok }: { hva: string; sti: string; 
 export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; lagret: (k: any) => void; avbryt: () => void; slettet?: () => void }) {
   const { org } = useKonto();
   const [k, settK] = useState<any>({ ...kunde });
-  const { opptatt, feil, kjor } = useHandling();
+  const [takTekst, settTakTekst] = useState(kunde?.makstak != null ? tallTekst(kunde.makstak) : "");
+  const tak = lesMakstak(takTekst);
+  const { opptatt, feil, settFeil, kjor } = useHandling();
   const felt = (navn: string) => ({ value: k[navn] ?? "", onChange: (e: any) => settK({ ...k, [navn]: e.target.value }) });
 
   async function slaOpp() {
@@ -137,6 +140,7 @@ export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; la
 
   async function lagre(ev: FormEvent) {
     ev.preventDefault();
+    if (tak.feil) return settFeil(tak.feil);
     const kropp = {
       type: k.type,
       navn: k.navn,
@@ -149,6 +153,7 @@ export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; la
       deres_referanse: k.deres_referanse || null,
       notat: k.notat || null,
       aktiv: k.aktiv,
+      makstak: tak.tak,
     };
     const r = await kjor(() => (k.id ? api("PATCH", `/org/${org!.id}/kunder/${k.id}`, kropp) : api("POST", `/org/${org!.id}/kunder`, kropp)));
     if (r) lagret(r);
@@ -205,10 +210,22 @@ export function KundeSkjema({ kunde, lagret, avbryt, slettet }: { kunde: any; la
           <input {...felt("telefon")} />
         </label>
       </div>
-      <label>
-        Deres referanse (standard)
-        <input {...felt("deres_referanse")} />
-      </label>
+      <div className="rad">
+        <label>
+          Deres referanse (standard)
+          <input {...felt("deres_referanse")} />
+        </label>
+        <label>
+          Makstak per faktura (valgfritt)
+          <input inputMode="decimal" placeholder="Ingen" value={takTekst} onChange={(e) => settTakTekst(e.target.value)} />
+          <span className="felt-hjelp">
+            {tak.tak != null
+              ? `Kunden betaler aldri mer enn ${kr(tak.tak)} kr på én faktura. Kommer automatisk på nye fakturaer til kunden og kan fjernes på hver faktura.`
+              : "Avtalt høyeste beløp å betale på én faktura. Er summen høyere, får fakturaen et fratrekk."}
+            {kunde?.makstak != null && tak.tak !== kunde.makstak && " Endringen gjelder også utkast og gjentakende fakturaer som hadde det gamle makstaket."}
+          </span>
+        </label>
+      </div>
       <label>
         Notat
         <textarea rows={2} {...felt("notat")} />

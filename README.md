@@ -25,6 +25,7 @@ bank og regnskapssystemer.
 | Sletting av organisasjoner, alltid med grunn: alt slettes, eller organisasjonen stenges når utstedte fakturaer må oppbevares (bokføringsloven) | Ferdig (eieren under Innstillinger → Organisasjon, plattformadministratoren i Administrasjon) |
 | Funksjoner per organisasjon: administratoren velger hvilke organisasjoner som har EHF, bank, AI, ansatte og timer, vaktplan osv., og standarden for nye | Ferdig (Administrasjon → Funksjoner) |
 | Gjentakende fakturaer, purring og inkassovarsel | Ferdig |
+| Makstak: kunden faktureres aldri mer enn et avtalt beløp; alle produktene står på fakturaen, og et fratrekk tar summen ned. Makstaket kan stå på kunden og kommer da på nye fakturaer, flere på én gang og gjentakelser, og kan fjernes per faktura | Ferdig |
 | Påminnelser om å lage fakturaer (push og e-post), for beløp som varierer | Ferdig |
 | Rapporter (reskontro, mva, salg) og CSV-eksport | Ferdig |
 | E-postsporing (Resend-webhook) | Ferdig, krever webhook i Resend |

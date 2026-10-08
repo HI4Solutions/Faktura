@@ -2,11 +2,11 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
-import { fraProdukt, harRabatt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
+import { fraProdukt, harRabatt, lesMakstak, NotatFelt, RabattKnapp, tallTekst, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { harFunksjon, kanSkrive, useKonto } from "../konto";
-import { dato, iDag, kr, summer } from "../format";
+import { dato, iDag, kr, summerMedMakstak } from "../format";
 import { Paaminnelser } from "./Paaminnelser";
 
 const intervallTekst: Record<string, string> = { maaned: "Hver måned", kvartal: "Hvert kvartal", aar: "Hvert år" };
@@ -74,7 +74,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
       {smal ? (
         <div className="kort liste">
           {data.map((g) => {
-            const sum = summer(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25, rabatt_prosent: l.rabatt_prosent, rabatt_belop: l.rabatt_belop })));
+            const sum = summerMedMakstak(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25, rabatt_prosent: l.rabatt_prosent, rabatt_belop: l.rabatt_belop })), g.makstak);
             const apne = () => kanSkrive(org?.rolle) && settRedigerer(g);
             return (
               <div key={g.id} className="liste-rad" role="button" tabIndex={0} onClick={apne} onKeyDown={(e) => e.key === "Enter" && apne()}>
@@ -128,7 +128,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
           </thead>
           <tbody>
             {data.map((g) => {
-              const sum = summer(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25, rabatt_prosent: l.rabatt_prosent, rabatt_belop: l.rabatt_belop })));
+              const sum = summerMedMakstak(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25, rabatt_prosent: l.rabatt_prosent, rabatt_belop: l.rabatt_belop })), g.makstak);
               return (
                 <tr key={g.id} className="klikkbar" onClick={() => kanSkrive(org?.rolle) && settRedigerer(g)}>
                   <td>{g.kunde_navn}</td>
@@ -200,6 +200,9 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
   });
   const [linjer, settLinjer] = useState<LinjeUtkast[]>(g.linjer?.map(tilUtkast) ?? [tomLinje()]);
   const [kopi, settKopi] = useState((g.kopi_til ?? []).join(", "));
+  // Makstak for fakturaene: følger kunden når den velges, og kan fjernes eller endres.
+  const [makstak, settMakstak] = useState(g.makstak != null ? tallTekst(g.makstak) : "");
+  const tak = lesMakstak(makstak);
   const [rabattValgt, settRabattValgt] = useState(false);
   const visRabatt = rabattValgt || harRabatt(linjer);
   const h = useHandling();
@@ -215,6 +218,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
     const ugyldige = ugyldigeEposter(kopi);
     if (ugyldige.length) return h.settFeil(`Ugyldig e-postadresse for kopi: ${ugyldige.join(", ")}`);
     if (sjekkLinjer()) return;
+    if (tak.feil) return h.settFeil(tak.feil);
     const neste = f.neste_forfall;
     const kropp = {
       kunde_id: f.kunde_id,
@@ -229,6 +233,7 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
       avsender: f.avsender ?? null,
       kommentar: f.kommentar.trim() || null,
       kopi_til: tilEpostliste(kopi),
+      makstak: tak.tak,
       linjer: tilTallLinjer(linjer, utenMva),
     };
     const r = await h.kjor(() => (g.id ? api("PATCH", `/org/${org!.id}/gjentakelser/${g.id}`, kropp) : api("POST", `/org/${org!.id}/gjentakelser`, kropp)));
@@ -241,7 +246,17 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
     <form onSubmit={lagre}>
       <label>
         Kunde
-        <Sokefelt etikett="Kunde" valg={kundeValg(kunder.data)} verdi={f.kunde_id || null} velg={(id) => settF({ ...f, kunde_id: id ?? "" })} plassholder="Søk kunde" />
+        <Sokefelt
+          etikett="Kunde"
+          valg={kundeValg(kunder.data)}
+          verdi={f.kunde_id || null}
+          velg={(id) => {
+            settF({ ...f, kunde_id: id ?? "" });
+            const k = kunder.data!.find((x) => x.id === id);
+            settMakstak(k?.makstak != null ? tallTekst(k.makstak) : "");
+          }}
+          plassholder="Søk kunde"
+        />
       </label>
       <div className="rad">
         <label>
@@ -343,10 +358,23 @@ function Skjema({ g, ferdig }: { g: any; ferdig: () => void }) {
           }}
         />
       </div>
-      <label>
-        Deres referanse
-        <input value={f.deres_referanse} onChange={(e) => settF({ ...f, deres_referanse: e.target.value })} />
-      </label>
+      <div className="rad">
+        <label>
+          Deres referanse
+          <input value={f.deres_referanse} onChange={(e) => settF({ ...f, deres_referanse: e.target.value })} />
+        </label>
+        <label>
+          Makstak per faktura (valgfritt)
+          <input inputMode="decimal" placeholder="Ingen" value={makstak} onChange={(e) => settMakstak(e.target.value)} />
+          <span className="felt-hjelp">
+            {tak.tak != null ? `Hver faktura blir høyst ${kr(tak.tak)} kr å betale.` : "Avtalt høyeste beløp å betale på hver faktura."}
+            {tak.tak != null && (() => {
+              const s = summerMedMakstak(tilTallLinjer(linjer, utenMva), tak.tak);
+              return s.fratrekk !== 0 ? ` Nå: ${kr(s.foer)} kr − fratrekk ${kr(-s.fratrekk)} kr.` : "";
+            })()}
+          </span>
+        </label>
+      </div>
       <NotatFelt verdi={f.kommentar} endre={(v) => settF({ ...f, kommentar: v })} />
       <EpostlisteFelt
         etikett="Kopi til (valgfritt)"

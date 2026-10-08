@@ -935,6 +935,15 @@ button.lenke.laas-ut { color: #b7c8ff; margin-top: 14px; }
 .rabatt-felt > input, .linjer .rabatt-felt > input { flex: 1; min-width: 0; padding-left: 8px; padding-right: 8px; }
 .rabatt-felt > select, .linjer td .rabatt-felt > select { flex: none; width: 54px; padding-left: 8px; padding-right: 20px; background-position: right 5px center; }
 .summer .rabatt { color: var(--ok); }
+/* Makstak: beløpet skrives rett i summene, og fratrekket står under. */
+.summer .makstak-rad { align-items: center; gap: 10px; }
+.summer .makstak-rad label { margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
+.summer .makstak-rad label .dempet { display: block; }
+.summer .makstak-rad .med-knapp { align-items: center; gap: 2px; }
+.summer .makstak-rad input { width: 128px; flex: none; text-align: right; padding: 5px 8px; }
+.summer .makstak-rad .lenke { padding: 4px 6px; }
+.summer .makstak-hjelp { margin: 0 0 6px; }
+tr.makstak-linje td { color: var(--ok); }
 .faktura-kommentar { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--kant); white-space: pre-line; overflow-wrap: anywhere; }
 
 /* Vedlegg: i skjemaet (velg og fjern) og på fakturaen (åpne) */

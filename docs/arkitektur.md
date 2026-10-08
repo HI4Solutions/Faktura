@@ -85,6 +85,21 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   referanser, melding til kunden, vedlegg, datoer og fakturagebyr. Det fulle skjemaet
   (kopimottakere, gjentakelse) åpnes med alt som er skrevet
 - `fakturaer`, `faktura_linjer`, `betalinger`
+- Makstak (`0049_makstak.sql`): en avtale om at kunden aldri faktureres mer enn et beløp å
+  betale (inkl. mva) på én faktura, f.eks. en lege som betaler for flere produkter, men aldri
+  mer enn 70 000 kr. Alle produktene står på fakturaen, og er summen over makstaket, får den
+  et fratrekk ned til makstaket: egne linjer (`faktura_linjer.makstak`, antall −1 så prisen
+  ikke er negativ i EHF), én per mva-sats, fordelt etter hvor mye satsen utgjør av summen.
+  0 % tar øreavrundingen når den er stor nok; ellers kan summen bli ett øre under, aldri
+  over (`makstak_fordel`). Fratrekket blir linjer når fakturaen utstedes; for utkast regnes
+  det for visning (`makstak_fratrekk`, `utkast_sum`, PDF-forhåndsvisningen), og appen regner
+  det likt i nettleseren (`makstakFratrekk`, testet mot databasen). Makstaket kan stå på
+  kunden (`kunder.makstak`): nye fakturaer, flere på én gang og gjentakelser får det når
+  `makstak` er utelatt i API-et, og det kan fjernes (`null`) eller endres per faktura.
+  Endres kundens makstak, følger utkast og gjentakelser som hadde det gamle, med. Delvis
+  kreditering regner fratrekket på nytt for det som står igjen, og kreditnotaen tar med
+  forskjellen (blir den 0 kr, avvises den); full kreditering tar alt tilbake. Makstaket
+  låses ved utstedelse, og en kreditnota har aldri makstak
 - `vedlegg`: filer på fakturaer (PDF, bilder, CSV og regneark, typene EHF godtar).
   Lastes opp før utkastet lagres, låses ved utstedelse, og workeren legger en kopi i
   `fakturaer`-bøtta når fakturaen sendes. Filer etter slettede vedlegg ryddes daglig

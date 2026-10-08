@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
-import { dato, iDag, kr, leggTilDager, linjebelop, summer } from "../format";
+import { dato, iDag, kr, leggTilDager, linjebelop, summer, summerMedMakstak } from "../format";
 import { erTom, fraProdukt, gebyrLinjer, harRabatt, NotatFelt, tilTallLinjer, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { VedleggFelt } from "../vedlegg";
 import type { Vedlegg } from "../api";
@@ -493,7 +493,8 @@ export function SendFraPaaminnelse() {
   const kunde = kunder.data.find((k) => k.id === kundeId);
   const utenMva = !o.mva_registrert;
   const tallLinjer = tilTallLinjer(linjer, utenMva);
-  const sum = summer([...tallLinjer, ...gebyrLinjer(gebyr, o)]);
+  // Kundens makstak legges på av serveren.
+  const sum = summerMedMakstak([...tallLinjer, ...gebyrLinjer(gebyr, o)], kunde?.makstak);
   const rabatt = Math.round((summer(tallLinjer.map((l) => ({ ...l, rabatt_prosent: null, rabatt_belop: null }))).eks - summer(tallLinjer).eks) * 100) / 100;
   const fokus = Math.max(0, linjer.findIndex((x) => !x.enhetspris.trim())); // første linje uten pris
   const endre = (i: number, e: Partial<LinjeUtkast>) => {
@@ -758,9 +759,15 @@ export function SendFraPaaminnelse() {
           <span>Å betale{!utenMva && sum.mva ? " inkl. mva" : ""}</span>
           <strong>{kr(sum.inkl)} kr</strong>
         </div>
-        {(rabatt > 0 || (!utenMva && sum.mva > 0)) && (
+        {(rabatt > 0 || sum.fratrekk !== 0 || (!utenMva && sum.mva > 0)) && (
           <p className="liten dempet">
-            {[rabatt > 0 ? `Rabatt ${kr(rabatt)} kr` : null, !utenMva && sum.mva > 0 ? `herav mva ${kr(sum.mva)} kr` : null].filter(Boolean).join(" · ")}
+            {[
+              rabatt > 0 ? `Rabatt ${kr(rabatt)} kr` : null,
+              sum.fratrekk !== 0 ? `Fratrekk ${kr(-sum.fratrekk)} kr (makstak ${kr(kunde.makstak)} kr)` : null,
+              !utenMva && sum.mva > 0 ? `herav mva ${kr(sum.mva)} kr` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         )}
         {mottaker && <p className="liten dempet">{mottaker}</p>}

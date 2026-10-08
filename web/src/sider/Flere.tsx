@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
 import { kanSkrive, useKonto } from "../konto";
-import { iDag, kr, leggTilDager, summer } from "../format";
+import { iDag, kr, leggTilDager, summerMedMakstak } from "../format";
 import { IkonPluss } from "../ikoner";
 import { gebyrLinjer, harRabatt, LinjeTabell, linjefeil, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tomLinje, erTom, type LinjeUtkast } from "../linjer";
 import { KundeSkjema, ProduktSkjema } from "./Register";
@@ -20,10 +20,11 @@ interface Kort {
   deres_referanse: string;
   kopi: string;
   rabatt: boolean; // rabattkolonnen er slått på
+  utenMakstak: boolean; // kundens makstak er fjernet på denne fakturaen
 }
 
 let teller = 0;
-const nyttKort = (kunde_id = ""): Kort => ({ nokkel: ++teller, kunde_id, linjer: [tomLinje()], deres_referanse: "", kopi: "", rabatt: false });
+const nyttKort = (kunde_id = ""): Kort => ({ nokkel: ++teller, kunde_id, linjer: [tomLinje()], deres_referanse: "", kopi: "", rabatt: false, utenMakstak: false });
 const erTomtKort = (k: Kort) => !k.kunde_id && k.linjer.every(erTom);
 
 type Valg =
@@ -68,8 +69,10 @@ export function FlereFakturaer() {
 
   const beregnet = kort.map((k, i) => {
     const linjer = tilTallLinjer(k.linjer, utenMva);
-    const sum = summer([...linjer, ...gebyrLinjer(gebyr, orgData.data)]);
     const kunde = kundeMap.get(k.kunde_id);
+    // Kundens makstak gjelder (serveren legger det på), om det ikke er fjernet her.
+    const tak = kunde?.makstak != null && !k.utenMakstak ? Number(kunde.makstak) : null;
+    const sum = summerMedMakstak([...linjer, ...gebyrLinjer(gebyr, orgData.data)], tak);
     const feilLinje = linjefeil(k.linjer);
     const mangler = !k.kunde_id
       ? "velg kunde"
@@ -82,7 +85,7 @@ export function FlereFakturaer() {
             : null;
     // Produkter med fast avsender eller konto bestemmer dem for fakturaen.
     const fast = fasteValg(k.linjer, produkter.data);
-    return { k, nr: i + 1, linjer, sum, kunde, mangler, fast };
+    return { k, nr: i + 1, linjer, sum, kunde, mangler, fast, tak };
   });
   const total = beregnet.reduce((s, b) => s + b.sum.inkl, 0);
   const utenEpost = beregnet.filter((b) => b.kunde && !b.kunde.epost);
@@ -112,6 +115,7 @@ export function FlereFakturaer() {
         kunde_id: b.k.kunde_id,
         deres_referanse: b.k.deres_referanse || null,
         kopi_til: tilEpostliste(b.k.kopi),
+        ...(b.k.utenMakstak ? { makstak: null } : {}),
         ...(b.fast.avsender ? { avsender: b.fast.avsender } : {}),
         ...(b.fast.konto ? { konto_id: fastKontoId(b.fast.konto) } : {}),
         linjer: b.linjer,
@@ -237,7 +241,7 @@ export function FlereFakturaer() {
         </button>
       </div>
 
-      {beregnet.map(({ k, nr, sum, kunde, fast }) => (
+      {beregnet.map(({ k, nr, sum, kunde, fast, tak }) => (
         <div className="kort flere-kort" key={k.nokkel}>
           <div className="flere-topp">
             <span className="flere-nr" aria-hidden="true">
@@ -247,7 +251,7 @@ export function FlereFakturaer() {
               etikett={`Kunde for faktura ${nr}`}
               valg={kundevalg}
               verdi={k.kunde_id || null}
-              velg={(id) => endreKort(k.nokkel, { kunde_id: id ?? "" })}
+              velg={(id) => endreKort(k.nokkel, { kunde_id: id ?? "", utenMakstak: false })}
               plassholder="Søk kunde"
               ny={{ tekst: "+ Ny kunde", handling: (navn) => settValg({ type: "ny-kunde", kort: k.nokkel, navn }) }}
             />
@@ -290,6 +294,25 @@ export function FlereFakturaer() {
               <span className="dempet liten">{utenMva ? "Å betale" : "Inkl. mva"}</span> {kr(sum.inkl)}
             </span>
           </div>
+          {kunde?.makstak != null && (
+            <p className="flere-info">
+              {tak != null ? (
+                <>
+                  Makstak {kr(tak)} kr fra kunden{sum.fratrekk !== 0 ? ` (fratrekk ${kr(-sum.fratrekk)} kr)` : ""}.{" "}
+                  <button type="button" className="lenke" onClick={() => endreKort(k.nokkel, { utenMakstak: true })}>
+                    Fjern på denne fakturaen
+                  </button>
+                </>
+              ) : (
+                <>
+                  Uten kundens makstak ({kr(Number(kunde.makstak))} kr).{" "}
+                  <button type="button" className="lenke" onClick={() => endreKort(k.nokkel, { utenMakstak: false })}>
+                    Bruk det
+                  </button>
+                </>
+              )}
+            </p>
+          )}
           <details className="flere-mer" open={Boolean(k.deres_referanse || k.kopi) || undefined}>
             <summary>Referanse og kopi</summary>
             <div className="rad">

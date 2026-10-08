@@ -18,7 +18,7 @@ export interface LinjeUtkast {
 
 export const tomLinje = (): LinjeUtkast => ({ produkt_id: null, beskrivelse: "", antall: "1", enhet: "stk", enhetspris: "", mva_sats: "25", rabatt: "", rabatt_type: "prosent" });
 export const erTom = (l: LinjeUtkast) => !l.produkt_id && !l.beskrivelse.trim() && l.enhetspris === "";
-const tallTekst = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
+export const tallTekst = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
 // Produkter uten fast pris får tom pris, som fylles inn på fakturaen.
 export const fraProdukt = (p: any): Partial<LinjeUtkast> => ({
   produkt_id: p.id,
@@ -250,6 +250,17 @@ export function RabattKnapp({ vis, veksle }: { vis: boolean; veksle: () => void 
       {vis ? "Fjern rabatt" : "+ Rabatt"}
     </button>
   );
+}
+
+// Makstaket slik det skrives i skjemaet: null er ingen makstak. Gir feilmelding når beløpet ikke er gyldig.
+// Punktum eller komma foran tre siffer er tusenskille («70.000» er 70 000, ikke 70 kr).
+export function lesMakstak(v: string | null): { tak: number | null; feil: string | null } {
+  if (v === null || !v.trim()) return { tak: null, feil: null };
+  let t = v.replace(/\s/g, "").replace(/kr$/i, "");
+  if (/^\d{1,3}([.,]\d{3})+$/.test(t)) t = t.replace(/[.,]/g, "");
+  else if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(t)) t = t.replace(/\./g, "");
+  const n = tall(t);
+  return Number.isFinite(n) && n > 0 ? { tak: Math.round(n * 100) / 100, feil: null } : { tak: null, feil: "Skriv makstaket som et beløp over 0, f.eks. 70 000." };
 }
 
 // Notat til kunden: står på fakturaen (PDF og EHF).

@@ -3,11 +3,11 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { api, apnePdf, hent, lastNed, type Vedlegg } from "../api";
 import { dataEndret, Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, harFunksjon, kanBokfore, kanSkrive, useKonto } from "../konto";
-import { dagerMellom, dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, orgnr, summer } from "../format";
+import { dagerMellom, dato, ehfFeil, ehfStatus, epostStatus, fakturaMerke, iDag, intervallTekst, kr, leggTilDager, leggTilMaaneder, linjebelop, orgnr, summer, summerMedMakstak } from "../format";
 import { KundeSkjema, ProduktSkjema } from "./Register";
 import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 import { IkonBinders, IkonKopier, IkonKroner, IkonPluss } from "../ikoner";
-import { fraProdukt, gebyrLinjer, harRabatt, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
+import { fraProdukt, gebyrLinjer, harRabatt, lesMakstak, LinjeTabell, medProdukt, NotatFelt, RabattKnapp, tallTekst, tilTallLinjer, tilUtkast, tomLinje, useLinjefeil, type LinjeUtkast } from "../linjer";
 import { kundeValg, Sokefelt } from "../sokefelt";
 import { VedleggFelt, VedleggListe } from "../vedlegg";
 import { AiFaktura, type AiUtkast } from "../ai";
@@ -409,6 +409,8 @@ export function FakturaSkjema() {
   const [gjenta, settGjenta] = useState<Gjenta | null>(null); // gjør fakturaen gjentakende
   const [nesteValgt, settNesteValgt] = useState(false); // neste forfall er valgt av brukeren
   const [gebyr, settGebyr] = useState(false);
+  // Makstaket for fakturaen (null: ingen). Følger kunden, og kan fjernes eller endres her.
+  const [makstak, settMakstak] = useState<string | null>(null);
   const [nyKunde, settNyKunde] = useState<{ navn: string } | null>(null);
   const [nyttProdukt, settNyttProdukt] = useState<{ linje: number | "ny"; navn?: string } | null>(null); // linjen produktet skal inn på
   const [kopi, settKopi] = useState("");
@@ -443,7 +445,9 @@ export function FakturaSkjema() {
         avsender: u.avsender ?? null,
       });
       settKopi((u.kopi_til ?? []).join(", "));
-      const ls = u.linjer.filter((l: any) => !erGebyr(l));
+      settMakstak(u.makstak != null ? tallTekst(u.makstak) : null);
+      // Fratrekket for makstaket regnes på nytt når kopien sendes.
+      const ls = u.linjer.filter((l: any) => !erGebyr(l) && !l.makstak);
       settLinjer(ls.length ? ls.map(tilUtkast) : [tomLinje()]);
       if (kopi) {
         settGebyr(u.linjer.some(erGebyr));
@@ -482,8 +486,20 @@ export function FakturaSkjema() {
 
   const utenMva = Boolean(orgData.data && !orgData.data.mva_registrert);
   const tallLinjer = tilTallLinjer(linjer, utenMva);
-  const sum = useMemo(() => summer([...tallLinjer, ...gebyrLinjer(gebyr, orgData.data)]), [JSON.stringify(tallLinjer), gebyr, orgData.data]);
+  const tak = lesMakstak(makstak);
+  const sum = useMemo(() => summerMedMakstak([...tallLinjer, ...gebyrLinjer(gebyr, orgData.data)], tak.tak), [JSON.stringify(tallLinjer), gebyr, orgData.data, tak.tak]);
   const kunde = kunder.data?.find((k: any) => k.id === f.kunde_id);
+  // Kundens makstak følger med når kunden velges (et utkast eller en kopi har sitt eget til kunden byttes).
+  const forrigeKunde = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!lastet || !kunder.data) return;
+    const forrige = forrigeKunde.current;
+    forrigeKunde.current = f.kunde_id;
+    if (forrige === f.kunde_id || (forrige === undefined && (id || kopiId))) return;
+    const k = kunder.data.find((x: any) => x.id === f.kunde_id);
+    settMakstak(k?.makstak != null ? tallTekst(k.makstak) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.kunde_id, lastet, Boolean(kunder.data)]);
   const rabatt = Math.round((summer(tallLinjer.map((l) => ({ ...l, rabatt_prosent: null, rabatt_belop: null }))).eks - summer(tallLinjer).eks) * 100) / 100;
   const sjekkLinjer = useLinjefeil(linjer, settFeil);
   // Gjentakelsen: neste forfall er ett intervall etter denne fakturaens forfall, om ikke
@@ -590,6 +606,7 @@ export function FakturaSkjema() {
     if (gjenta && nesteValgt && forfall && gjenta.neste_forfall <= forfall)
       return settFeil(`Neste forfall for gjentakelsen må være etter forfallsdatoen på fakturaen (${dato(forfall)}).`);
     if (gjenta?.slutt_dato && nesteForfall && gjenta.slutt_dato < nesteForfall) return settFeil("Sluttdatoen for gjentakelsen er før neste forfall.");
+    if (tak.feil) return settFeil(tak.feil);
     const kropp = {
       kunde_id: f.kunde_id,
       fakturadato: f.fakturadato || null,
@@ -612,6 +629,7 @@ export function FakturaSkjema() {
           }
         : null,
       gebyr,
+      makstak: tak.tak,
       linjer: tallLinjer,
       vedlegg: vedlegg.map((v) => v.id),
     };
@@ -757,6 +775,11 @@ export function FakturaSkjema() {
             + Nytt produkt
           </button>
           <RabattKnapp vis={visRabatt} veksle={vekslRabatt} />
+          {makstak === null && (
+            <button type="button" title="Kunden skal aldri betale mer enn et avtalt beløp på én faktura" onClick={() => settMakstak("")}>
+              + Makstak
+            </button>
+          )}
           {orgData.data.standard_gebyr > 0 && (
             <label style={{ margin: 0 }}>
               <input type="checkbox" checked={gebyr} onChange={(e) => settGebyr(e.target.checked)} />
@@ -770,6 +793,49 @@ export function FakturaSkjema() {
               <span>Rabatt</span>
               <span className="tall">−{kr(rabatt)}</span>
             </div>
+          )}
+          {makstak !== null && (
+            <>
+              {sum.fratrekk !== 0 && (
+                <div>
+                  <span>Sum før makstak</span>
+                  <span className="tall">{kr(sum.foer)}</span>
+                </div>
+              )}
+              <div className="makstak-rad">
+                <label htmlFor="makstak">
+                  Makstak
+                  {kunde?.makstak != null && tak.tak === kunde.makstak && <span className="liten dempet">fra kunden</span>}
+                </label>
+                <span className="med-knapp">
+                  <input
+                    id="makstak"
+                    className="tall"
+                    inputMode="decimal"
+                    placeholder="Beløp"
+                    aria-describedby="makstak-hjelp"
+                    autoFocus={makstak === "" && !kunde?.makstak}
+                    value={makstak}
+                    onChange={(e) => {
+                      settMakstak(e.target.value);
+                      if (feil?.startsWith("Skriv makstaket")) settFeil(null);
+                    }}
+                  />
+                  <button type="button" className="lenke" aria-label="Fjern makstaket på denne fakturaen" title="Fjern makstaket på denne fakturaen" onClick={() => settMakstak(null)}>
+                    ✕
+                  </button>
+                </span>
+              </div>
+              {sum.fratrekk !== 0 && (
+                <div className="rabatt">
+                  <span>Fratrekk</span>
+                  <span className="tall">−{kr(-sum.fratrekk)}</span>
+                </div>
+              )}
+              <p id="makstak-hjelp" className="liten dempet makstak-hjelp">
+                Å betale blir aldri mer enn makstaket{utenMva ? "" : " (inkl. mva)"}. Er summen høyere, får fakturaen et fratrekk.
+              </p>
+            </>
           )}
           {!utenMva && (
             <>
@@ -1028,6 +1094,12 @@ export function FakturaVisning() {
               {f.kid}
             </div>
           )}
+          {f.makstak != null && (
+            <div>
+              <div className="dempet liten">Makstak</div>
+              {kr(f.makstak)}
+            </div>
+          )}
           {f.sendt_til && !viaEhf && (
             <div>
               <div className="dempet liten">Sendt til</div>
@@ -1081,8 +1153,9 @@ export function FakturaVisning() {
             </tr>
           </thead>
           <tbody>
-            {f.linjer.map((l: any) => (
-              <tr key={l.id}>
+            {/* Et utkast viser fratrekket for makstaket slik det blir når fakturaen sendes. */}
+            {[...f.linjer, ...(f.makstak_linjer ?? []).map((l: any, i: number) => ({ ...l, id: `makstak-${i}` }))].map((l: any) => (
+              <tr key={l.id} className={l.makstak ? "makstak-linje" : undefined}>
                 <td className="hel tittel">{l.beskrivelse}</td>
                 <td className="tall" data-label="Antall">
                   {String(l.antall).replace(".", ",")} {l.enhet !== "stk" ? l.enhet : ""}
@@ -1402,9 +1475,16 @@ function Kreditering({ faktura, ferdig }: { faktura: any; ferdig: (kn: any) => v
     if (kn) ferdig(kn);
   }
 
+  const makstak = faktura.linjer.some((l: any) => l.makstak);
   return (
     <>
       <p>En kreditnota får eget nummer og sendes til kunden. Den kan ikke angres.</p>
+      {makstak && (
+        <p className="melding info">
+          Fakturaen har fratrekk for makstaket på {kr(faktura.makstak)} kr. Krediterer du deler av den, regnes fratrekket på nytt for det som står igjen, så
+          kreditnotaen tar bare med det kunden faktisk betaler mindre.
+        </p>
+      )}
       <label>
         <input type="radio" checked={hel} onChange={() => settHel(true)} /> Krediter hele fakturaen
       </label>

@@ -15,6 +15,27 @@ export async function hentFaktura(db: Db, orgId: string, id: string) {
   return { ...f, linjer, vedlegg };
 }
 
+// Fratrekket for makstaket på et utkast, som linjer (utstedte fakturaer har det som linjer
+// fra faktura.utsted). Tomt uten makstak eller når summen er under.
+export async function makstakLinjer(db: Db, f: any) {
+  if (f.status !== "utkast" || f.makstak == null) return [];
+  const rader = await alle<{ mva_sats: number; belop_eks: number; mva_belop: number; beskrivelse: string }>(
+    db,
+    "select mva_sats, belop_eks, mva_belop, beskrivelse from faktura.makstak_fratrekk($1)",
+    [f.id],
+  );
+  return rader.map((r) => ({
+    beskrivelse: r.beskrivelse,
+    antall: -1,
+    enhet: "stk",
+    enhetspris: -r.belop_eks,
+    mva_sats: r.mva_sats,
+    belop_eks: r.belop_eks,
+    mva_belop: r.mva_belop,
+    makstak: true,
+  }));
+}
+
 async function hentLogo(sti: string | null | undefined) {
   if (!sti || !config.filerBucket) return null;
   try {
@@ -56,7 +77,7 @@ export async function pdfData(db: Db, f: any): Promise<PdfFaktura> {
     var_referanse: f.var_referanse,
     selger,
     kunde,
-    linjer: f.linjer.map((l: any) => ({
+    linjer: [...f.linjer, ...(utkast ? await makstakLinjer(db, f) : [])].map((l: any) => ({
       beskrivelse: l.beskrivelse,
       antall: l.antall,
       enhet: l.enhet,
