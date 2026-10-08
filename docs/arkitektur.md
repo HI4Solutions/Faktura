@@ -289,9 +289,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   halvt minutt), bakgrunnsjobbene hopper over organisasjonen (bankhenting, gjentakende
   fakturaer, EHF-sending, som da går på e-post, påminnelser og Google Disk), og appen
   skjuler det som ikke er slått på (`mine_organisasjoner.funksjoner`)
-- Menyen i appen har ett punkt for fakturaene: Fakturaer, Gjentakende og Innbetalinger er
-  faner øverst på de tre sidene (`web/src/fakturameny.tsx`), med de samme adressene som før
-  (`/gjentakende`, `/innbetalinger`), og «Fakturaer» er valgt i menyen på alle tre.
+- Menyen i appen har ett punkt for fakturaene: Fakturaer har fanene Alle, Utkast, Ubetalt,
+  Betalt, Kreditert, Gjentakende og Innbetalinger (`web/src/fakturameny.tsx`). Gjentakende og
+  Innbetalinger har de samme adressene som før (`/gjentakende`, `/innbetalinger`), og
+  «Fakturaer» er valgt i menyen på alle tre.
   Innstillingene har fanene Organisasjon (opplysningene, brukerne, regnskapsføreren og
   sletting), Faktura (fakturaoppsettet, logoen, betalingen med kontonumre, purring og banken,
   og EHF), Ansatte og timer, Min konto og App. Hver del lagrer bare sine felt

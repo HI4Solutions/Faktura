@@ -8,12 +8,13 @@ import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { harFunksjon, kanSkrive, useKonto } from "../konto";
 import { dato, iDag, kr, summerMedMakstak } from "../format";
 import { Paaminnelser } from "./Paaminnelser";
-import { Fakturameny } from "../fakturameny";
+import { Fakturafaner } from "../fakturameny";
 
 const intervallTekst: Record<string, string> = { maaned: "Hver måned", kvartal: "Hvert kvartal", aar: "Hvert år" };
 
-// To faner: gjentakende fakturaer (sendes av seg selv) og påminnelser (for fakturaer man lager
-// selv, for eksempel når beløpet varierer). Fanen står i adressen (?fane=paaminnelser).
+// En av fanene på Fakturaer (fakturameny.tsx), med to faner under: gjentakende fakturaer (sendes
+// av seg selv) og påminnelser (for fakturaer man lager selv, for eksempel når beløpet varierer).
+// Fanen står i adressen (?fane=paaminnelser).
 export function Gjentakende() {
   const { org } = useKonto();
   const [sok, settSok] = useSearchParams();
@@ -25,21 +26,21 @@ export function Gjentakende() {
     ] as const
   ).filter(([, , vis]) => vis);
   const fane = synlige.some(([v]) => v === "paaminnelser") && (sok.get("fane") === "paaminnelser" || !synlige.some(([v]) => v === "fakturaer")) ? "paaminnelser" : "fakturaer";
-  const faner = synlige.length < 2 ? null : (
-    <div className="faner" role="tablist">
-      {synlige.map(([v, t]) => (
-        <button key={v} role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : ""} onClick={() => settSok(v === "fakturaer" ? {} : { fane: v }, { replace: true })}>
-          {t}
-        </button>
-      ))}
-    </div>
-  );
-  return (
+  const faner = (
     <>
-      <Fakturameny />
-      {fane === "paaminnelser" ? <Paaminnelser faner={faner} /> : <GjentakendeFakturaer faner={faner} />}
+      <Fakturafaner valgt="gjentakende" />
+      {synlige.length > 1 && (
+        <div className="faner" role="tablist" aria-label="Gjentakende">
+          {synlige.map(([v, t]) => (
+            <button key={v} role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : ""} onClick={() => settSok(v === "fakturaer" ? {} : { fane: v }, { replace: true })}>
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
     </>
   );
+  return fane === "paaminnelser" ? <Paaminnelser faner={faner} /> : <GjentakendeFakturaer faner={faner} />;
 }
 
 function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
@@ -54,7 +55,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
     return (
       <>
         <div className="topp">
-          <h1>Gjentakende</h1>
+          <h1>Fakturaer</h1>
         </div>
         {faner}
         {feil ? <Feil melding={feil} /> : <Laster />}
@@ -64,7 +65,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
   return (
     <>
       <div className="topp">
-        <h1>Gjentakende</h1>
+        <h1>Fakturaer</h1>
         {kanSkrive(org?.rolle) && (
           <button className="primar" onClick={() => settRedigerer({})}>
             Ny gjentakelse

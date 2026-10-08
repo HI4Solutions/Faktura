@@ -12,7 +12,7 @@ import { kundeValg, Sokefelt } from "../sokefelt";
 import { VedleggFelt, VedleggListe } from "../vedlegg";
 import { AiFaktura, type AiUtkast } from "../ai";
 import type { PaaminnelseUtkast } from "./Paaminnelser";
-import { Fakturameny } from "../fakturameny";
+import { Fakturafaner } from "../fakturameny";
 
 // Binders etter kundenavnet i lista når fakturaen har vedlegg.
 const HarVedlegg = ({ antall }: { antall?: number }) =>
@@ -41,7 +41,6 @@ export function Fakturaliste() {
 
   return (
     <>
-      <Fakturameny />
       <div className="topp">
         <h1>Fakturaer</h1>
         {kanSkrive(org?.rolle) && (
@@ -57,19 +56,7 @@ export function Fakturaliste() {
           </div>
         )}
       </div>
-      <div className="faner" role="tablist">
-        {[
-          ["", "Alle"],
-          ["utkast", "Utkast"],
-          ["utstedt", "Ubetalt"],
-          ["betalt", "Betalt"],
-          ["kreditert", "Kreditert"],
-        ].map(([v, t]) => (
-          <button key={v} role="tab" aria-selected={status === v} className={status === v ? "valgt" : ""} onClick={() => settStatus(v)}>
-            {t}
-          </button>
-        ))}
-      </div>
+      <Fakturafaner valgt={status} velgStatus={settStatus} />
       {utkast.length > 0 && kanSkrive(org?.rolle) && harFunksjon(org, "flere") && (
         <div className="knapper" style={{ marginBottom: 14 }}>
           <button type="button" onClick={() => settSendUtkast(true)}>

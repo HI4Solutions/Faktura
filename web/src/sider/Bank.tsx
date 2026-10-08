@@ -11,7 +11,7 @@ import { erAdmin, kanBokfore, useKonto } from "../konto";
 import { Sokefelt } from "../sokefelt";
 import { IkonGnist, IkonKlokke, IkonKroner } from "../ikoner";
 import { HemmeligFelt, HemmeligTekst } from "../hemmelig";
-import { Fakturameny } from "../fakturameny";
+import { Fakturafaner } from "../fakturameny";
 
 // En konto i banken som er lagt inn i HI4 Faktura (bare de leses), med navnet derfra.
 export interface BankKonto {
@@ -696,15 +696,15 @@ export function Innbetalinger() {
 
   return (
     <>
-      <Fakturameny />
       <div className="topp">
-        <h1>Innbetalinger</h1>
+        <h1>Fakturaer</h1>
         {aktive.length > 0 && bokfore && (
           <button onClick={hentNa} disabled={henter}>
-            {henter ? "Henter …" : "Hent nå"}
+            {henter ? "Henter …" : "Hent innbetalinger nå"}
           </button>
         )}
       </div>
+      <Fakturafaner valgt="innbetalinger" />
       {bank.data && (
         <p className="undertittel">
           {aktive.length ? `Fra ${navnListe(aktive.map((k) => k.bank))}.` : "Banken er ikke koblet til."}{" "}

@@ -201,6 +201,7 @@ strong { font-weight: 650; }
 .topp { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
 .topp h1 { margin: 0; }
 .undertittel { color: var(--dempet); margin: -0.6rem 0 1.25rem; }
+.faner + .undertittel { margin-top: -0.2rem; }
 
 /* Grid-barn må kunne krympe. Ellers blir hele siden like bred som den bredeste
    tabellen, og mobilen zoomer ut (alt blir «veldig stort»). */
@@ -403,12 +404,6 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 /* Også når trykket henger igjen som «hover» på telefon */
 .faner button.valgt, .faner button.valgt:hover:not(:disabled) { background: var(--aksent-lys); color: var(--aksent); }
 .faner.utseende { margin-bottom: 6px; }
-/* Delene av en side med ett punkt i menyen (Fakturaer, Gjentakende og Innbetalinger) */
-.seksjonsmeny { display: flex; gap: 2px 24px; margin: -4px 0 18px; border-bottom: 1px solid var(--kant); overflow-x: auto; scrollbar-width: none; }
-.seksjonsmeny::-webkit-scrollbar { display: none; }
-.seksjonsmeny a { flex: none; padding: 6px 1px 10px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--dempet); font-weight: 600; font-size: 0.95rem; text-decoration: none; white-space: nowrap; }
-.seksjonsmeny a:hover { color: var(--tekst); }
-.seksjonsmeny a.active { color: var(--aksent); border-bottom-color: var(--aksent); }
 /* Steder i innstillingene som lenker går rett til (under toppfeltet på mobil) */
 .innstilling-sted { scroll-margin-top: 76px; }
 
@@ -707,8 +702,8 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
   .faner::-webkit-scrollbar { display: none; }
   .faner button { flex: none; min-height: 36px; }
   /* Innstillingene har mange faner: de brytes over to linjer, så alle synes. */
-  .faner.innstillinger-faner { flex-wrap: wrap; overflow: visible; }
-  .faner.innstillinger-faner button { flex: 1 1 auto; justify-content: center; }
+  .faner.innstillinger-faner, .faner.fakturafaner { flex-wrap: wrap; overflow: visible; }
+  .faner.innstillinger-faner button, .faner.fakturafaner button { flex: 1 1 auto; justify-content: center; }
 
   /* Handlinger på fakturasiden: to kolonner med like store knapper */
   .topp .handlinger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 8px; }

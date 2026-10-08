@@ -140,7 +140,7 @@ export function Paaminnelser({ faner }: { faner: ReactNode }) {
   return (
     <>
       <div className="topp">
-        <h1>Gjentakende</h1>
+        <h1>Fakturaer</h1>
         {skriv && (
           <button className="primar" onClick={() => settRedigerer({})}>
             Ny påminnelse
