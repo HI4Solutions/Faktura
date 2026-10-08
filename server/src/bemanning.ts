@@ -2,7 +2,8 @@
 // rollen personen har hos dere, f.eks. lege eller sekretær, med hvor mange som trengs på jobb per
 // dag. En rolle kan være for dem som ikke er ansatt (ikke_ansatt, f.eks. leger som er aksjonærer):
 // da er de med i vaktplanen, på tavla, i kalenderen og i fraværet, men ikke i lønn, feriebank,
-// ekstratimer eller arbeidsmiljølovens advarsler. Kalenderen viser måneden med datoene nedover og
+// ekstratimer eller arbeidsmiljølovens advarsler; og en rolle kan stå utenfor tavla (tavle, f.eks.
+// legene: 0057_rolle_tavle.sql). Kalenderen viser måneden med datoene nedover og
 // folkene bortover, rolle for rolle, og hvor mange som er på jobb med hver rolle mot behovet. Den
 // regnes ut i appen fra vaktplanen og fraværet; her styres rollene. Eier og administrator endrer
 // dem; regnskap ser dem.
@@ -22,10 +23,11 @@ const skjema = z.object({
   kort: valgfri(tekst(8, "Forkortelsen").min(1)),
   behov: valgfri(z.number().int("Skriv behovet som et helt tall").min(0, "Behovet kan ikke være negativt").max(500, "Behovet kan være høyst 500")),
   ikke_ansatt: z.boolean().optional(), // de med rollen er ikke ansatt
+  tavle: z.boolean().optional(), // de med rollen er med på tavla (0057_rolle_tavle.sql)
 });
 
 const GRUPPER = `
-  select g.id, g.navn, g.kort, g.behov, g.rekkefolge, g.ikke_ansatt,
+  select g.id, g.navn, g.kort, g.behov, g.rekkefolge, g.ikke_ansatt, g.tavle,
          (select count(*)::int from faktura.ansatte a where a.org_id = g.org_id and a.gruppe_id = g.id and a.aktiv) as antall
     from faktura.ansattgrupper g
    where g.org_id = $1
@@ -49,10 +51,10 @@ export function bemanningRuter() {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
       return en(
         db,
-        `insert into faktura.ansattgrupper (org_id, navn, kort, behov, ikke_ansatt, rekkefolge)
-         values ($1, $2, $3, $4, $5, (select coalesce(max(rekkefolge), 0) + 1 from faktura.ansattgrupper where org_id = $1))
+        `insert into faktura.ansattgrupper (org_id, navn, kort, behov, ikke_ansatt, tavle, rekkefolge)
+         values ($1, $2, $3, $4, $5, $6, (select coalesce(max(rekkefolge), 0) + 1 from faktura.ansattgrupper where org_id = $1))
          returning id`,
-        [orgId(c), b.navn, b.kort ?? null, b.behov ?? null, b.ikke_ansatt ?? false],
+        [orgId(c), b.navn, b.kort ?? null, b.behov ?? null, b.ikke_ansatt ?? false, b.tavle ?? true],
       );
     });
     return c.json(ny, 201);
@@ -60,7 +62,7 @@ export function bemanningRuter() {
 
   r.patch("/ansattgrupper/:id", async (c) => {
     const b = skjema.partial().parse(await c.req.json().catch(() => ({})));
-    const felt = (["navn", "kort", "behov", "ikke_ansatt"] as const).filter((k) => b[k] !== undefined);
+    const felt = (["navn", "kort", "behov", "ikke_ansatt", "tavle"] as const).filter((k) => b[k] !== undefined);
     if (!felt.length) throw new ApiFeil(400, "Ingen felt å endre");
     await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);

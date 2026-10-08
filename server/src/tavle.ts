@@ -5,7 +5,8 @@
 // vaktene deres står som «mangler vikar» til en vikar er satt inn. Hvem som hører til hvilken
 // fase (vakten overlapper fasens tidsrom), finner appen ut. Eier og administrator plasserer
 // de ansatte i oppgavene, for hånd eller med rulleringen (/tavle/rullering, 0051); regnskap ser
-// tavla, og den ansatte ser sine egne plasser (/tavle/mine).
+// tavla, og den ansatte ser sine egne plasser (/tavle/mine). De med en rolle som ikke er med på
+// tavla (f.eks. legene, 0057_rolle_tavle.sql), står ikke der og fordeles ikke.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
@@ -38,6 +39,15 @@ const FASER = "select id, navn, to_char(fra, 'HH24:MI') as fra, to_char(til, 'HH
 const OPPGAVER = "select id, navn, behov, rekkefolge from faktura.tavle_oppgaver where org_id = $1 order by rekkefolge, opprettet";
 const BEHOV = "select fase_id, oppgave_id, antall from faktura.tavle_behov where org_id = $1";
 const UTELATT = "select oppgave_id, ansatt_id from faktura.tavle_utelatt where org_id = $1";
+// De som har en rolle som ikke er med på tavla (0057_rolle_tavle.sql).
+async function utenforTavla(db: Db, org: string) {
+  const rader = await alle<{ id: string }>(
+    db,
+    "select a.id from faktura.ansatte a join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id where a.org_id = $1 and not g.tavle",
+    [org],
+  );
+  return new Set(rader.map((x) => x.id));
+}
 
 export function tavleRuter() {
   const r = new Hono();
@@ -145,7 +155,8 @@ export function tavleRuter() {
     return c.json(
       await bruk(c, async (db) => {
         await db.query("select faktura.krev($1, 'personal_les')", [orgId(c)]);
-        const vakter = await alle<{
+        const utenfor = await utenforTavla(db, orgId(c));
+        const vakter = (await alle<{
           id: string;
           ansatt_id: string;
           navn: string;
@@ -167,7 +178,7 @@ export function tavleRuter() {
             where v.org_id = $1 and v.dato = $2
             order by v.fra, a.etternavn, a.fornavn`,
           [orgId(c), dato],
-        );
+        )).filter((v) => !utenfor.has(v.ansatt_id));
         type TavleVakt = { id: string; fra: string | null; til: string | null; oppgave: string | null; vikar: boolean; publisert: boolean; fast?: boolean; timer?: number };
         const ressurser = new Map<string, { ansatt_id: string; navn: string; fravaer: string | null; vakter: TavleVakt[] }>();
         for (const v of vakter) {
@@ -179,7 +190,7 @@ export function tavleRuter() {
         // ingen klokkeslett og hører til alle fasene.
         const b = await beregnBemanning(db, orgId(c), dato, dato);
         const navn = new Map(b.ansatte.map((a) => [a.id, a.navn]));
-        for (const f of b.faste.filter((x) => x.dato === dato))
+        for (const f of b.faste.filter((x) => x.dato === dato && !utenfor.has(x.ansatt_id)))
           ressurser.set(f.ansatt_id, {
             ansatt_id: f.ansatt_id,
             navn: navn.get(f.ansatt_id) ?? "",
@@ -194,15 +205,22 @@ export function tavleRuter() {
           ressurser: [...ressurser.values()].sort(
             (x, y) => (x.vakter[0]?.fra ?? "00:00").localeCompare(y.vakter[0]?.fra ?? "00:00") || x.navn.localeCompare(y.navn, "nb"),
           ),
-          plasseringer: await alle(db, "select id, fase_id, oppgave_id, ansatt_id, rullert from faktura.tavle_plasseringer where org_id = $1 and dato = $2", [orgId(c), dato]),
+          plasseringer: (
+            await alle<{ ansatt_id: string }>(db, "select id, fase_id, oppgave_id, ansatt_id, rullert from faktura.tavle_plasseringer where org_id = $1 and dato = $2", [
+              orgId(c),
+              dato,
+            ])
+          ).filter((p) => !utenfor.has(p.ansatt_id)),
           utelatt: await alle(db, UTELATT, [orgId(c)]),
-          fravaer: await alle(
-            db,
-            `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.fra, f.til
-               from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
-              where f.org_id = $1 and $2 between f.fra and f.til order by a.etternavn, a.fornavn`,
-            [orgId(c), dato],
-          ),
+          fravaer: (
+            await alle<{ ansatt_id: string }>(
+              db,
+              `select f.id, f.ansatt_id, a.fornavn || ' ' || a.etternavn as navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.fra, f.til
+                 from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
+                where f.org_id = $1 and $2 between f.fra and f.til order by a.etternavn, a.fornavn`,
+              [orgId(c), dato],
+            )
+          ).filter((f) => !utenfor.has(f.ansatt_id)),
           mangler_vikar: vakter
             .filter((v) => v.fravaer && !v.har_vikar)
             .map((v) => ({ vakt_id: v.id, ansatt_id: v.ansatt_id, navn: v.navn, fra: v.fra, til: v.til, oppgave: v.oppgave, type: v.fravaer })),
@@ -238,6 +256,14 @@ export function tavleRuter() {
     const b = z.object({ dato: datoS, fase_id: uuid, ansatt_id: uuid, oppgave_id: uuid.nullable() }).parse(await c.req.json().catch(() => ({})));
     await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      // En rolle som ikke er med på tavla (databasen hopper over plassen; her sies det fra).
+      const utenfor = await en<{ navn: string; rolle: string }>(
+        db,
+        `select a.fornavn || ' ' || a.etternavn as navn, g.navn as rolle from faktura.ansatte a join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id
+          where a.org_id = $1 and a.id = $2 and not g.tavle`,
+        [orgId(c), b.ansatt_id],
+      );
+      if (utenfor && b.oppgave_id) throw new ApiFeil(400, `${utenfor.navn} er ikke med på tavla (rollen ${utenfor.rolle})`);
       if (!b.oppgave_id)
         await db.query("delete from faktura.tavle_plasseringer where org_id = $1 and dato = $2 and fase_id = $3 and ansatt_id = $4", [orgId(c), b.dato, b.fase_id, b.ansatt_id]);
       else
@@ -337,8 +363,10 @@ export async function kjorRullering(db: Db, org: string, b: RulleringValg) {
     start,
     b.fra,
   ]);
-  const historikk = plasser.filter((p) => p.dato < b.fra && !borte.some((f) => f.ansatt_id === p.ansatt_id && f.fra <= p.dato && f.til >= p.dato));
-  const iPerioden = plasser.filter((p) => p.dato >= b.fra);
+  // De med en rolle som ikke er med på tavla, fordeles ikke (og plassene deres teller ikke).
+  const utenfor = await utenforTavla(db, org);
+  const historikk = plasser.filter((p) => p.dato < b.fra && !utenfor.has(p.ansatt_id) && !borte.some((f) => f.ansatt_id === p.ansatt_id && f.fra <= p.dato && f.til >= p.dato));
+  const iPerioden = plasser.filter((p) => p.dato >= b.fra && !utenfor.has(p.ansatt_id));
   const staar = behold ? iPerioden.filter((p) => !p.rullert) : [];
 
   // De som er på jobb hver dag (som på tavla): vaktene og de faste arbeidsdagene, uten dem
@@ -347,7 +375,7 @@ export async function kjorRullering(db: Db, org: string, b: RulleringValg) {
   const ansatt = new Map(bem.ansatte.map((a) => [a.id, a]));
   const ansattDag = (a: string, d: string) => {
     const x = ansatt.get(a);
-    return !!x && x.aktiv && d >= x.ansatt_fra && (!x.ansatt_til || d <= x.ansatt_til);
+    return !!x && x.aktiv && !utenfor.has(a) && d >= x.ansatt_fra && (!x.ansatt_til || d <= x.ansatt_til);
   };
   const dager: RDag[] = [];
   for (let d = b.fra; d <= b.til; d = leggTilDager(d, 1)) {

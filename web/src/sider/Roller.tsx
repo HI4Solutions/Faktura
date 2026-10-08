@@ -1,22 +1,23 @@
 // Rollene: rollen personen har hos dere, f.eks. lege eller sekretær (i API-et «ansattgrupper»;
 // 0039_bemanning.sql og 0056_roller.sql). En rolle kan være for dem som ikke er ansatt (f.eks.
-// leger som er aksjonærer eller selvstendige): de er med i vaktplanen, på tavla, i
-// bemanningskalenderen og i fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens
-// advarsler. Med vaktplanen står rollene ved siden av hverandre i bemanningskalenderen, med hvor
-// mange som er på jobb mot behovet. Rollene settes opp her (fra Ansatte og fra kalenderen), og
-// velges for hver person i skjemaet under Ansatte.
+// leger som er aksjonærer eller selvstendige): de er med i vaktplanen, i bemanningskalenderen og
+// i fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler. Med vaktplanen står
+// rollene ved siden av hverandre i bemanningskalenderen, med hvor mange som er på jobb mot
+// behovet, og en rolle kan stå utenfor tavla (0057_rolle_tavle.sql; f.eks. legene: de står ikke
+// der og fordeles ikke). Rollene settes opp her (fra Ansatte og fra kalenderen), og velges for hver
+// person i skjemaet under Ansatte.
 import { useState, type FormEvent } from "react";
 import { api } from "../api";
 import { Feil, tall, useHandling } from "../felles";
 import { IkonNed, IkonOpp, IkonPluss } from "../ikoner";
 import { useKonto } from "../konto";
 
-export type Rolle = { id: string; navn: string; kort: string | null; behov: number | null; rekkefolge: number; antall: number; ikke_ansatt: boolean };
+export type Rolle = { id: string; navn: string; kort: string | null; behov: number | null; rekkefolge: number; antall: number; ikke_ansatt: boolean; tavle: boolean };
 type Person = { id: string; fornavn: string; etternavn: string; aktiv: boolean; stilling: string | null; gruppe_id: string | null };
 
 // «Sekretær» blir «Sek.» i oppsummeringen i kalenderen, med mindre rollen har en egen forkortelse.
 export const kortNavn = (g: Pick<Rolle, "navn" | "kort">) => g.kort || (g.navn.length > 5 ? `${g.navn.slice(0, 3)}.` : g.navn);
-export const IKKE_ANSATT_HJELP = "med i vaktplanen, på tavla, i kalenderen og fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler";
+export const IKKE_ANSATT_HJELP = "med i vaktplanen, kalenderen og fraværet, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler";
 
 // kalender: med vaktplanen (behov og forkortelse i bemanningskalenderen).
 export function RollerOppsett({ roller, personer, kalender, endret, lukk }: { roller: Rolle[]; personer: Person[]; kalender: boolean; endret: () => void; lukk: () => void }) {
@@ -91,6 +92,7 @@ export function RollerOppsett({ roller, personer, kalender, endret, lukk }: { ro
                         kalender && g.behov != null ? `trenger ${g.behov} per dag` : "",
                         `${g.antall} ${g.antall === 1 ? "person" : "personer"}`,
                         g.ikke_ansatt ? "ikke ansatt" : "",
+                        kalender && g.tavle === false ? "ikke på tavla" : "",
                       ]
                         .filter(Boolean)
                         .join(" · ")}
@@ -184,6 +186,7 @@ function RolleSkjema({ rolle, kalender, ferdig, avbryt }: { rolle?: Rolle; kalen
     kort: rolle?.kort ?? "",
     behov: rolle?.behov != null ? String(rolle.behov) : "",
     ikke_ansatt: rolle?.ikke_ansatt ?? false,
+    tavle: rolle?.tavle ?? true,
   });
   const h = useHandling();
   const sett = (e: Partial<typeof v>) => settV({ ...v, ...e });
@@ -192,7 +195,7 @@ function RolleSkjema({ rolle, kalender, ferdig, avbryt }: { rolle?: Rolle; kalen
     e.preventDefault();
     const behov = v.behov.trim() === "" ? null : tall(v.behov);
     if (behov !== null && !(Number.isInteger(behov) && behov >= 0)) return h.settFeil("Skriv behovet som et helt tall");
-    const kropp = { navn: v.navn.trim(), ikke_ansatt: v.ikke_ansatt, ...(kalender ? { kort: v.kort.trim() || null, behov } : {}) };
+    const kropp = { navn: v.navn.trim(), ikke_ansatt: v.ikke_ansatt, ...(kalender ? { kort: v.kort.trim() || null, behov, tavle: v.tavle } : {}) };
     const r = await h.kjor(async () => {
       if (rolle) await api("PATCH", `/org/${org!.id}/ansattgrupper/${rolle.id}`, kropp);
       else await api("POST", `/org/${org!.id}/ansattgrupper`, kropp);
@@ -226,6 +229,17 @@ function RolleSkjema({ rolle, kalender, ferdig, avbryt }: { rolle?: Rolle; kalen
         <input type="checkbox" checked={v.ikke_ansatt} onChange={(e) => sett({ ikke_ansatt: e.target.checked })} /> Ikke ansatt
       </label>
       <p className="felt-hjelp oppsett-hjelp">For dem som jobber her uten å være ansatt, f.eks. leger som er aksjonærer eller selvstendige: {IKKE_ANSATT_HJELP}.</p>
+      {kalender && (
+        <>
+          <label>
+            <input type="checkbox" checked={v.tavle} onChange={(e) => sett({ tavle: e.target.checked })} /> Med på tavla
+          </label>
+          <p className="felt-hjelp oppsett-hjelp">
+            Uten kryss står de med rollen ikke på tavla, rulleringen fordeler dem ikke, og plassene deres fra i dag av fjernes. I vaktplanen og kalenderen er de med
+            som før.
+          </p>
+        </>
+      )}
       <Feil melding={h.feil} />
       <div className="knapper">
         <button className="primar" disabled={h.opptatt}>

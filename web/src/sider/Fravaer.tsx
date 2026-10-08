@@ -17,7 +17,7 @@ import { visDag } from "../uke";
 // er (0047_fravaer_skjult.sql); andre ser bare at den ansatte er borte (F).
 export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "kurs" | "annet" | "fravaer";
 export type Fravaer = { id: string; ansatt_id: string; ansatt_navn: string; type: FravaerType; fra: string; til: string; notat?: string | null };
-export type Ansatt = { id: string; fornavn: string; etternavn: string; ansatt_fra: string; ansatt_til: string | null; aktiv: boolean };
+export type Ansatt = { id: string; fornavn: string; etternavn: string; ansatt_fra: string; ansatt_til: string | null; aktiv: boolean; tavle?: boolean };
 type BerortVakt = { id: string; dato: string; fra: string; til: string; oppgave: string | null };
 
 export const FRAVAERTYPER: FravaerType[] = ["ferie", "syk", "sykt_barn", "permisjon", "kurs", "annet"];

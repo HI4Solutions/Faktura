@@ -185,7 +185,10 @@ export function Tavle({ dato, velgDato, kanEndre }: { dato: string; velgDato: (d
         )}
       />
       {data.faser.length > 0 && data.oppgaver.length > 0 && <BehovPerFase faser={data.faser} oppgaver={data.oppgaver} behov={data.behov} endret={last} />}
-      {data.oppgaver.length > 0 && ansatte.data && <HvemKan oppgaver={data.oppgaver} ansatte={ansatte.data} utelatt={data.utelatt} endret={last} />}
+      {data.oppgaver.length > 0 && ansatte.data && (
+        // De med en rolle som ikke er med på tavla, står ikke her.
+        <HvemKan oppgaver={data.oppgaver} ansatte={ansatte.data.filter((a) => a.tavle !== false)} utelatt={data.utelatt} endret={last} />
+      )}
       <div className="knapper oppsett-ferdig">
         <button type="button" className="primar" onClick={() => settOppsett(false)}>
           Ferdig

@@ -171,8 +171,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   rolle kan være for dem som ikke er ansatt (`ansattgrupper.ikke_ansatt`, f.eks. leger på et
   legekontor som er aksjonærer eller selvstendige), og `ansatte.arbeidstaker` følger rollen
   (triggere når personen får en annen rolle, når rollen endres og når den slettes; API-et kan
-  ikke sette det selv). De som ikke er ansatt, er med i vaktplanen, på tavla, i
-  bemanningskalenderen og i fraværet, men ikke i feriebanken (`feriebank`), ekstratimene eller
+  ikke sette det selv). De som ikke er ansatt, er med i vaktplanen, på tavla (om rollen er med
+  der), i bemanningskalenderen og i fraværet, men ikke i feriebanken (`feriebank`), ekstratimene eller
   arbeidsmiljølovens advarsler (der sjekkes bare overlapp og at de er aktive), og appen viser
   ikke lønn, fødselsnummer eller kontonummer for dem. Det er rollen som vises («Lege»), ikke
   «eier eller aksjonær» (tilknytningen per person fra 0054 er erstattet av rollene i 0056).
@@ -245,8 +245,13 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   Ressursene en dag er de som har vakt i vaktplanen eller fast arbeidsdag etter
   arbeidsplanen, og hver hører til fasene vakten overlapper (en hel fast dag hører til alle). Eier og administrator plasserer dem i oppgavene (én oppgave per ansatt og fase;
   dra og slipp på PC, trykk på mobil) og kan kopiere plassene fra en annen dag. Den som er
-  borte, kan ikke plasseres, og plassene den har, teller ikke. Regnskap ser tavla, og den
-  ansatte ser sine egne plasser under Mine vakter
+  borte, kan ikke plasseres, og plassene den har, teller ikke. En rolle kan stå utenfor tavla
+  (`ansattgrupper.tavle`, `0057_rolle_tavle.sql`; f.eks. legene, mens sekretærene fordeles): de
+  med rollen står ikke der, rulleringen og kopieringen tar dem ikke med, og de kan ikke plasseres
+  (databasen lager ikke plassen, og API-et sier fra). Når rollen tas ut av tavla, eller personen
+  får en slik rolle, fjernes plassene deres fra i dag av; i vaktplanen, bemanningskalenderen og
+  fraværet er de med som før. Regnskap ser tavla, og den ansatte ser sine egne plasser under
+  Mine vakter
 - Norske helligdager (`server/src/helligdager.ts`, `web/src/helligdager.ts` og
   `faktura.helligdager` i databasen, likt regnet): 1. nyttårsdag, skjærtorsdag, langfredag,
   1. og 2. påskedag, 1. mai, 17. mai, Kristi himmelfartsdag, 1. og 2. pinsedag og 1. og 2.
@@ -307,7 +312,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (`Klokkeslett` i `web/src/uke.tsx`) tar også «730», «7.30» og «1530» og retter dem til 07:30
   og 15:30
 - `ansattgrupper` og `ansatte.gruppe_id`: rollene (i appen «Roller»; f.eks. lege og sekretær),
-  med hvor mange som trengs på jobb per dag, og om de med rollen er ansatt (`ikke_ansatt`).
+  med hvor mange som trengs på jobb per dag, om de med rollen er ansatt (`ikke_ansatt`), og om
+  de er med på tavla (`tavle`, se over).
   Rollene settes opp under Ansatte → Roller og i bemanningskalenderen, og velges (eller lages,
   «+ Ny rolle») i ansattskjemaet; de hører til «Ansatte og timer», ikke bare vaktplanen.
   Bemanningskalenderen (i appen, fra de faste arbeidsplanene, vaktplanen og fraværet) viser

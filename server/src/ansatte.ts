@@ -123,8 +123,9 @@ const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
          a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
-         -- Rollen, og om personen er ansatt (følger rollen, 0056_roller.sql).
+         -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
+         coalesce((select g.tavle from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id), true) as tavle,
          -- Ukedagene i den faste arbeidsplanen som gjelder i dag (1 = mandag).
          (select coalesce(array_agg(d.ukedag order by d.ukedag), '{}') from faktura.arbeidsplan_dager d
            where d.org_id = a.org_id

@@ -98,4 +98,37 @@ describe.skipIf(!process.env.DATABASE_URL)("Roller", () => {
     expect((await kall("PATCH", `/api/org/${org}/ansatte/${lise}`, { gruppe_id: null })).data).toMatchObject({ rolle: null, arbeidstaker: true });
     expect((await kall("PATCH", `/api/org/${org}/ansatte/${lise}`, { gruppe_id: lege })).data.arbeidstaker).toBe(false);
   });
+
+  it("en rolle kan stå utenfor tavla: legene står ikke der og fordeles ikke", async () => {
+    const fase = (await kall("POST", `/api/org/${org}/tavle/faser`, { navn: "Dag", fra: "08:00", til: "16:00" })).data.id;
+    const resepsjon = (await kall("POST", `/api/org/${org}/tavle/oppgaver`, { navn: "Resepsjon", behov: 1 })).data.id;
+    const tavla = async () => (await kall("GET", `/api/org/${org}/tavle?dato=${dag}`)).data;
+    const plasser = (ansatt_id: string) => kall("PUT", `/api/org/${org}/tavle/plassering`, { dato: dag, fase_id: fase, ansatt_id, oppgave_id: resepsjon });
+
+    // Med på tavla (standard): Lise kan plasseres.
+    expect((await tavla()).ressurser.map((r: any) => r.navn).sort()).toEqual(["Lise Lege", "Ola Sekretær"]);
+    expect((await plasser(lise)).status).toBe(204);
+    expect((await person(lise)).tavle).toBe(true);
+
+    // Legene tas ut av tavla: plassen hennes forsvinner, og hun står ikke der.
+    expect((await kall("PATCH", `/api/org/${org}/ansattgrupper/${lege}`, { tavle: false })).status).toBe(204);
+    expect((await kall("GET", `/api/org/${org}/ansattgrupper`)).data.find((g: any) => g.id === lege).tavle).toBe(false);
+    expect((await person(lise)).tavle).toBe(false);
+    const t = await tavla();
+    expect(t.ressurser.map((r: any) => r.navn)).toEqual(["Ola Sekretær"]);
+    expect(t.plasseringer).toEqual([]);
+    expect((await plasser(lise)).data.error).toBe("Lise Lege er ikke med på tavla (rollen Lege)");
+    // Rulleringen fordeler bare Ola.
+    const r = (await kall("POST", `/api/org/${org}/tavle/rullering`, { fra: dag, til: dag })).data;
+    expect(r.ansatte.map((a: any) => a.navn)).toEqual(["Ola Sekretær"]);
+    // I vaktplanen er hun med som før.
+    expect((await kall("GET", `/api/org/${org}/vakter?fra=${dag}&til=${dag}`)).data.vakter.some((v: any) => v.ansatt_id === lise)).toBe(true);
+
+    // Tilbake på tavla, og ut igjen ved å få en annen rolle som ikke er med.
+    expect((await kall("PATCH", `/api/org/${org}/ansattgrupper/${lege}`, { tavle: true })).status).toBe(204);
+    expect((await plasser(lise)).status).toBe(204);
+    const utenfor = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Overlege", tavle: false })).data.id;
+    expect((await kall("PATCH", `/api/org/${org}/ansatte/${lise}`, { gruppe_id: utenfor })).status).toBe(200);
+    expect((await tavla()).plasseringer).toEqual([]);
+  });
 });

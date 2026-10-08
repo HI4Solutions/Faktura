@@ -55,6 +55,24 @@ delete from faktura.ansattgrupper where id = :'lege';
 select test.er((select count(*) from faktura.ansatte where org_id = :'org' and not arbeidstaker), 0::bigint, 'uten rollen er alle ansatt');
 select test.er((select count(*) from faktura.feriebank(:'org', :i_aar)), 3::bigint, 'og i feriebanken');
 
+-- Med på tavla (0057_rolle_tavle.sql): plasser for dem med en rolle utenfor tavla lages ikke, og
+-- plassene deres fra i dag av forsvinner når de får en slik rolle, eller rollen tas ut.
+insert into faktura.ansattgrupper (org_id, navn, tavle) values (:'org', 'Overlege', false) returning id as overlege \gset
+insert into faktura.tavle_faser (org_id, navn) values (:'org', 'Dag') returning id as fase \gset
+insert into faktura.tavle_oppgaver (org_id, navn) values (:'org', 'Resepsjon') returning id as opp \gset
+select (faktura.i_dag() + 7) as neste \gset
+insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id) values (:'org', :'neste', :'fase', :'opp', :'ola');
+select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 1::bigint, 'Ola er plassert');
+update faktura.ansatte set gruppe_id = :'overlege' where id = :'ola';
+select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 0::bigint, 'med en rolle utenfor tavla forsvinner plassen');
+insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id) values (:'org', :'neste', :'fase', :'opp', :'ola');
+select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 0::bigint, 'og en ny plass lages ikke');
+update faktura.ansattgrupper set tavle = true where id = :'overlege';
+insert into faktura.tavle_plasseringer (org_id, dato, fase_id, oppgave_id, ansatt_id) values (:'org', :'neste', :'fase', :'opp', :'ola');
+select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 1::bigint, 'med rollen på tavla igjen kan han plasseres');
+update faktura.ansattgrupper set tavle = false where id = :'overlege';
+select test.er((select count(*) from faktura.tavle_plasseringer where ansatt_id = :'ola'), 0::bigint, 'rollen tas ut av tavla');
+
 \c :migrator
 drop schema test cascade;
 \echo '  ok'

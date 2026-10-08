@@ -458,11 +458,12 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       ? !valgtRolle.ikke_ansatt
       : !(a.gruppe_id && a.gruppe_id === (ansatt.gruppe_id ?? "") && ansatt.arbeidstaker === false);
   const rollenavn = nyRolle?.navn.trim() || valgtRolle?.navn;
-  const rolleHjelp = !arbeidstaker
-    ? `${rollenavn ? `«${rollenavn}»` : "Rollen"} er for dem som ikke er ansatt: ${IKKE_ANSATT_HJELP}.`
-    : vaktplan
-      ? "F.eks. lege eller sekretær. Bemanningskalenderen viser hvor mange med hver rolle som er på jobb, mot behovet."
-      : "F.eks. lege eller sekretær.";
+  const rolleHjelp =
+    (!arbeidstaker
+      ? `${rollenavn ? `«${rollenavn}»` : "Rollen"} er for dem som ikke er ansatt: ${IKKE_ANSATT_HJELP}.`
+      : vaktplan
+        ? "F.eks. lege eller sekretær. Bemanningskalenderen viser hvor mange med hver rolle som er på jobb, mot behovet."
+        : "F.eks. lege eller sekretær.") + (vaktplan && !nyRolle && valgtRolle?.tavle === false ? " Rollen er ikke med på tavla." : "");
 
   async function lagre(e: FormEvent) {
     e.preventDefault();

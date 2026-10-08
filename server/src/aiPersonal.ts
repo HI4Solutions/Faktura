@@ -530,6 +530,13 @@ async function plasser(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSv
   const a = finnAnsatt(k.p, ai.ansatt);
   if (a.ukjent) return { tekst: `Fant ikke «${a.ukjent}» blant de ansatte.` };
   if (!a.a) return { tekst: "Hvem skal plasseres?" };
+  // En rolle som ikke er med på tavla (f.eks. legene, 0057_rolle_tavle.sql).
+  const utenfor = await en<{ rolle: string }>(
+    k.db,
+    "select g.navn as rolle from faktura.ansatte a join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id where a.org_id = $1 and a.id = $2 and not g.tavle",
+    [k.orgId, a.a.id],
+  );
+  if (utenfor) return { tekst: `${a.a.navn} er ikke med på tavla (rollen ${utenfor.rolle}).` };
   const o = finnPaTavla(k.p.oppgaver, "O", ai.oppgave);
   if (!o) return { tekst: `${enLinje(ai.oppgave, 60) ? `Fant ikke oppgaven «${enLinje(ai.oppgave, 60)}» på tavla.` : "Hvilken oppgave?"} Oppgavene er ${liste(k.p.oppgaver.map((x) => x.navn))}.` };
   const fase = ai.fase ? finnPaTavla(k.p.faser, "F", ai.fase) : null;
