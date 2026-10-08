@@ -34,8 +34,16 @@ type Ansatt = Grunnansatt & {
   stillingsprosent: number;
   ukentlig_arbeidstid: number;
   ansettelsestype: string;
+  tilknytning?: string; // ansatt, eller med uten å være ansatt (f.eks. leger som er aksjonærer)
   gruppe_id: string | null;
 };
+const IKKE_ANSATT: Record<string, [string, string]> = {
+  eier: ["eier eller aksjonær", "eier/aksjonær"],
+  selvstendig: ["selvstendig næringsdrivende", "selvstendig"],
+  innleid: ["innleid", "innleid"],
+};
+const ikkeAnsatt = (a: Ansatt, kort = false) =>
+  a.tilknytning && a.tilknytning !== "ansatt" ? (IKKE_ANSATT[a.tilknytning]?.[kort ? 1 : 0] ?? a.tilknytning) : null;
 type Gruppe = { id: string; navn: string; kort: string | null; behov: number | null; rekkefolge: number; antall: number };
 type Seksjon = { id: string | null; navn: string; kort: string; behov: number | null; farge: number; ansatte: Ansatt[] };
 type Rute =
@@ -222,8 +230,8 @@ export function Bemanning({
   const summer = seksjoner.length + (visUtenVikar ? 1 : 0) + (visLedige ? 1 : 0);
   const hoyre = (i: number) => ({ "--h-alle": summer - 1 - i, "--h-grupper": Math.max(0, seksjoner.length - 1 - i) }) as CSSProperties;
 
-  const beskriv = (r: Rute) => {
-    if (r.art === "utenfor") return "Ikke ansatt";
+  const beskriv = (r: Rute, a: Ansatt) => {
+    if (r.art === "utenfor") return ikkeAnsatt(a) ? "Jobber ikke her" : "Ikke ansatt";
     if (r.art === "fri") return "Fri";
     const deler =
       r.art === "borte"
@@ -254,7 +262,7 @@ export function Bemanning({
       klasse += " fri";
       innhold = "–";
     } else klasse += " utenfor";
-    const tekst = beskriv(r);
+    const tekst = beskriv(r, a);
     return (
       <td key={a.id} className={klasse} title={tekst}>
         <button type="button" aria-label={`${a.fornavn} ${a.etternavn}, ${visDag(d)}: ${tekst}`} onClick={() => settRute({ a, d })}>
@@ -361,7 +369,11 @@ export function Bemanning({
                 <tr>
                   {seksjoner.flatMap((s) =>
                     s.ansatte.map((a, j) => (
-                      <th key={a.id} className={`bm-ansatt g${s.farge}${j === 0 ? " forste" : ""}`} title={`${a.fornavn} ${a.etternavn}${a.stilling ? ` · ${a.stilling}` : ""}`}>
+                      <th
+                        key={a.id}
+                        className={`bm-ansatt g${s.farge}${j === 0 ? " forste" : ""}`}
+                        title={`${a.fornavn} ${a.etternavn}${a.stilling ? ` · ${a.stilling}` : ""}${ikkeAnsatt(a) ? ` · ${ikkeAnsatt(a)} (ikke ansatt)` : ""}`}
+                      >
                         {kanEndre ? (
                           // Trykk på navnet: stillingsprosent, arbeidstid og faste dager.
                           <button type="button" className="bm-ansatt-knapp" aria-label={`Arbeidstid og faste dager for ${a.fornavn} ${a.etternavn}`} onClick={() => settPlanFor(a.id)}>
@@ -479,7 +491,7 @@ export function Bemanning({
               {visLangDag(valgt.d)}
               {valgt.a.stilling ? ` · ${valgt.a.stilling}` : ""}
             </p>
-            {valgt.r.art === "utenfor" && <p>Ikke ansatt denne dagen.</p>}
+            {valgt.r.art === "utenfor" && <p>{ikkeAnsatt(valgt.a) ? "Jobber ikke her denne dagen." : "Ikke ansatt denne dagen."}</p>}
             {valgt.r.art === "fri" && <p>Fri (ingen fast arbeidsdag eller vakt).</p>}
             {valgt.r.art === "borte" && (
               <div className={`melding ${valgt.r.utenVikar.length ? "feil" : "info"} bm-borte`}>
@@ -870,8 +882,8 @@ function GrupperOppsett({ grupper, ansatte, endret, lukk }: { grupper: Gruppe[];
       </section>
       {grupper.length > 0 && aktive.length > 0 && (
         <section className="oppsett-del">
-          <h3>Ansatte</h3>
-          <p className="liten dempet">Velg gruppen til hver ansatt (også under Ansatte).</p>
+          <h3>Ansatte og andre</h3>
+          <p className="liten dempet">Velg gruppen til hver person (også under Ansatte), også dem som ikke er ansatt, som leger som er aksjonærer.</p>
           <ul className="liste-enkel oppsett-liste bm-ansattliste">
             {aktive.map((a) => (
               <li key={a.id}>
@@ -879,7 +891,9 @@ function GrupperOppsett({ grupper, ansatte, endret, lukk }: { grupper: Gruppe[];
                   <span className="tittel">
                     {a.fornavn} {a.etternavn}
                   </span>{" "}
-                  <span className="dempet">{a.stilling ?? ""}</span>
+                  <span className="dempet">
+                    {[a.stilling, ikkeAnsatt(a, true)].filter(Boolean).join(" · ")}
+                  </span>
                 </span>
                 <select key={a.gruppe_id ?? ""} defaultValue={a.gruppe_id ?? ""} aria-label={`Gruppe for ${a.fornavn} ${a.etternavn}`} onChange={(e) => settGruppe(a, e.target.value)}>
                   <option value="">Uten gruppe</option>

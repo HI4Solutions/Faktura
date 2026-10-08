@@ -308,7 +308,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   ferie, S syk, SB sykt barn, P permisjon, K kurs, A annet; for andre bare F) eller
   ekstratimer, nederst ekstratimene i måneden per ansatt,
   og til høyre hvor mange som er på jobb i hver gruppe mot behovet, vakter uten vikar og ledige
-  vakter. Grupper kan lages fra stillingene
+  vakter. Så kan f.eks. legene ses opp mot sekretærene, også leger som ikke er ansatt
+  (aksjonærer, `ansatte.tilknytning`), som telles i gruppen sin som de andre. Grupper kan lages
+  fra stillingene, eller velges og lages rett i ansattskjemaet («+ Ny gruppe»). AI-assistenten
+  svarer med det samme når man spør hvem som jobber («Leger 6 av 7 (mangler 1), Sekretærer 4
+  av 4»)
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
   bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
   Disk, ansatte og timer, vaktplan og bemanning; vaktplanen bygger på ansatte og timer),

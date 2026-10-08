@@ -16,6 +16,7 @@ import { FRAVAERTYPER, periode } from "./fravaer.js";
 import { iFasen } from "./rullering.js";
 import { kjorRullering } from "./tavle.js";
 import { sammeNavn } from "./bank.js";
+import { helligdag } from "./helligdager.js";
 
 export const PERSONAL_HANDLINGER = [
   "fravaer", "vikar", "ny_vakt", "publiser_vakter", "ta_vakt", "plasser", "rullering", "for_timer", "lever_timer", "godkjenn_timer",
@@ -813,9 +814,27 @@ async function hvemJobber(k: PKontekst, ai: Partial<PersonalKommando>): Promise<
       where f.org_id = $1 and f.til >= $2 and f.fra <= $3 order by a.fornavn`,
     [k.orgId, fra, til],
   );
+  // Gruppene i bemanningskalenderen (f.eks. leger og sekretærer, også de som ikke er ansatt):
+  // hvor mange i hver som er på jobb, mot behovet (som ikke regnes på helligdager).
+  const grupper = await alle<{ navn: string; behov: number | null; ansatte: string[] }>(
+    k.db,
+    `select g.navn, g.behov, coalesce(array_agg(a.id::text) filter (where a.id is not null), '{}') as ansatte
+       from faktura.ansattgrupper g left join faktura.ansatte a on a.org_id = g.org_id and a.gruppe_id = g.id
+      where g.org_id = $1 group by g.id order by g.rekkefolge, g.opprettet`,
+    [k.orgId],
+  );
   const dagTekster: string[] = [];
   const enDag = fra === til;
   for (let d = fra; d <= til; d = pluss(d, 1)) {
+    const ider = new Set([
+      ...vakter_.filter((v) => v.dato === d && v.ansatt_id && !v.fravaer).map((v) => v.ansatt_id!),
+      ...b.faste.filter((f) => f.dato === d && !f.fravaer).map((f) => f.ansatt_id),
+    ]);
+    const iGruppene = grupper.map((g) => {
+      const n = g.ansatte.filter((a) => ider.has(a)).length;
+      const behov = g.behov != null && !helligdag(d) ? g.behov : null;
+      return { navn: g.navn, n, behov };
+    });
     const paJobb = [
       ...vakter_.filter((v) => v.dato === d && v.ansatt_id && !v.fravaer).map((v) => `${v.navn} ${v.fra}–${v.til}${v.oppgave ? ` (${v.oppgave})` : ""}${v.publisert ? "" : " (utkast)"}`),
       ...b.faste.filter((f) => f.dato === d && !f.fravaer).map((f) => `${navn.get(f.ansatt_id) ?? "?"}${f.fra ? ` ${f.fra}–${f.til}` : " (hel dag)"}`),
@@ -828,12 +847,17 @@ async function hvemJobber(k: PKontekst, ai: Partial<PersonalKommando>): Promise<
       if (borte.length) deler.push(`Borte: ${liste(borte)}.`);
       if (mangler.length) deler.push(`${flertall(mangler.length, "vakt mangler", "vakter mangler")} vikar: ${liste(mangler)}.`);
       if (ledige.length) deler.push(`${flertall(ledige.length, "ledig vakt", "ledige vakter")}: ${liste(ledige)}.`);
+      if (iGruppene.length)
+        deler.push(
+          `Bemanningen: ${iGruppene.map((g) => `${g.navn} ${g.n}${g.behov != null ? ` av ${g.behov}${g.n < g.behov ? ` (mangler ${g.behov - g.n})` : ""}` : ""}`).join(", ")}.`,
+        );
       dagTekster.push(deler.join(" "));
     } else {
       const deler = [`${dag(d)}: ${paJobb.length} på jobb`];
       if (borte.length) deler.push(`borte ${liste(borte)}`);
       if (mangler.length) deler.push(`${mangler.length} mangler vikar`);
       if (ledige.length) deler.push(`${ledige.length} ledig${ledige.length === 1 ? "" : "e"}`);
+      for (const g of iGruppene) deler.push(`${g.navn} ${g.n}${g.behov != null ? `/${g.behov}` : ""}`);
       dagTekster.push(deler.join(", "));
     }
   }

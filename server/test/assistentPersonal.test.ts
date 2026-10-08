@@ -200,6 +200,27 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten for personal", () => 
     expect(vakter.tekst).toContain("09:00–17:00 (Lager)");
   });
 
+  it("hvem jobber: leger mot sekretærer, også leger som ikke er ansatt", async () => {
+    const neste = pluss(dag, 1);
+    const leger = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Leger", behov: 2 })).data.id;
+    const sekretaerer = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Sekretærer", behov: 1 })).data.id;
+    // Lise er aksjonær (ikke ansatt) og jobber fast den dagen; Kari er lege, Ola sekretær.
+    const lise = await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Lise", etternavn: "Lege", tilknytning: "eier", gruppe_id: leger, ansatt_fra: "2025-01-01" });
+    expect(lise.status, JSON.stringify(lise.data)).toBe(201);
+    const ukedag = ((new Date(`${neste}T12:00:00Z`).getUTCDay() + 6) % 7) + 1;
+    expect((await kall("PUT", `/api/org/${org}/ansatte/${lise.data.id}/arbeidsplan`, { gjelder_fra: "2025-01-01", dager: [{ ukedag, fra: "08:00", til: "15:30" }] })).status).toBe(200);
+    expect((await kall("PATCH", `/api/org/${org}/ansatte/${id.kari}`, { gruppe_id: leger })).status).toBe(200);
+    expect((await kall("PATCH", `/api/org/${org}/ansatte/${id.ola}`, { gruppe_id: sekretaerer })).status).toBe(200);
+
+    const enDag = await spor({ handling: "hvem_jobber", fra_dato: neste });
+    expect(enDag.tekst).toContain("Lise Lege 08:00–15:30");
+    expect(enDag.tekst).toContain("Bemanningen: Leger 1 av 2 (mangler 1), Sekretærer 1 av 1.");
+    // Kari er syk den første dagen, så ingen av legene er på jobb da.
+    const toDager = await spor({ handling: "hvem_jobber", fra_dato: dag, til_dato: neste }, regnskap);
+    expect(toDager.tekst).toContain("Leger 0/2, Sekretærer 1/1");
+    expect(toDager.tekst).toContain("Leger 1/2, Sekretærer 1/1");
+  });
+
   it("den ansatte kan snakke til assistenten, og bruken telles", async () => {
     const opptak = new Uint8Array(3000).map((_, i) => i % 199);
     tale = { tale: true, tekst: "Jeg er syk i dag" };

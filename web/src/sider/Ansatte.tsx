@@ -64,6 +64,7 @@ const TILKNYTNING: Record<Tilknytning, [string, string]> = {
   innleid: ["Innleid", "Innleid"],
 };
 const erAnsatt = (a: Pick<Ansatt, "tilknytning">) => (a.tilknytning ?? "ansatt") === "ansatt";
+const NY_GRUPPE = "ny"; // valget «+ Ny gruppe …» for gruppen i bemanningskalenderen
 const belop = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 });
 const tekstTall = (n: number | null | undefined) => (n == null ? "" : belop.format(n).replace(/\s/g, " "));
 const lonn = (a: Ansatt) =>
@@ -308,10 +309,12 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Ansatte og timer).
   const fullStilling = Number(oppsett.data?.full_stilling ?? 37.5);
   // Med vaktplanen (funksjonene i Administrasjon): gruppene i bemanningskalenderen (f.eks.
-  // sekretærer og leger), hvis noen er laget, og den faste arbeidsplanen (ukedagene den ansatte
-  // jobber), som et utkast til den lagres.
+  // sekretærer og leger), og den faste arbeidsplanen (ukedagene den ansatte jobber), som et
+  // utkast til den lagres. En ny gruppe kan lages rett herfra (nyGruppe: navnet), når den
+  // ansatte lagres.
   const vaktplan = harFunksjon(org, "vaktplan");
   const grupper = useData(() => (vaktplan ? hent<{ id: string; navn: string }[]>(`/org/${org!.id}/ansattgrupper`) : Promise.resolve([])), [org?.id]);
+  const [nyGruppe, settNyGruppe] = useState<string | null>(null);
   const planer = useData(
     () => (ansatt.id && vaktplan ? hent<Plan[]>(`/org/${org!.id}/ansatte/${ansatt.id}/arbeidsplan`) : Promise.resolve([] as Plan[])),
     [org?.id, ansatt.id],
@@ -457,6 +460,8 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     };
     if (bursdager) kropp.bursdag_varsel = a.bursdag_varsel;
     if (grupper.data?.length) kropp.gruppe_id = a.gruppe_id || null;
+    const gruppenavn = nyGruppe?.trim() ?? "";
+    if (nyGruppe !== null && !gruppenavn) return h.settFeil("Skriv navnet på den nye gruppen, eller velg en annen.");
     if (a.stillingsprosent.trim()) kropp.stillingsprosent = tall(a.stillingsprosent);
     if (a.ukentlig_arbeidstid.trim()) kropp.ukentlig_arbeidstid = tall(a.ukentlig_arbeidstid);
     if (vaktplan) kropp.ferie_dager = a.ferie_dager.trim() ? tall(a.ferie_dager) : null;
@@ -473,6 +478,15 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     const nyPlan = plan && endret(plan) ? tilLagring(plan) : null;
     if (typeof nyPlan === "string") return h.settFeil(nyPlan);
     const r = await h.kjor(async () => {
+      // Den nye gruppen lages først (en med samme navn brukes heller, om den finnes).
+      if (gruppenavn) {
+        const finnes = grupper.data?.find((g) => g.navn.trim().toLowerCase() === gruppenavn.toLowerCase());
+        const gruppe = finnes?.id ?? (await api<{ id: string }>("POST", `/org/${org!.id}/ansattgrupper`, { navn: gruppenavn })).id;
+        kropp.gruppe_id = gruppe;
+        settNyGruppe(null);
+        settA((x) => ({ ...x, gruppe_id: gruppe }));
+        void grupper.last();
+      }
       const lagret = await (ny ? api<Ansatt>("POST", `/org/${org!.id}/ansatte`, kropp) : api<Ansatt>("PATCH", `/org/${org!.id}/ansatte/${ansatt.id}`, kropp));
       // Planen for en ny ansatt gjelder fra den ansatte begynner.
       if (nyPlan) {
@@ -485,10 +499,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     if (!r) return;
     if (!ny) return lukk();
     // Ny ansatt: bli i skjemaet, så man kan gi innlogging med en gang.
-    settA({ ...a, fnr: "", endreFnr: !r.har_fnr, fjernFnr: false, fodselsdato: r.fodselsdato ?? "" });
+    settA({ ...a, fnr: "", endreFnr: !r.har_fnr, fjernFnr: false, fodselsdato: r.fodselsdato ?? "", gruppe_id: r.gruppe_id ?? "" });
     settTillegg(tilUtkast(r.tillegg));
     settLagretTillegg(JSON.stringify(tilUtkast(r.tillegg)));
-    settMelding(`${r.fornavn} er lagt inn som ansatt nr. ${r.ansattnummer}.`);
+    settMelding(erAnsatt(r) ? `${r.fornavn} er lagt inn som ansatt nr. ${r.ansattnummer}.` : `${r.fornavn} er lagt inn (nr. ${r.ansattnummer}).`);
     oppdatert(r);
   }
 
@@ -639,7 +653,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           <input placeholder="F.eks. butikkmedarbeider eller lege" {...felt("stilling")} />
         </label>
         <div className="rad">
-          <label>
+          <label className={arbeidstaker ? undefined : "hel"}>
             Tilknytning
             <select {...felt("tilknytning")}>
               {Object.entries(TILKNYTNING).map(([v, [t]]) => (
@@ -668,18 +682,38 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             advarsler.
           </p>
         )}
-        {!!grupper.data?.length && (
-          <label>
-            Gruppe i bemanningskalenderen
-            <select {...felt("gruppe_id")}>
-              <option value="">Ingen gruppe</option>
-              {grupper.data.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.navn}
-                </option>
-              ))}
-            </select>
-          </label>
+        {vaktplan && (!!grupper.data?.length || kanEndre) && (
+          <div className="rad">
+            <label className="hel">
+              Gruppe i bemanningskalenderen
+              <select
+                value={nyGruppe !== null ? NY_GRUPPE : a.gruppe_id}
+                onChange={(e) => {
+                  if (e.target.value === NY_GRUPPE) settNyGruppe("");
+                  else {
+                    settNyGruppe(null);
+                    sett({ gruppe_id: e.target.value });
+                  }
+                }}
+              >
+                <option value="">Ingen gruppe</option>
+                {(grupper.data ?? []).map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.navn}
+                  </option>
+                ))}
+                {kanEndre && <option value={NY_GRUPPE}>+ Ny gruppe …</option>}
+              </select>
+              <span className="felt-hjelp">F.eks. leger og sekretærer: kalenderen viser hvor mange i hver gruppe som er på jobb hver dag, mot behovet.</span>
+            </label>
+            {nyGruppe !== null && (
+              <label className="hel">
+                Navn på den nye gruppen
+                <input value={nyGruppe} maxLength={40} placeholder="F.eks. Leger" autoFocus onChange={(e) => settNyGruppe(e.target.value)} />
+                <span className="felt-hjelp">Lages når du lagrer. Hvor mange som trengs per dag, setter du under Vaktplan → Kalender → Grupper.</span>
+              </label>
+            )}
+          </div>
         )}
         <div className="rad">
           <label>
