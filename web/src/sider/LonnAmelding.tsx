@@ -35,7 +35,13 @@ type Grunnlag = {
   forskuddstrekk: { dato: string; belop: number }[];
   sum_forskuddstrekk: number;
   arbeidsgiveravgift: number;
-  mottakere: { ansatt_id: string; navn: string; ansattnummer: number; inntekter: { beskrivelse: string; belop: number; antall: number | null }[]; forskuddstrekk: number }[];
+  mottakere: {
+    ansatt_id: string;
+    navn: string;
+    ansattnummer: number;
+    inntekter: { beskrivelse: string; belop: number; antall: number | null; fordel?: string; trekk?: boolean }[];
+    forskuddstrekk: number;
+  }[];
 };
 type Maaned = { maaned: string; frist: string; med_lonn: number; arbeidsforhold: number; skattetrekk: number; brutto: number; siste: Melding | null };
 
@@ -48,6 +54,36 @@ const BESKRIVELSE: Record<string, string> = {
   bonus: "Bonus",
   feriepenger: "Feriepenger",
   trekkILoennForFerie: "Trekk i lønn for ferie",
+  // Naturalytelser og utgiftsgodtgjørelser (reiser).
+  bil: "Fri bil",
+  elektroniskKommunikasjon: "Elektronisk kommunikasjon",
+  skattepliktigDelForsikringer: "Forsikringer",
+  rentefordelLaan: "Rentefordel lån",
+  bolig: "Fri bolig",
+  skattepliktigPersonalrabatt: "Personalrabatt",
+  annet: "Andre naturalytelser",
+  reiseKostMedOvernattingPaaHotell: "Kost, hotell",
+  reiseKostMedOvernattingPaaHybelUtenKokEllerPensjonatEllerBrakke: "Kost, hybel/pensjonat/brakke",
+  reiseKostMedOvernattingPaaHybelMedKokEllerPrivat: "Kost, hybel med kokemulighet/privat",
+  reiseKostUtenOvernatting: "Kost, dagsreise",
+  reiseNattillegg: "Nattillegg",
+  reiseKost: "Kost (trekkpliktig)",
+  reiseAnnet: "Reise, annet (trekkpliktig)",
+  kilometergodtgjoerelseBil: "Bilgodtgjørelse",
+  kilometergodtgjoerelsePassasjertillegg: "Passasjertillegg",
+  kilometergodtgjoerelseAndreFremkomstmidler: "Kilometergodtgjørelse, andre",
+};
+// Enheten for antallet: timer for timelønnen, døgn, dager, netter og km for reisene.
+const ENHET: Record<string, string> = {
+  timeloenn: "t",
+  reiseKostMedOvernattingPaaHotell: "døgn",
+  reiseKostMedOvernattingPaaHybelUtenKokEllerPensjonatEllerBrakke: "døgn",
+  reiseKostMedOvernattingPaaHybelMedKokEllerPrivat: "døgn",
+  reiseKostUtenOvernatting: "dager",
+  reiseNattillegg: "netter",
+  kilometergodtgjoerelseBil: "km",
+  kilometergodtgjoerelsePassasjertillegg: "km",
+  kilometergodtgjoerelseAndreFremkomstmidler: "km",
 };
 const STATUS: Record<Status, [string, string]> = {
   lages: ["Lages", "merke-noytral"],
@@ -60,7 +96,14 @@ const STATUS: Record<Status, [string, string]> = {
 };
 // Inntektene til en mottaker på én linje, f.eks. «Timelønn 38 000,00 (152 t)», eller null.
 const inntektTekst = (inntekter: Grunnlag["mottakere"][number]["inntekter"]) =>
-  inntekter.length ? inntekter.map((i) => `${BESKRIVELSE[i.beskrivelse] ?? i.beskrivelse} ${kr(i.belop)}${i.antall ? ` (${String(i.antall).replace(".", ",")} t)` : ""}`).join(" · ") : null;
+  inntekter.length
+    ? inntekter
+        .map(
+          (i) =>
+            `${BESKRIVELSE[i.beskrivelse] ?? i.beskrivelse}${i.fordel === "utgiftsgodtgjoerelse" && i.trekk && !/trekkpliktig/.test(BESKRIVELSE[i.beskrivelse] ?? "") ? " (trekkpliktig)" : ""} ${kr(i.belop)}${i.antall ? ` (${String(i.antall).replace(".", ",")} ${ENHET[i.beskrivelse] ?? ""})`.replace(" )", ")") : ""}`,
+        )
+        .join(" · ")
+    : null;
 const merke = (s: Status) => <span className={`merke ${STATUS[s][1]}`}>{STATUS[s][0]}</span>;
 const tid = (iso: string) => {
   const d = new Date(iso);

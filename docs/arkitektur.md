@@ -750,6 +750,36 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   fører påleggstrekk (2610), bidragstrekk (2620) og forskudd til ansatte (1570, også forskudd som
   utbetales med lønnsarten `forskudd_utbetalt`) på egne kontoer. Rapporten «Trekk og betalinger»
   (`lonn.trekk`) har betalingene med mottaker, KID og frist
+- Naturalytelser og reiser (`0083_naturalytelser_reiser.sql`, `server/src/naturalytelser.ts`,
+  `server/src/naturalytelserRuter.ts`, `server/src/reise.ts`, `server/src/reiseRuter.ts`,
+  `web/src/sider/LonnNaturalytelser.tsx`, `web/src/sider/LonnReiser.tsx`): faste naturalytelser per
+  ansatt (`naturalytelser`: fri bil med listepris, registreringsnummer eller bilpool, dato for
+  første registrering og yrkeskjøring over 40 000 km; elektronisk kommunikasjon; forsikring;
+  rentefordel med lånet og renten; fri bolig; annet), som den ordinære kjøringen tar med for hver
+  måned de gjelder (lønnsartene `natural_*`, nøkkelen `natural:<id>`): trekk- og avgiftspliktige,
+  men ikke utbetalt (`lonnsslipper.naturalytelser`). Fri bil er 30 % av listeprisen opp til
+  innslagspunktet (`BIL_INNSLAG`) og 20 % over, 75 % for biler eldre enn tre år eller med mye
+  yrkeskjøring; elektronisk kommunikasjon sjablongen; rentefordelen lånet ganger normrenten
+  (`NORMRENTE`, oppdateres når Skatteetaten setter den) minus renten. Linjen for fri bil har
+  listeprisen og registreringsnummeret i `lonnslinjer.tillegg` (tilleggsinformasjonen `bilOgBaat`
+  i a-meldingen). Reiseregningene (`reiseregninger`) lages og endres bare gjennom funksjonene
+  `lagre_reiseregning`, `send_reiseregning`, `godkjenn_reiseregning`, `avvis_reiseregning`,
+  `apne_reiseregning` og `slett_reiseregning`: den ansatte fører og sender sine egne, eier og
+  administrator fører for en ansatt, godkjenner (med beregningen som lagres), avviser med en grunn
+  eller åpner en som ikke er utbetalt (varsel til eier og administrator når en sendes, og til den
+  ansatte når den er godkjent eller avvist; varseltypen `reiser`). Beregningen (`beregnReise`): kost per døgn fra avreisen
+  (dagsreise 6–12 og over 12 timer), måltidene som er dekket (frokost 20 %, lunsj 30 %, middag
+  50 %), nattillegg, kilometergodtgjørelse med passasjer-, skogsvei- og tilhengertillegg og andre
+  kjøretøy, og utlegg etter regning, etter statens satser eller de trekkfrie
+  (`lonn_oppsett.reise_satser`; `REISESATSER` per år); innenfor de trekkfrie satsene er
+  trekkfri utgiftsgodtgjørelse (med antall), resten trekkpliktig, og alt når vilkårene ikke er
+  oppfylt. Hver kjøring den ansatte er med i, tar med de godkjente som ikke er utbetalt (nøkkelen
+  `reise:<id>:<linje>`, `lonnsslipper.reiseregninger`), og `lonn_godkjenn` merker dem som
+  utbetalt (`lonnskjoring_id`), og avviser kjøringen når en er endret, utbetalt i en annen kjøring
+  eller godkjent på nytt etter at slippen ble regnet ut. A-meldingen: `fordel` naturalytelse og
+  utgiftsgodtgjoerelse med beskrivelsene for dem. Lønnsbilaget: kilometergodtgjørelse (7100),
+  diett og nattillegg (7150), utlegg (7140), og naturalytelsene (5280) mot motkontoen (5290).
+  Rapportene «Reiser og godtgjørelser» (`lonn.reiser`) og «Naturalytelser» (`lonn.naturalytelser`)
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -783,7 +813,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   for uke, merarbeid og uten overtid), timeliste, fravær, feriebank, timebank, ekstratimer og
   ansatte (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
   per lønnsart (grunnlaget for bokføringen), skattetrekk og arbeidsgiveravgift per termin med
-  fristene, feriepengeliste, årsoversikt, OTP, lønns- og stillingsendringer og trekk og betalinger (`server/src/lonnRapporter.ts`).
+  fristene, feriepengeliste, årsoversikt, OTP, lønns- og stillingsendringer, trekk og betalinger, reiser og
+  godtgjørelser og naturalytelser (`server/src/lonnRapporter.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
   lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
   for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og
@@ -795,8 +826,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   står i `rapport_maanedsutsendinger`, så hver måned sendes én gang
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag. Loggen for de ansatte, lønnen,
-  lønnshistorikken, trekkene, a-meldingene og lønnsbilagene er bare for dem som ser lønnen, og loggen for
-  fraværet og inntektsmeldingene til NAV bare for eier og administrator (`0081_revisjonslogg_lonn.sql`)
+  lønnshistorikken, trekkene, naturalytelsene, reiseregningene, a-meldingene og lønnsbilagene er bare
+  for dem som ser lønnen, og loggen for fraværet og inntektsmeldingene til NAV bare for eier og
+  administrator (`0081_revisjonslogg_lonn.sql`, `0083_naturalytelser_reiser.sql`)
 
 ### Roller
 
@@ -821,6 +853,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Se de faste trekkene i lønnen og betalingene fra en kjøring | ✓ | ✓ | | ✓ | | |
 | Legge inn, endre og avslutte faste trekk, og KID-en for forskuddstrekket | ✓ | ✓ | | | | |
 | Se egne faste trekk | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+| Se naturalytelsene og alle reiseregningene | ✓ | ✓ | | ✓ | | |
+| Legge inn, endre og avslutte naturalytelser; føre reiseregninger for de ansatte, godkjenne, avvise og åpne dem | ✓ | ✓ | | | | |
+| Se egne naturalytelser; føre, sende, rette og slette egne reiseregninger (ikke godkjente) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Se lønnsbilagene | ✓ | ✓ | | ✓ | | |
 | Endre kontoene for lønnsbilaget, og bokføre en kjøring som ble godkjent før bokføringen kom | ✓ | ✓ | | | | |
 | Se a-meldingene (månedene, grunnlaget og avvikene) | ✓ | ✓ | | ✓ | | |

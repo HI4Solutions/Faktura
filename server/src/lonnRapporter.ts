@@ -1,12 +1,13 @@
 // Rapportene for Lønn i rapportmodulen (rapportmodul.ts), fra de godkjente lønnskjøringene:
 // lønnsjournalen, summene per lønnsart, lønnsbilaget (konteringen, lonnBokforing.ts), skattetrekk
 // og arbeidsgiveravgift per termin med fristene, feriepengelisten, årsoversikten og OTP; og
-// lønns- og stillingsendringene som gjelder fra perioden (lonnsendringer.ts); og trekkene og
-// betalingene til Skatteetaten og andre (lonnstrekk.ts, lonnBetalinger.ts).
+// lønns- og stillingsendringene som gjelder fra perioden (lonnsendringer.ts); trekkene og
+// betalingene til Skatteetaten og andre (lonnstrekk.ts, lonnBetalinger.ts); og reisene og
+// naturalytelsene som er utbetalt og innberettet (reise.ts, naturalytelser.ts).
 // Journalen, lønnsartene og bilaget kan gjelde én kjøring (valget kjoring); de sendes til
 // regnskapsføreren når kjøringen godkjennes, om det er slått på.
 import { alle, en, type Db } from "./db.js";
-import { AMELDING_NAVN, lonnsart } from "./lonnsarter.js";
+import { AMELDING_NAVN, ameldingNavn, lonnsart } from "./lonnsarter.js";
 import { frister, maanedNavn } from "./lonnsberegning.js";
 import { TREKKTYPER, type Trekktype } from "./lonnstrekk.js";
 import { hentBilag } from "./lonnBokforing.js";
@@ -49,37 +50,44 @@ export const lonnRapporter: Rapportdef[] = [
     id: "lonn.journal",
     modul: "lonn",
     navn: "Lønnsjournal",
-    beskrivelse: "Lønnsslippene i de godkjente kjøringene med utbetaling i perioden: brutto, trekk, netto, feriepenger, OTP og arbeidsgiveravgift.",
+    beskrivelse:
+      "Lønnsslippene i de godkjente kjøringene med utbetaling i perioden: brutto, naturalytelser, trekk, netto, feriepenger, OTP og arbeidsgiveravgift.",
     funksjon: "lonn",
     tilgang: "personal_les",
     parameter: "periode",
     maanedlig: true,
-    hent: async (db, org, v) => ({
-      periode: await kjoringTekst(db, org, v),
-      kolonner: [
-        { nokkel: "utbetalt", navn: "Utbetalt", type: "dato" },
-        { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
-        { nokkel: "navn", navn: "Ansatt" },
-        { nokkel: "brutto", navn: "Brutto", type: "kr", sum: true },
-        { nokkel: "skattetrekk", navn: "Skattetrekk", type: "kr", sum: true },
-        { nokkel: "trekk_etter_skatt", navn: "Trekk", type: "kr", sum: true },
-        { nokkel: "utgifter", navn: "Utgifter", type: "kr", sum: true },
-        { nokkel: "netto", navn: "Netto", type: "kr", sum: true },
-        { nokkel: "feriepengegrunnlag", navn: "Feriep.grunnlag", type: "kr", sum: true },
-        { nokkel: "feriepenger_opptjent", navn: "Feriepenger", type: "kr", sum: true },
-        { nokkel: "otp", navn: "OTP", type: "kr", sum: true },
-        { nokkel: "aga", navn: "AGA", type: "kr", sum: true },
-      ],
-      rader: await alle(
+    hent: async (db, org, v) => {
+      const rader = await alle<Record<string, unknown> & { naturalytelser: number }>(
         db,
-        `select to_char(k.utbetalingsdato, 'YYYY-MM-DD') as utbetalt, s.ansattnummer, s.navn, s.brutto, s.skattetrekk, s.trekk_etter_skatt, s.utgifter, s.netto,
-                s.feriepengegrunnlag, s.feriepenger_opptjent, s.otp, s.aga
+        `select to_char(k.utbetalingsdato, 'YYYY-MM-DD') as utbetalt, s.ansattnummer, s.navn, s.brutto, s.naturalytelser::float8 as naturalytelser,
+                s.skattetrekk, s.trekk_etter_skatt, s.utgifter, s.netto, s.feriepengegrunnlag, s.feriepenger_opptjent, s.otp, s.aga
            from faktura.lonnsslipper s join faktura.lonnskjoringer k on k.id = s.kjoring_id
           where ${KJORINGER}
           order by k.utbetalingsdato, k.type, s.ansattnummer`,
         parametre(org, v),
-      ),
-    }),
+      );
+      // Naturalytelsene (trekkpliktige, ikke utbetalt) bare når noen har dem.
+      const natural = rader.some((r) => Number(r.naturalytelser) !== 0);
+      return {
+        periode: await kjoringTekst(db, org, v),
+        kolonner: [
+          { nokkel: "utbetalt", navn: "Utbetalt", type: "dato" },
+          { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "brutto", navn: "Brutto", type: "kr", sum: true },
+          ...(natural ? [{ nokkel: "naturalytelser", navn: "Naturalytelser", type: "kr" as const, sum: true }] : []),
+          { nokkel: "skattetrekk", navn: "Skattetrekk", type: "kr", sum: true },
+          { nokkel: "trekk_etter_skatt", navn: "Trekk", type: "kr", sum: true },
+          { nokkel: "utgifter", navn: "Utgifter", type: "kr", sum: true },
+          { nokkel: "netto", navn: "Netto", type: "kr", sum: true },
+          { nokkel: "feriepengegrunnlag", navn: "Feriep.grunnlag", type: "kr", sum: true },
+          { nokkel: "feriepenger_opptjent", navn: "Feriepenger", type: "kr", sum: true },
+          { nokkel: "otp", navn: "OTP", type: "kr", sum: true },
+          { nokkel: "aga", navn: "AGA", type: "kr", sum: true },
+        ],
+        rader: natural ? rader : rader.map(({ naturalytelser: _, ...r }) => r),
+      };
+    },
   },
   {
     id: "lonn.lonnsarter",
@@ -108,7 +116,7 @@ export const lonnRapporter: Rapportdef[] = [
           where ${KJORINGER}`,
         parametre(org, v),
       );
-      const gruppe = { lonn: "Lønn", utgift: "Utgift", trekk: "Trekk" } as const;
+      const gruppe = { lonn: "Lønn", utgift: "Utgift", trekk: "Trekk", natural: "Naturalytelse" } as const;
       const rader = [
         ...arter.map((a) => ({ post: lonnsart(a.lonnsart).navn, gruppe: gruppe[lonnsart(a.lonnsart).type], antall: a.antall, belop: rund(a.belop) })),
         ...(s && s.slipper
@@ -219,7 +227,7 @@ export const lonnRapporter: Rapportdef[] = [
     id: "lonn.amelding",
     modul: "lonn",
     navn: "A-meldingsgrunnlag",
-    beskrivelse: "Lønnen per ansatt og måned etter beskrivelsen i a-meldingen, og forskuddstrekket, fra de godkjente kjøringene med utbetaling i perioden (til avstemming mot a-meldingen).",
+    beskrivelse: "Lønnen, naturalytelsene og utgiftsgodtgjørelsene per ansatt og måned etter beskrivelsen i a-meldingen, og forskuddstrekket, fra de godkjente kjøringene med utbetaling i perioden (til avstemming mot a-meldingen).",
     funksjon: "lonn",
     tilgang: "personal_les",
     parameter: "periode",
@@ -244,9 +252,10 @@ export const lonnRapporter: Rapportdef[] = [
       const per = new Map<string, { maaned: string; ansattnummer: number; navn: string; beskrivelse: string; belop: number | null; forskuddstrekk: number | null }>();
       for (const l of linjer) {
         const art = lonnsart(l.lonnsart);
-        if (art.type !== "lonn" || !art.amelding) continue;
-        const nokkel = `${l.maaned}|${l.ansattnummer}|${art.amelding}`;
-        const x = per.get(nokkel) ?? { maaned: l.maaned, ansattnummer: l.ansattnummer, navn: l.navn, beskrivelse: AMELDING_NAVN[art.amelding] ?? art.amelding, belop: 0, forskuddstrekk: null };
+        if (art.type === "trekk" || !art.amelding) continue;
+        const beskrivelse = ameldingNavn(art);
+        const nokkel = `${l.maaned}|${l.ansattnummer}|${beskrivelse}`;
+        const x = per.get(nokkel) ?? { maaned: l.maaned, ansattnummer: l.ansattnummer, navn: l.navn, beskrivelse, belop: 0, forskuddstrekk: null };
         x.belop = rund((x.belop ?? 0) + l.belop);
         per.set(nokkel, x);
       }
@@ -507,6 +516,115 @@ export const lonnRapporter: Rapportdef[] = [
           { nokkel: "belop", navn: "Beløp", type: "kr", sum: true },
         ],
         rader,
+      };
+    },
+  },
+  {
+    id: "lonn.reiser",
+    modul: "lonn",
+    navn: "Reiser og godtgjørelser",
+    beskrivelse:
+      "Reiseregningene som er utbetalt i de godkjente kjøringene med utbetaling i perioden: diett, nattillegg og kilometergodtgjørelse innenfor de trekkfrie satsene og det som er trekkpliktig, og utleggene etter regning.",
+    funksjon: "lonn",
+    tilgang: "personal_les",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      const linjer = await alle<{ reise: string; utbetalt: string; ansattnummer: number; navn: string; lonnsart: string; antall: number | null; belop: number }>(
+        db,
+        `select split_part(l.nokkel, ':', 2) as reise, to_char(s.utbetalingsdato, 'YYYY-MM-DD') as utbetalt, s.ansattnummer, s.navn, l.lonnsart,
+                l.antall::float8 as antall, l.belop::float8 as belop
+           from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id join faktura.lonnskjoringer k on k.id = s.kjoring_id
+          where ${KJORINGER} and not l.fjernet and l.nokkel like 'reise:%'
+          order by s.utbetalingsdato, s.ansattnummer, l.rekkefolge`,
+        parametre(org, v),
+      );
+      const reiser = new Map(
+        (
+          await alle<{ id: string; formaal: string; sted: string | null; fra: string; til: string }>(
+            db,
+            `select id, formaal, sted, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til
+               from faktura.reiseregninger where org_id = $1 and id = any($2::uuid[])`,
+            [org, [...new Set(linjer.map((l) => l.reise))].filter((x) => /^[0-9a-f-]{36}$/.test(x))],
+          )
+        ).map((r) => [r.id, r]),
+      );
+      const per = new Map<string, Record<string, any>>();
+      for (const l of linjer) {
+        const r = reiser.get(l.reise);
+        const x = per.get(`${l.utbetalt}|${l.reise}`) ?? {
+          utbetalt: l.utbetalt,
+          ansattnummer: String(l.ansattnummer),
+          navn: l.navn,
+          reise: r ? [r.sted, r.formaal].filter(Boolean).join(" – ") : "",
+          dato: r ? (r.fra === r.til ? r.fra : `${visDato(r.fra)}–${visDato(r.til)}`) : "",
+          km: 0,
+          trekkfritt: 0,
+          trekkpliktig: 0,
+          utlegg: 0,
+          sum: 0,
+        };
+        const art = lonnsart(l.lonnsart);
+        if (l.lonnsart === "reise_utlegg") x.utlegg = rund(x.utlegg + l.belop);
+        else if (art.trekk) x.trekkpliktig = rund(x.trekkpliktig + l.belop);
+        else x.trekkfritt = rund(x.trekkfritt + l.belop);
+        if (l.lonnsart === "km_bil" && l.antall) x.km = rund(x.km + l.antall);
+        x.sum = rund(x.sum + l.belop);
+        per.set(`${l.utbetalt}|${l.reise}`, x);
+      }
+      return {
+        kolonner: [
+          { nokkel: "utbetalt", navn: "Utbetalt", type: "dato" },
+          { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "reise", navn: "Reise" },
+          { nokkel: "dato", navn: "Dato", type: "tekst" },
+          { nokkel: "km", navn: "Km med bil", type: "antall", sum: true },
+          { nokkel: "trekkfritt", navn: "Trekkfritt", type: "kr", sum: true },
+          { nokkel: "trekkpliktig", navn: "Trekkpliktig", type: "kr", sum: true },
+          { nokkel: "utlegg", navn: "Utlegg", type: "kr", sum: true },
+          { nokkel: "sum", navn: "Utbetalt i alt", type: "kr", sum: true },
+        ],
+        rader: [...per.values()].map((x) => ({ ...x, dato: x.dato.includes("–") ? x.dato : visDato(x.dato) })),
+      };
+    },
+  },
+  {
+    id: "lonn.naturalytelser",
+    modul: "lonn",
+    navn: "Naturalytelser",
+    beskrivelse:
+      "Naturalytelsene (fri bil, elektronisk kommunikasjon, forsikringer, rentefordel, fri bolig, personalrabatt og andre) per ansatt i de godkjente kjøringene med utbetaling i perioden: trekkpliktige og med arbeidsgiveravgift, men ikke utbetalt.",
+    funksjon: "lonn",
+    tilgang: "personal_les",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      const rader = await alle<{ utbetalt: string; ansattnummer: number; navn: string; lonnsart: string; tekst: string; belop: number }>(
+        db,
+        `select to_char(s.utbetalingsdato, 'YYYY-MM-DD') as utbetalt, s.ansattnummer, s.navn, l.lonnsart, l.tekst, l.belop::float8 as belop
+           from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id join faktura.lonnskjoringer k on k.id = s.kjoring_id
+          where ${KJORINGER} and not l.fjernet and l.lonnsart like 'natural%'
+          order by s.utbetalingsdato, s.ansattnummer, l.rekkefolge`,
+        parametre(org, v),
+      );
+      return {
+        kolonner: [
+          { nokkel: "utbetalt", navn: "Utbetalt", type: "dato" },
+          { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "ytelse", navn: "Naturalytelse" },
+          { nokkel: "tekst", navn: "Beskrivelse" },
+          { nokkel: "belop", navn: "Beløp", type: "kr", sum: true },
+        ],
+        rader: rader.map((r) => ({
+          utbetalt: r.utbetalt,
+          ansattnummer: String(r.ansattnummer),
+          navn: r.navn,
+          ytelse: ameldingNavn(lonnsart(r.lonnsart)),
+          tekst: r.tekst,
+          belop: rund(r.belop),
+        })),
       };
     },
   },

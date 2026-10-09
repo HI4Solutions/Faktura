@@ -5,9 +5,10 @@
 // lønnsslippen. Regnskap ser kjøringene. De ansatte ser sine egne lønnsslipper («Mine
 // lønnsslipper»).
 //
-// Fanen står i adressen (?fane=kjoringer|amelding|sykepenger|aar|mine), kjøringen som er åpen med
-// ?kjoring=, måneden i a-meldingen med ?maaned= (LonnAmelding.tsx), forespørselen fra NAV med
-// ?foresporsel= (LonnSykepenger.tsx), og året for årsoversikten med ?aar= (LonnAar.tsx).
+// Fanen står i adressen (?fane=kjoringer|amelding|sykepenger|reiser|aar|mine), kjøringen som er
+// åpen med ?kjoring=, måneden i a-meldingen med ?maaned= (LonnAmelding.tsx), forespørselen fra NAV
+// med ?foresporsel= (LonnSykepenger.tsx), reiseregningen med ?reise= (LonnReiser.tsx), og året for
+// årsoversikten med ?aar= (LonnAar.tsx).
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent, lastNed } from "../api";
@@ -21,6 +22,7 @@ import { Ameldinger } from "./LonnAmelding";
 import { Sykepenger } from "./LonnSykepenger";
 import { KjoringBokforing } from "./LonnBokforing";
 import { LonnBetalinger } from "./LonnBetalinger";
+import { Reiser } from "./LonnReiser";
 
 export interface Linje {
   id: string;
@@ -63,6 +65,7 @@ export interface Slipp {
   aga_sats: number;
   antall_timeforinger: number;
   merknader: string[];
+  naturalytelser: number;
   linjer: Linje[];
 }
 type Summer = {
@@ -118,7 +121,7 @@ interface KjoringRad {
 interface Lonnsart {
   kode: string;
   navn: string;
-  type: "lonn" | "utgift" | "trekk";
+  type: "lonn" | "utgift" | "trekk" | "natural";
   fortegn: 1 | -1;
   manuell: boolean;
 }
@@ -152,11 +155,16 @@ export function Lonn() {
   if (leder) faner.push(["kjoringer", "Lønnskjøringer"], ["amelding", "A-melding"], ["aar", "Årsoversikt"]);
   // Sykepenger og NAV: helseopplysninger, så bare eier og administrator.
   if (leder && erAdmin(org?.rolle)) faner.splice(2, 0, ["sykepenger", "Sykepenger"]);
+  // Reiseregningene: de som ser lønnen, ser alle; den ansatte fører og ser sine egne (etter
+  // lønnsslippene, som er det den ansatte ser først).
+  if (leder) faner.push(["reiser", "Reiser"]);
   if (egen) faner.push(["mine", "Mine lønnsslipper"]);
+  if (egen && !leder) faner.push(["reiser", "Mine reiser"]);
   const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? faner[0]?.[0] ?? null;
   const kjoring = sok.get("kjoring");
   // Kjøringen og måneden i a-meldingen har sin egen overskrift og lenke tilbake.
-  const detalj = (fane === "kjoringer" && !!kjoring) || (fane === "amelding" && !!sok.get("maaned")) || (fane === "sykepenger" && !!sok.get("foresporsel"));
+  const detalj =
+    (fane === "kjoringer" && !!kjoring) || (fane === "amelding" && !!sok.get("maaned")) || (fane === "sykepenger" && !!sok.get("foresporsel")) || (fane === "reiser" && !!sok.get("reise"));
   const ga = (endring: Record<string, string | null>) => {
     const p = new URLSearchParams(sok);
     for (const [k, v] of Object.entries(endring)) {
@@ -189,12 +197,12 @@ export function Lonn() {
       {!detalj && (
         <>
           <div className="topp">
-            <h1>{leder ? "Lønn" : "Lønnsslipper"}</h1>
+            <h1>{leder ? "Lønn" : "Lønn og reiser"}</h1>
           </div>
           {faner.length > 1 && (
             <div className="faner tett" role="tablist">
               {faner.map(([v, t]) => (
-                <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga({ fane: v, kjoring: null, aar: null, maaned: null, foresporsel: null })}>
+                <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga({ fane: v, kjoring: null, aar: null, maaned: null, foresporsel: null, reise: null })}>
                   {t}
                 </button>
               ))}
@@ -205,6 +213,7 @@ export function Lonn() {
       {fane === "kjoringer" && (kjoring ? <KjoringSide id={kjoring} tilbake={() => ga({ kjoring: null })} /> : <Kjoringer apne={(id) => ga({ kjoring: id })} />)}
       {fane === "amelding" && <Ameldinger />}
       {fane === "sykepenger" && <Sykepenger />}
+      {fane === "reiser" && <Reiser leder={leder} reise={sok.get("reise")} apne={(id) => ga({ reise: id })} />}
       {fane === "aar" && <Aarsoversikter />}
       {fane === "mine" && <MineSlipper />}
     </>
@@ -605,7 +614,7 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
       <KjoringBokforing kjoringId={d.id} godkjent={!utkast} godkjentAt={d.godkjent_at} />
       <p className="liten dempet">
         Fastlønn for arbeidsdagene den ansatte er ansatt, timelønn og overtid fra de godkjente timene som ikke er lønnet, faste tillegg, sykepenger i arbeidsgiverperioden og
-        omsorgsdager for dem med timelønn, og feriepenger i juni. Skattetrekket etter skattekortet (50 % uten skattekort), OTP med {tallTekst(d.otp_prosent)} %, feriepenger med{" "}
+        omsorgsdager for dem med timelønn, naturalytelsene, de godkjente reiseregningene og de faste trekkene, og feriepenger i juni. Skattetrekket etter skattekortet (50 % uten skattekort), OTP med {tallTekst(d.otp_prosent)} %, feriepenger med{" "}
         {tallTekst(d.feriepenger_prosent)} % og arbeidsgiveravgift i {AGA_SONER[d.aga_sone] ?? `sone ${d.aga_sone}`}. Satsene står under{" "}
         <Link to="/innstillinger?fane=personal">Innstillinger → Ansatte og timer</Link>.
       </p>
@@ -858,6 +867,7 @@ function SlippKort({
                       ) : l.kilde === "manuell" ? (
                         <span className="merke merke-info lonn-merke">{l.nokkel ? "Endret" : "Lagt til"}</span>
                       ) : null}
+                      {arter.find((a) => a.kode === l.lonnsart)?.type === "natural" && <span className="merke merke-noytral lonn-merke">Utbetales ikke</span>}
                       {!l.tekst.toLowerCase().startsWith(navnPaArt(l.lonnsart).toLowerCase()) && <span className="lonn-art">{navnPaArt(l.lonnsart)}</span>}
                     </td>
                     <td className="tall">{tekstAntall(l)}</td>
@@ -912,6 +922,7 @@ function SlippKort({
                   {s.antall_timeforinger} {s.antall_timeforinger === 1 ? "timeføring" : "timeføringer"} lønnes
                 </div>
               )}
+              {s.naturalytelser !== 0 && <div>Naturalytelser {kr(s.naturalytelser)} (med i skattetrekket, utbetales ikke)</div>}
               <div>Konto {s.kontonr ? s.kontonr.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3") : "mangler"}</div>
             </div>
             <div className="summer lonn-summer">
@@ -1040,7 +1051,9 @@ function LinjeSkjema({ linje, arter, lagre, opptatt }: { linje: Linje | null; ar
             <span className="felt-hjelp">
               {valgtArt.type === "utgift"
                 ? "Utbetales i tillegg, uten skatt og arbeidsgiveravgift."
-                : valgtArt.type === "trekk"
+                : valgtArt.type === "natural"
+                  ? "Naturalytelse: med i skattetrekket og arbeidsgiveravgiften, men utbetales ikke."
+                  : valgtArt.type === "trekk"
                   ? "Trekkes fra det som utbetales, etter skatt."
                   : valgtArt.fortegn < 0
                     ? "Trekkes fra bruttolønnen."
@@ -1215,6 +1228,9 @@ function SlippVisning({ id }: { id: string }) {
         {s.trekk_etter_skatt !== 0 && rad("Trekk etter skatt", s.trekk_etter_skatt)}
         {rad("Utbetalt", s.netto, "total")}
       </div>
+      {s.naturalytelser !== 0 && (
+        <p className="liten dempet">Naturalytelser {kr(s.naturalytelser)}: med i grunnlaget for skattetrekket, men utbetales ikke.</p>
+      )}
       <h3>Hittil i {s.utbetalingsdato.slice(0, 4)}</h3>
       <div className="summer lonn-summer">
         {rad("Bruttolønn", s.hittil.brutto)}

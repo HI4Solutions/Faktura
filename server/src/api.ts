@@ -41,6 +41,8 @@ import { ameldingRuter } from "./ameldingRuter.js";
 import { lonnBokforingRuter } from "./lonnBokforingRuter.js";
 import { navRuter } from "./navRuter.js";
 import { lonnstrekkRuter } from "./lonnstrekkRuter.js";
+import { naturalytelserRuter } from "./naturalytelserRuter.js";
+import { reiseRuter } from "./reiseRuter.js";
 import { skattekortRuter } from "./skattekortRuter.js";
 import { rapportmodulRuter } from "./rapportmodul.js";
 import { krevFunksjoner } from "./funksjoner.js";
@@ -433,6 +435,8 @@ export function lagApi() {
   org.route("/", lonnBokforingRuter());
   org.route("/", navRuter());
   org.route("/", lonnstrekkRuter());
+  org.route("/", naturalytelserRuter());
+  org.route("/", reiseRuter());
   org.route("/", skattekortRuter());
   // Rapportmodulen: hver rapport krever sin funksjon og tilgang (rapportmodul.ts).
   org.route("/", rapportmodulRuter());

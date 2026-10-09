@@ -41,7 +41,7 @@ export type Slippdata = {
   aga_grunnlag: number;
   aga_sats: number;
   otp: number;
-  linjer: { lonnsart: string; belop: number; antall: number | null; opptjent_fra?: string | null; opptjent_til?: string | null }[];
+  linjer: { lonnsart: string; belop: number; antall: number | null; opptjent_fra?: string | null; opptjent_til?: string | null; tillegg?: Record<string, unknown> | null }[];
 };
 export type Grunnlag = {
   maaned: string; // ÅÅÅÅ-MM
@@ -87,10 +87,18 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
       order by s.utbetalingsdato, s.ansattnummer`,
     [org, fra, til],
   );
-  const linjer = await alle<{ slipp_id: string; lonnsart: string; belop: number; antall: number | null; opptjent_fra: string | null; opptjent_til: string | null }>(
+  const linjer = await alle<{
+    slipp_id: string;
+    lonnsart: string;
+    belop: number;
+    antall: number | null;
+    opptjent_fra: string | null;
+    opptjent_til: string | null;
+    tillegg: Record<string, unknown> | null;
+  }>(
     db,
     `select l.slipp_id, l.lonnsart, l.belop::float8 as belop, l.antall::float8 as antall,
-            to_char(l.opptjent_fra, 'YYYY-MM-DD') as opptjent_fra, to_char(l.opptjent_til, 'YYYY-MM-DD') as opptjent_til
+            to_char(l.opptjent_fra, 'YYYY-MM-DD') as opptjent_fra, to_char(l.opptjent_til, 'YYYY-MM-DD') as opptjent_til, l.tillegg
        from faktura.lonnslinjer l where l.slipp_id = any($1::uuid[]) and not l.fjernet`,
     [slipper.map((s) => s.id)],
   );
@@ -140,7 +148,7 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
       otp: s.otp,
       linjer: linjer
         .filter((l) => l.slipp_id === s.id)
-        .map(({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til }) => ({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til })),
+        .map(({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til, tillegg }) => ({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til, tillegg })),
     })),
     utkast,
     permisjoner,
@@ -149,11 +157,37 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
 
 // --- Inntektene, trekket og avgiften ----------------------------------------------------------
 
-// opptjent: opptjeningsperioden når lønnen gjelder en annen måned (etterbetaling).
-type Inntekt = { beskrivelse: string; aga: boolean; trekk: boolean; belop: number; antall: number | null; opptjent: { fra: string; til: string } | null };
+// fordel: kontantytelse (lønn), naturalytelse eller utgiftsgodtgjoerelse (reiser; 0083). opptjent:
+// opptjeningsperioden når lønnen gjelder en annen måned (etterbetaling). bil: listeprisen og
+// registreringsnummeret for fri bil (tilleggsinformasjonen).
+type Fordel = "kontantytelse" | "naturalytelse" | "utgiftsgodtgjoerelse";
+type Inntekt = {
+  fordel: Fordel;
+  beskrivelse: string;
+  aga: boolean;
+  trekk: boolean;
+  belop: number;
+  antall: number | null;
+  opptjent: { fra: string; til: string } | null;
+  bil: { listepris: number; regnr: string | null; bilpool: boolean } | null;
+};
+const FORDEL: Record<string, Fordel> = { lonn: "kontantytelse", natural: "naturalytelse", utgift: "utgiftsgodtgjoerelse" };
+// Beskrivelsene som rapporteres med antall: timer for timelønnen, døgn, netter og km for reisene.
+const MED_ANTALL = new Set([
+  "timeloenn",
+  "reiseKostMedOvernattingPaaHotell",
+  "reiseKostMedOvernattingPaaHybelUtenKokEllerPensjonatEllerBrakke",
+  "reiseKostMedOvernattingPaaHybelMedKokEllerPrivat",
+  "reiseKostUtenOvernatting",
+  "reiseNattillegg",
+  "kilometergodtgjoerelseBil",
+  "kilometergodtgjoerelsePassasjertillegg",
+  "kilometergodtgjoerelseAndreFremkomstmidler",
+]);
 
-// Lønnen per ansatt etter beskrivelsen i a-meldingen (og om den gir avgift og trekk, og
-// opptjeningsperioden for etterbetaling); antall timer for timelønnen.
+// Lønnen, naturalytelsene og utgiftsgodtgjørelsene per ansatt etter beskrivelsen i a-meldingen (og
+// om de gir avgift og trekk, og opptjeningsperioden for etterbetaling); antall timer for
+// timelønnen og døgn, netter eller km for reisene. Fri bil per bil.
 export function inntekter(slipper: Slippdata[]): Map<string, Inntekt[]> {
   const ut = new Map<string, Map<string, Inntekt>>();
   for (const s of slipper) {
@@ -161,12 +195,15 @@ export function inntekter(slipper: Slippdata[]): Map<string, Inntekt[]> {
     ut.set(s.ansatt_id, per);
     for (const l of s.linjer) {
       const art = lonnsart(l.lonnsart);
-      if (art.type !== "lonn" || !art.amelding || !l.belop) continue;
+      const fordel = FORDEL[art.type];
+      if (!fordel || !art.amelding || !l.belop) continue;
       const opptjent = l.opptjent_fra && l.opptjent_til ? { fra: l.opptjent_fra, til: l.opptjent_til } : null;
-      const nokkel = `${art.amelding}|${art.aga}|${art.trekk}|${opptjent?.fra ?? ""}|${opptjent?.til ?? ""}`;
-      const x = per.get(nokkel) ?? { beskrivelse: art.amelding, aga: art.aga, trekk: art.trekk, belop: 0, antall: null, opptjent };
+      const t = l.tillegg as { listepris?: number; regnr?: string | null; bilpool?: boolean } | null | undefined;
+      const bil = l.lonnsart === "natural_bil" && t?.listepris ? { listepris: Number(t.listepris), regnr: t.regnr ?? null, bilpool: !!t.bilpool } : null;
+      const nokkel = `${fordel}|${art.amelding}|${art.aga}|${art.trekk}|${opptjent?.fra ?? ""}|${opptjent?.til ?? ""}|${bil ? `${bil.listepris}|${bil.regnr}|${bil.bilpool}` : ""}`;
+      const x = per.get(nokkel) ?? { fordel, beskrivelse: art.amelding, aga: art.aga, trekk: art.trekk, belop: 0, antall: null, opptjent, bil };
       x.belop += l.belop;
-      if (art.amelding === "timeloenn" && l.antall != null) x.antall = (x.antall ?? 0) + Number(l.antall);
+      if (MED_ANTALL.has(art.amelding) && l.antall != null) x.antall = (x.antall ?? 0) + Number(l.antall);
       per.set(nokkel, x);
     }
   }
@@ -355,15 +392,26 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
       if (t) x.forskuddstrekk = [{ beskrivelse: "ordinaert", beloep: -t }];
       const i = inn.get(f.id) ?? [];
       if (i.length)
-        x.inntekt = i.map((y) => ({
-          ...(y.opptjent ? { startdatoOpptjeningsperiode: y.opptjent.fra, sluttdatoOpptjeningsperiode: y.opptjent.til } : {}),
-          fordel: "kontantytelse",
-          utloeserArbeidsgiveravgift: y.aga,
-          inngaarIGrunnlagForTrekk: y.trekk,
-          beloep: belop(y.belop),
-          arbeidsforholdId: String(f.ansattnummer),
-          loennsinntekt: y.antall != null && y.antall > 0 ? { beskrivelse: y.beskrivelse, antall: desimal(y.antall) } : { beskrivelse: y.beskrivelse },
-        }));
+        x.inntekt = i.map((y) => {
+          // Elementene i rekkefølgen XSD-en krever: beskrivelse, tilleggsinformasjon, antall.
+          const loennsinntekt: Record<string, unknown> = { beskrivelse: y.beskrivelse };
+          if (y.bil)
+            loennsinntekt.tilleggsinformasjon = {
+              bilOgBaat: y.bil.bilpool
+                ? { listeprisForBil: belop(y.bil.listepris), erBilpool: true }
+                : { listeprisForBil: belop(y.bil.listepris), bilregistreringsnummer: y.bil.regnr ?? "" },
+            };
+          if (y.antall != null && y.antall > 0) loennsinntekt.antall = desimal(y.antall);
+          return {
+            ...(y.opptjent ? { startdatoOpptjeningsperiode: y.opptjent.fra, sluttdatoOpptjeningsperiode: y.opptjent.til } : {}),
+            fordel: y.fordel,
+            utloeserArbeidsgiveravgift: y.aga,
+            inngaarIGrunnlagForTrekk: y.trekk,
+            beloep: belop(y.belop),
+            arbeidsforholdId: String(f.ansattnummer),
+            loennsinntekt,
+          };
+        });
       const u = iLonn.utlegg.get(f.id) ?? [];
       if (u.length) x.utleggstrekk = u.map((y) => ({ beskrivelse: y.beskrivelse, beloep: -y.beloep, datoForUtleggstrekk: y.dato }));
       return x;

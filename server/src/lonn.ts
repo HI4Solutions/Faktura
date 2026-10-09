@@ -17,6 +17,8 @@ import { bokforKjoring } from "./lonnBokforing.js";
 import { endringstekster, etterbetaling, fastlonnLinjer, gjeldende, kjent, ukeDato, type Etterbetalt, type GodkjentKjoring, type Lonnsendring } from "./lonnsendringer.js";
 import { aktive, fagforeningslinjer, trekkEtterSkatt, type Lonnstrekk } from "./lonnstrekk.js";
 import { hentBetalinger } from "./lonnBetalinger.js";
+import { naturallinjer, type Naturalytelse } from "./naturalytelser.js";
+import type { Reiselinje } from "./reise.js";
 import {
   andelAnsatt,
   arbeidsgiverperiode,
@@ -166,6 +168,24 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     ).map((x) => [x.nokkel, Number(x.trukket)]),
   );
   const trukket = (id: string) => trukketSum.get(`trekk:${id}`) ?? 0;
+  // Naturalytelsene (0083) i den ordinære kjøringen, og reiseregningene som er godkjent og ikke
+  // utbetalt (i hver kjøring den ansatte er med i; den første som godkjennes, betaler dem).
+  const naturalytelser = ordinar
+    ? await alle<Naturalytelse>(
+        db,
+        `select id, ansatt_id, type, tekst, belop::float8 as belop, listepris::float8 as listepris, regnr, bilpool,
+                to_char(forstegangsreg, 'YYYY-MM-DD') as forstegangsreg, yrkeskjoring, laan::float8 as laan, rente::float8 as rente,
+                to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til
+           from faktura.naturalytelser where org_id = $1 and fra <= $3::date and (til is null or til >= $2::date) order by fra, opprettet`,
+        [org, fra, til],
+      )
+    : [];
+  const reiser = await alle<{ id: string; ansatt_id: string; beregning: Reiselinje[] }>(
+    db,
+    `select id, ansatt_id, beregning from faktura.reiseregninger
+      where org_id = $1 and status = 'godkjent' and lonnskjoring_id is null order by fra, opprettet`,
+    [org],
+  );
   const tillegg = await alle<Tillegg & { ansatt_id: string }>(
     db,
     `select id, ansatt_id, navn, belop::float8 as belop, per, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til
@@ -505,6 +525,18 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         }
       }
     }
+    // Naturalytelsene for måneden, og reiseregningene som skal utbetales (én linje per del).
+    if (ordinar && ansatt) {
+      const n = naturallinjer(
+        naturalytelser.filter((x) => x.ansatt_id === a.id),
+        fra,
+        til,
+      );
+      auto.push(...n.linjer);
+      merknader.push(...n.merknader);
+    }
+    for (const x of reiser.filter((y) => y.ansatt_id === a.id))
+      x.beregning.forEach((l, i) => auto.push({ lonnsart: l.lonnsart, tekst: l.tekst, antall: l.antall, sats: l.sats, belop: Number(l.belop), nokkel: `reise:${x.id}:${i}` }));
     if (!ansatt && !uker.length && !auto.length && !manuelle.length && !slipp) continue;
     if (!ordinar && !k.feriepenger && !slipp) continue;
     resultater.push({ a, slipp, auto, manuelle, timeforinger, timebankPoster, merknader });
@@ -560,6 +592,8 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       }
       s.merknader.push(...t.merknader);
     }
+    if (r.manuelle.some((m) => !m.fjernet && m.nokkel?.startsWith("reise:") && !reiser.some((x) => m.nokkel!.startsWith(`reise:${x.id}:`))))
+      s.merknader.push("En linje fra en reiseregning som ikke er godkjent (eller er utbetalt), er med fordi den er endret for hånd. Angre endringen eller fjern linjen.");
     if (!r.a.kontonr && s.netto > 0) s.merknader.push("Mangler kontonummer på den ansatte.");
     return { r, auto, s };
   });
@@ -569,6 +603,14 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
   for (const [i, { r, auto, s }] of beregnet.entries()) {
     // Ingenting å lønne (og ingenting lagt til for hånd): ingen slipp.
     if (!auto.length && !r.manuelle.length && !r.slipp?.skattetrekk_manuell && !r.merknader.length) continue;
+    // Reiseregningene som utbetales på slippen (en linje fra dem er med, og ikke fjernet for hånd).
+    const reiseIder = [
+      ...new Set(
+        [...auto.map((l) => l.nokkel), ...r.manuelle.filter((m) => !m.fjernet).map((m) => m.nokkel)]
+          .filter((n): n is string => !!n && n.startsWith("reise:"))
+          .map((n) => n.split(":")[1]!),
+      ),
+    ].filter((id) => reiser.some((x) => x.id === id));
     const felles = [
       r.a.navn,
       r.a.ansattnummer,
@@ -595,6 +637,8 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       [...r.merknader, ...s.merknader],
       // Utbetalingene fra timebanken, om linjen ikke er fjernet for hånd.
       auto.some((l) => l.nokkel === "timebank") || r.manuelle.some((m) => m.nokkel === "timebank" && !m.fjernet) ? r.timebankPoster : [],
+      s.naturalytelser,
+      reiseIder,
     ];
     let slippId = r.slipp?.id;
     if (slippId) {
@@ -602,7 +646,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         `update faktura.lonnsslipper set navn = $2, ansattnummer = $3, lonnstype = $4, periode = $5, utbetalingsdato = $6, trekkmetode = $7, trekkpliktig = $8,
                 trekkgrunnlag = $9, skattetrekk = $10, skattetrekk_manuell = $11, brutto = $12, utgifter = $13, trekk_etter_skatt = $14, netto = $15,
                 feriepengegrunnlag = $16, feriepenger_opptjent = $17, otp_grunnlag = $18, otp = $19, aga_grunnlag = $20, aga = $21, aga_sats = $22,
-                timeforinger = $23, merknader = $24, timebank_poster = $25
+                timeforinger = $23, merknader = $24, timebank_poster = $25, naturalytelser = $26, reiseregninger = $27
           where id = $1`,
         [slippId, ...felles],
       );
@@ -612,17 +656,17 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         db,
         `insert into faktura.lonnsslipper (org_id, kjoring_id, ansatt_id, navn, ansattnummer, lonnstype, periode, utbetalingsdato, trekkmetode, trekkpliktig,
                 trekkgrunnlag, skattetrekk, skattetrekk_manuell, brutto, utgifter, trekk_etter_skatt, netto, feriepengegrunnlag, feriepenger_opptjent,
-                otp_grunnlag, otp, aga_grunnlag, aga, aga_sats, timeforinger, merknader, timebank_poster)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) returning id`,
+                otp_grunnlag, otp, aga_grunnlag, aga, aga_sats, timeforinger, merknader, timebank_poster, naturalytelser, reiseregninger)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29) returning id`,
         [org, k.id, r.a.id, ...felles],
       ))!.id;
     }
     behold.add(slippId);
     for (const [n, l] of auto.entries())
       await db.query(
-        `insert into faktura.lonnslinjer (org_id, slipp_id, lonnsart, tekst, antall, sats, belop, kilde, nokkel, opptjeningsaar, rekkefolge, opptjent_fra, opptjent_til)
-         values ($1, $2, $3, $4, $5, $6, $7, 'auto', $8, $9, $10, $11, $12)`,
-        [org, slippId, l.lonnsart, l.tekst, l.antall, l.sats, l.belop, l.nokkel, l.opptjeningsaar ?? null, n, l.opptjent_fra ?? null, l.opptjent_til ?? null],
+        `insert into faktura.lonnslinjer (org_id, slipp_id, lonnsart, tekst, antall, sats, belop, kilde, nokkel, opptjeningsaar, rekkefolge, opptjent_fra, opptjent_til, tillegg)
+         values ($1, $2, $3, $4, $5, $6, $7, 'auto', $8, $9, $10, $11, $12, $13::jsonb)`,
+        [org, slippId, l.lonnsart, l.tekst, l.antall, l.sats, l.belop, l.nokkel, l.opptjeningsaar ?? null, n, l.opptjent_fra ?? null, l.opptjent_til ?? null, l.tillegg ? JSON.stringify(l.tillegg) : null],
       );
   }
   // Slipper uten grunnlag lenger (og uten noe lagt til for hånd) fjernes.
@@ -640,7 +684,7 @@ const SLIPP = `
          s.utgifter::float8 as utgifter, s.trekk_etter_skatt::float8 as trekk_etter_skatt, s.netto::float8 as netto,
          s.feriepengegrunnlag::float8 as feriepengegrunnlag, s.feriepenger_opptjent::float8 as feriepenger_opptjent,
          s.otp_grunnlag::float8 as otp_grunnlag, s.otp::float8 as otp, s.aga_grunnlag::float8 as aga_grunnlag, s.aga::float8 as aga,
-         s.aga_sats::float8 as aga_sats, cardinality(s.timeforinger) as antall_timeforinger, s.merknader
+         s.aga_sats::float8 as aga_sats, cardinality(s.timeforinger) as antall_timeforinger, s.merknader, s.naturalytelser::float8 as naturalytelser
     from faktura.lonnsslipper s`;
 const LINJE = `
   select l.id, l.slipp_id, l.lonnsart, l.tekst, l.antall::float8 as antall, l.sats::float8 as sats, l.belop::float8 as belop, l.kilde, l.nokkel,

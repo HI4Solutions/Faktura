@@ -45,7 +45,7 @@ export const periodeSlutt = (periode: string) => new Date(Date.UTC(Number(period
 const dagerMellom = (fra: string, til: string) => Math.round((Date.parse(`${til}T12:00:00Z`) - Date.parse(`${fra}T12:00:00Z`)) / 86_400_000);
 const maks = (a: string, b: string) => (a > b ? a : b);
 const min = (a: string, b: string) => (a < b ? a : b);
-const tall = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 2 }).replace(/[\u00a0\u202f]/g, " ").replace(/\u2212/g, "-");
+export const tall = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 2 }).replace(/[\u00a0\u202f]/g, " ").replace(/\u2212/g, "-");
 const MND = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
 // «oktober 2026» for perioden 2026-10-01.
 export const maanedNavn = (periode: string) => `${MND[Number(periode.slice(5, 7)) - 1]} ${periode.slice(0, 4)}`;
@@ -136,6 +136,8 @@ export type Linje = {
   opptjent_til?: string | null;
   kilde?: "auto" | "manuell";
   fjernet?: boolean;
+  // Tilleggsinformasjon til a-meldingen (fri bil: listeprisen og registreringsnummeret; 0083).
+  tillegg?: Record<string, unknown> | null;
 };
 
 export type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"; fra: string | null; til: string | null };
@@ -421,6 +423,7 @@ export function ferietrekk(a: Ansatt, o: Oppsett): Linje | null {
 export type Trekkrad = { grunnlag: number; trekk: number };
 export type Summer = {
   brutto: number;
+  naturalytelser: number; // trekkpliktige, utbetales ikke (0083)
   trekkpliktig: number;
   trekkgrunnlag: number;
   skattetrekk: number;
@@ -486,13 +489,16 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   let unntatt = 0; // feriepenger uten tabelltrekk (utbetalt i ferieåret)
   let ferie60 = 0;
   let fradrag = 0; // fagforeningskontingent trukket i lønnen (positiv)
+  let natural = 0; // naturalytelser (0083)
   for (const l of aktive) {
     const art = lonnsart(l.lonnsart);
     const b = Number(l.belop);
     if (art.type === "utgift") utgifter += b;
     else if (art.type === "trekk") trekkEtter += b;
+    else if (art.type === "natural") natural += b;
     else brutto += b;
-    if (art.type === "lonn" && art.trekk) trekkpliktig += b;
+    // Trekkpliktig: lønnen, naturalytelsene og den trekkpliktige delen av reisegodtgjørelsen.
+    if (art.type !== "trekk" && art.trekk) trekkpliktig += b;
     if (art.ferie) ferie += b;
     if (art.otp) otpGrunnlag += b;
     if (art.aga) agaGrunnlag += b;
@@ -567,6 +573,7 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   if (netto < 0) merknader.push("Nettolønnen er negativ. Sjekk trekkene.");
   return {
     brutto,
+    naturalytelser: rund(natural),
     trekkpliktig,
     trekkgrunnlag: rund(Math.max(0, grunnlag)),
     skattetrekk: trekk,

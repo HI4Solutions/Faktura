@@ -12,7 +12,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, somSystem, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
-import { AMELDING_NAVN, lonnsart } from "./lonnsarter.js";
+import { AMELDING_NAVN, ameldingNavn, lonnsart } from "./lonnsarter.js";
 import { rund } from "./lonnsberegning.js";
 import { lagAarsoversiktPdf, type PdfAarsoversikt } from "./aarsoversiktPdf.js";
 import { hentLogo } from "./dokument.js";
@@ -116,13 +116,17 @@ export async function hentAarsoversikt(db: Db, org: string, ansatt: string, aar:
     ansattnummer = a?.ansattnummer ?? 0;
   }
 
-  // Lønnen etter beskrivelsen i a-meldingen; utgifter og trekk etter skatt med teksten på linjen.
+  // Lønnen og naturalytelsene etter beskrivelsen i a-meldingen; utgiftene som rapporteres (reiser)
+  // også, de andre utgiftene og trekkene etter skatt med teksten på linjen.
   const inntekter = new Map<string, { kode: string; navn: string; belop: number }>();
   const utgifter = new Map<string, number>();
   const trekk = new Map<string, number>();
   for (const l of linjer) {
     const art = lonnsart(l.lonnsart);
-    if (art.type === "utgift") utgifter.set(l.tekst, (utgifter.get(l.tekst) ?? 0) + l.belop);
+    if (art.type === "utgift") {
+      const navn = art.amelding ? ameldingNavn(art) : l.tekst;
+      utgifter.set(navn, (utgifter.get(navn) ?? 0) + l.belop);
+    }
     else if (art.type === "trekk") trekk.set(l.tekst, (trekk.get(l.tekst) ?? 0) + l.belop);
     else {
       const kode = art.amelding ?? art.kode;

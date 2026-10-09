@@ -386,7 +386,7 @@ function Ramme() {
             {visLonn && (
               <NavLink to="/lonn">
                 <IkonLonn />
-                Lønnsslipper
+                Lønn og reiser
               </NavLink>
             )}
             {visBeskjeder && (
@@ -513,7 +513,7 @@ function Ramme() {
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vakter"><Vakter /></Krever>} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
-            <Route path="/lonn" element={<Krever kode="lonn" navn="Lønnsslipper"><Lonn /></Krever>} />
+            <Route path="/lonn" element={<Krever kode="lonn" navn="Lønn og reiser"><Lonn /></Krever>} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />

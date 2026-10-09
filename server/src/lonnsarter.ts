@@ -1,8 +1,10 @@
 // Lønnsartene i lønnskjøringen (0065_lonn.sql): hva hver linje er, og om den er trekkpliktig
 // (forskuddstrekk), avgiftspliktig (arbeidsgiveravgift), med i feriepengegrunnlaget og i
-// grunnlaget for OTP. type: lønn (bruttolønnen), utgift (godtgjørelse som ikke er
-// skattepliktig, utbetales i tillegg) eller trekk (trekkes etter skatt). fortegn: vanlig fortegn
-// på beløpet (trekk er negative). manuell: kan velges når en linje legges til.
+// grunnlaget for OTP. type: lønn (bruttolønnen), utgift (godtgjørelse, utbetales i tillegg; den
+// trekkpliktige delen av reisegodtgjørelsen er trekk- og avgiftspliktig), trekk (trekkes etter
+// skatt) eller natural (naturalytelse: trekk- og avgiftspliktig, men utbetales ikke; 0083).
+// fortegn: vanlig fortegn på beløpet (trekk er negative). manuell: kan velges når en linje legges
+// til.
 // amelding: beskrivelsen i a-meldingen (steg 4). fradrag: trekket reduserer grunnlaget for
 // forskuddstrekket (fagforeningskontingent, 0082).
 //
@@ -14,7 +16,7 @@
 export type Lonnsart = {
   kode: string;
   navn: string;
-  type: "lonn" | "utgift" | "trekk";
+  type: "lonn" | "utgift" | "trekk" | "natural";
   trekk: boolean;
   aga: boolean;
   ferie: boolean;
@@ -50,6 +52,34 @@ const trekk = (kode: string, navn: string, x: Partial<Lonnsart> = {}): Lonnsart 
   fortegn: -1,
   manuell: true,
   amelding: null,
+  ...x,
+});
+
+const utgift = (kode: string, navn: string, amelding: string | null, x: Partial<Lonnsart> = {}): Lonnsart => ({
+  kode,
+  navn,
+  type: "utgift",
+  trekk: false,
+  aga: false,
+  ferie: false,
+  otp: false,
+  fortegn: 1,
+  manuell: false,
+  amelding,
+  ...x,
+});
+
+const natural = (kode: string, navn: string, amelding: string, x: Partial<Lonnsart> = {}): Lonnsart => ({
+  kode,
+  navn,
+  type: "natural",
+  trekk: true,
+  aga: true,
+  ferie: false,
+  otp: false,
+  fortegn: 1,
+  manuell: true,
+  amelding,
   ...x,
 });
 
@@ -98,6 +128,32 @@ export const LONNSARTER: Lonnsart[] = [
   trekk("fagforening", "Fagforeningskontingent", { fradrag: true }),
   trekk("forskudd_trekk", "Tilbakebetaling av forskudd"),
   { kode: "forskudd_utbetalt", navn: "Forskudd på lønn (lån)", type: "utgift", trekk: false, aga: false, ferie: false, otp: false, fortegn: 1, manuell: true, amelding: null },
+  // Reiser (0083, reise.ts): kost, nattillegg og kilometergodtgjørelse innenfor de trekkfrie
+  // satsene (trekkfri utgiftsgodtgjørelse med antall døgn, netter eller km), det som er over
+  // (trekkpliktig), og utlegg etter regning (rapporteres ikke). Regnes av reiseregningene.
+  utgift("reise_kost_hotell", "Kost på reise med overnatting (hotell)", "reiseKostMedOvernattingPaaHotell"),
+  utgift("reise_kost_hybel", "Kost på reise med overnatting (hybel, pensjonat, brakke)", "reiseKostMedOvernattingPaaHybelUtenKokEllerPensjonatEllerBrakke"),
+  utgift("reise_kost_privat", "Kost på reise med overnatting (hybel med kokemulighet, privat)", "reiseKostMedOvernattingPaaHybelMedKokEllerPrivat"),
+  utgift("reise_kost_dag", "Kost på dagsreise", "reiseKostUtenOvernatting"),
+  utgift("reise_nattillegg", "Nattillegg", "reiseNattillegg"),
+  utgift("reise_kost_trekk", "Kost på reise (trekkpliktig)", "reiseKost", { trekk: true, aga: true }),
+  utgift("reise_annet_trekk", "Annen godtgjørelse på reise (trekkpliktig)", "reiseAnnet", { trekk: true, aga: true }),
+  utgift("km_bil", "Kilometergodtgjørelse", "kilometergodtgjoerelseBil"),
+  utgift("km_tillegg", "Tillegg for skogsvei og tilhenger", "kilometergodtgjoerelseBil"),
+  utgift("km_passasjer", "Passasjertillegg", "kilometergodtgjoerelsePassasjertillegg"),
+  utgift("km_annet", "Kilometergodtgjørelse (andre kjøretøy)", "kilometergodtgjoerelseAndreFremkomstmidler"),
+  utgift("km_bil_trekk", "Kilometergodtgjørelse (trekkpliktig)", "kilometergodtgjoerelseBil", { trekk: true, aga: true }),
+  utgift("km_annet_trekk", "Kilometergodtgjørelse, andre kjøretøy (trekkpliktig)", "kilometergodtgjoerelseAndreFremkomstmidler", { trekk: true, aga: true }),
+  utgift("reise_utlegg", "Utlegg på reise (etter regning)", null),
+  // Naturalytelser (0083, naturalytelser.ts): faste per ansatt (fri bil regnes av listeprisen), og
+  // de som legges til for hånd (personalrabatt og gaver over grensene).
+  natural("natural_bil", "Fri bil", "bil", { manuell: false }),
+  natural("natural_ek", "Elektronisk kommunikasjon", "elektroniskKommunikasjon"),
+  natural("natural_forsikring", "Forsikring (skattepliktig del av premien)", "skattepliktigDelForsikringer"),
+  natural("natural_rente", "Rentefordel på lån", "rentefordelLaan"),
+  natural("natural_bolig", "Fri bolig", "bolig"),
+  natural("natural_rabatt", "Personalrabatt (skattepliktig del)", "skattepliktigPersonalrabatt"),
+  natural("natural_annet", "Annen naturalytelse (f.eks. gave over grensen)", "annet"),
 ];
 
 // Beskrivelsene i a-meldingen som lønnsartene rapporteres som, med navnet den ansatte ser
@@ -111,7 +167,30 @@ export const AMELDING_NAVN: Record<string, string> = {
   bonus: "Bonus",
   feriepenger: "Feriepenger",
   trekkILoennForFerie: "Trekk i lønn for ferie",
+  // Naturalytelser og utgiftsgodtgjørelser (0083).
+  bil: "Fri bil",
+  elektroniskKommunikasjon: "Elektronisk kommunikasjon",
+  skattepliktigDelForsikringer: "Skattepliktig del av forsikringer",
+  rentefordelLaan: "Rentefordel lån",
+  bolig: "Fri bolig",
+  skattepliktigPersonalrabatt: "Skattepliktig personalrabatt",
+  annet: "Andre naturalytelser",
+  reiseKostMedOvernattingPaaHotell: "Kost med overnatting på hotell",
+  reiseKostMedOvernattingPaaHybelUtenKokEllerPensjonatEllerBrakke: "Kost med overnatting på hybel, pensjonat eller brakke",
+  reiseKostMedOvernattingPaaHybelMedKokEllerPrivat: "Kost med overnatting på hybel med kokemulighet eller privat",
+  reiseKostUtenOvernatting: "Kost uten overnatting",
+  reiseNattillegg: "Nattillegg",
+  reiseKost: "Trekkpliktig kostgodtgjørelse",
+  reiseAnnet: "Annen trekkpliktig reisegodtgjørelse",
+  kilometergodtgjoerelseBil: "Bilgodtgjørelse",
+  kilometergodtgjoerelsePassasjertillegg: "Passasjertillegg",
+  kilometergodtgjoerelseAndreFremkomstmidler: "Kilometergodtgjørelse, andre fremkomstmidler",
 };
+
+// Navnet på en linje etter beskrivelsen i a-meldingen (den trekkpliktige delen av en
+// utgiftsgodtgjørelse merkes).
+export const ameldingNavn = (art: Lonnsart) =>
+  `${(art.amelding && AMELDING_NAVN[art.amelding]) || art.navn}${art.type === "utgift" && art.trekk ? " (trekkpliktig)" : ""}`;
 
 const PER_KODE = new Map(LONNSARTER.map((l) => [l.kode, l]));
 export const lonnsart = (kode: string): Lonnsart => PER_KODE.get(kode) ?? lonn(kode, kode);

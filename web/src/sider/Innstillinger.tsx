@@ -216,6 +216,7 @@ function PersonalOppsett() {
     virksomhet_orgnr: string;
     pensjonsinnretning_orgnr: string;
     sykepenger_refusjon: boolean;
+    reise_satser: "staten" | "trekkfri";
     egenmelding: Egenmeldingsordning;
     egenmelding_dager: string;
     egenmelding_ganger: string;
@@ -251,6 +252,7 @@ function PersonalOppsett() {
         virksomhet_orgnr: data.virksomhet_orgnr ?? "",
         pensjonsinnretning_orgnr: data.pensjonsinnretning_orgnr ?? "",
         sykepenger_refusjon: data.sykepenger_refusjon ?? true,
+        reise_satser: data.reise_satser ?? "staten",
         egenmelding: ordning(data.egenmelding_dager ?? 3, data.egenmelding_ganger === undefined ? 4 : data.egenmelding_ganger, data.egenmelding_dager_aar ?? null),
         egenmelding_dager: String(data.egenmelding_dager ?? 3),
         egenmelding_ganger: data.egenmelding_ganger == null ? "" : String(data.egenmelding_ganger),
@@ -291,6 +293,7 @@ function PersonalOppsett() {
               virksomhet_orgnr: o!.virksomhet_orgnr.replace(/\s/g, "") || null,
               pensjonsinnretning_orgnr: o!.pensjonsinnretning_orgnr.replace(/\s/g, "") || null,
               sykepenger_refusjon: o!.sykepenger_refusjon,
+              reise_satser: o!.reise_satser,
             }
           : {}),
       }),
@@ -493,6 +496,18 @@ function PersonalOppsett() {
               {o.sykepenger_refusjon
                 ? "Lønnen går som vanlig (med timelønn: de planlagte timene), og refusjonen kreves i inntektsmeldingen til NAV (Lønn → Sykepenger). NAV refunderer høyst 6 G."
                 : "Etter de 16 dagene i arbeidsgiverperioden trekkes fastlønnen for sykedagene, og timelønn betales ikke; NAV betaler sykepengene til den ansatte."}
+            </span>
+          </label>
+          <label>
+            Satser for reiser (diett, nattillegg og kilometergodtgjørelse)
+            <select value={o.reise_satser} onChange={(e) => settO({ ...o, reise_satser: e.target.value as "staten" | "trekkfri" })}>
+              <option value="staten">Statens satser</option>
+              <option value="trekkfri">De trekkfrie satsene</option>
+            </select>
+            <span className="felt-hjelp">
+              {o.reise_satser === "staten"
+                ? "Reiseregningene betales etter statens særavtale (f.eks. 1 012 kr per døgn med overnatting og 5,30 kr per km i 2026). Det som er over Skatteetatens trekkfrie satser, er trekkpliktig og gir arbeidsgiveravgift."
+                : "Reiseregningene betales etter Skatteetatens trekkfrie satser (f.eks. 693 kr per døgn på hotell og 3,50 kr per km i 2026), så ingenting blir trekkpliktig."}
             </span>
           </label>
           <h4 className="lonn-under">Betalingsfil til nettbanken</h4>

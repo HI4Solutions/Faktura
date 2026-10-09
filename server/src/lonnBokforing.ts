@@ -29,6 +29,11 @@ export type Kontorolle =
   | "bidragstrekk"
   | "andre_trekk"
   | "forskudd"
+  | "bilgodtgjorelse"
+  | "diett"
+  | "reiseutlegg"
+  | "naturalytelser"
+  | "naturalytelser_mot"
   | "skyldig_aga"
   | "paalopt_aga_feriepenger"
   | "skyldig_lonn"
@@ -49,6 +54,11 @@ export const KONTOROLLER: { rolle: Kontorolle; navn: string; standard: string }[
   { rolle: "bidragstrekk", navn: "Bidragstrekk", standard: "2620" },
   { rolle: "andre_trekk", navn: "Andre trekk", standard: "2690" },
   { rolle: "forskudd", navn: "Forskudd til ansatte", standard: "1570" },
+  { rolle: "bilgodtgjorelse", navn: "Bilgodtgjørelse", standard: "7100" },
+  { rolle: "diett", navn: "Diett og nattillegg", standard: "7150" },
+  { rolle: "reiseutlegg", navn: "Reisekostnader (utlegg)", standard: "7140" },
+  { rolle: "naturalytelser", navn: "Naturalytelser", standard: "5280" },
+  { rolle: "naturalytelser_mot", navn: "Motkonto for naturalytelser", standard: "5290" },
   { rolle: "skyldig_aga", navn: "Skyldig arbeidsgiveravgift", standard: "2770" },
   { rolle: "paalopt_aga_feriepenger", navn: "Påløpt arbeidsgiveravgift på feriepenger", standard: "2785" },
   { rolle: "skyldig_lonn", navn: "Skyldig lønn", standard: "2930" },
@@ -93,6 +103,12 @@ export type Bilagsslipp = {
   bidragstrekk?: number;
   forskudd_trekk?: number;
   forskudd_utbetalt?: number;
+  // Reisene (0083): kilometergodtgjørelsen, diett og nattillegg, og utleggene etter regning (alt
+  // utgiftsgodtgjørelse), og naturalytelsene (utbetales ikke; føres mot motkontoen).
+  bilgodtgjorelse?: number;
+  diett?: number;
+  reiseutlegg?: number;
+  naturalytelser?: number;
 };
 export type Bilagsgrunnlag = {
   kjoring: { id: string; periode: string; type: "ordinar" | "ekstra"; utbetalingsdato: string };
@@ -115,6 +131,10 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
   const bidrag = sum((s) => ore(s.bidragstrekk ?? 0));
   const forskuddTrekk = sum((s) => ore(s.forskudd_trekk ?? 0));
   const forskuddUt = sum((s) => ore(s.forskudd_utbetalt ?? 0));
+  const bil = sum((s) => ore(s.bilgodtgjorelse ?? 0));
+  const diett = sum((s) => ore(s.diett ?? 0));
+  const reiseutlegg = sum((s) => ore(s.reiseutlegg ?? 0));
+  const natural = sum((s) => ore(s.naturalytelser ?? 0));
   const andreTrekk = -sum((s) => ore(s.trekk_etter_skatt)) - paalegg - bidrag - forskuddTrekk;
   const netto = sum((s) => ore(s.netto));
   const aga = sum((s) => ore(s.aga));
@@ -133,8 +153,13 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
     post("skyldige_feriepenger", ferie, "Feriepenger utbetalt");
     post("feriepenger", ferie60, "Feriepenger for den ekstra ferieuka");
   } else post("feriepenger", ferie + ferie60, "Feriepenger utbetalt");
-  post("utgifter", utgifter - forskuddUt, "Utgiftsgodtgjørelse");
+  post("utgifter", utgifter - forskuddUt - bil - diett - reiseutlegg, "Utgiftsgodtgjørelse");
+  post("bilgodtgjorelse", bil, "Kilometergodtgjørelse");
+  post("diett", diett, "Diett og nattillegg");
+  post("reiseutlegg", reiseutlegg, "Utlegg på reise");
   post("forskudd", forskuddUt, "Forskudd på lønn");
+  post("naturalytelser", natural, "Naturalytelser");
+  post("naturalytelser_mot", -natural, "Naturalytelser");
   post("forskuddstrekk", -skatt, "Forskuddstrekk");
   post("paaleggstrekk", -paalegg, "Utleggstrekk");
   post("bidragstrekk", -bidrag, "Bidragstrekk");
@@ -203,7 +228,14 @@ export async function hentBilagsgrunnlag(db: Db, org: string, kjoring: string): 
                         and l.lonnsart in ('utleggstrekk_samordnet', 'utleggstrekk_skatt', 'utleggstrekk')), 0)::float8 as paaleggstrekk,
             coalesce((select -sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'bidragstrekk'), 0)::float8 as bidragstrekk,
             coalesce((select -sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'forskudd_trekk'), 0)::float8 as forskudd_trekk,
-            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'forskudd_utbetalt'), 0)::float8 as forskudd_utbetalt
+            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'forskudd_utbetalt'), 0)::float8 as forskudd_utbetalt,
+            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet
+                        and l.lonnsart in ('km_bil', 'km_tillegg', 'km_passasjer', 'km_annet', 'km_bil_trekk', 'km_annet_trekk')), 0)::float8 as bilgodtgjorelse,
+            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet
+                        and l.lonnsart in ('reise_kost_hotell', 'reise_kost_hybel', 'reise_kost_privat', 'reise_kost_dag', 'reise_nattillegg',
+                                           'reise_kost_trekk', 'reise_annet_trekk')), 0)::float8 as diett,
+            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'reise_utlegg'), 0)::float8 as reiseutlegg,
+            s.naturalytelser::float8 as naturalytelser
        from faktura.lonnsslipper s
       where s.org_id = $1 and s.kjoring_id = $2
       order by s.ansattnummer`,

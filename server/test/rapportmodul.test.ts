@@ -169,6 +169,8 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "lonn.otp",
         "lonn.endringer",
         "lonn.trekk",
+        "lonn.reiser",
+        "lonn.naturalytelser",
         "lonn.sykepenger",
       ],
     });
@@ -179,7 +181,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     const r = await moduler(regnskap);
     expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte"]);
     // Sykepengene (helseopplysninger) ser bare eier og administrator.
-    expect(r.lonn).toHaveLength(10);
+    expect(r.lonn).toHaveLength(12);
     expect(r.lonn).not.toContain("lonn.sykepenger");
     expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.sykepenger`, undefined, regnskap)).status).toBe(403);
     expect(await moduler(fakturerer)).toEqual({ faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"] });

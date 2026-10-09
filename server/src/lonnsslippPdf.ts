@@ -1,7 +1,7 @@
 // Lønnsslippen som PDF (A4, standardfontene som fakturaen): arbeidsgiveren og den ansatte,
 // perioden, utbetalingsdatoen og kontoen, linjene (lønn, forskuddstrekk, utgifter og trekk etter
-// skatt) med beløpet som utbetales, tallene hittil i år og det som er opptjent i perioden
-// (feriepenger og pensjon).
+// skatt) med beløpet som utbetales, naturalytelsene (skattepliktige, utbetales ikke), tallene
+// hittil i år og det som er opptjent i perioden (feriepenger og pensjon).
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { rensTekst } from "./pdf.js";
@@ -202,6 +202,16 @@ export async function lagLonnsslippPdf(s: PdfLonnsslipp): Promise<Uint8Array> {
     y -= 12;
   }
   y -= 16;
+
+  // Naturalytelsene (0083): med i grunnlaget for forskuddstrekket, men utbetales ikke.
+  const natural = s.linjer.filter((l) => lonnsart(l.lonnsart).type === "natural");
+  if (natural.length) {
+    if (y - 13 * (natural.length + 2) < BUNN) nySide(false);
+    tekst("Naturalytelser (skattepliktige, utbetales ikke)", MARG, y, { f: fet });
+    y -= 15;
+    for (const l of natural) linjeRad(l);
+    y -= 12;
+  }
 
   // Hittil i år og opptjent i perioden, i to bokser.
   const boks = (x: number, tittelTekst: string, rader: [string, string][]) => {

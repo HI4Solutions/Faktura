@@ -52,6 +52,12 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
    Skatteetaten (samordnet og for skattekrav) blir utleggstrekk med datoen for trekket og summen i
    betalingsinformasjonen, og forskuddstrekket har beskrivelsen «ordinaert». Bidragstrekk og andre
    utleggstrekk rapporteres ikke.
+   Naturalytelser (på den ansatte) rapporteres med fordelen naturalytelse (trekk- og
+   avgiftspliktig), fri bil med listeprisen og registreringsnummeret (eller bilpool) i
+   tilleggsinformasjonen. Reisene (godkjente reiseregninger) rapporteres som utgiftsgodtgjørelse:
+   kost, nattillegg og kilometergodtgjørelse innenfor de trekkfrie satsene med antall døgn,
+   dager, netter eller km (uten trekk og avgift), og det som er over (reiseKost, reiseAnnet,
+   kilometergodtgjoerelseBil) med trekk og avgift. Utlegg etter regning rapporteres ikke.
 3. **Hver måned:** godkjenn lønnskjøringen, åpne måneden under Lønn → A-melding, rett det som
    mangler, og lag fila eller send den.
 4. **Tilgang for innsending fra appen** (når den er slått på): kunder som allerede har koblet til

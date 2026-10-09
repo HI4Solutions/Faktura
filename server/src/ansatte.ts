@@ -188,6 +188,9 @@ const oppsettSkjema = z.object({
   // Lønn under sykdom etter arbeidsgiverperioden (0079_nav_sykepenger.sql): arbeidsgiveren betaler
   // og krever refusjon fra NAV, eller NAV betaler sykepengene til den ansatte.
   sykepenger_refusjon: z.boolean().optional(),
+  // Satsene for reiser (0083): statens satser (det som er over de trekkfrie, er trekkpliktig) eller
+  // bare de trekkfrie satsene.
+  reise_satser: z.enum(["staten", "trekkfri"]).optional(),
 });
 
 const foringSkjema = z.object({
@@ -288,13 +291,15 @@ type Oppsett = Regler & {
   virksomhet_orgnr: string | null;
   pensjonsinnretning_orgnr: string | null;
   sykepenger_refusjon: boolean;
+  reise_satser: "staten" | "trekkfri";
 };
 export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
     `select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
             aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt, egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager,
-            timebank, vaktbytte_fridag, lonnskonto, skatt_kontonr, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr, sykepenger_refusjon
+            timebank, vaktbytte_fridag, lonnskonto, skatt_kontonr, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr, sykepenger_refusjon,
+            reise_satser
        from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
@@ -325,6 +330,7 @@ export async function regler(db: Db, org: string): Promise<Oppsett> {
       virksomhet_orgnr: null,
       pensjonsinnretning_orgnr: null,
       sykepenger_refusjon: true,
+      reise_satser: "staten",
     }
   );
 }
@@ -363,7 +369,7 @@ function ukesummer(foringer: Foringsrad[], r: Regler, avtalt: Map<string, number
 
 // Push til eier og administrator (de som godkjenner timer, planlegger vakter og får vite om
 // sykdom), unntatt den som selv gjorde det. Slås opp av serveren: en ansatt ser ikke hvem de andre medlemmene er.
-export async function varslePersonal(org: string, unntatt: string, hendelse: "timer" | "vakter" | "fravaer", tittel: string, tekst: string, url: string, tag: string) {
+export async function varslePersonal(org: string, unntatt: string, hendelse: "timer" | "vakter" | "fravaer" | "reiser", tittel: string, tekst: string, url: string, tag: string) {
   const mottakere = await somSystem((db) =>
     alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and rolle in ('eier', 'admin') and bruker_id <> $2", [
       org,
@@ -396,8 +402,8 @@ export function ansattRuter() {
                                              aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt,
                                              egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager, timebank,
                                              vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr, sykepenger_refusjon,
-                                             skatt_kontonr)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+                                             skatt_kontonr, reise_satser)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
              full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg,
@@ -408,7 +414,7 @@ export function ansattRuter() {
              vaktbytte_fridag = excluded.vaktbytte_fridag, lonnskonto = excluded.lonnskonto, bank_bic = excluded.bank_bic,
              betalingsfil_format = excluded.betalingsfil_format, virksomhet_orgnr = excluded.virksomhet_orgnr,
              pensjonsinnretning_orgnr = excluded.pensjonsinnretning_orgnr, sykepenger_refusjon = excluded.sykepenger_refusjon,
-             skatt_kontonr = excluded.skatt_kontonr`,
+             skatt_kontonr = excluded.skatt_kontonr, reise_satser = excluded.reise_satser`,
           [
             orgId(c),
             ny.aktiv,
@@ -438,6 +444,7 @@ export function ansattRuter() {
             ny.pensjonsinnretning_orgnr ?? null,
             ny.sykepenger_refusjon,
             ny.skatt_kontonr ?? null,
+            ny.reise_satser ?? "staten",
           ],
         );
         return regler(db, orgId(c));
