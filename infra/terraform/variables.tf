@@ -110,3 +110,45 @@ variable "ai_grense" {
   type        = number
   default     = 1000
 }
+
+# Skattekort fra Skatteetaten (docs/skattekort.md). Leverandøren (Medinnova AS) har én
+# Maskinporten-klient og ett system i Altinns systemregister.
+variable "skatteetaten_miljo" {
+  description = "test (Maskinporten-test, Altinn TT02 og Skatteetatens testmiljø) eller prod. Settes med GitHub-variabelen SKATTEETATEN_MILJO."
+  type        = string
+  default     = "test"
+  validation {
+    condition     = contains(["test", "prod"], var.skatteetaten_miljo)
+    error_message = "skatteetaten_miljo må være test eller prod."
+  }
+}
+
+variable "maskinporten_klient_id" {
+  description = "Klient-ID-en (integrasjons-ID) til Maskinporten-klienten. Tom = skattekortfunksjonen er skjult. Settes med GitHub-variabelen MASKINPORTEN_KLIENT_ID."
+  type        = string
+  default     = ""
+}
+
+variable "maskinporten_nokkel_id" {
+  description = "Nøkkel-ID-en (kid) til nøkkelen på Maskinporten-klienten. Settes med GitHub-variabelen MASKINPORTEN_NOKKEL_ID."
+  type        = string
+  default     = ""
+}
+
+variable "leverandor_orgnr" {
+  description = "Organisasjonsnummeret til leverandøren av løsningen (eier Maskinporten-klienten og systemet i Altinn). Settes med GitHub-variabelen LEVERANDOR_ORGNR."
+  type        = string
+  default     = "936564046"
+}
+
+variable "altinn_systemnavn" {
+  description = "Navnet kundene ser i Altinn når de godkjenner tilgangen. Settes med GitHub-variabelen ALTINN_SYSTEMNAVN."
+  type        = string
+  default     = "HI4 Faktura"
+}
+
+variable "altinn_system_id" {
+  description = "System-ID-en i Altinns systemregister (tom = <leverandor_orgnr>_lonn). Settes med GitHub-variabelen ALTINN_SYSTEM_ID."
+  type        = string
+  default     = ""
+}

@@ -106,8 +106,18 @@ export type Ansatt = {
   skattekort: "tabell" | "prosent" | "frikort" | null;
   skatt_tabell: number | null;
   skatt_prosent: number | null;
-  skatt_frikort: number | null;
+  skatt_frikort: number | null; // frikort uten beløp: uten grense (ingen trekk)
   skattekort_aar: number | null;
+  // Fra Skatteetaten (0068): svaret og tilleggsopplysningene (Svalbard, kildeskatt, tiltakssonen).
+  skattekort_resultat?: string | null;
+  skattekort_tillegg?: string[] | null;
+};
+
+// Tilleggsopplysningene på skattekortet som bør sjekkes i lønnskjøringen (bor den ansatte i
+// tiltakssonen, er det alt regnet med i skattekortet).
+export const TILLEGGSOPPLYSNINGER: Record<string, string> = {
+  oppholdPaaSvalbard: "Skattekortet sier at den ansatte bor på Svalbard. Lønn for arbeid på Svalbard har egne trekkregler (svalbardskatt); kontroller trekket.",
+  kildeskattPaaLoenn: "Den ansatte er på kildeskatteordningen for utenlandske arbeidstakere (PAYE). Trekket følger skattekortet; kontroller at lønnen rapporteres med kildeskatt i a-meldingen.",
 };
 
 export type Linje = {
@@ -389,6 +399,10 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   } else if (a.skattekort === "prosent") {
     trekk = prosent(Number(a.skatt_prosent), trekkpliktig);
     metode = `Prosenttrekk ${tall(Number(a.skatt_prosent))} %`;
+  } else if (a.skattekort === "frikort" && a.skatt_frikort == null) {
+    // Frikort uten beløpsgrense (eller ikke trekkplikt): ingen trekk.
+    grunnlag = 0;
+    metode = "Frikort uten beløpsgrense";
   } else if (a.skattekort === "frikort") {
     const igjen = Math.max(0, Number(a.skatt_frikort) - t.frikortBrukt);
     const over = Math.max(0, trekkpliktig - igjen);
@@ -419,6 +433,9 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
     if (unntatt > 0 && !t.ekstra) merknader.push("Det trekkes ikke skatt av feriepengene (tabelltrekk).");
   }
   if (a.skattekort && a.skattekort_aar && a.skattekort_aar !== t.aar) merknader.push(`Skattekortet er for ${a.skattekort_aar}, ikke ${t.aar}. Hent det nye skattekortet.`);
+  if (a.skattekort_resultat === "vurderArbeidstillatelse")
+    merknader.push("Skatteetaten ber arbeidsgiveren vurdere om den ansatte har arbeidstillatelse (gjelder ofte utenlandske arbeidstakere).");
+  for (const x of a.skattekort_tillegg ?? []) if (TILLEGGSOPPLYSNINGER[x] && trekkpliktig > 0) merknader.push(TILLEGGSOPPLYSNINGER[x]);
   if (manueltTrekk != null) {
     trekk = manueltTrekk;
     metode = `${metode} – endret for hånd`;

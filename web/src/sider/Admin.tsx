@@ -10,6 +10,7 @@ import { IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
 import { ModulValg, modulnavn, opplisting, useModuler, type Modul } from "../moduler";
 import { SlettOrganisasjon } from "../slettOrg";
 import { aarFraFilnavn, lesTrekktabellFil } from "../trekktabeller";
+import { SkattekortOppsett } from "./Skattekort";
 
 type Org = {
   id: string;
@@ -1406,6 +1407,8 @@ function Drift({ apne }: { apne: (id: string) => void }) {
         </section>
 
         <Trekktabeller />
+
+        <SkattekortOppsett />
 
         <section className="kort">
           <h2>Integrasjoner og banker</h2>

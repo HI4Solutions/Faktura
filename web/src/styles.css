@@ -2338,3 +2338,10 @@ button.lenke.lonn-pdf { padding: 0 16px; flex: none; }
 .tidligere-lonn table { margin: 8px 0; font-size: 0.88rem; }
 .tidligere-lonn td.hoyre { white-space: nowrap; }
 .tidligere-skjema { margin-top: 10px; }
+
+/* Skattekort fra Skatteetaten (Innstillinger → Ansatte og timer, og på den ansatte) */
+.skattekort-kobling h2 .merke { margin-left: 6px; vertical-align: middle; font-size: 0.7em; }
+.skattekort-fra-skatteetaten { margin: 8px 0 4px; padding: 10px 12px; border: 1px solid var(--kant); border-radius: 10px; background: var(--flate-2); }
+.skattekort-fra-skatteetaten p { margin: 0 0 6px; }
+.skattekort-fra-skatteetaten p:last-child { margin-bottom: 0; }
+.skattekort-trekk { margin: 4px 0 6px; padding-left: 18px; }

@@ -14,6 +14,7 @@ import { oppdaterEhfKoblinger, sendSomEhf, sjekkEhfLevering } from "./ehfSending
 import { fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, slettBankOkter } from "./bank.js";
 import { sendPaaminnelser } from "./paaminnelser.js";
 import { sendBursdager } from "./bursdager.js";
+import { hentSkattekort, hentSkattekortSvar, lagTilgang, planleggDagligSkattekort, planleggTilgangssjekk, registrerAltinnSystem, sjekkTilgang } from "./skattekort.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -148,6 +149,12 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "bank-okt") return fullforBankOkt(o.org_id, o.kobling_id, o.kode, o.psu);
   if (o.type === "bank-hent") return void (await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu, kilde: o.kilde }));
   if (o.type === "bank-slett") return slettBankOkter(o.org_id, o.okt_ider, o.alt);
+  if (o.type === "skattekort-tilgang") return lagTilgang(o.org_id);
+  if (o.type === "skattekort-status") return sjekkTilgang(o.org_id);
+  if (o.type === "skattekort-hent")
+    return void (await hentSkattekort(o.org_id, { ansattIder: o.ansatt_ider, daglig: o.daglig, aar: o.aar, kilde: o.kilde }));
+  if (o.type === "skattekort-svar") return hentSkattekortSvar(o.org_id, o.referanse, o.aar, o.forsok);
+  if (o.type === "altinn-system") return void (await registrerAltinnSystem());
   return sendEpost(o);
 }
 
@@ -260,6 +267,13 @@ export async function gjenta() {
     await oppdaterEhf();
   } catch (e) {
     logg("ERROR", "EHF-oppslag feilet", { feil: (e as Error).message });
+  }
+
+  // Skattekort fra Skatteetaten: endringene siden i går (og de ansatte som mangler skattekortet for året).
+  try {
+    await planleggDagligSkattekort();
+  } catch (e) {
+    logg("ERROR", "Planlegging av skattekort feilet", { feil: (e as Error).message });
   }
 
   logg(resultat.some((r) => !r.ok) ? "WARNING" : "INFO", "Gjentakelser kjørt", { antall: resultat.length, feil: resultat.filter((r) => !r.ok) });
@@ -487,16 +501,51 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
 
+  // Skattekort fra Skatteetaten: tilgangen i Altinn, hentingen, svar som ventet, og systemet i
+  // Altinns systemregister (plattformadministratoren).
+  const skattOppgave = z.object({ org_id: z.string().uuid(), oppgave_id: z.string() });
+  app.post("/oppgaver/skattekort-tilgang", async (c) => {
+    const o = skattOppgave.parse(await c.req.json());
+    await lagTilgang(o.org_id);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/skattekort-status", async (c) => {
+    const o = skattOppgave.parse(await c.req.json());
+    await sjekkTilgang(o.org_id);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/skattekort-hent", async (c) => {
+    const o = skattOppgave
+      .extend({
+        ansatt_ider: z.array(z.string().uuid()).max(5000).optional(),
+        daglig: z.boolean().optional(),
+        aar: z.number().int().min(2000).max(2100).optional(),
+        kilde: z.enum(["godkjent", "manuell", "automatisk", "ansatt"]).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(await hentSkattekort(o.org_id, { ansattIder: o.ansatt_ider, daglig: o.daglig, aar: o.aar, kilde: o.kilde }));
+  });
+  app.post("/oppgaver/skattekort-svar", async (c) => {
+    const o = skattOppgave
+      .extend({ referanse: z.string().regex(/^BR\d+$/), aar: z.number().int().min(2000).max(2100), forsok: z.number().int().min(1).max(100) })
+      .parse(await c.req.json());
+    await hentSkattekortSvar(o.org_id, o.referanse, o.aar, o.forsok);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/altinn-system", async (c) => c.json(await registrerAltinnSystem()));
+
   app.post("/jobber/gjenta", async (c) => c.json(await gjenta()));
   // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag henter fra banken på de faste
   // hentetidene (planleggingen tar hver hentetid én gang per bank), sjekker nye kunder for
-  // EHF (litt om gangen) og sender bursdagsvarslene (fra kl. 08, én gang per bursdag).
+  // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker
+  // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn.
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
     await sendBursdager().catch((e) => logg("ERROR", "Bursdagsvarsler feilet", { feil: (e as Error).message }));
     await planleggBankhenting().catch((e) => logg("ERROR", "Planlegging av bankhenting feilet", { feil: (e as Error).message }));
     await oppdaterEhf(10, { nye: true }).catch((e) => logg("ERROR", "EHF-oppslag for nye kunder feilet", { feil: (e as Error).message }));
+    await planleggTilgangssjekk().catch((e) => logg("ERROR", "Sjekk av tilgangene i Altinn feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));

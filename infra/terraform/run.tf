@@ -33,6 +33,17 @@ locals {
     AI_MODELL = var.ai_modell
     AI_GRENSE = tostring(var.ai_grense)
   })
+
+  # Skattekort fra Skatteetaten (Maskinporten og systembruker i Altinn). Uten klient-ID er
+  # funksjonen skjult. Nøkkelen har bare workeren (hemmeligheten maskinporten-nokkel).
+  skattekort_env = { for k, v in {
+    SKATTEETATEN_MILJO     = var.skatteetaten_miljo
+    MASKINPORTEN_KLIENT_ID = var.maskinporten_klient_id
+    MASKINPORTEN_NOKKEL_ID = var.maskinporten_nokkel_id
+    LEVERANDOR_ORGNR       = var.leverandor_orgnr
+    ALTINN_SYSTEMNAVN      = var.altinn_systemnavn
+    ALTINN_SYSTEM_ID       = var.altinn_system_id
+  } : k => v if v != "" }
 }
 
 resource "google_cloud_run_v2_service" "api" {
@@ -61,7 +72,7 @@ resource "google_cloud_run_v2_service" "api" {
       image = var.placeholder_image
 
       dynamic "env" {
-        for_each = merge(local.db_env, local.ai_env, {
+        for_each = merge(local.db_env, local.ai_env, local.skattekort_env, {
           ROLLE         = "api"
           ADMIN_EPOSTER = var.admin_eposter
           DB_USER       = google_sql_user.api.name
@@ -149,7 +160,7 @@ resource "google_cloud_run_v2_service" "worker" {
       image = var.placeholder_image
 
       dynamic "env" {
-        for_each = merge(local.db_env, local.ai_env, { ROLLE = "worker", DB_USER = google_sql_user.worker.name })
+        for_each = merge(local.db_env, local.ai_env, local.skattekort_env, { ROLLE = "worker", DB_USER = google_sql_user.worker.name })
         content {
           name  = env.key
           value = env.value
@@ -171,6 +182,16 @@ resource "google_cloud_run_v2_service" "worker" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.manuell["google-oauth-client-secret"].secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "MASKINPORTEN_NOKKEL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.manuell["maskinporten-nokkel"].secret_id
             version = "latest"
           }
         }

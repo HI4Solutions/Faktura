@@ -525,6 +525,25 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   godkjente kjøringer (`min_lonnsslipp`). En ansatt med lønnsslipper i godkjente kjøringer kan
   ikke slettes, og en organisasjon med godkjente kjøringer stenges i stedet for å slettes
   (oppbevares fem år etter siste utbetaling)
+- `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
+  `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
+  `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
+  systembruker i Altinn. Leverandøren (Medinnova AS) har én Maskinporten-klient og ett system i
+  Altinns systemregister (tilgangspakken «Lønn»), som plattformadministratoren registrerer under
+  Administrasjon → Drift (`altinn_system`). Eier og administrator ber om tilgang
+  (`be_om_skattekorttilgang`, med totrinn); workeren lager forespørselen i Altinn, og daglig
+  leder godkjenner den (`skattekort_tilgang`: venter, ny, godkjent, avslått, avvist, utløpt
+  eller feil). Hjerteslaget sjekker forespørsler som venter (hvert andre minutt den første timen,
+  så hver halvtime). Med godkjent tilgang henter workeren et token for organisasjonens
+  systembruker, bestiller skattekortene til de ansatte med fødselsnummer (høyst 1000 om gangen)
+  og henter svaret (204 til det er klart; ellers i en ny oppgave). Skattekortet lagres på den
+  ansatte med alle trekkodene (`skattekort_trekk`), svaret (`skattekort_resultat`),
+  tilleggsopplysningene og hvor det kom fra (`skattekort_kilde`: manuell eller skatteetaten);
+  lønnskjøringen bruker trekket for lønn fra hovedarbeidsgiver, eller fra biarbeidsgiver når
+  den ansatte er merket slik (`biarbeidsgiver`, regnes om når valget endres). Uten skattekort
+  trekkes 50 %, uten trekkplikt er det frikort uten beløpsgrense. Hver morgen hentes
+  endringene, og de som mangler skattekortet for året (eller ikke er hentet på en uke); et
+  skattekort for et tidligere år erstatter aldri et nyere
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
@@ -664,5 +683,7 @@ og hastighetsgrenser i API-et.
       arbeidsgiveravgift per sone, sykepenger i arbeidsgiverperioden, sluttoppgjør,
       godkjenning med låsing og lønnsslipp som PDF
    4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og
-      arbeidsgiveravgift, feriepengeliste og årsoversikt for den ansatte
+      arbeidsgiveravgift, feriepengeliste og årsoversikt for den ansatte. ~~Skattekort fra
+      Skatteetaten~~ Ferdig (systembruker i Altinn; slås på når Maskinporten er satt opp).
+      OTP rapporteres i a-meldingen med pensjonsinnretningens organisasjonsnummer
    5. Utbetaling: betalingsfil (pain.001) til nettbanken først, direkte bankintegrasjon senere

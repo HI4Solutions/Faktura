@@ -37,6 +37,13 @@ jobs:
       TF_VAR_ai_region: ${{ vars.AI_REGION || 'europe-west3' }}
       TF_VAR_ai_modell: ${{ vars.AI_MODELL || 'gemini-3.5-flash' }}
       TF_VAR_ai_grense: ${{ vars.AI_GRENSE || '1000' }}
+      # Skattekort fra Skatteetaten (docs/skattekort.md): skjult til klient-ID-en er satt.
+      TF_VAR_skatteetaten_miljo: ${{ vars.SKATTEETATEN_MILJO || 'test' }}
+      TF_VAR_maskinporten_klient_id: ${{ vars.MASKINPORTEN_KLIENT_ID }}
+      TF_VAR_maskinporten_nokkel_id: ${{ vars.MASKINPORTEN_NOKKEL_ID }}
+      TF_VAR_leverandor_orgnr: ${{ vars.LEVERANDOR_ORGNR || '936564046' }}
+      TF_VAR_altinn_systemnavn: ${{ vars.ALTINN_SYSTEMNAVN || 'HI4 Faktura' }}
+      TF_VAR_altinn_system_id: ${{ vars.ALTINN_SYSTEM_ID }}
     steps:
       - uses: actions/checkout@v4
 

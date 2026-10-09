@@ -32,6 +32,7 @@ import { TemaBryter } from "./TemaBryter";
 import { installer } from "./pwa";
 import { Assistent } from "./assistent";
 import { iFakturadelen } from "./fakturameny";
+import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
   IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonNokkel, IkonOversikt, IkonPluss,
   IkonProdukter, IkonRapport, IkonSkjold, IkonTavle, IkonVelg,
@@ -540,6 +541,7 @@ function Ramme() {
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
             <Route path="/lonn" element={<Krever kode="lonn" navn="Lønn"><Lonn /></Krever>} />
+            <Route path="/skattekort/godkjent" element={<Krever kode="lonn" navn="Skattekort"><SkattekortGodkjent /></Krever>} />
             <Route path="/timer" element={<Timer />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />

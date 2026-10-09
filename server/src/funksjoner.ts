@@ -30,6 +30,7 @@ const RUTER: [RegExp, string][] = [
   [/^\/(vakter|vaktbytter|tavle|fravaer|feriebank|ferie|kolleger)(\/|$)/, "vaktplan"],
   [/^\/ekstratimer(\.csv|\.pdf)?$/, "vaktplan"],
   [/^\/lonn(\/|$)/, "lonn"],
+  [/^\/skattekort(\/|$)/, "lonn"],
 ];
 
 export const funksjonerFor = (sti: string) => [...new Set(RUTER.filter(([re]) => re.test(sti)).map(([, kode]) => kode))];

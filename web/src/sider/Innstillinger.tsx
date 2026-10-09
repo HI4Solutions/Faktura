@@ -8,6 +8,7 @@ import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
 import { EhfSending } from "./Ehf";
 import { BankKobling, kontoerEndret } from "./Bank";
+import { SkattekortKobling } from "./Skattekort";
 import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
@@ -21,6 +22,7 @@ const SAMMENSLATT: Record<string, [Fane, string]> = {
   betaling: ["faktura", "betaling"],
   ehf: ["faktura", "ehf"],
   brukere: ["organisasjon", "brukere"],
+  skattekort: ["personal", "skattekort"],
 };
 
 // Innstillingene er delt i faner. Fanen står i adressen (?fane=), så lenker kan gå rett til
@@ -84,7 +86,12 @@ export function Innstillinger() {
           )}
         </>
       )}
-      {fane === "personal" && <PersonalOppsett />}
+      {fane === "personal" && (
+        <>
+          <PersonalOppsett />
+          {harFunksjon(org, "lonn") && <SkattekortKobling />}
+        </>
+      )}
       {fane === "konto" && <MinKonto />}
       {fane === "app" && <AppOgVarsler />}
     </>
@@ -355,7 +362,8 @@ function PersonalOppsett() {
             </label>
           </div>
           <p className="liten dempet">
-            Skattekortet registreres på hver ansatt. Lønnskjøringene er under <Link to="/lonn">Lønn</Link>.
+            Skattekortet registreres på hver ansatt, eller hentes fra Skatteetaten når dere har koblet til (under). Lønnskjøringene er under{" "}
+            <Link to="/lonn">Lønn</Link>.
           </p>
         </>
       )}

@@ -17,6 +17,7 @@ import { AML, beregnUke, uke, type Regler, type Ukesum } from "./arbeidstid.js";
 import { dato as visDato, iDag, kontonrGyldig } from "./regler.js";
 import { leggIKo } from "./tjenester.js";
 import { beregnBemanning } from "./arbeidsplan.js";
+import { kortFraTrekk, type Trekk } from "./skattekort.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -108,6 +109,9 @@ const ansattSkjema = z.object({
   skatt_prosent: valgfri(z.number().min(0, "Prosentsatsen kan ikke være negativ").max(100, "Prosentsatsen kan være høyst 100")),
   skatt_frikort: valgfri(z.number().min(0, "Frikortbeløpet kan ikke være negativt").max(100_000_000, "Frikortbeløpet er for stort")),
   skattekort_aar: valgfri(z.number().int().min(2000, "Ugyldig år").max(2100, "Ugyldig år")),
+  // Biarbeidsgiver: den ansatte har hovedarbeidsgiveren et annet sted, og trekket for lønn fra
+  // biarbeidsgiver brukes (0068; skattekortet fra Skatteetaten regnes om).
+  biarbeidsgiver: z.boolean().optional(),
 });
 
 const oppsettSkjema = z.object({
@@ -155,8 +159,10 @@ const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.forkortelse, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
          a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
-         -- Skattekortet (0065_lonn.sql).
-         a.skattekort, a.skatt_tabell, a.skatt_prosent, a.skatt_frikort, a.skattekort_aar,
+         -- Skattekortet (0065_lonn.sql), og det som er hentet fra Skatteetaten (0068).
+         a.skattekort, a.skatt_tabell, a.skatt_prosent, a.skatt_frikort, a.skattekort_aar, a.biarbeidsgiver, a.skattekort_kilde,
+         a.skattekort_hentet, a.skattekort_resultat, to_char(a.skattekort_utstedt, 'YYYY-MM-DD') as skattekort_utstedt, a.skattekort_tillegg,
+         a.skattekort_trekk,
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
          coalesce((select g.tavle from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id), true) as tavle,
@@ -454,8 +460,33 @@ export function ansattRuter() {
       if (b.tillegg?.length) await lagreTillegg(db, orgId(c), ny, b.tillegg, true);
       return en(db, `${ANSATT} where a.org_id = $1 and a.id = $2`, [orgId(c), ny]);
     });
+    if (b.fnr) await hentSkattekortFor(c, [a.id]);
     return c.json(a, 201);
   });
+
+  // Med godkjent tilgang til Skatteetaten hentes skattekortet når fødselsnummeret legges inn.
+  async function hentSkattekortFor(c: Context, ider: string[]) {
+    const t = await bruk(c, (db) => en<{ status: string }>(db, "select status from faktura.skattekort_tilgang where org_id = $1", [orgId(c)]));
+    if (t?.status === "godkjent" && ider.length) await leggIKo({ type: "skattekort-hent", org_id: orgId(c), ansatt_ider: ider, kilde: "ansatt" });
+  }
+
+  // Skattekortet fra Skatteetaten regnes om når valget av biarbeidsgiver endres (fra trekket for
+  // lønn fra biarbeidsgiver eller hovedarbeidsgiver), med mindre skattekortet også endres for hånd.
+  async function regnOmSkattekort(db: Db, org: string, ansatt: string, b: Partial<z.infer<typeof ansattSkjema>>, f: Record<string, unknown>) {
+    if (b.biarbeidsgiver === undefined) return;
+    const n = await en<Record<string, any>>(
+      db,
+      `select biarbeidsgiver, skattekort, skatt_tabell, skatt_prosent::float8 as skatt_prosent, skatt_frikort::float8 as skatt_frikort,
+              skattekort_kilde, skattekort_trekk
+         from faktura.ansatte where org_id = $1 and id = $2`,
+      [org, ansatt],
+    );
+    if (!n || n.biarbeidsgiver === b.biarbeidsgiver || n.skattekort_kilde !== "skatteetaten" || !n.skattekort_trekk?.length) return;
+    // Skjemaet sender gjerne hele skattekortet; bare verdier som er endret, teller som endret for hånd.
+    if (["skattekort", "skatt_tabell", "skatt_prosent", "skatt_frikort"].some((k) => k in f && (f[k] ?? null) !== (n[k] ?? null))) return;
+    const kort = kortFraTrekk(n.skattekort_trekk as Trekk[], b.biarbeidsgiver);
+    if (kort) Object.assign(f, kort);
+  }
 
   r.patch("/ansatte/:id", async (c) => {
     const b = ansattSkjema.partial().parse(await c.req.json().catch(() => ({})));
@@ -464,6 +495,7 @@ export function ansattRuter() {
     const a = await bruk(c, async (db) => {
       if (b.rolle && b.gruppe_id === undefined) f.gruppe_id = await rolleId(db, orgId(c), b.rolle);
       await sjekkGruppe(db, orgId(c), f);
+      await regnOmSkattekort(db, orgId(c), id(c), b, f);
       const navn = Object.keys(f);
       if (navn.length) {
         const res = await db.query(`update faktura.ansatte set ${navn.map((k, i) => `${k} = $${i + 3}`).join(", ")} where org_id = $1 and id = $2`, [
@@ -479,6 +511,7 @@ export function ansattRuter() {
       if (b.tillegg) await lagreTillegg(db, orgId(c), id(c), b.tillegg, true);
       return en(db, `${ANSATT} where a.org_id = $1 and a.id = $2`, [orgId(c), id(c)]);
     });
+    if (b.fnr) await hentSkattekortFor(c, [id(c)]);
     return c.json(a);
   });
 
@@ -513,6 +546,7 @@ export function ansattRuter() {
   r.post("/ansatte/importer", async (c) => {
     const b = importSkjema.parse(await c.req.json().catch(() => ({})));
     let plan = await bruk(c, (db) => planleggImport(db, orgId(c), b));
+    const medFnr: string[] = []; // de lagrede radene med fødselsnummer (skattekortet hentes)
     if (!b.proving) {
       const lagres = (p: (typeof plan)[number]) => p.status === "ny" || p.status === "oppdater";
       const kryptert = new Map<string, Buffer>();
@@ -522,6 +556,7 @@ export function ansattRuter() {
         const plan = await planleggImport(db, orgId(c), b);
         const full = (await regler(db, orgId(c))).full_stilling;
         const roller = new Map<string, string>();
+        medFnr.length = 0;
         for (const p of plan.filter(lagres)) {
           try {
             const d = p.data!;
@@ -531,8 +566,10 @@ export function ansattRuter() {
             if (p.status === "ny") {
               const ny = await nyAnsatt(db, orgId(c), alleFelt, full);
               if (d.tillegg?.length) await lagreTillegg(db, orgId(c), ny, d.tillegg, false);
+              if (d.fnr) medFnr.push(ny);
               continue;
             }
+            if (d.fnr) medFnr.push(p.id!);
             // Tomme felt i fila sletter ikke det som står fra før, og et notat legges til det
             // som står der (med mindre det står der allerede).
             const { notat, ...f } = Object.fromEntries(Object.entries(alleFelt).filter(([, v]) => v !== null && v !== ""));
@@ -551,6 +588,7 @@ export function ansattRuter() {
         }
         return plan;
       });
+      await hentSkattekortFor(c, medFnr);
     }
     const antall = { ny: 0, oppdater: 0, hopp: 0, feil: 0 };
     for (const p of plan) antall[p.status]++;

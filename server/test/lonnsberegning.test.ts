@@ -284,6 +284,21 @@ describe("skattetrekket og summene", () => {
     expect(ingen.merknader[0]).toContain("Mangler skattekort");
   });
 
+  it("frikort uten beløpsgrense (og ikke trekkplikt) gir ikke trekk", () => {
+    const fri = { ...kari, skattekort: "frikort" as const, skatt_prosent: null, skatt_frikort: null };
+    const s = summer([linje("timelonn", 80000)], oppsett, trekk(fri, { frikortBrukt: 500000 }), "2026-10-20", null);
+    expect(s).toMatchObject({ skattetrekk: 0, trekkgrunnlag: 0, trekkmetode: "Frikort uten beløpsgrense", netto: 80000 });
+    expect(s.merknader).toEqual([]);
+  });
+
+  it("tilleggsopplysninger og arbeidstillatelse fra Skatteetaten gir merknader", () => {
+    const a = { ...kari, skattekort_tillegg: ["oppholdPaaSvalbard", "oppholdITiltakssone"], skattekort_resultat: "vurderArbeidstillatelse" };
+    const s = summer([linje("fastlonn", 30000)], oppsett, trekk(a), "2026-10-20", null);
+    expect(s.merknader.some((m) => m.includes("Svalbard"))).toBe(true);
+    expect(s.merknader.some((m) => m.includes("arbeidstillatelse"))).toBe(true);
+    expect(s.merknader.some((m) => m.includes("tiltakssonen"))).toBe(false);
+  });
+
   it("skattetrekket satt for hånd, og skattekort for et annet år", () => {
     const s = summer([linje("fastlonn", 50000)], oppsett, trekk({ ...kari, skattekort_aar: 2025 }), "2026-10-20", 12345);
     expect(s).toMatchObject({ skattetrekk: 12345, trekkmetode: "Prosenttrekk 30 % – endret for hånd", netto: 37655 });

@@ -74,7 +74,14 @@ export type Oppgave =
   | { type: "bank-auth"; org_id: string; kobling_id: string }
   | { type: "bank-okt"; org_id: string; kobling_id: string; kode: string; psu?: { ip: string; agent: string } }
   | { type: "bank-hent"; org_id: string; kobling_id?: string; psu?: { ip: string; agent: string }; kilde?: "automatisk" | "manuell" | "apnet" | "tilkoblet" }
-  | { type: "bank-slett"; org_id: string; okt_ider: string[]; alt?: boolean };
+  | { type: "bank-slett"; org_id: string; okt_ider: string[]; alt?: boolean }
+  // Skattekort fra Skatteetaten: forespørselen om tilgang i Altinn, statusen på den, hentingen
+  // (daglig: endringene), svaret som ikke var klart, og systemet i Altinns systemregister.
+  | { type: "skattekort-tilgang"; org_id: string }
+  | { type: "skattekort-status"; org_id: string }
+  | { type: "skattekort-hent"; org_id: string; ansatt_ider?: string[]; daglig?: boolean; aar?: number; kilde?: "godkjent" | "manuell" | "automatisk" | "ansatt" }
+  | { type: "skattekort-svar"; org_id: string; referanse: string; aar: number; forsok: number }
+  | { type: "altinn-system" };
 
 let tasks: CloudTasksClient | undefined;
 

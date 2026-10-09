@@ -51,6 +51,23 @@ export const config = {
   // Banking. Hver organisasjon bruker sin egen applikasjon der.
   enableBankingUrl: valgfri("ENABLE_BANKING_URL") ?? "https://api.enablebanking.com",
 
+  // Skatteetaten (skattekort til arbeidsgiver) gjennom Maskinporten og systembruker i Altinn.
+  // Leverandøren av løsningen har én Maskinporten-klient og ett system i Altinns
+  // systemregister; hver organisasjon gir systemet tilgang i Altinn. Uten klient er
+  // funksjonen avslått. Nøkkelen (privat RSA-nøkkel, PEM) har bare workeren.
+  skatteetatenMiljo: (valgfri("SKATTEETATEN_MILJO") === "prod" ? "prod" : "test") as "test" | "prod",
+  maskinportenKlientId: valgfri("MASKINPORTEN_KLIENT_ID"),
+  maskinportenNokkelId: valgfri("MASKINPORTEN_NOKKEL_ID"),
+  maskinportenNokkel: ((v) => (v && v !== "ikke-satt" ? v : undefined))(valgfri("MASKINPORTEN_NOKKEL")),
+  leverandorOrgnr: valgfri("LEVERANDOR_ORGNR") ?? "936564046", // Medinnova AS
+  altinnSystemId: valgfri("ALTINN_SYSTEM_ID"),
+  // Navnet kunden ser i Altinn når tilgangen godkjennes.
+  altinnSystemnavn: valgfri("ALTINN_SYSTEMNAVN") ?? "HI4 Faktura",
+  // Adressene (standard etter miljøet over); settes i tester.
+  maskinportenUrl: valgfri("MASKINPORTEN_URL"),
+  altinnUrl: valgfri("ALTINN_URL"),
+  skattekortUrl: valgfri("SKATTEKORT_URL"),
+
   // AI: Gemini på Vertex AI i prosjektet (uten prosjekt er AI-funksjonene skjult), i EU.
   // Regionen kan også være multiregionen «eu» eller «global».
   aiProsjekt: valgfri("AI_PROSJEKT"),

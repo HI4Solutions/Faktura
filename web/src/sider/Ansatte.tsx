@@ -18,6 +18,7 @@ import { tallformat } from "../uke";
 import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
 import { AnsattFravaer, FravaerDialog, type Fravaer } from "./Fravaer";
 import { IKKE_ANSATT_HJELP, RollerOppsett, type Rolle } from "./Roller";
+import { SkattekortFraSkatteetaten, type Trekk } from "./Skattekort";
 
 type Ansatt = {
   id: string;
@@ -57,8 +58,16 @@ type Ansatt = {
   skattekort: "tabell" | "prosent" | "frikort" | null;
   skatt_tabell: number | null;
   skatt_prosent: number | null;
-  skatt_frikort: number | null;
+  skatt_frikort: number | null; // frikort uten beløp: uten grense
   skattekort_aar: number | null;
+  // Fra Skatteetaten (0068): biarbeidsgiverforhold, hvor skattekortet kom fra, svaret og trekket.
+  biarbeidsgiver: boolean;
+  skattekort_kilde: "manuell" | "skatteetaten" | null;
+  skattekort_hentet: string | null;
+  skattekort_resultat: string | null;
+  skattekort_utstedt: string | null;
+  skattekort_tillegg: string[] | null;
+  skattekort_trekk: Trekk[] | null;
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -342,6 +351,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     skatt_prosent: tekstTall(ansatt.skatt_prosent),
     skatt_frikort: tekstTall(ansatt.skatt_frikort),
     skattekort_aar: String(ansatt.skattekort_aar ?? iDag().slice(0, 4)),
+    biarbeidsgiver: ansatt.biarbeidsgiver ?? false,
   }));
   // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
   const oppsett = useData(() => hent<{ bursdag_varsel: string; full_stilling: number; ferie_dager: number }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
@@ -527,12 +537,13 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       const k = a.skattekort;
       if (k === "tabell" && (!a.skatt_tabell.trim() || !a.skatt_prosent.trim())) return h.settFeil("Skriv tabellnummeret og prosentsatsen fra skattekortet.");
       if (k === "prosent" && !a.skatt_prosent.trim()) return h.settFeil("Skriv prosentsatsen fra skattekortet.");
-      if (k === "frikort" && !a.skatt_frikort.trim()) return h.settFeil("Skriv frikortbeløpet fra skattekortet.");
       kropp.skattekort = k || null;
       kropp.skatt_tabell = k === "tabell" ? Number(a.skatt_tabell.trim()) : null;
       kropp.skatt_prosent = k === "tabell" || k === "prosent" ? tall(a.skatt_prosent) : null;
-      kropp.skatt_frikort = k === "frikort" ? tall(a.skatt_frikort) : null;
+      // Frikort uten beløp: uten beløpsgrense (ingen trekk).
+      kropp.skatt_frikort = k === "frikort" && a.skatt_frikort.trim() ? tall(a.skatt_frikort) : null;
       kropp.skattekort_aar = k && a.skattekort_aar.trim() ? Number(a.skattekort_aar) : null;
+      kropp.biarbeidsgiver = a.biarbeidsgiver;
     }
     // Fødselsnummeret sendes bare når det er skrevet inn eller skal fjernes; ellers fødselsdatoen.
     if (a.fjernFnr) kropp.fnr = null;
@@ -953,7 +964,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                 {a.skattekort === "frikort" && (
                   <label>
                     Frikortbeløp (kr)
-                    <input inputMode="decimal" {...felt("skatt_frikort")} />
+                    <input inputMode="decimal" placeholder="Uten grense" {...felt("skatt_frikort")} />
                   </label>
                 )}
                 {a.skattekort && (
@@ -963,16 +974,25 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                   </label>
                 )}
               </div>
+              <label>
+                <input type="checkbox" checked={a.biarbeidsgiver} disabled={!kanEndre} onChange={(e) => sett({ biarbeidsgiver: e.target.checked })} />
+                Biarbeidsgiver (den ansatte har hovedarbeidsgiveren et annet sted)
+              </label>
               <p className="felt-hjelp tillegg-hjelp">
                 {a.skattekort === "tabell"
                   ? "Lønnen trekkes etter tabellen; prosentsatsen brukes i ekstra kjøringer og på feriepengene for den ekstra ferieuka."
                   : a.skattekort === "frikort"
-                    ? "Ingen trekk til frikortbeløpet er brukt opp i året; deretter 50 %."
+                    ? a.skatt_frikort.trim()
+                      ? "Ingen trekk til frikortbeløpet er brukt opp i året; deretter 50 %."
+                      : "Frikort uten beløpsgrense: ingen trekk."
                     : a.skattekort === "prosent"
                       ? "Prosentsatsen trekkes av all lønn."
                       : "Uten skattekort trekkes 50 %."}{" "}
-                Skattekortet hentes i Altinn (eller den ansatte gir deg det).
+                {ansatt.skattekort_kilde === "skatteetaten" || ansatt.skattekort_hentet
+                  ? "Hentes fra Skatteetaten; som biarbeidsgiver brukes trekket for biarbeidsgiver."
+                  : "Med koblingen til Skatteetaten (Innstillinger → Ansatte og timer) hentes skattekortet av seg selv når fødselsnummeret er registrert."}
               </p>
+              {ansatt.id && <SkattekortFraSkatteetaten a={ansatt as Ansatt} />}
             </>
           )}
           </>
