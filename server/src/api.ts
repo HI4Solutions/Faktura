@@ -36,6 +36,7 @@ import { bemanningRuter } from "./bemanning.js";
 import { arbeidsplanRuter } from "./arbeidsplan.js";
 import { lonnRuter } from "./lonn.js";
 import { skattekortRuter } from "./skattekortRuter.js";
+import { rapportmodulRuter } from "./rapportmodul.js";
 import { krevFunksjoner } from "./funksjoner.js";
 import { hentModuler, krevGodkjentKonto, meldNyKonto, modulKoder } from "./kontoer.js";
 import { aiPaa } from "./ai.js";
@@ -421,6 +422,8 @@ export function lagApi() {
   org.route("/", arbeidsplanRuter());
   org.route("/", lonnRuter());
   org.route("/", skattekortRuter());
+  // Rapportmodulen: hver rapport krever sin funksjon og tilgang (rapportmodul.ts).
+  org.route("/", rapportmodulRuter());
 
   // --- Logo ----------------------------------------------------------------
   // Lastes opp som PNG/JPG (maks 5 MB) og skaleres ned før lagring. Hver opplasting

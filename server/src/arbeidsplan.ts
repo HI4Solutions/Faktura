@@ -208,7 +208,7 @@ type Rapport = {
   ansatte: { ansatt_id: string; ansattnummer: number; navn: string; gruppe: string | null; stilling: string | null; stillingsprosent: number; timer: number; dager: { dato: string; timer: number; vakter: string }[] }[];
 };
 
-async function ekstratimer(db: Db, org: string, fra: string, til: string): Promise<Rapport> {
+export async function ekstratimer(db: Db, org: string, fra: string, til: string): Promise<Rapport> {
   await db.query("select faktura.krev($1, 'personal_les')", [org]);
   const b = await beregnBemanning(db, org, fra, til);
   const ansatte = b.ansatte

@@ -547,6 +547,30 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   trekkes 50 %, uten trekkplikt er det frikort uten beløpsgrense. Hver morgen hentes
   endringene, og de som mangler skattekortet for året (eller ikke er hentet på en uke); et
   skattekort for et tidligere år erstatter aldri et nyere
+- Rapportmodulen (`0070_rapportmodul.sql`, `server/src/rapportmodul.ts`, siden «Rapporter»):
+  én side for rapportene fra alle modulene, med en fane per modul (Faktura, Personal, Lønn og
+  de som kommer) og Utsending. Hver modul melder inn rapportene sine (`Rapportdef` i
+  `RAPPORTER`: id `modul.navn`, funksjonen og tilgangen rapporten krever, valgene periode,
+  termin, år eller ingen, og en funksjon som gir kolonnene og radene); visningen, summene,
+  CSV (semikolon, BOM, norske desimaler) og PDF (liggende med mange kolonner) er felles. Lista
+  viser bare rapportene organisasjonen har funksjonen til og brukeren har tilgang til
+  (fakturarapportene for alle med lesetilgang, timer, ansatte og lønn for eier, administrator og
+  regnskap, fravær og feriebank for eier og administrator). Faktura: kundereskontro, mva per
+  termin, salg per måned, fakturajournal (med alle kolonnene fra den gamle eksporten) og
+  innbetalinger (`server/src/rapporter.ts`). Personal: timer per ansatt (ordinære, overtid uke
+  for uke, merarbeid og uten overtid), timeliste, fravær, feriebank, ekstratimer og ansatte
+  (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
+  per lønnsart (grunnlaget for bokføringen), skattetrekk og arbeidsgiveravgift per termin med
+  fristene, feriepengeliste, årsoversikt og OTP (`server/src/lonnRapporter.ts`).
+  `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
+  lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
+  for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og
+  administrator endrer det, med totrinn, og nye mottakere gir hendelsen
+  `organisasjon.rapportmottakere_endret`, som sender e-post til alle eierne (mottakerne får
+  lønn og personopplysninger). Rapportene sendes av workeren (oppgaven `rapport-send`) som PDF
+  og CSV på e-post, med svar til den som sendte; det som er sendt, logges i
+  `rapport_utsendinger` (bare workeren skriver), og måneden månedsrapportene er lagt i kø for,
+  står i `rapport_maanedsutsendinger`, så hver måned sendes én gang
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag
 
@@ -569,6 +593,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Se lønnskjøringene og alle lønnsslippene | ✓ | ✓ | | ✓ | | |
 | Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
 | Se egne lønnsslipper (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+| Rapporter: fakturarapportene | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| Rapporter: timer, ansatte og lønn | ✓ | ✓ | | ✓ | | |
+| Rapporter: fravær og feriebank | ✓ | ✓ | | | | |
+| Sende rapporter og endre utsendingen til regnskapsføreren | ✓ | ✓ | | | | |
 
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 ² Så lenge den ansatte er aktiv (ikke etter at de har sluttet).

@@ -81,7 +81,17 @@ export type Oppgave =
   | { type: "skattekort-status"; org_id: string }
   | { type: "skattekort-hent"; org_id: string; ansatt_ider?: string[]; daglig?: boolean; aar?: number; kilde?: "godkjent" | "manuell" | "automatisk" | "ansatt" }
   | { type: "skattekort-svar"; org_id: string; referanse: string; aar: number; forsok: number }
-  | { type: "altinn-system" };
+  | { type: "altinn-system" }
+  // Rapportmodulen: rapporter (CSV og PDF) på e-post til regnskapsføreren.
+  | {
+      type: "rapport-send";
+      org_id: string;
+      rapporter: { id: string; valg: { fra?: string; til?: string; aar?: number; termin?: number; kjoring?: string } }[];
+      til: string[];
+      melding?: string | null;
+      bruker_id?: string | null;
+      automatisk?: "lonn" | "maaned" | null;
+    };
 
 let tasks: CloudTasksClient | undefined;
 

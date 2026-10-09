@@ -15,6 +15,7 @@ import { fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting,
 import { sendPaaminnelser } from "./paaminnelser.js";
 import { sendBursdager } from "./bursdager.js";
 import { hentSkattekort, hentSkattekortSvar, lagTilgang, planleggDagligSkattekort, planleggTilgangssjekk, registrerAltinnSystem, sjekkTilgang } from "./skattekort.js";
+import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -155,6 +156,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
     return void (await hentSkattekort(o.org_id, { ansattIder: o.ansatt_ider, daglig: o.daglig, aar: o.aar, kilde: o.kilde }));
   if (o.type === "skattekort-svar") return hentSkattekortSvar(o.org_id, o.referanse, o.aar, o.forsok);
   if (o.type === "altinn-system") return void (await registrerAltinnSystem());
+  if (o.type === "rapport-send") return sendRapporter(o);
   return sendEpost(o);
 }
 
@@ -276,6 +278,13 @@ export async function gjenta() {
     logg("ERROR", "Planlegging av skattekort feilet", { feil: (e as Error).message });
   }
 
+  // Den 1. i måneden: månedsrapportene til regnskapsførerne som har bedt om dem.
+  try {
+    await planleggMaanedsrapporter();
+  } catch (e) {
+    logg("ERROR", "Planlegging av månedsrapporter feilet", { feil: (e as Error).message });
+  }
+
   logg(resultat.some((r) => !r.ok) ? "WARNING" : "INFO", "Gjentakelser kjørt", { antall: resultat.length, feil: resultat.filter((r) => !r.ok) });
   return resultat;
 }
@@ -340,6 +349,7 @@ export async function publiserUtboks(maks = 500) {
         await publiser(r.hendelse, r.org_id, { ...r.data, hendelse: r.hendelse, org_id: r.org_id, tid: r.opprettet }, String(r.id));
         if (r.hendelse === "organisasjon.kontonr_endret") await varsleKontonr(db, r);
         if (r.hendelse === "organisasjon.kopi_endret") await varsleKopiadresse(db, r);
+        if (r.hendelse === "organisasjon.rapportmottakere_endret") await varsleRapportmottakere(db, r);
         await db.query("update faktura.utboks set publisert_at = now() where id = $1", [r.id]);
         ok++;
       } catch (e) {
@@ -389,6 +399,27 @@ async function varsleKopiadresse(db: SystemDb, r: any) {
         "Var ikke dette deg eller en du kjenner til, logg inn og endre den tilbake under Innstillinger med en gang, og bytt passord.",
       ].join("\n"),
     `kopi-${r.id}`,
+  );
+}
+
+// Varsler alle eiere når rapportene (med lønn og personopplysninger) skal gå til nye mottakere.
+export async function varsleRapportmottakere(db: SystemDb, r: any) {
+  const endretAv = r.data?.endret_av ? await en(db, "select epost from faktura.brukere where id = $1", [r.data.endret_av]) : null;
+  const liste = (v: unknown) => (Array.isArray(v) && v.length ? v.join(", ") : "(ingen)");
+  await varsleEiere(
+    db,
+    r.org_id,
+    (navn) => `Rapportene fra ${navn} sendes til en ny adresse`,
+    (navn) =>
+      [
+        `Rapportene fra ${navn} (f.eks. lønn og timer) sendes nå også til: ${liste(r.data?.nye)}.`,
+        "",
+        `Alle mottakere: ${liste(r.data?.alle)}`,
+        `Endret av: ${endretAv?.epost ?? "ukjent"} ${new Date(r.opprettet).toLocaleString("nb-NO", { timeZone: "Europe/Oslo" })}`,
+        "",
+        "Var ikke dette deg eller en du kjenner til, logg inn og fjern adressen under Rapporter → Utsending med en gang, og bytt passord.",
+      ].join("\n"),
+    `rapportmottakere-${r.id}`,
   );
 }
 
@@ -533,6 +564,23 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
   app.post("/oppgaver/altinn-system", async (c) => c.json(await registrerAltinnSystem()));
+
+  // Rapportmodulen: rapporter på e-post til regnskapsføreren.
+  app.post("/oppgaver/rapport-send", async (c) => {
+    const o = z
+      .object({
+        org_id: z.string().uuid(),
+        rapporter: z.array(z.object({ id: z.string().max(60), valg: valgSkjema })).min(1).max(20),
+        til: z.array(z.string().email()).min(1).max(10),
+        melding: z.string().max(2000).nullish(),
+        bruker_id: z.string().uuid().nullish(),
+        automatisk: z.enum(["lonn", "maaned"]).nullish(),
+        oppgave_id: z.string(),
+      })
+      .parse(await c.req.json());
+    await sendRapporter(o);
+    return c.json({ ok: true });
+  });
 
   app.post("/jobber/gjenta", async (c) => c.json(await gjenta()));
   // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag henter fra banken på de faste

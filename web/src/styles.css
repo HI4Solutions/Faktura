@@ -2345,3 +2345,49 @@ button.lenke.lonn-pdf { padding: 0 16px; flex: none; }
 .skattekort-fra-skatteetaten p { margin: 0 0 6px; }
 .skattekort-fra-skatteetaten p:last-child { margin-bottom: 0; }
 .skattekort-trekk { margin: 4px 0 6px; padding-left: 18px; }
+
+/* Rapporter: felles rapportmodul med en fane per modul (sider/Rapporter.tsx) */
+.rapport-oppsett { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 18px; align-items: start; }
+.rapport-liste {
+  display: flex; flex-direction: column; gap: 2px; padding: 6px; position: sticky; top: 16px;
+  background: var(--flate); border: 1px solid var(--kant); border-radius: var(--radius); box-shadow: var(--skygge-1);
+}
+.rapport-liste button {
+  justify-content: flex-start; text-align: left; border: 0; box-shadow: none; background: transparent;
+  color: var(--tekst-2); padding: 8px 12px; border-radius: 8px; font-weight: 550; white-space: normal;
+}
+.rapport-liste button:hover:not(:disabled) { color: var(--tekst); background: var(--flate-2); }
+.rapport-liste button.valgt, .rapport-liste button.valgt:hover:not(:disabled) { background: var(--aksent-lys); color: var(--aksent); }
+.kort.rapport-visning { min-width: 0; }
+.rapport-topp h2 { margin: 0; }
+.rapport-topp p { margin: 4px 0 0; }
+.rapport-valg { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 12px; margin-top: 16px; }
+.rapport-valg > label { flex: 0 1 190px; min-width: 0; }
+.rapport-knapper { margin: 0 0 var(--felt-avstand, 14px) auto; }
+.rapport-periode { margin: 0 0 10px; }
+.tabell-rull { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--kant); border-radius: 10px; }
+table.rapport-tabell { font-size: 0.88rem; }
+table.rapport-tabell th, table.rapport-tabell td { padding: 8px 12px; }
+table.rapport-tabell td { white-space: nowrap; }
+table.rapport-tabell tbody tr:last-child td { border-bottom: 0; }
+table.rapport-tabell tfoot td { font-weight: 650; border-bottom: 0; border-top: 1px solid var(--kant-sterk); background: var(--flate-2); }
+/* Første kolonne (navnet) blir stående når tabellen rulles sidelengs. */
+table.rapport-tabell th:first-child, table.rapport-tabell td:first-child { position: sticky; left: 0; z-index: 1; }
+table.rapport-tabell td:first-child { background: var(--flate); }
+table.rapport-tabell tfoot td:first-child { background: var(--flate-2); }
+.rapport-maanedlig { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 24px; margin-bottom: 8px; }
+.rapport-maanedlig legend { font-size: 0.72rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dempet); padding: 0; margin-bottom: 6px; }
+.rapport-maanedlig label { margin-bottom: 6px; }
+@media (max-width: 860px) {
+  .rapport-oppsett { display: block; }
+  .rapport-velger { margin-bottom: 12px; }
+}
+@media (max-width: 700px) {
+  .rapport-valg > label { flex: 1 1 140px; }
+  .rapport-knapper { width: 100%; margin-left: 0; }
+  .rapport-knapper > button { flex: 1 1 0; justify-content: center; }
+  .tabell-rull { margin: 0 -16px; border-left: 0; border-right: 0; border-radius: 0; }
+  table.rapport-tabell th:first-child, table.rapport-tabell td:first-child { padding-left: 16px; }
+  table.rapport-tabell th:last-child, table.rapport-tabell td:last-child { padding-right: 16px; }
+  table.rapport-tabell td:first-child { white-space: normal; min-width: 110px; max-width: 42vw; }
+}

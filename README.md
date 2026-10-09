@@ -27,7 +27,7 @@ bank og regnskapssystemer.
 | Gjentakende fakturaer, purring og inkassovarsel | Ferdig |
 | Makstak: kunden faktureres aldri mer enn et avtalt beløp; alle produktene står på fakturaen, og et fratrekk tar summen ned. Makstaket kan stå på kunden og kommer da på nye fakturaer, flere på én gang og gjentakelser, og kan fjernes per faktura | Ferdig |
 | Påminnelser om å lage fakturaer (push og e-post), for beløp som varierer | Ferdig |
-| Rapporter (reskontro, mva, salg) og CSV-eksport | Ferdig |
+| Rapporter: én side med en fane per modul (Faktura, Personal, Lønn): reskontro, mva, salg, fakturajournal og innbetalinger; timer per ansatt med overtid, timeliste, fravær, feriebank, ekstratimer og ansatte; lønnsjournal, sum per lønnsart, skattetrekk og arbeidsgiveravgift, feriepenger, årsoversikt og OTP. Alle som tabell, CSV og PDF, og på e-post til regnskapsføreren: når du vil, når en lønnskjøring godkjennes, eller den 1. hver måned | Ferdig (menyen «Rapporter»; regnskapsføreren under Rapporter → Utsending) |
 | E-postsporing (Resend-webhook) | Ferdig, krever webhook i Resend |
 | Google Disk | Ferdig, krever OAuth-klient (`GOOGLE_OAUTH_CLIENT_ID`) |
 | EHF/Peppol (gjennom hver organisasjons konto hos Recommand) | Ferdig |

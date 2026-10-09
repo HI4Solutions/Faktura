@@ -43,6 +43,7 @@ import {
 import { lagLonnsslippPdf } from "./lonnsslippPdf.js";
 import { hentLogo } from "./dokument.js";
 import { leggIKo } from "./tjenester.js";
+import { lonnsrapportOppgave } from "./rapportmodul.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -664,8 +665,13 @@ export function lonnRuter() {
         "select a.bruker_id from faktura.lonnsslipper s join faktura.ansatte a on a.org_id = s.org_id and a.id = s.ansatt_id where s.kjoring_id = $1 and a.bruker_id is not null",
         [id(c)],
       );
-      return { k, brukere: brukere.map((b) => b.bruker_id) };
+      return { k, brukere: brukere.map((b) => b.bruker_id), rapporter: await lonnsrapportOppgave(db, orgId(c), id(c)) };
     });
+    // Lønnsrapportene for kjøringen til regnskapsføreren, når det er slått på (Rapporter → Utsending).
+    if (svar.rapporter)
+      await leggIKo(svar.rapporter).catch((e) =>
+        console.log(JSON.stringify({ severity: "WARNING", message: "Lønnsrapportene ble ikke sendt", feil: (e as Error).message })),
+      );
     if (svar.brukere.length)
       await leggIKo({
         type: "varsel",

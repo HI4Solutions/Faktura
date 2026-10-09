@@ -180,6 +180,9 @@ function Ramme() {
   // Lønn: eier, administrator og regnskap ser lønnskjøringene, og den som er ansatt, sine egne
   // lønnsslipper (funksjonen «Lønn» bygger på ansatte og timer).
   const visLonn = harFunksjon(org, "lonn") && !!org?.personal && ((!ansatt && kanSePersonal(org.rolle)) || !!org.ansatt_id);
+  // Rapporter (felles rapportmodul): fakturarapportene med funksjonen «Rapporter», og personal- og
+  // lønnsrapportene for eier, administrator og regnskap. Serveren velger rapport for rapport.
+  const visRapporter = !ansatt && (harFunksjon(org, "rapporter") || (kanSePersonal(org?.rolle) && (harFunksjon(org, "ansatte") || harFunksjon(org, "lonn"))));
   const uleste = useUlesteBeskjeder(org?.id, visBeskjeder);
   const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
   // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
@@ -415,7 +418,7 @@ function Ramme() {
               <IkonProdukter />
               Produkter
             </NavLink>
-            {harFunksjon(org, "rapporter") && (
+            {visRapporter && (
               <NavLink to="/rapporter">
                 <IkonRapport />
                 Rapporter
@@ -532,7 +535,7 @@ function Ramme() {
             <Route path="/bank/tilbake" element={<Krever kode="bank" navn="Bank"><BankTilbake /></Krever>} />
             <Route path="/kunder" element={<Kunder />} />
             <Route path="/kunder/importer" element={<Krever kode="import" navn="Importer kunder"><Importer key="kunder" type="kunder" /></Krever>} />
-            <Route path="/rapporter" element={<Krever kode="rapporter" navn="Rapporter"><Rapporter /></Krever>} />
+            <Route path="/rapporter" element={<Krever kode={["rapporter", "ansatte", "lonn"]} navn="Rapporter"><Rapporter /></Krever>} />
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/produkter/importer" element={<Krever kode="import" navn="Importer produkter"><Importer key="produkter" type="produkter" /></Krever>} />
             <Route path="/ansatte" element={<Ansatte />} />
