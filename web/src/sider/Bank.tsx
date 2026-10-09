@@ -4,10 +4,10 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
-import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
+import { Dialog, Feil, Laster, Tom, dataEndret, useData, useHandling } from "../felles";
 import { AiMerke, aiGrunn } from "../ai";
 import { dato, kr } from "../format";
-import { erAdmin, kanBokfore, useKonto } from "../konto";
+import { erAdmin, harFunksjon, kanBokfore, useKonto } from "../konto";
 import { Sokefelt } from "../sokefelt";
 import { IkonGnist, IkonKlokke, IkonKroner } from "../ikoner";
 import { HemmeligFelt, HemmeligTekst } from "../hemmelig";
@@ -46,6 +46,23 @@ export interface BankStatus {
   tilbake_url: string;
   antall: { forslag: number; uavklart: number; koblet: number; ignorert: number };
   ai: boolean; // AI kan foreslå fakturaen for uavklarte innbetalinger
+  hentinger?: Henting[]; // de siste hentingene fra bankene (nyeste først)
+}
+
+// Én henting fra en bank: hva banken sendte, og hva som ble nytt (eller feilen).
+export interface Henting {
+  id: number;
+  tid: string;
+  bank: string;
+  kilde: "automatisk" | "manuell" | "apnet" | "tilkoblet";
+  transaksjoner: number;
+  inn: number;
+  ventende: number; // innbetalinger som ikke er bokført i banken ennå
+  nye: number;
+  koblet: number;
+  forslag: number;
+  nyeste: string | null; // den nyeste bokføringsdatoen banken sendte
+  feil: string | null;
 }
 
 const BANKER = ["DNB", "Storebrand", "Nordea", "Handelsbanken", "Danske Bank", "SpareBank 1 SR-Bank", "SpareBank 1 SMN", "SpareBank 1 Østlandet", "SpareBank 1 Nord-Norge"];
@@ -148,6 +165,95 @@ export function Hentetider({ tider, sist, oppdater, children }: { tider: string[
   );
 }
 
+// De siste hentingene, så det går an å se hva hver henting fikk fra banken.
+const KILDE: Record<Henting["kilde"], string> = { automatisk: "Automatisk", manuell: "Hent nå", apnet: "Appen åpnet", tilkoblet: "Etter BankID" };
+const flertall = (n: number, en: string, flere: string) => `${n} ${n === 1 ? en : flere}`;
+export function hentingTekst(h: Henting) {
+  if (h.feil) return `Feil: ${h.feil}`;
+  const utfall = [h.koblet ? `${h.koblet} registrert` : "", h.forslag ? `${h.forslag} å bekrefte` : ""].filter(Boolean);
+  const deler = [
+    `${flertall(h.transaksjoner, "transaksjon", "transaksjoner")} fra banken`,
+    h.nye ? `${flertall(h.nye, "ny innbetaling", "nye innbetalinger")}${utfall.length ? ` (${utfall.join(", ")})` : ""}` : "ingen nye innbetalinger",
+  ];
+  if (h.ventende) deler.push(`${flertall(h.ventende, "innbetaling", "innbetalinger")} ikke bokført i banken ennå`);
+  if (h.nyeste) deler.push(`nyeste bokført ${dato(h.nyeste)}`);
+  return deler.join(" · ");
+}
+function Hentelogg({ hentinger }: { hentinger: Henting[] }) {
+  if (!hentinger.length) return null;
+  return (
+    <details className="hentelogg">
+      <summary>Siste hentinger</summary>
+      <ul>
+        {hentinger.map((h) => (
+          <li key={h.id} className={h.feil ? "feil" : undefined}>
+            <span className="hentelogg-tid">
+              {naarTekst(h.tid)} · {KILDE[h.kilde] ?? h.kilde}
+            </span>
+            <span>
+              {h.bank}: {hentingTekst(h)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="liten dempet">
+        Automatisk: de faste hentetidene, uten at du er til stede (bankene tillater høyst fire slike i døgnet). Når du åpner appen eller trykker «Hent
+        innbetalinger nå», henter appen med deg til stede.
+      </p>
+    </details>
+  );
+}
+
+// Når appen åpnes eller kommer fram igjen (Innbetalinger, fakturaene og oversikten), hentes
+// innbetalingene fra bankene med brukeren til stede (serveren gjør det høyst hvert kvarter, og
+// bare for dem som kan registrere betalinger). Når hentingen er ferdig i alle bankene, lastes
+// sidene på nytt. Hentingen fortsetter når brukeren går til en annen side.
+const sistSpurt = new Map<string, number>(); // når appen sist spurte, per organisasjon
+const pagaar = new Set<string>(); // organisasjonene det hentes for nå
+const lyttere = new Set<() => void>();
+const hentingEndret = () => lyttere.forEach((f) => f());
+
+async function hentVedApning(orgId: string) {
+  if (pagaar.has(orgId) || Date.now() - (sistSpurt.get(orgId) ?? 0) < 60_000) return;
+  sistSpurt.set(orgId, Date.now());
+  try {
+    const r = await api<{ startet: boolean; siste?: number; banker?: number }>("POST", `/org/${orgId}/bank/hent`, { apnet: true });
+    if (!r?.startet) return;
+    pagaar.add(orgId);
+    hentingEndret();
+    await ventPaHentinger(orgId, r.siste ?? 0, r.banker ?? 1);
+    dataEndret();
+  } catch {
+    // Stille: «Hent innbetalinger nå» finnes.
+  } finally {
+    if (pagaar.delete(orgId)) hentingEndret();
+  }
+}
+
+// Gir true mens appen henter av seg selv.
+export function useHentVedApning() {
+  const { org } = useKonto();
+  const [, tegn] = useState(0);
+  useEffect(() => {
+    const f = () => tegn((n) => n + 1);
+    lyttere.add(f);
+    return () => void lyttere.delete(f);
+  }, []);
+  const skal = Boolean(org && org.type !== "regnskapsbyraa" && harFunksjon(org, "bank") && kanBokfore(org.rolle));
+  useEffect(() => {
+    if (!skal || !org) return;
+    const id = org.id;
+    void hentVedApning(id);
+    const synlig = () => {
+      if (document.visibilityState === "visible") void hentVedApning(id);
+    };
+    document.addEventListener("visibilitychange", synlig);
+    return () => document.removeEventListener("visibilitychange", synlig);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org?.id, skal]);
+  return Boolean(org && pagaar.has(org.id));
+}
+
 // BankID-adressen workeren lager for banken: spør til den er klar.
 async function ventPaBankId(orgId: string, koblingId: string): Promise<string> {
   for (let i = 0; i < 40; i++) {
@@ -160,13 +266,13 @@ async function ventPaBankId(orgId: string, koblingId: string): Promise<string> {
   throw new Error("Banken svarte ikke. Prøv igjen om litt.");
 }
 
-// Venter til hentingen er ferdig i bankene (sist_hentet endres), høyst et halvt minutt.
-async function ventPaHenting(orgId: string, for_: BankStatus): Promise<BankStatus | null> {
-  const forrige = new Map(for_.koblinger.map((k) => [k.id, k.sist_hentet]));
-  for (let i = 0; i < 30; i++) {
-    await pause(1000);
+// Venter til det er kommet en ny henting fra hver bank som hentes fra (høyst et minutt).
+// siste: den siste hentingen før denne; banker: hvor mange banker det hentes fra.
+async function ventPaHentinger(orgId: string, siste: number, banker: number): Promise<BankStatus | null> {
+  for (let i = 0; i < 40; i++) {
+    await pause(1500);
     const s = await hent<BankStatus>(`/org/${orgId}/bank`);
-    if (s.koblinger.filter((k) => k.tilkoblet && forrige.has(k.id)).every((k) => k.sist_hentet !== forrige.get(k.id))) return s;
+    if ((s.hentinger ?? []).filter((h) => h.id > siste).length >= Math.max(1, banker)) return s;
   }
   return null;
 }
@@ -242,8 +348,8 @@ export function BankKobling() {
   async function hentNa() {
     settVenter("Henter innbetalinger …");
     await h.kjor(async () => {
-      await api("POST", `/org/${org!.id}/bank/hent`);
-      const s = await ventPaHenting(org!.id, data!);
+      const r = await api<{ siste?: number; banker?: number }>("POST", `/org/${org!.id}/bank/hent`);
+      const s = await ventPaHentinger(org!.id, r?.siste ?? 0, r?.banker ?? 1);
       if (s) settData(s);
     });
     settVenter(null);
@@ -658,6 +764,7 @@ export function Innbetalinger() {
   const [spor, settSpor] = useState<string | null>(null); // innbetalingen AI-en ser på
   const [aiSvar, settAiSvar] = useState<Record<string, string>>({}); // når AI-en ikke fant noen faktura
   const bokfore = kanBokfore(org?.rolle);
+  const henterSelv = useHentVedApning();
 
   const handling = async (sti: string, kropp?: unknown) => {
     if (await h.kjor(() => api("POST", `/org/${org!.id}/banktransaksjoner/${sti}`, kropp ?? {}))) {
@@ -681,8 +788,8 @@ export function Innbetalinger() {
   async function hentNa() {
     settHenter(true);
     await h.kjor(async () => {
-      await api("POST", `/org/${org!.id}/bank/hent`);
-      await ventPaHenting(org!.id, bank.data!);
+      const r = await api<{ siste?: number; banker?: number }>("POST", `/org/${org!.id}/bank/hent`);
+      await ventPaHentinger(org!.id, r?.siste ?? 0, r?.banker ?? 1);
     });
     settHenter(false);
     last();
@@ -724,12 +831,13 @@ export function Innbetalinger() {
           }}
         >
           {bokfore && (
-            <button type="button" onClick={hentNa} disabled={henter}>
-              {henter ? "Henter …" : "Hent innbetalinger nå"}
+            <button type="button" onClick={hentNa} disabled={henter || henterSelv}>
+              {henter || henterSelv ? "Henter …" : "Hent innbetalinger nå"}
             </button>
           )}
         </Hentetider>
       )}
+      {bank.data?.hentinger && aktive.length > 0 && <Hentelogg hentinger={bank.data.hentinger} />}
       {bank.data?.koblinger
         .filter((k) => k.siste_feil)
         .map((k) => (

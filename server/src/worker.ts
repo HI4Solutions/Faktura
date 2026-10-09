@@ -145,8 +145,8 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "disk-slett") return slettFraDisk(o.org_id, o.faktura_ider, pdfFilnavn);
   if (o.type === "varsel") return void (await sendVarsel(o.varsel));
   if (o.type === "bank-auth") return lagBankAdresse(o.org_id, o.kobling_id);
-  if (o.type === "bank-okt") return fullforBankOkt(o.org_id, o.kobling_id, o.kode);
-  if (o.type === "bank-hent") return void (await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu }));
+  if (o.type === "bank-okt") return fullforBankOkt(o.org_id, o.kobling_id, o.kode, o.psu);
+  if (o.type === "bank-hent") return void (await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu, kilde: o.kilde }));
   if (o.type === "bank-slett") return slettBankOkter(o.org_id, o.okt_ider, o.alt);
   return sendEpost(o);
 }
@@ -463,16 +463,17 @@ export function lagWorker() {
     await lagBankAdresse(o.org_id, o.kobling_id);
     return c.json({ ok: true });
   });
+  const psuSkjema = z.object({ ip: z.string().max(100), agent: z.string().max(500) }).optional();
   app.post("/oppgaver/bank-okt", async (c) => {
-    const o = bankOppgave.extend({ kobling_id: z.string().uuid(), kode: z.string().min(1).max(4000) }).parse(await c.req.json());
-    await fullforBankOkt(o.org_id, o.kobling_id, o.kode);
+    const o = bankOppgave.extend({ kobling_id: z.string().uuid(), kode: z.string().min(1).max(4000), psu: psuSkjema }).parse(await c.req.json());
+    await fullforBankOkt(o.org_id, o.kobling_id, o.kode, o.psu);
     return c.json({ ok: true });
   });
   app.post("/oppgaver/bank-hent", async (c) => {
     const o = bankOppgave
-      .extend({ kobling_id: z.string().uuid().optional(), psu: z.object({ ip: z.string().max(100), agent: z.string().max(500) }).optional() })
+      .extend({ kobling_id: z.string().uuid().optional(), psu: psuSkjema, kilde: z.enum(["automatisk", "manuell", "apnet", "tilkoblet"]).optional() })
       .parse(await c.req.json());
-    return c.json(await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu }));
+    return c.json(await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu, kilde: o.kilde }));
   });
   app.post("/oppgaver/bank-slett", async (c) => {
     const o = bankOppgave.extend({ okt_ider: z.array(z.string().max(500)).max(50), alt: z.boolean().optional() }).parse(await c.req.json());

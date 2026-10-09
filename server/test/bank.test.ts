@@ -8,7 +8,7 @@ import { config } from "../src/config.js";
 import { lagApi } from "../src/api.js";
 import { alle, en, somSystem } from "../src/db.js";
 import { settKryptering } from "../src/kryptering.js";
-import { lagJwt, nokkelFeil, normaliserPem, settBankFetch, tilInnbetalinger, velgBank, type Bank, type Innbetaling } from "../src/enableBanking.js";
+import { lagJwt, nokkelFeil, normaliserPem, oppsummer, settBankFetch, tilInnbetalinger, velgBank, type Bank, type Innbetaling } from "../src/enableBanking.js";
 import { finnFaktura, fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, sammeNavn, sisteHentetid, slettBankOkter, type ApenFaktura } from "../src/bank.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 
@@ -47,6 +47,19 @@ describe("Enable Banking: signatur og transaksjoner", () => {
     expect(ut[1]).toMatchObject({ betaler: "FJORDLINE", melding: "Faktura 2 takk", valuta: "NOK" });
     expect(ut[0].referanse).toBe("0100001");
     expect(ut[2].ekstern_id).not.toBe(ut[3].ekstern_id);
+  });
+
+  it("oppsummerer hva banken sendte: innbetalinger, reserverte og den nyeste bokføringsdatoen", () => {
+    expect(
+      oppsummer([
+        { transaction_amount: { amount: "100", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "BOOK", booking_date: "2026-10-07" },
+        { transaction_amount: { amount: "200", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG", transaction_date: "2026-10-09" },
+        { transaction_amount: { amount: "50", currency: "NOK" }, credit_debit_indicator: "DBIT", status: "BOOK", booking_date: "2026-10-08" },
+        { transaction_amount: { amount: "-20", currency: "NOK" }, value_date: "2026-10-06" },
+        { transaction_amount: { amount: "30", currency: "NOK" }, value_date: "2026-10-05T00:00:00" },
+      ]),
+    ).toEqual({ transaksjoner: 5, inn: 2, ventende: 1, nyeste: "2026-10-08" });
+    expect(oppsummer([])).toEqual({ transaksjoner: 0, inn: 0, ventende: 0, nyeste: null });
   });
 
   it("gjør om en nøkkel limt inn på én linje til vanlig PEM", () => {
@@ -167,6 +180,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
   const banken = async (id: string) => (await bankStatus()).koblinger.find((k: any) => k.id === id);
   const status = async (nr: number) => (await api("GET", `/api/org/${org}/fakturaer/${fakturaer[nr]}`)).data.status;
   const transaksjoner = () => somSystem((db) => alle(db, "select * from faktura.banktransaksjoner where org_id = $1 order by dato, belop, ekstern_id", [org]));
+  const hentinger = () => somSystem((db) => alle(db, "select * from faktura.bankhentinger where org_id = $1 order by id", [org]));
   const inn = (id: string, belop: number, debtor: string | null, melding?: string) => ({
     entry_reference: id,
     transaction_amount: { amount: belop.toFixed(2), currency: "NOK" },
@@ -255,7 +269,9 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(r.status).toBe(202);
     expect(r.data).toEqual({ ok: true, kobling_id: dnbId, forrige: null });
     expect((await api("POST", `/api/org/${org}/bank/fullfor`, { code: "kode-1", state })).status).toBe(400); // engangs
-    expect(ko.at(-1)).toMatchObject({ type: "bank-okt", org_id: org, kobling_id: dnbId, kode: "kode-1" });
+    // Brukeren er til stede (kom nettopp tilbake fra BankID): IP-adressen og nettleseren følger med.
+    const okt = ko.at(-1) as any;
+    expect(okt).toMatchObject({ type: "bank-okt", org_id: org, kobling_id: dnbId, kode: "kode-1", psu: { ip: "203.0.113.9", agent: "Testleser/1.0" } });
 
     svar["POST /sessions"] = () =>
       json(200, {
@@ -266,7 +282,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
           { uid: "k-spare", account_id: { iban: "NO0215035656262" }, name: "Sparekonto", currency: "NOK" },
         ],
       });
-    await fullforBankOkt(org, dnbId, "kode-1");
+    await fullforBankOkt(org, dnbId, "kode-1", okt.psu);
     expect(kall.at(-1)!.kropp).toEqual({ code: "kode-1" });
     const s = await bankStatus();
     expect(s.tilkoblet).toBe(true);
@@ -277,7 +293,9 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(s.koblinger[0].kontoer).toEqual([{ kontonr: "86011117947", navn: "Driftskonto" }]);
     expect(s.koblinger[0].andre_kontoer).toBe(1);
     expect(JSON.stringify(s)).not.toContain("15035656262");
-    expect(ko.at(-1)).toMatchObject({ type: "bank-hent", org_id: org, kobling_id: dnbId });
+    // Den første hentingen skjer med brukeren til stede, og teller ikke mot bankens grense.
+    expect(ko.at(-1)).toMatchObject({ type: "bank-hent", org_id: org, kobling_id: dnbId, kilde: "tilkoblet", psu: okt.psu });
+    expect(s.hentinger).toEqual([]);
   });
 
   it("henter innbetalinger: registrerer, foreslår og lar resten stå uavklart", async () => {
@@ -293,11 +311,17 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
                 inn("t2", 2500, "FJORDLINE LOGISTIKK AS", "Betaling"),
                 inn("t4", 99, "Ukjent"),
                 { entry_reference: "t5", transaction_amount: { amount: "500.00", currency: "NOK" }, credit_debit_indicator: "DBIT", status: "BOOK", booking_date: dag },
+                // Ikke bokført i banken ennå: lagres ikke, men telles i hentingen.
+                { entry_reference: "p1", transaction_amount: { amount: "700.00", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG", transaction_date: dag },
               ],
               continuation_key: "side-2",
             });
 
     expect(await hentInnbetalinger(org)).toEqual({ nye: 4, koblet: 1, forslag: 2 });
+    // Hentingen er lagret: hva banken sendte (også det som ikke er bokført ennå), og hva som ble nytt.
+    expect(await hentinger()).toEqual([
+      expect.objectContaining({ kobling_id: dnbId, bank: "DNB", kilde: "automatisk", fra: dagerSiden(60), kontoer: 1, transaksjoner: 6, inn: 4, ventende: 1, nye: 4, koblet: 1, forslag: 2, nyeste: dag, feil: null }),
+    ]);
     // Bare driftskontoen leses, de siste 60 dagene første gang.
     expect(kall.filter((k) => k.sti.startsWith("/accounts/")).every((k) => k.sti.startsWith("/accounts/k-drift/") && k.psu === null)).toBe(true);
     expect(kall.find((k) => k.sti.startsWith("/accounts/k-drift/"))!.sti).toBe(`/accounts/k-drift/transactions?date_from=${dagerSiden(60)}`);
@@ -314,6 +338,14 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
 
     // Neste henting: ingenting nytt, og ingenting registreres to ganger.
     expect(await hentInnbetalinger(org)).toEqual({ nye: 0, koblet: 0, forslag: 0 });
+    // Appen viser de siste hentingene, den nyeste først.
+    const hentet = (await bankStatus()).hentinger;
+    expect(hentet.map((h: any) => [h.kilde, h.bank, h.transaksjoner, h.nye])).toEqual([
+      ["automatisk", "DNB", 6, 0],
+      ["automatisk", "DNB", 6, 4],
+    ]);
+    expect(hentet[1]).toMatchObject({ inn: 4, ventende: 1, koblet: 1, forslag: 2, nyeste: dag, feil: null });
+    expect(Date.parse(hentet[0].tid)).toBeGreaterThan(Date.now() - 60_000);
     // Neste henting fra kontoen starter fem dager tilbake: banker kan bokføre noen dager etter.
     const k = (await kobling(dnbId))!;
     expect(k.kontoer.map((x: any) => [x.kontonr, x.hent_fra ?? null])).toEqual([
@@ -424,9 +456,12 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
   });
 
   it("«Hent nå» sender med at brukeren er til stede", async () => {
-    expect((await api("POST", `/api/org/${org}/bank/hent`)).status).toBe(202);
+    const r = await api("POST", `/api/org/${org}/bank/hent`);
+    expect(r.status).toBe(202);
+    // Appen venter til det er kommet en ny henting fra hver av de to bankene.
+    expect(r.data).toEqual({ ok: true, startet: true, siste: (await hentinger()).at(-1).id, banker: 2 });
     const o = ko.at(-1) as any;
-    expect(o).toMatchObject({ type: "bank-hent", org_id: org, psu: { ip: "203.0.113.9", agent: "Testleser/1.0" } });
+    expect(o).toMatchObject({ type: "bank-hent", org_id: org, kilde: "manuell", psu: { ip: "203.0.113.9", agent: "Testleser/1.0" } });
     expect(o.kobling_id).toBeUndefined();
     // Kontoer fra før appen leste kontoene som er lagt inn (valgt, med koblingens dato)
     // hentes fra koblingens dato.
@@ -440,12 +475,50 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
       ),
     );
     const for_ = kall.length;
-    await hentInnbetalinger(org, { psu: o.psu });
+    await hentInnbetalinger(org, { psu: o.psu, kilde: o.kilde });
     expect(kall.slice(for_).map((k) => [k.sti, k.psu])).toEqual([
       ["/accounts/k-drift/transactions?date_from=2026-09-20", "203.0.113.9"],
       [`/accounts/k-husleie/transactions?date_from=${dagerSiden(5)}`, "203.0.113.9"],
     ]);
     expect((await kobling(dnbId))!.kontoer[0]).toMatchObject({ kontonr: "86011117947", hent_fra: dagerSiden(5) });
+    expect((await hentinger()).slice(-2).map((h: any) => [h.bank, h.kilde, h.fra])).toEqual([
+      ["DNB", "manuell", "2026-09-20"],
+      ["Storebrand Bank", "manuell", dagerSiden(5)],
+    ]);
+  });
+
+  it("når appen åpnes, hentes det med brukeren til stede, høyst hvert kvarter", async () => {
+    const apne = (hvem = eier) => api("POST", `/api/org/${org}/bank/hent`, { apnet: true }, hvem);
+    // «Hent nå» var nettopp: ingenting skjer.
+    let fra = ko.length;
+    expect(await apne()).toEqual({ status: 200, data: { ok: true, startet: false } });
+    expect(ko.length).toBe(fra);
+    // De automatiske hentingene teller ikke (brukeren var ikke til stede).
+    const glem = () => somSystem((db) => db.query("delete from faktura.bankhentinger where org_id = $1 and kilde <> 'automatisk'", [org]));
+    await glem();
+    const r = await apne();
+    expect(r.status).toBe(202);
+    expect(r.data).toEqual({ ok: true, startet: true, siste: (await hentinger()).at(-1).id, banker: 2 });
+    const o = ko.at(-1) as any;
+    expect(o).toMatchObject({ type: "bank-hent", org_id: org, kilde: "apnet", psu: { ip: "203.0.113.9", agent: "Testleser/1.0" } });
+    expect(o.kobling_id).toBeUndefined();
+    await hentInnbetalinger(org, { psu: o.psu, kilde: o.kilde });
+    expect((await hentinger()).slice(-2).map((h: any) => [h.bank, h.kilde])).toEqual([
+      ["DNB", "apnet"],
+      ["Storebrand Bank", "apnet"],
+    ]);
+    fra = ko.length;
+    expect((await apne()).data).toEqual({ ok: true, startet: false });
+
+    // Uten rett til å registrere betalinger skjer ingenting (og det er ingen feil); andre får ikke spørre.
+    const leser = "Bearer test:uid-bank-les:bank-les@server.test:mfa";
+    const inv = await api("POST", `/api/org/${org}/invitasjoner`, { epost: "bank-les@server.test", rolle: "les" });
+    expect((await api("POST", "/api/invitasjoner/aksepter", { token: inv.data.lenke.split("/").pop() }, leser)).status).toBe(200);
+    await glem();
+    expect(await apne(leser)).toEqual({ status: 200, data: { ok: true, startet: false } });
+    expect((await api("POST", `/api/org/${org}/bank/hent`, undefined, leser)).status).toBe(403);
+    expect((await apne(fremmed)).status).toBe(403);
+    expect(ko.length).toBe(fra);
   });
 
   it("hentetidene følger norsk tid, også vintertid", () => {
@@ -510,6 +583,11 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     svar["GET /accounts/:uid/transactions"] = (k) =>
       k.sti.startsWith("/accounts/k-drift/") ? json(401, { message: "Session expired", error: "EXPIRED_SESSION" }) : json(200, { transactions: [] });
     await hentInnbetalinger(org);
+    // Feilen står i hentingen fra DNB; Storebrand svarte som vanlig.
+    expect((await hentinger()).slice(-2).map((h: any) => [h.bank, h.kilde, h.transaksjoner, h.feil])).toEqual([
+      ["DNB", "automatisk", 0, "Session expired (401 EXPIRED_SESSION)"],
+      ["Storebrand Bank", "automatisk", 0, null],
+    ]);
     let s = await bankStatus();
     expect(s.tilkoblet).toBe(true);
     expect(s.koblinger.find((k: any) => k.id === dnbId)).toMatchObject({

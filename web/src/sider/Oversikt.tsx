@@ -6,7 +6,7 @@ import { harFunksjon, kanBokfore, kanSkrive, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { IkonFaktura, IkonHake, IkonKlokke, IkonKroner, IkonKunder, IkonPluss, IkonUtkast, IkonVarsel } from "../ikoner";
 import { Fakturatabell } from "./Fakturaer";
-import { dagerTil, navnListe, type BankStatus } from "./Bank";
+import { dagerTil, navnListe, useHentVedApning, type BankStatus } from "./Bank";
 
 export function Oversikt() {
   const { org, meg, velgOrg } = useKonto();
@@ -15,7 +15,10 @@ export function Oversikt() {
   const bank = useData(
     () => (org?.type === "regnskapsbyraa" || !harFunksjon(org, "bank") ? Promise.resolve(null) : hent<BankStatus>(`/org/${org!.id}/bank`).catch(() => null)),
     [org?.id],
+    { oppdater: true },
   );
+  // Nye innbetalinger fra banken når oversikten åpnes.
+  useHentVedApning();
 
   // Regnskapsbyrå: felles oversikt over klientene.
   if (org?.type === "regnskapsbyraa") {

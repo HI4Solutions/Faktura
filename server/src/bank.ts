@@ -23,6 +23,7 @@ import {
   hentTransaksjoner,
   kontonr,
   opprettOkt,
+  oppsummer,
   slettOkt,
   startAutorisering,
   tilInnbetalinger,
@@ -176,7 +177,7 @@ export async function lagBankAdresse(orgId: string, koblingId: string) {
 // Koden fra banken (etter BankID) byttes mot en økt med lesetilgang til kontoene. Alle
 // kontoene i økten lagres, men bare de som er lagt inn i HI4 Faktura leses (også de som
 // legges inn senere). Hvor langt hver konto er hentet, følger kontonummeret fra forrige økt.
-export async function fullforBankOkt(orgId: string, koblingId: string, kode: string) {
+export async function fullforBankOkt(orgId: string, koblingId: string, kode: string, psu?: Psu) {
   const [app, k] = await somSystem(async (db) => [await bankApp(db, orgId), await hentKobling(db, orgId, koblingId)] as const);
   if (!app || !k) return;
   try {
@@ -203,7 +204,9 @@ export async function fullforBankOkt(orgId: string, koblingId: string, kode: str
     });
     // Den gamle økten (ved fornyelse) trengs ikke lenger.
     if (k.okt_id && k.okt_id !== okt.session_id) await slettOkt(app.nokkel, k.okt_id).catch(() => undefined);
-    if (kontoer.length) await leggIKo({ type: "bank-hent", org_id: orgId, kobling_id: k.id });
+    // Brukeren er til stede (kom nettopp tilbake fra BankID): den første hentingen teller ikke
+    // mot bankens grense for hentinger uten brukeren.
+    if (kontoer.length) await leggIKo({ type: "bank-hent", org_id: orgId, kobling_id: k.id, kilde: "tilkoblet", ...(psu ? { psu } : {}) });
   } catch (e) {
     await oppdater(k.id, { state: null, auth_url: null, siste_feil: `Koblingen til banken ble ikke fullført: ${(e as Error).message}` });
   }
@@ -329,6 +332,10 @@ const utloptFeil = (f: BankFeil) =>
   f.status === 401 || f.status === 403 || /(EXPIRED|REVOKED|CLOSED|INVALID)_?SESSION|SESSION_?(EXPIRED|REVOKED|CLOSED|INVALID)|CONSENT/i.test(f.kode ?? "");
 
 type Resultat = { nye: number; koblet: number; forslag: number };
+// Hvorfor det hentes: de faste hentetidene (uten brukeren), «Hent nå», appen er åpnet, eller
+// rett etter BankID. Bare de automatiske teller mot bankens grense (fire i døgnet).
+export type Hentekilde = "automatisk" | "manuell" | "apnet" | "tilkoblet";
+type Hentelogg = { fra: string | null; kontoer: number; transaksjoner: number; inn: number; ventende: number; nyeste: string | null };
 // Hvor mange innbetalinger AI-en kan se på i én henting (tak på kostnaden, og den første
 // hentingen kan ha mange). feil: feil på rad; etter to prøves det ikke mer denne gangen.
 type AiBudsjett = { igjen: number; feil: number };
@@ -402,10 +409,29 @@ const merkHentet = (id: string, kontonr: string[], fra: string) =>
     ),
   );
 
+// Hver henting fra en bank lagres (faktura.bankhentinger), med hva banken sendte og hva som ble
+// nytt eller feilen, og logges, så det går an å se hva de automatiske hentingene får.
+async function loggHenting(orgId: string, k: Bankkobling, kilde: Hentekilde, h: Hentelogg, r: Resultat, feil: string | null) {
+  logg(feil ? "WARNING" : "INFO", "Henting fra banken", { org_id: orgId, bank: k.bank, kilde, ...h, ...r, ...(feil ? { feil } : {}) });
+  try {
+    await somSystem(async (db) => {
+      await db.query(
+        `insert into faktura.bankhentinger (org_id, kobling_id, bank, kilde, fra, kontoer, transaksjoner, inn, ventende, nye, koblet, forslag, nyeste, feil)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+        [orgId, k.id, k.bank, kilde, h.fra, h.kontoer, h.transaksjoner, h.inn, h.ventende, r.nye, r.koblet, r.forslag, h.nyeste, feil],
+      );
+      await db.query("select faktura.rydd_bankhentinger($1)", [orgId]);
+    });
+  } catch (e) {
+    logg("WARNING", "Kunne ikke lagre hentingen", { org_id: orgId, feil: (e as Error).message });
+  }
+}
+
 // Henter nye innbetalinger fra kontoene som er lagt inn i HI4 Faktura, i én eller alle
 // bankene, og kobler dem til fakturaene.
-export async function hentInnbetalinger(orgId: string, valg: { koblingId?: string; psu?: Psu } = {}): Promise<Resultat> {
+export async function hentInnbetalinger(orgId: string, valg: { koblingId?: string; psu?: Psu; kilde?: Hentekilde } = {}): Promise<Resultat> {
   const resultat: Resultat = { nye: 0, koblet: 0, forslag: 0 };
+  const kilde: Hentekilde = valg.kilde ?? (valg.psu ? "manuell" : "automatisk");
   const [app, koblinger, egne, start, aiAktiv] = await somSystem(
     async (db) =>
       [
@@ -437,18 +463,32 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
   for (const k of koblinger) {
     const kontoer = (k.kontoer ?? []).filter((x) => egne.has(x.kontonr));
     if (!kontoer.length) continue;
+    const h: Hentelogg = { fra: null, kontoer: 0, transaksjoner: 0, inn: 0, ventende: 0, nyeste: null };
+    const for_ = { ...resultat };
+    const iBanken = (): Resultat => ({ nye: resultat.nye - for_.nye, koblet: resultat.koblet - for_.koblet, forslag: resultat.forslag - for_.forslag });
     try {
       for (const konto of kontoer) {
         const fra = senest(hentesFra(k, konto) ?? iDag(-60), startdato);
-        for (const t of tilInnbetalinger(await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu)))
-          if (t.dato >= startdato) await lagreOgKoble(orgId, konto.kontonr, t, resultat, ai);
+        const rader = await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu);
+        const o = oppsummer(rader);
+        Object.assign(h, {
+          fra: !h.fra || fra < h.fra ? fra : h.fra,
+          kontoer: h.kontoer + 1,
+          transaksjoner: h.transaksjoner + o.transaksjoner,
+          inn: h.inn + o.inn,
+          ventende: h.ventende + o.ventende,
+          nyeste: o.nyeste && (!h.nyeste || o.nyeste > h.nyeste) ? o.nyeste : h.nyeste,
+        });
+        for (const t of tilInnbetalinger(rader)) if (t.dato >= startdato) await lagreOgKoble(orgId, konto.kontonr, t, resultat, ai);
       }
       // Neste gang hentes de siste dagene på nytt: banker kan bokføre noen dager etter.
       await merkHentet(k.id, kontoer.map((x) => x.kontonr), iDag(-5));
+      await loggHenting(orgId, k, kilde, h, iBanken(), null);
     } catch (e) {
       const f = e instanceof BankFeil ? e : new BankFeil((e as Error).message, 500);
       const utlopt = utloptFeil(f);
-      logg(utlopt ? "WARNING" : "ERROR", "Henting fra banken feilet", { org_id: orgId, bank: k.bank, status: f.status, feil: f.message });
+      logg(utlopt ? "WARNING" : "ERROR", "Henting fra banken feilet", { org_id: orgId, bank: k.bank, kilde, status: f.status, feil: f.message });
+      await loggHenting(orgId, k, kilde, h, iBanken(), f.status ? `${f.message} (${f.status}${f.kode ? ` ${f.kode}` : ""})` : f.message);
       await oppdater(
         k.id,
         utlopt

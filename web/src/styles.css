@@ -651,6 +651,14 @@ ol.steg li { margin-bottom: 8px; line-height: 1.5; }
 /* «Hent innbetalinger nå» står til høyre i boksen (under teksten på smale skjermer). */
 .hentetider-tekst { flex: 1; min-width: 0; }
 .hentetider-handling { flex: none; align-self: center; }
+/* De siste hentingene fra bankene (Innbetalinger) */
+.hentelogg { margin: -0.5rem 0 1rem; font-size: 0.86rem; }
+.hentelogg > summary { cursor: pointer; color: var(--tekst-2); font-weight: 600; padding: 2px 0; width: fit-content; }
+.hentelogg ul { list-style: none; padding: 0; margin: 6px 0 4px; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate); }
+.hentelogg li { display: flex; flex-direction: column; gap: 1px; padding: 7px 12px; border-bottom: 1px solid var(--kant); }
+.hentelogg li:last-child { border-bottom: 0; }
+.hentelogg li.feil { color: var(--fare); }
+.hentelogg-tid { color: var(--dempet); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 @media (max-width: 560px) {
   .hentetider { flex-wrap: wrap; }
   .hentetider-handling { flex-basis: 100%; padding-left: 28px; }

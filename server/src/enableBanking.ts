@@ -186,6 +186,26 @@ export type Innbetaling = {
 
 const tekst = (x: unknown): string | null => (typeof x === "string" && x.trim() ? x.trim() : null);
 
+// Hva banken sendte (til hentingsloggen): alle transaksjonene, innbetalingene som er bokført og
+// de som ikke er bokført ennå (reservert), og den nyeste bokføringsdatoen.
+export function oppsummer(transaksjoner: any[]): { transaksjoner: number; inn: number; ventende: number; nyeste: string | null } {
+  let inn = 0;
+  let ventende = 0;
+  let nyeste: string | null = null;
+  for (const t of transaksjoner) {
+    const belop = Number(t?.transaction_amount?.amount);
+    const erInn = t?.credit_debit_indicator ? t.credit_debit_indicator === "CRDT" : belop > 0;
+    const bokfort = !t?.status || t.status === "BOOK";
+    if (erInn && Number.isFinite(belop) && belop !== 0) {
+      if (bokfort) inn++;
+      else ventende++;
+    }
+    const dato = bokfort ? (tekst(t?.booking_date) ?? tekst(t?.value_date) ?? tekst(t?.transaction_date))?.slice(0, 10) : null;
+    if (dato && (!nyeste || dato > nyeste)) nyeste = dato;
+  }
+  return { transaksjoner: transaksjoner.length, inn, ventende, nyeste };
+}
+
 // Innbetalingene (bokførte penger inn) blant transaksjonene, i datoorden. Uten id fra
 // banken får transaksjonen et fingeravtrykk; like transaksjoner samme dag nummereres.
 export function tilInnbetalinger(transaksjoner: any[]): Innbetaling[] {

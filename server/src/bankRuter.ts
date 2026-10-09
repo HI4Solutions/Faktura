@@ -54,6 +54,12 @@ function koblingStatus(k: Bankkobling, egne: Map<string, string | null>) {
   };
 }
 
+// Brukeren er til stede: IP-adressen og nettleseren sendes til banken (PSD2).
+const psu = (c: Context) => ({
+  ip: (c.req.header("x-forwarded-for") ?? "").split(",")[0]!.trim() || "0.0.0.0",
+  agent: (c.req.header("user-agent") ?? "HI4 Faktura").slice(0, 500),
+});
+
 async function status(db: Db, org: string) {
   const app = await hentApp(db, org);
   const egne = app ? await egneKontoer(db, org) : new Map<string, string | null>();
@@ -74,6 +80,13 @@ async function status(db: Db, org: string) {
     hentetider: HENTETIDER, // når workeren henter av seg selv hver dag (norsk tid)
     tilbake_url: tilbakeUrl(),
     antall: await antall(db, org),
+    // De siste hentingene: hva banken sendte, og hva som ble nytt (eller feilen).
+    hentinger: await alle(
+      db,
+      `select id, tid, bank, kilde, transaksjoner, inn, ventende, nye, koblet, forslag, to_char(nyeste, 'YYYY-MM-DD') as nyeste, feil
+         from faktura.bankhentinger where org_id = $1 order by id desc limit 12`,
+      [org],
+    ),
     ai: aiPaa() && Boolean(start?.ai_aktiv), // AI kan foreslå fakturaen for uavklarte innbetalinger
   };
 }
@@ -241,7 +254,8 @@ export function bankRuter() {
       await db.query("update faktura.bankkoblinger set state = null, siste_feil = null where id = $1", [k.id]);
       return k;
     });
-    await leggIKo({ type: "bank-okt", org_id: orgId(c), kobling_id: k.id, kode: b.code });
+    // Brukeren er til stede: den første hentingen etter BankID teller ikke mot bankens grense.
+    await leggIKo({ type: "bank-okt", org_id: orgId(c), kobling_id: k.id, kode: b.code, psu: psu(c) });
     // Appen venter til fullfort er endret (eller det kommer en feil).
     return c.json({ ok: true, kobling_id: k.id, forrige: tekst(k.fullfort) }, 202);
   });
@@ -263,15 +277,37 @@ export function bankRuter() {
   });
 
   // Hent nå fra alle bankene. Brukeren er til stede, så det teller ikke mot bankenes grense.
+  // apnet: appen ble åpnet (Innbetalinger, fakturaene, oversikten), og henter av seg selv når
+  // det er mer enn et kvarter siden sist brukeren var til stede ved en henting; ellers skjer
+  // ingenting (og ingen feil, heller ikke uten bank eller uten rett til å registrere betalinger).
   r.post("/bank/hent", async (c) => {
-    await bruk(c, async (db) => {
-      await krev(c, db, "bokfor");
-      const k = await en(db, "select 1 from faktura.bankkoblinger where org_id = $1 and status = 'aktiv' and okt_id is not null limit 1", [orgId(c)]);
-      if (!k) throw new ApiFeil(409, "Ingen bank er koblet til");
+    const b = z.object({ apnet: z.boolean().optional() }).parse(await c.req.json().catch(() => ({})));
+    const s = await bruk(c, async (db) => {
+      await krev(c, db, b.apnet ? "les" : "bokfor");
+      if (!b.apnet) {
+        const k = await en(db, "select 1 from faktura.bankkoblinger where org_id = $1 and status = 'aktiv' and okt_id is not null limit 1", [orgId(c)]);
+        if (!k) throw new ApiFeil(409, "Ingen bank er koblet til");
+      }
+      // banker: bankene som har en konto som er lagt inn i HI4 Faktura (de som hentes fra).
+      // siste: den siste hentingen som er lagret nå.
+      return en<{ kan: boolean; banker: number; nylig: boolean; siste: number }>(
+        db,
+        `select faktura.kan($1, 'bokfor') as kan,
+                (select count(*)::int from faktura.bankkoblinger k
+                  where k.org_id = $1 and k.status = 'aktiv' and k.okt_id is not null
+                    and exists (select 1 from faktura.integrasjoner i where i.org_id = $1 and i.type = 'bank' and i.status <> 'frakoblet')
+                    and exists (select 1 from jsonb_array_elements(k.kontoer) x
+                                 where x ->> 'kontonr' in (select o.kontonr from faktura.organisasjoner o where o.id = $1
+                                                           union select e.kontonr from faktura.kontoer e where e.org_id = $1))) as banker,
+                exists (select 1 from faktura.bankhentinger where org_id = $1 and kilde <> 'automatisk' and tid > now() - interval '15 minutes') as nylig,
+                coalesce((select max(id) from faktura.bankhentinger where org_id = $1), 0) as siste`,
+        [orgId(c)],
+      );
     });
-    const ip = (c.req.header("x-forwarded-for") ?? "").split(",")[0].trim() || "0.0.0.0";
-    await leggIKo({ type: "bank-hent", org_id: orgId(c), psu: { ip, agent: (c.req.header("user-agent") ?? "HI4 Faktura").slice(0, 500) } });
-    return c.json({ ok: true }, 202);
+    if (b.apnet && !(s?.kan && s.banker > 0 && !s.nylig)) return c.json({ ok: true, startet: false });
+    await leggIKo({ type: "bank-hent", org_id: orgId(c), psu: psu(c), kilde: b.apnet ? "apnet" : "manuell" });
+    // Appen venter til det er kommet en ny henting per bank.
+    return c.json({ ok: true, startet: true, siste: s?.siste ?? 0, banker: s?.banker ?? 0 }, 202);
   });
 
   // Fjern én bank. Workeren avslutter økten hos Enable Banking.

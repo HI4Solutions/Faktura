@@ -115,7 +115,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   hentinger i døgnet uten brukeren; «Hent nå» kommer i tillegg). Hver hentetid tas én gang per
   bank (atomisk, også med flere instanser), og en som ble gått glipp av, tas igjen før neste.
   Appen viser hentetidene, neste henting og når det sist ble hentet, med «Hent innbetalinger
-  nå» i samme boks. Innbetalingene kobles
+  nå» i samme boks. Når appen åpnes eller kommer fram igjen (Innbetalinger, fakturaene,
+  oversikten), henter den med brukeren til stede (`POST …/bank/hent` med `apnet`: høyst hvert
+  kvarter, og bare for dem som kan registrere betalinger), og den første hentingen etter BankID
+  skjer også med brukeren til stede. IP-adressen og nettleseren (PSU-headerne) sendes bare da
+  og ved «Hent nå», aldri fra de faste hentetidene. Innbetalinger som ikke er bokført i banken
+  ennå, lagres ikke (de telles i hentingen). Innbetalingene kobles
   til fakturaer: KID eller fakturanummer i meldingen
   registreres med en gang (`koble_banktransaksjon`), samme beløp og betaler blir forslag,
   resten uavklart. Uten KID-avtale med banken. Innbetalinger fra før startdatoen
@@ -127,6 +132,13 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `kontoer`) vises og leses, hver fra sin egen dato. Appen legger til og fjerner banker;
   workeren lager BankID-adressen, fullfører økten og henter, og appen venter på svaret ved
   å spørre etter statusen
+- `bankhentinger`: hver henting fra en bank (`loggHenting` i `bank.ts`): hvorfor (de faste
+  hentetidene, «Hent nå», appen åpnet eller etter BankID), hva banken sendte (transaksjonene,
+  innbetalingene som er bokført og de som ikke er det ennå, den nyeste bokføringsdatoen), hva
+  som ble nytt, eller feilen. Logges også til Cloud Logging («Henting fra banken»). Appen viser
+  de siste under «Siste hentinger» på Innbetalinger, så det går an å se hva de automatiske
+  hentingene får fra banken. Bare workeren skriver, og de siste 200 per organisasjon beholdes
+  (`rydd_bankhentinger`)
 - `ai_bruk`: AI-forespørsler og tokens per organisasjon, måned og funksjon. Hver organisasjon
   har et tak per måned (`AI_GRENSE`), og en administrator kan slå AI av
   (`organisasjoner.ai_aktiv`). Tale skrives først ned (`…/ai/faktura/tale`,

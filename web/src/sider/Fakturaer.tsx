@@ -13,6 +13,7 @@ import { VedleggFelt, VedleggListe } from "../vedlegg";
 import { AiFaktura, type AiUtkast } from "../ai";
 import type { PaaminnelseUtkast } from "./Paaminnelser";
 import { Fakturafaner } from "../fakturameny";
+import { useHentVedApning } from "./Bank";
 
 // Binders etter kundenavnet i lista når fakturaen har vedlegg.
 const HarVedlegg = ({ antall }: { antall?: number }) =>
@@ -36,6 +37,8 @@ export function Fakturaliste() {
   // «Ubetalt» er bare fakturaer; kreditnotaer skal ikke betales og står under «Kreditert».
   const filter = status === "utstedt" ? "?status=utstedt&type=faktura" : status === "kreditert" ? "?status=kreditert&kreditnotaer=1" : status ? `?status=${status}` : "";
   const { data, feil, laster, last } = useData(() => hent(`/org/${org!.id}/fakturaer${filter}`), [org?.id, status], { oppdater: true });
+  // Nye innbetalinger fra banken når lista åpnes (lista lastes på nytt når de er hentet).
+  useHentVedApning();
   const [sendUtkast, settSendUtkast] = useState(false);
   const utkast = status === "utkast" ? (data ?? []) : [];
 
