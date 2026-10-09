@@ -10,6 +10,10 @@
 //
 // Avspasering (0073_timebank.sql): fri fra timebanken i hele dager, med timene den tar fra banken.
 // Lederen registrerer den her; den ansatte søker om den (server/src/timebank.ts).
+//
+// Permisjon med lønn (0074_vaktbytte_fridag.sql, betalt): med fastlønn går lønnen som vanlig, med
+// timelønn lønnes timene. Den registreres også når den som gir bort en fast arbeidsdag, tar
+// fridagen som betalt fravær (server/src/vaktbytte.ts).
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
@@ -33,6 +37,8 @@ export const FRAVAERTYPER = {
   annet: "Annet fravær",
 } as const;
 type Type = keyof typeof FRAVAERTYPER;
+// «Permisjon med lønn» for betalt permisjon, ellers typen.
+export const fravaerNavn = (type: Type, betalt?: boolean | null) => (type === "permisjon" && betalt ? "Permisjon med lønn" : FRAVAERTYPER[type]);
 
 const dagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 const dag = (iso: string) => dagFormat.format(new Date(`${iso}T12:00:00Z`));
@@ -44,8 +50,9 @@ const skjema = z.object({
   fra: datoS,
   til: datoS,
   notat: valgfri(tekst(500, "Notatet")),
-  // Avspasering: timene den tar fra timebanken.
+  // Avspasering: timene den tar fra timebanken. Permisjon med lønn: timene som lønnes.
   timer: z.number({ error: "Skriv antall timer" }).gt(0, "Skriv antall timer").max(2000, "For mange timer").nullable().optional(),
+  betalt: z.boolean().optional(), // permisjon med lønn
   // Sykdom: egenmelding eller sykmelding (legeerklæring for sykt barn), og den ansattes svar på om
   // fraværet har sammenheng med arbeidet. erklaering: den ansatte bekrefter egenmeldingen.
   dokumentasjon: z.enum(["egenmelding", "sykmelding"]).nullable().optional(),
@@ -63,13 +70,23 @@ const FRAVAER = `
          case when s.ser then f.arbeidsrelatert end as arbeidsrelatert,
          case when s.ser then f.egenmeldt end as egenmeldt,
          case when s.ser then f.timer end as timer,
+         case when s.ser then f.betalt end as betalt,
          case when s.ser and f.egenmeldt is not null then f.egenmeldt_av is not distinct from a.bruker_id end as egenmeldt_selv,
          f.opprettet, f.opprettet_av = faktura.bruker_id() as min
     from faktura.fravaer f
     join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
     cross join lateral (select faktura.ser_fravaertype(f.org_id, f.ansatt_id) as ser) s`;
 
-type Fravaer = { id: string; ansatt_id: string; ansatt_navn: string; type: Type; fra: string; til: string; dokumentasjon: "egenmelding" | "sykmelding" | null };
+type Fravaer = {
+  id: string;
+  ansatt_id: string;
+  ansatt_navn: string;
+  type: Type;
+  fra: string;
+  til: string;
+  dokumentasjon: "egenmelding" | "sykmelding" | null;
+  betalt: boolean | null;
+};
 const ERKLAERING = "Bekreft erklæringen for å sende egenmeldingen";
 
 export function fravaerRuter() {
@@ -104,8 +121,19 @@ export function fravaerRuter() {
       if (b.dokumentasjon === "egenmelding" && ansatt === selv && !b.erklaering) throw new ApiFeil(400, ERKLAERING);
       const ny = await en<{ id: string }>(
         db,
-        "insert into faktura.fravaer (org_id, ansatt_id, type, fra, til, notat, dokumentasjon, arbeidsrelatert, timer) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id",
-        [orgId(c), ansatt, b.type, b.fra, b.til, b.notat ?? null, b.dokumentasjon ?? null, b.arbeidsrelatert ?? null, b.type === "avspasering" ? (b.timer ?? null) : null],
+        "insert into faktura.fravaer (org_id, ansatt_id, type, fra, til, notat, dokumentasjon, arbeidsrelatert, timer, betalt) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id",
+        [
+          orgId(c),
+          ansatt,
+          b.type,
+          b.fra,
+          b.til,
+          b.notat ?? null,
+          b.dokumentasjon ?? null,
+          b.arbeidsrelatert ?? null,
+          b.type === "avspasering" || (b.type === "permisjon" && b.betalt) ? (b.timer ?? null) : null,
+          b.type === "permisjon" && !!b.betalt,
+        ],
       );
       const f = (await en<Fravaer>(db, `${FRAVAER} where f.id = $1`, [ny!.id]))!;
       const vakter = await alle<{ id: string; dato: string; fra: string; til: string; oppgave: string | null }>(
@@ -142,7 +170,7 @@ export function fravaerRuter() {
           hendelse: "fravaer",
           org_id: orgId(c),
           bruker_ider: [svar.bruker],
-          tittel: `${FRAVAERTYPER[f.type]} registrert`,
+          tittel: `${fravaerNavn(f.type, f.betalt)} registrert`,
           tekst: `${periode(f.fra, f.til)}.`,
           url: "/vakter?fane=mine",
           tag: `fravaer-${f.id}`,

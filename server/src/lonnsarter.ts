@@ -48,6 +48,9 @@ export const LONNSARTER: Lonnsart[] = [
   // kan betales ut fra banken. Regnes av banken, så de legges ikke til for hånd.
   lonn("avspasering", "Avspasering fra timebanken", { manuell: false, amelding: "timeloenn" }),
   lonn("timebank", "Utbetalt fra timebanken", { manuell: false, amelding: "timeloenn" }),
+  // Permisjon med lønn (0074): timene lønnes for den med timelønn (med fastlønn går lønnen som
+  // vanlig). Regnes av fraværet.
+  lonn("permisjon", "Permisjon med lønn", { manuell: false, amelding: "timeloenn" }),
   lonn("fast_tillegg", "Fast tillegg", { amelding: "fastTillegg" }),
   lonn("uregelmessig_tillegg", "Tillegg for kveld, natt eller helg", { amelding: "uregelmessigeTilleggKnyttetTilArbeidetTid" }),
   lonn("bonus", "Bonus", { otp: false, amelding: "bonus" }),

@@ -225,11 +225,14 @@ export function timelinjer(a: Ansatt, r: Regler, uker: Ferieuke[]) {
 
 // Timebanken (0073): timer tatt ut som fri (avspasering) lønnes for den med timelønn (med
 // fastlønn går lønnen som vanlig), og timer betales ut fra banken med timelønnen eller timesatsen.
-export function timebanklinjer(a: Ansatt, avspasert: number, utbetalt: number): Linje[] {
+// Permisjon med lønn (0074) lønnes som avspasering: timene for den med timelønn.
+export function timebanklinjer(a: Ansatt, avspasert: number, utbetalt: number, permisjon = 0): Linje[] {
   const sats = a.lonnstype === "time" ? Number(a.timelonn ?? 0) : timesats(a);
   const ut: Linje[] = [];
   if (a.lonnstype === "time" && rund(avspasert) > 0)
     ut.push({ lonnsart: "avspasering", tekst: "Avspasering fra timebanken", antall: rund(avspasert), sats, belop: rund(rund(avspasert) * sats), nokkel: "avspasering" });
+  if (a.lonnstype === "time" && rund(permisjon) > 0)
+    ut.push({ lonnsart: "permisjon", tekst: "Permisjon med lønn", antall: rund(permisjon), sats, belop: rund(rund(permisjon) * sats), nokkel: "permisjon" });
   if (rund(utbetalt) > 0)
     ut.push({ lonnsart: "timebank", tekst: "Utbetalt fra timebanken", antall: rund(utbetalt), sats, belop: rund(rund(utbetalt) * sats), nokkel: "timebank" });
   return ut;

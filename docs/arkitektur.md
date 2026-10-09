@@ -289,9 +289,26 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (`av_leder`, «Gitt bort»/«Byttet» av lederen i lista) og gjør det med `vaktbytte_utfor`, med de
   samme sjekkene; vakter med førte timer byttes ikke. Med `forhandsvis` gjøres byttet og rulles
   tilbake (savepoint), så lederen ser de nye advarslene etter arbeidsmiljøloven før det
-  bekreftes. De to får beskjed når en av vaktene er publisert
+  bekreftes. De to får beskjed når en av vaktene er publisert.
+  Fridagen (`0074_vaktbytte_fridag.sql`): gir den ansatte bort en fast arbeidsdag (eller vakten på
+  en fast arbeidsdag) uten å få en vakt igjen, og får fri den dagen (`gir_fridag`), velger de hva
+  fridagen tas fra (`vaktbytter.fri`, når `lonn_oppsett.vaktbytte_fridag` er på, som er
+  standard): en feriedag, timer fra timebanken (timene vakten var på, `fri_timer`) eller betalt
+  fravær med en grunn (`fri_grunn`); med timelønn også fri uten lønn (standard for dem), med
+  fastlønn må den tas fra noe. `sjekk_fridag` sjekker at feriedagene og timene finnes, og det
+  som er valgt i bytter som venter, regnes som brukt (`ferie_i_vaktbytter`, og
+  `timebank_saldo.sokt`); `vaktbytte_fridag` gir appen valgene med saldoene. Ferie, timebanken og
+  betalt fravær er fravær lederen ellers registrerer, så et slikt bytte må alltid godkjennes av
+  eier eller administrator (også med `fritt`), og når det går gjennom, registrerer
+  `vaktbytte_utfor` fraværet (ferie, avspasering med timene, eller permisjon med lønn) og
+  lagrer det på byttet (`fravaer_id`). Valget ser bare den som ga bort vakten, og eier og
+  administrator (`ser_fravaertype`; ikke kollegaen, ikke regnskap og ikke revisjonsloggen for
+  andre); lederen får det i varselet (`vaktbytte_fri`, som system). Lederen kan også velge
+  fridagen (eller ikke noe fravær) når de gir bort en ansatts faste arbeidsdag i vaktplanen, og
+  da registreres fraværet med en gang
 - `fravaer`: sykdom, sykt barn, ferie, permisjon, kurs og annet fravær per ansatt (fra og med, til
-  og med). Eier og administrator registrerer alt; den ansatte melder selv sykdom (fra og med
+  og med). Permisjon kan være med lønn (`betalt`, med timene: med timelønn lønnes de i
+  lønnskjøringen som «Permisjon med lønn», med fastlønn går lønnen som vanlig). Eier og administrator registrerer alt; den ansatte melder selv sykdom (fra og med
   i går) og kan bare endre sluttdatoen på den etterpå. Melder den ansatte seg syk, får eier og
   administrator varsel med hvor mange vakter som trenger vikar; registrerer leder fravær, får
   den ansatte beskjed. Den som er borte, tas ut av ressursene: vaktene er merket med fraværet,

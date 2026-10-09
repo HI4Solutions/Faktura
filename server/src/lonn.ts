@@ -169,14 +169,15 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     else x.ider.push(f.id);
   }
   // Timebanken (0073): avspasering i perioden (hele dager som fravær, og timer), og utbetalinger fra
-  // banken som ikke er lønnet ennå (i ordinære kjøringer).
+  // banken som ikke er lønnet ennå (i ordinære kjøringer). Permisjon med lønn (0074) lønnes som
+  // avspasering (betalt).
   const avspasering = ordinar
-    ? await alle<{ ansatt_id: string; fra: string; til: string; timer: number }>(
+    ? await alle<{ ansatt_id: string; fra: string; til: string; timer: number; betalt: boolean }>(
         db,
-        `select ansatt_id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, timer::float8 as timer
-           from faktura.fravaer where org_id = $1 and type = 'avspasering' and til >= $2 and fra <= $3
+        `select ansatt_id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, timer::float8 as timer, betalt
+           from faktura.fravaer where org_id = $1 and (type = 'avspasering' or betalt) and til >= $2 and fra <= $3
          union all
-         select ansatt_id, to_char(dato, 'YYYY-MM-DD'), to_char(dato, 'YYYY-MM-DD'), -timer::float8
+         select ansatt_id, to_char(dato, 'YYYY-MM-DD'), to_char(dato, 'YYYY-MM-DD'), -timer::float8, false
            from faktura.timebank_poster where org_id = $1 and type = 'avspasering' and dato between $2 and $3`,
         [org, fra, til],
       )
@@ -300,14 +301,20 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       const t = timelinjer(a, o, uker);
       auto.push(...t.linjer);
       timeforinger = uker.flatMap((u) => u.ider);
-      // Timebanken: avspasering (timelønn) og utbetaling; timene teller også for tilleggene per time.
-      const avspasert = a.lonnstype === "time" ? avspasering.filter((x) => x.ansatt_id === a.id).reduce((sum, x) => sum + avspasertIPerioden(x, fra, til), 0) : 0;
+      // Timebanken: avspasering og permisjon med lønn (timelønn), og utbetaling; timene teller også
+      // for tilleggene per time.
+      const iPerioden = (betalt: boolean) =>
+        a.lonnstype === "time"
+          ? avspasering.filter((x) => x.ansatt_id === a.id && x.betalt === betalt).reduce((sum, x) => sum + avspasertIPerioden(x, fra, til), 0)
+          : 0;
+      const avspasert = iPerioden(false);
+      const permisjon = iPerioden(true);
       const egneUtbetalinger = utbetalinger.filter((x) => x.ansatt_id === a.id);
       const utbetalt = egneUtbetalinger.reduce((sum, x) => sum + Number(x.timer), 0);
-      auto.push(...timebanklinjer(a, avspasert, utbetalt));
+      auto.push(...timebanklinjer(a, avspasert, utbetalt, permisjon));
       timebankPoster = egneUtbetalinger.map((x) => x.id);
       const egneTillegg = tillegg.filter((x) => x.ansatt_id === a.id && (ansatt || (x.per === "time" && a.lonnstype === "time")));
-      auto.push(...tilleggslinjer(a, egneTillegg, fra, til, t.timer + avspasert + utbetalt, t.ekstraTimer + utbetalt));
+      auto.push(...tilleggslinjer(a, egneTillegg, fra, til, t.timer + avspasert + permisjon + utbetalt, t.ekstraTimer + utbetalt));
       // Sykdom: arbeidsgiverperioden, og sykt barn (omsorgsdagene i året).
       const egne = fravaer.filter((x) => x.ansatt_id === a.id);
       if (egne.length) {

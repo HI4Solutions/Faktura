@@ -7,6 +7,10 @@
 // Lederen (eier og administrator) gir bort eller bytter vakter rett fra vaktplanen (LederByttDialog,
 // 0072_vaktbytte_leder.sql): uten godkjenning, med alle aktive i organisasjonen, og med advarslene
 // byttet gir før det bekreftes.
+//
+// Fridagen (0074_vaktbytte_fridag.sql): den som gir bort en fast arbeidsdag, velger hva fridagen tas
+// fra (FridagValg): en feriedag, timebanken eller betalt fravær (med timelønn også fri uten lønn).
+// Lederen godkjenner, og fraværet registreres med byttet. Lederen velger selv i vaktplanen.
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
@@ -45,6 +49,24 @@ export type Bytte = {
   hindring: string | null; // hva som hindrer deg i å ta vakten
   advarsler: string[]; // for den som godkjenner
   av_leder: boolean; // byttet er gjort av lederen i vaktplanen
+  // Fridagen (bare for den som ga bort vakten, og eier og administrator).
+  fri: Fri | null;
+  fri_timer: number | null;
+  fri_grunn: string | null; // hva det betalte fraværet gjelder
+  fravaer_id: string | null; // fraværet som ble registrert
+};
+export type Fri = "ferie" | "avspasering" | "betalt" | "uten_lonn";
+// Fridagen når vakten gis bort (vaktbytte_fridag): om den som har vakten, får fri på en fast
+// arbeidsdag, om de spørres, timene, lønnstypen, feriedagene som er igjen og timene i timebanken.
+export type Fridag = {
+  fridag: boolean;
+  sporres: boolean;
+  timer: number;
+  lonnstype: "maaned" | "time";
+  ferie_aar: number;
+  ferie_igjen: number;
+  timebank: boolean;
+  timebank_igjen: number | null;
 };
 export type ByttSvar = { innstilling: Innstilling; bytter: Bytte[] };
 // Vakten (eller den faste arbeidsdagen, uten id) som skal byttes.
@@ -65,6 +87,75 @@ const vaktTekst = (dato: string, fra: string | null, til: string | null) => `${v
 // Midt i en setning: «mot tir. 13. okt. 08:00–16:00».
 const liten = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 const motTekst = (b: Bytte) => (b.mot_dato ? liten(vaktTekst(b.mot_dato, b.mot_fra, b.mot_til)) : "");
+
+// --- Fridagen -----------------------------------------------------------------------
+
+const tall = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
+const ferieIgjen = (f: Fridag) =>
+  f.ferie_igjen > 0 ? `${tall(f.ferie_igjen)} ${f.ferie_igjen === 1 ? "feriedag" : "feriedager"} igjen i ${f.ferie_aar}` : `ingen feriedager igjen i ${f.ferie_aar}`;
+// Fravær som registreres (og godkjennes av lederen): ferie, timebanken og betalt fravær.
+const medFravaer = (fri: Fri | "" | null | undefined) => fri === "ferie" || fri === "avspasering" || fri === "betalt";
+const registrertSom = (fri: Fri | "" | null, timerFri: number | null) =>
+  fri === "ferie" ? "ferie" : fri === "avspasering" ? `avspasering (${timer(timerFri ?? 0)} fra timebanken)` : "permisjon med lønn";
+
+// Hva fridagen tas fra («en feriedag», «7,5 t fra timebanken», «betalt fravær («Legetime»)»), og
+// når byttet er gjort, hva som er registrert.
+export function friTekst(b: Pick<Bytte, "fri" | "fri_timer" | "fri_grunn" | "fravaer_id" | "status">) {
+  const grunn = b.fri_grunn ? ` («${b.fri_grunn}»)` : "";
+  if (b.status === "godkjent" && b.fravaer_id) return `registrert som ${registrertSom(b.fri, b.fri_timer)}${b.fri === "betalt" ? grunn : ""}`;
+  switch (b.fri) {
+    case "ferie":
+      return "en feriedag";
+    case "avspasering":
+      return `${timer(b.fri_timer ?? 0)} fra timebanken`;
+    case "betalt":
+      return `betalt fravær${grunn}`;
+    case "uten_lonn":
+      return "fri uten lønn";
+    default:
+      return null;
+  }
+}
+
+// Den ansatte velger hva fridagen tas fra, med feriedagene og timene de har.
+function FridagValg({ fridag, fri, settFri, grunn, settGrunn }: { fridag: Fridag; fri: Fri | ""; settFri: (f: Fri) => void; grunn: string; settGrunn: (g: string) => void }) {
+  const bank = fridag.timebank_igjen ?? 0;
+  const valg: { kode: Fri; tittel: string; tekst: string; av?: boolean }[] = [
+    ...(fridag.lonnstype === "time" ? [{ kode: "uten_lonn" as const, tittel: "Fri uten lønn", tekst: "Du får ikke lønn for timene." }] : []),
+    { kode: "ferie", tittel: "En feriedag", tekst: `Du har ${ferieIgjen(fridag)}.`, av: fridag.ferie_igjen < 1 },
+    ...(fridag.timebank
+      ? [
+          {
+            kode: "avspasering" as const,
+            tittel: "Timebanken",
+            tekst: bank >= fridag.timer ? `Tar ${timer(fridag.timer)} av de ${timer(bank)} du har.` : `Vakten er ${timer(fridag.timer)}, og du har ${timer(bank)}.`,
+            av: bank < fridag.timer,
+          },
+        ]
+      : []),
+    { kode: "betalt", tittel: "Søk om betalt fravær", tekst: "For eksempel velferdspermisjon. Lederen avgjør det." },
+  ];
+  return (
+    <fieldset className="fridag-valg">
+      <legend>Hva tar du fridagen fra?</legend>
+      {valg.map((v) => (
+        <label key={v.kode} className={[fri === v.kode ? "valgt" : "", v.av ? "av" : ""].filter(Boolean).join(" ") || undefined}>
+          <input type="radio" name="fri" checked={fri === v.kode} disabled={v.av} onChange={() => settFri(v.kode)} />
+          <span>
+            <strong>{v.tittel}</strong>
+            <span className="dempet liten">{v.tekst}</span>
+          </span>
+        </label>
+      ))}
+      {fri === "betalt" && (
+        <label className="fridag-grunn">
+          Hva gjelder det?
+          <input maxLength={300} placeholder="F.eks. begravelse eller legetime med barn" value={grunn} onChange={(e) => settGrunn(e.target.value)} />
+        </label>
+      )}
+    </fieldset>
+  );
+}
 
 export function statusMerke(b: Bytte) {
   switch (b.status) {
@@ -129,16 +220,23 @@ const nokkel = (k: Kandidat) => k.vakt_id ?? `${k.ansatt_id}|${k.dato}`;
 function ByttSkjema({ vakt, innstilling, lukk, ferdig }: { vakt: ByttVakt; innstilling: Innstilling; lukk: () => void; ferdig: (melding: string) => void }) {
   const { org } = useKonto();
   const sti = vakt.id ? `vakt=${vakt.id}` : `dato=${vakt.dato}`;
-  const m = useData(() => hent<{ kolleger: Kollega[]; vakter: Kandidat[] }>(`/org/${org!.id}/vaktbytter/muligheter?${sti}`), [org?.id, sti]);
+  const m = useData(() => hent<{ kolleger: Kollega[]; vakter: Kandidat[]; fridag: Fridag | null }>(`/org/${org!.id}/vaktbytter/muligheter?${sti}`), [org?.id, sti]);
   const [type, settType] = useState<"gi" | "bytt">("gi");
   const [til, settTil] = useState(""); // tom: alle med samme rolle
   const [mot, settMot] = useState("");
   const [melding, settMelding] = useState("");
+  const [fri, settFri] = useState<Fri | "">("");
+  const [grunn, settGrunn] = useState("");
   const h = useHandling();
 
   if (m.feil) return <Feil melding={m.feil} />;
   if (!m.data) return <Laster />;
   const kolleger = m.data.kolleger;
+  // Fridagen: når en fast arbeidsdag gis bort (og organisasjonen spør). Med timelønn er
+  // standarden fri uten lønn.
+  const fridag = m.data.fridag;
+  const sporres = type === "gi" && !!fridag?.sporres;
+  const friValgt: Fri | "" = fri || (fridag?.lonnstype === "time" ? "uten_lonn" : "");
   const mulige = m.data.vakter.filter((k) => !k.hindring);
   // Vaktene en kan bytte mot, per kollega.
   const perKollega = new Map<string, Kandidat[]>();
@@ -149,18 +247,26 @@ function ByttSkjema({ vakt, innstilling, lukk, ferdig }: { vakt: ByttVakt; innst
     h.kjor(async () => {
       const valgt = type === "bytt" ? mulige.find((k) => nokkel(k) === mot) : undefined;
       if (type === "bytt" && !valgt) throw new Error("Velg vakten du vil bytte mot");
+      if (sporres && !friValgt) throw new Error("Velg hva du tar fridagen fra");
+      if (sporres && friValgt === "betalt" && !grunn.trim()) throw new Error("Skriv hva det betalte fraværet gjelder");
       const b = await api<Bytte>("POST", `/org/${org!.id}/vaktbytter`, {
         ...(vakt.id ? { vakt_id: vakt.id } : { dato: vakt.dato }),
         til_ansatt: valgt ? valgt.ansatt_id : til || null,
         ...(valgt ? (valgt.vakt_id ? { mot_vakt_id: valgt.vakt_id } : { mot_dato: valgt.dato }) : {}),
         melding: melding.trim() || undefined,
+        ...(sporres ? { fri: friValgt, fri_grunn: friValgt === "betalt" ? grunn.trim() : undefined } : {}),
       });
+      const fridagTekst = !medFravaer(b.fri)
+        ? ""
+        : b.fri === "betalt"
+          ? " Lederen tar stilling til det betalte fraværet når byttet skal godkjennes."
+          : ` Fridagen registreres som ${b.fri === "ferie" ? "ferie" : "avspasering"} når lederen har godkjent byttet.`;
       ferdig(
-        b.mot_vakt_id
+        (b.mot_vakt_id
           ? `Du har spurt ${b.til_navn} om å bytte. Du får beskjed når ${b.til_navn?.split(" ")[0]} har svart.`
           : b.til_ansatt
             ? `Du har spurt ${b.til_navn} om å ta vakten.`
-            : "Vakten er tilbudt kollegaene dine. Du får beskjed når noen tar den.",
+            : "Vakten er tilbudt kollegaene dine. Du får beskjed når noen tar den.") + fridagTekst,
       );
     });
   };
@@ -212,11 +318,33 @@ function ByttSkjema({ vakt, innstilling, lukk, ferdig }: { vakt: ByttVakt; innst
           <span className="felt-hjelp">Vaktene til kolleger med samme rolle de neste åtte ukene, som dere begge kan ta (uten en annen vakt som overlapper).</span>
         </label>
       )}
+      {sporres && fridag && (
+        <FridagValg
+          fridag={fridag}
+          fri={friValgt}
+          settFri={(x) => {
+            settFri(x);
+            h.settFeil(null);
+          }}
+          grunn={grunn}
+          settGrunn={settGrunn}
+        />
+      )}
       <label>
         Melding
         <input maxLength={300} placeholder="Valgfritt, f.eks. hvorfor" value={melding} onChange={(e) => settMelding(e.target.value)} />
+        {sporres && <span className="felt-hjelp">Kollegaene ser meldingen, men ikke hva du tar fridagen fra.</span>}
       </label>
-      {innstilling === "godkjenning" && <p className="felt-hjelp">Når en kollega har sagt ja, må lederen godkjenne byttet før det gjelder.</p>}
+      {innstilling === "godkjenning" ? (
+        <p className="felt-hjelp">
+          Når en kollega har sagt ja, må lederen godkjenne byttet før det gjelder.{sporres && medFravaer(friValgt) ? " Fraværet registreres da." : ""}
+        </p>
+      ) : (
+        sporres &&
+        medFravaer(friValgt) && (
+          <p className="felt-hjelp">Når fridagen tas fra ferien, timebanken eller som betalt fravær, må lederen godkjenne byttet før det gjelder. Fraværet registreres da.</p>
+        )
+      )}
       <Feil melding={h.feil} />
       <div className="knapper">
         <button className="primar" disabled={h.opptatt || !kolleger.length}>
@@ -254,11 +382,15 @@ const kandidatNokkel = (k: LederKandidat) => k.vakt_id ?? k.dato;
 function LederByttSkjema({ vakt, lukk, ferdig }: { vakt: LederVakt; lukk: () => void; ferdig: (melding: string) => void }) {
   const { org } = useKonto();
   const sti = `/org/${org!.id}/vaktbytter/leder/muligheter?${vakt.id ? `vakt=${vakt.id}` : `ansatt=${vakt.ansatt_id}&dato=${vakt.dato}`}`;
-  const m = useData(() => hent<{ rolle: string | null; kolleger: LederKollega[] }>(sti), [sti]);
+  const m = useData(() => hent<{ rolle: string | null; kolleger: LederKollega[]; fridag: Fridag | null }>(sti), [sti]);
   const [type, settType] = useState<"gi" | "bytt">("gi");
   const [til, settTil] = useState("");
   const [mot, settMot] = useState("");
   const [melding, settMelding] = useState("");
+  // Fridagen når en fast arbeidsdag gis bort: ferie, avspasering eller permisjon med lønn (tom: ikke
+  // noe fravær).
+  const [fri, settFri] = useState<"" | "ferie" | "avspasering" | "betalt">("");
+  const [friGrunn, settFriGrunn] = useState("");
   // Vaktene til den det byttes med (svaret huskes med hvem det gjelder, så et nytt valg ikke viser
   // vaktene til den forrige).
   const k = useData(
@@ -268,8 +400,10 @@ function LederByttSkjema({ vakt, lukk, ferdig }: { vakt: LederVakt; lukk: () => 
   const kandidater = k.data && k.data.kollega === til ? k.data.vakter : null;
   const valgt = type === "bytt" ? kandidater?.find((x) => kandidatNokkel(x) === mot) : undefined;
   const klar = !!til && (type === "gi" || !!valgt);
+  const fridag = m.data?.fridag;
+  const medFri = type === "gi" && !!fridag?.fridag;
   // Forhåndsvisningen: advarslene etter arbeidsmiljøloven byttet gir (eller hvorfor det ikke går).
-  const nokkel = klar ? `${type}|${til}|${type === "bytt" ? mot : ""}` : "";
+  const nokkel = klar ? `${type}|${til}|${type === "bytt" ? mot : ""}|${medFri ? fri : ""}` : "";
   const [forhand, settForhand] = useState<{ nokkel: string; advarsler?: string[]; feil?: string } | null>(null);
   const h = useHandling();
 
@@ -277,6 +411,7 @@ function LederByttSkjema({ vakt, lukk, ferdig }: { vakt: LederVakt; lukk: () => 
     ...(vakt.id ? { vakt_id: vakt.id } : { ansatt_id: vakt.ansatt_id, dato: vakt.dato }),
     til_ansatt: til,
     ...(valgt ? (valgt.vakt_id ? { mot_vakt_id: valgt.vakt_id } : { mot_dato: valgt.dato }) : {}),
+    ...(medFri && fri ? { fri, fri_grunn: fri === "betalt" ? friGrunn.trim() || undefined : undefined } : {}),
   });
   useEffect(() => {
     if (!nokkel) return;
@@ -316,10 +451,11 @@ function LederByttSkjema({ vakt, lukk, ferdig }: { vakt: LederVakt; lukk: () => 
       if (type === "bytt" && !valgt) throw new Error(`Velg vakten ${navn} skal få i stedet`);
       const r = await api<LederSvar>("POST", `/org/${org!.id}/vaktbytter/leder`, { ...kropp(), melding: melding.trim() || undefined });
       const beskjed = r.varslet ? " De to får beskjed." : "";
+      const fravaer = r.fravaer_id ? ` Fridagen er registrert som ${registrertSom(r.fri, r.fri_timer)}.` : "";
       ferdig(
         r.mot_vakt_id
           ? `Vaktene er byttet: ${r.fra_navn} har nå ${liten(vaktTekst(r.mot_dato!, r.mot_fra, r.mot_til))}, og ${r.tatt_av_navn} har ${liten(vaktTekst(r.dato, r.fra, r.til))}.${beskjed}`
-          : `Vakten ${liten(vaktTekst(r.dato, r.fra, r.til))} er gitt til ${r.tatt_av_navn}.${beskjed}`,
+          : `Vakten ${liten(vaktTekst(r.dato, r.fra, r.til))} er gitt til ${r.tatt_av_navn}.${fravaer}${beskjed}`,
       );
     });
   };
@@ -391,6 +527,30 @@ function LederByttSkjema({ vakt, lukk, ferdig }: { vakt: LederVakt; lukk: () => 
           <span className="felt-hjelp">Vaktene og de faste arbeidsdagene til {kollega ? fornavn(kollega.navn) : "den andre"} de neste åtte ukene, også utkast.</span>
         </label>
       )}
+      {medFri && fridag && (
+        <>
+          <label>
+            Fridagen for {navn}
+            <select value={fri} onChange={(e) => settFri(e.target.value as typeof fri)}>
+              <option value="">Ikke noe fravær</option>
+              <option value="ferie">Ferie (en feriedag)</option>
+              {(fridag.timebank || fri === "avspasering") && <option value="avspasering">Avspasering ({timer(fridag.timer)} fra timebanken)</option>}
+              <option value="betalt">Permisjon med lønn</option>
+            </select>
+            <span className="felt-hjelp">
+              {navn} har {ferieIgjen(fridag)}
+              {fridag.timebank ? ` og ${timer(fridag.timebank_igjen ?? 0)} i timebanken` : ""}. Fraværet registreres med byttet
+              {fridag.lonnstype === "time" ? "; uten fravær får " + navn + " ikke lønn for dagen" : ""}.
+            </span>
+          </label>
+          {fri === "betalt" && (
+            <label>
+              Hva gjelder permisjonen?
+              <input maxLength={300} placeholder="Valgfritt, f.eks. begravelse" value={friGrunn} onChange={(e) => settFriGrunn(e.target.value)} />
+            </label>
+          )}
+        </>
+      )}
       <label>
         Melding til de ansatte
         <input maxLength={300} placeholder="Valgfritt, f.eks. hvorfor" value={melding} onChange={(e) => settMelding(e.target.value)} />
@@ -421,7 +581,7 @@ function LederByttSkjema({ vakt, lukk, ferdig }: { vakt: LederVakt; lukk: () => 
       )}
       <p className="felt-hjelp">
         Byttet gjøres med en gang, uten godkjenning, og plassen på tavla følger med.
-        {!vakt.id ? ` ${navn} får fri denne dagen.` : ""}
+        {medFri ? ` ${navn} får fri denne dagen.` : ""}
         {varsles ? " De to får beskjed (de som har innlogging)." : " Vakten er ikke publisert, så ingen får beskjed før uka publiseres."}
       </p>
       <Feil melding={h.feil} />
@@ -473,31 +633,38 @@ export function Bytter({
   const andre = seAlle ? alle.filter((b) => b.status === "tilbudt" && !tilDeg.includes(b) && !dine.includes(b)) : [];
   const avsluttet = alle.filter((b) => !aapen(b)).sort((x, y) => (y.behandlet_at ?? y.svart_at ?? y.opprettet).localeCompare(x.behandlet_at ?? x.svart_at ?? x.opprettet));
 
-  const kjor = (fn: () => Promise<unknown>, tekst: string) =>
+  // Meldingen kan regnes av svaret (f.eks. om byttet venter på godkjenning).
+  const kjor = <T,>(fn: () => Promise<T>, tekst: string | ((r: T) => string)) =>
     h.kjor(async () => {
-      await fn();
-      settMelding(tekst);
+      const r = await fn();
+      settMelding(typeof tekst === "function" ? tekst(r) : tekst);
       settAvviser(null);
       endret();
     });
   const svarPaa = (b: Bytte, ja: boolean) =>
     kjor(
-      () => api("POST", `/org/${org!.id}/vaktbytter/${b.id}/svar`, { ja }),
-      !ja
-        ? b.status === "akseptert"
-          ? "Du har angret."
-          : `Du har sagt nei takk til ${b.fra_navn}.`
-        : svar.innstilling === "godkjenning"
-          ? "Du har sagt ja. Byttet gjelder når lederen har godkjent det."
-          : b.mot_vakt_id
-            ? `Byttet er gjort: du har nå ${vaktTekst(b.dato, b.fra, b.til)}.`
-            : `Vakten ${vaktTekst(b.dato, b.fra, b.til)} er din.`,
+      () => api<Bytte>("POST", `/org/${org!.id}/vaktbytter/${b.id}/svar`, { ja }),
+      (r) =>
+        !ja
+          ? b.status === "akseptert"
+            ? "Du har angret."
+            : `Du har sagt nei takk til ${b.fra_navn}.`
+          : r.status === "akseptert"
+            ? "Du har sagt ja. Byttet gjelder når lederen har godkjent det."
+            : b.mot_vakt_id
+              ? `Byttet er gjort: du har nå ${vaktTekst(b.dato, b.fra, b.til)}.`
+              : `Vakten ${vaktTekst(b.dato, b.fra, b.til)} er din.`,
     );
   const trekk = (b: Bytte) => {
     if (!confirm(`Trekke tilbake tilbudet om vakten ${vaktTekst(b.dato, b.fra, b.til)}?`)) return;
     kjor(() => api("POST", `/org/${org!.id}/vaktbytter/${b.id}/trekk`), "Tilbudet er trukket tilbake.");
   };
-  const godkjenn = (b: Bytte) => kjor(() => api("POST", `/org/${org!.id}/vaktbytter/${b.id}/godkjenn`, {}), `Byttet er godkjent, og vakten${b.mot_vakt_id ? "e" : ""} er flyttet. De to får beskjed.`);
+  const godkjenn = (b: Bytte) =>
+    kjor(
+      () => api<Bytte>("POST", `/org/${org!.id}/vaktbytter/${b.id}/godkjenn`, {}),
+      (r) =>
+        `Byttet er godkjent, og vakten${b.mot_vakt_id ? "e" : ""} er flyttet.${r.fravaer_id ? ` Fridagen er registrert som ${registrertSom(r.fri, r.fri_timer)}.` : ""} De to får beskjed.`,
+    );
   const avvis = (b: Bytte) =>
     kjor(() => api("POST", `/org/${org!.id}/vaktbytter/${b.id}/avvis`, { grunn: grunn.trim() || undefined }), "Byttet er ikke godkjent. De to får beskjed, og vaktene blir som før.");
 
@@ -514,6 +681,7 @@ export function Bytter({
         </span>
         <span className="under bryt">{beskrivelse(b, egen)}</span>
         {b.melding && <span className="under bryt">«{b.melding}»</span>}
+        {friTekst(b) && <span className="under bryt bytte-fridag">Fridagen: {friTekst(b)}</span>}
         {b.status === "avvist" && <span className="under bryt">Ikke godkjent{b.behandlet_av_navn ? ` av ${b.behandlet_av_navn}` : ""}{b.grunn ? `: ${b.grunn}` : "."}</span>}
         {b.advarsler.length > 0 && (
           <ul className="bytte-advarsler">

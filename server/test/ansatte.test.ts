@@ -128,6 +128,8 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
       egenmelding_barn_dager: 3,
       // Timebanken er av til den slås på (0073_timebank.sql).
       timebank: false,
+      // Den som gir bort en fast arbeidsdag, velger hva fridagen tas fra (0074_vaktbytte_fridag.sql).
+      vaktbytte_fridag: true,
     });
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { overtid_prosent: 30 })).data.error).toBe("Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).data).toMatchObject({ aktiv: true, daglig_grense: 9 });

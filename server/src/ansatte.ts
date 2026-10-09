@@ -131,6 +131,9 @@ const oppsettSkjema = z.object({
   helg: z.boolean().optional(),
   // Timebank (0073_timebank.sql): overtid og ekstratimer kan settes i banken og avspaseres senere.
   timebank: z.boolean().optional(),
+  // Fridagen ved vaktbytte (0074_vaktbytte_fridag.sql): den som gir bort en fast arbeidsdag, velger
+  // hva fridagen tas fra (ferie, timebanken eller betalt fravær).
+  vaktbytte_fridag: z.boolean().optional(),
   // Lønnskjøringen (0065_lonn.sql): sonen for arbeidsgiveravgift, OTP-satsen (0: uten OTP),
   // feriepengesatsen, lønnsdagen og måneden med halvt skattetrekk.
   aga_sone: z.enum(["1", "1a", "2", "3", "4", "4a", "5"], { error: "Velg sone for arbeidsgiveravgift" }).optional(),
@@ -237,13 +240,14 @@ type Oppsett = Regler & {
   egenmelding_dager_aar: number | null;
   egenmelding_barn_dager: number;
   timebank: boolean;
+  vaktbytte_fridag: boolean;
 };
 export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
     `select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
             aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt, egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager,
-            timebank
+            timebank, vaktbytte_fridag
        from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
@@ -266,6 +270,7 @@ export async function regler(db: Db, org: string): Promise<Oppsett> {
       egenmelding_dager_aar: null,
       egenmelding_barn_dager: 3,
       timebank: false,
+      vaktbytte_fridag: true,
     }
   );
 }
@@ -335,15 +340,17 @@ export function ansattRuter() {
         await db.query(
           `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
                                              aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt,
-                                             egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager, timebank)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                                             egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager, timebank,
+                                             vaktbytte_fridag)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
              full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg,
              aga_sone = excluded.aga_sone, otp_prosent = excluded.otp_prosent, feriepenger_prosent = excluded.feriepenger_prosent,
              lonnsdag = excluded.lonnsdag, halv_skatt = excluded.halv_skatt, egenmelding_dager = excluded.egenmelding_dager,
              egenmelding_ganger = excluded.egenmelding_ganger, egenmelding_dager_aar = excluded.egenmelding_dager_aar,
-             egenmelding_barn_dager = excluded.egenmelding_barn_dager, timebank = excluded.timebank`,
+             egenmelding_barn_dager = excluded.egenmelding_barn_dager, timebank = excluded.timebank,
+             vaktbytte_fridag = excluded.vaktbytte_fridag`,
           [
             orgId(c),
             ny.aktiv,
@@ -365,6 +372,7 @@ export function ansattRuter() {
             ny.egenmelding_dager_aar,
             ny.egenmelding_barn_dager,
             ny.timebank,
+            ny.vaktbytte_fridag,
           ],
         );
         return regler(db, orgId(c));

@@ -191,6 +191,7 @@ function PersonalOppsett() {
     full_stilling: string;
     ferie_dager: string;
     vaktbytte: Vaktbytte;
+    vaktbytte_fridag: boolean;
     helg: boolean;
     timebank: boolean;
     aga_sone: string;
@@ -218,6 +219,7 @@ function PersonalOppsett() {
         full_stilling: tekst(data.full_stilling ?? 37.5),
         ferie_dager: tekst(data.ferie_dager ?? 25),
         vaktbytte: data.vaktbytte ?? "godkjenning",
+        vaktbytte_fridag: data.vaktbytte_fridag ?? true,
         helg: data.helg ?? true,
         timebank: data.timebank ?? false,
         aga_sone: data.aga_sone ?? "1",
@@ -247,6 +249,7 @@ function PersonalOppsett() {
         full_stilling: tall(o!.full_stilling),
         ferie_dager: tall(o!.ferie_dager),
         vaktbytte: o!.vaktbytte,
+        vaktbytte_fridag: o!.vaktbytte_fridag,
         helg: o!.helg,
         timebank: o!.timebank,
         ...(harFunksjon(org, "vaktplan") ? egenmeldingsregler(o!) : {}),
@@ -353,6 +356,19 @@ function PersonalOppsett() {
               advarslene etter arbeidsmiljøloven byttet gir.
             </span>
           </label>
+          {o.vaktbytte !== "av" && (
+            <>
+              <label>
+                <input type="checkbox" checked={o.vaktbytte_fridag} onChange={(e) => settO({ ...o, vaktbytte_fridag: e.target.checked })} />
+                Spør hva fridagen tas fra når en ansatt gir bort en fast arbeidsdag
+              </label>
+              <p className="liten dempet">
+                Den som gir bort en fast arbeidsdag uten å få en vakt igjen, velger da en feriedag, timer fra timebanken eller å søke om betalt fravær (med timelønn
+                også fri uten lønn). Feriedagene og timene må finnes. Du godkjenner byttet, også når byttene ellers går uten godkjenning, og fraværet registreres
+                da av seg selv.
+              </p>
+            </>
+          )}
         </>
       )}
       <h3>Overtid</h3>

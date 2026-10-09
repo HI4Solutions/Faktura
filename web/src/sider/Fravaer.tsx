@@ -38,7 +38,8 @@ export type Fravaer = {
   arbeidsrelatert?: boolean | null;
   egenmeldt?: string | null;
   egenmeldt_selv?: boolean | null;
-  timer?: number | null; // avspasering: timene den tar fra timebanken
+  timer?: number | null; // avspasering: timene den tar fra timebanken; permisjon med lønn: timene som lønnes
+  betalt?: boolean | null; // permisjon med lønn (0074_vaktbytte_fridag.sql)
 };
 // Egenmeldingene til en ansatt (GET /egenmelding): reglene, retten etter to måneder, det som er
 // brukt i løpet av 12 måneder (egen sykdom) og dagene med sykt barn i år.
@@ -91,6 +92,8 @@ export const borteTekst: Record<FravaerType, string> = {
   fravaer: "har fravær",
 };
 
+// «Permisjon med lønn» for betalt permisjon, ellers typen.
+export const fravaerNavn = (f: Pick<Fravaer, "type" | "betalt">) => (f.type === "permisjon" && f.betalt ? "Permisjon med lønn" : fravaerTekst[f.type]);
 export const fravaerPeriode = (f: Pick<Fravaer, "fra" | "til">) => (f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)} – ${visDag(f.til)}`);
 const dager = (f: Pick<Fravaer, "fra" | "til">) => Math.round((Date.parse(`${f.til}T12:00:00Z`) - Date.parse(`${f.fra}T12:00:00Z`)) / 86_400_000) + 1;
 const erSykdom = (t?: FravaerType) => t === "syk" || t === "sykt_barn";
@@ -130,8 +133,9 @@ export function FravaerSkjema({
     notat: fravaer.notat ?? "",
     dokumentasjon: (fravaer.dokumentasjon ?? "") as Dokumentasjon | "",
     timer: fravaer.timer != null ? String(fravaer.timer).replace(".", ",") : "",
+    betalt: !!fravaer.betalt,
   }));
-  // Avspasering: timene foreslås av de planlagte timene, til de endres for hånd.
+  // Avspasering og permisjon med lønn: timene foreslås av de planlagte timene, til de endres for hånd.
   const timerEndret = useRef(fravaer.timer != null);
   // Egenmeldingen den ansatte sender (med erklæringen) og svaret om arbeidet.
   const [egen, settEgen] = useState({ send: !!egenmelding && !fravaer.dokumentasjon, arbeidsrelatert: "nei" as "nei" | "ja" | "vet_ikke" });
@@ -140,8 +144,10 @@ export function FravaerSkjema({
   // Avspasering bare når timebanken er på (eller fraværet alt er avspasering).
   const typer: FravaerType[] = selv ? ["syk", "sykt_barn"] : FRAVAERTYPER.filter((t) => t !== "avspasering" || org?.timebank || fravaer.type === "avspasering");
   const avspasering = f.type === "avspasering";
+  const medLonn = f.type === "permisjon" && f.betalt;
+  const medTimer = avspasering || medLonn;
   useEffect(() => {
-    if (!avspasering || !f.ansatt_id || !/^\d{4}-\d{2}-\d{2}$/.test(f.fra) || !/^\d{4}-\d{2}-\d{2}$/.test(f.til) || f.til < f.fra || timerEndret.current) return;
+    if (!medTimer || !f.ansatt_id || !/^\d{4}-\d{2}-\d{2}$/.test(f.fra) || !/^\d{4}-\d{2}-\d{2}$/.test(f.til) || f.til < f.fra || timerEndret.current) return;
     let aktiv = true;
     hent<{ timer: number }>(`/org/${org!.id}/timebank/forslag?ansatt=${f.ansatt_id}&fra=${f.fra}&til=${f.til}`).then(
       (r) => aktiv && !timerEndret.current && settF((x) => ({ ...x, timer: String(r.timer).replace(".", ",") })),
@@ -151,7 +157,7 @@ export function FravaerSkjema({
       aktiv = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avspasering, f.ansatt_id, f.fra, f.til]);
+  }, [medTimer, f.ansatt_id, f.fra, f.til]);
   // Den ansatte endrer bare sluttdatoen på sykdom som er meldt (og kan sende egenmelding for den).
   const bareSlutt = !!selv && !!fravaer.id;
   const valg = (ansatte ?? []).filter((a) => a.id === fravaer.ansatt_id || a.aktiv);
@@ -169,7 +175,8 @@ export function FravaerSkjema({
           til: f.til,
           notat: f.notat.trim() || null,
           ...(selv ? egenmeldingen : { dokumentasjon: erSykdom(f.type) ? f.dokumentasjon || null : null }),
-          ...(avspasering ? { timer: Number(f.timer.replace(",", ".")) } : {}),
+          ...(medTimer ? { timer: Number(f.timer.replace(",", ".")) } : {}),
+          ...(f.type === "permisjon" ? { betalt: f.betalt } : {}),
         };
     const r = await h.kjor(() =>
       fravaer.id
@@ -185,7 +192,7 @@ export function FravaerSkjema({
           ? "Fraværet er endret."
           : selv
             ? `Sykdommen er meldt (${fravaerPeriode(r)}). Lederen din har fått beskjed.`
-            : `${fravaerTekst[r.type as FravaerType]} for ${hvem} er registrert (${fravaerPeriode(r)}).`,
+            : `${fravaerNavn(r)} for ${hvem} er registrert (${fravaerPeriode(r)}).`,
       r.vakter,
     );
   }
@@ -250,6 +257,31 @@ export function FravaerSkjema({
             }}
           />
           <TimebankSaldo ansattId={f.ansatt_id} />
+        </label>
+      )}
+      {!selv && f.type === "permisjon" && (
+        <label>
+          <input type="checkbox" checked={f.betalt} onChange={(e) => sett({ betalt: e.target.checked })} />
+          Med lønn (betalt permisjon, f.eks. velferdspermisjon)
+        </label>
+      )}
+      {medLonn && (
+        <label>
+          Timer med lønn
+          <input
+            inputMode="decimal"
+            required
+            placeholder="7,5"
+            value={f.timer}
+            onChange={(e) => {
+              timerEndret.current = true;
+              sett({ timer: e.target.value });
+            }}
+          />
+          <span className="felt-hjelp">
+            Foreslått av de planlagte timene (vakter og faste dager), ellers en vanlig arbeidsdag per dag. Med timelønn lønnes timene; med fastlønn går lønnen som
+            vanlig.
+          </span>
         </label>
       )}
       {selv && (
@@ -608,7 +640,7 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
             <button key={f.id} type="button" className="liste-rad" onClick={() => endre && settApen(f)} disabled={!endre}>
               <span className="linje">
                 <span className="tittel">{f.ansatt_navn}</span>
-                <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerTekst[f.type]}</span>
+                <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerNavn(f)}</span>
                 {dokumentasjonTekst(f) && <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>}
               </span>
               <span className="linje">
@@ -672,7 +704,7 @@ export function MittFravaer({ ansattId, versjon: utenfra, endret }: { ansattId: 
         {aktuelt.map((f) => (
           <div key={f.id} className="melding info mitt-fravaer-rad">
             <span>
-              <strong>{fravaerTekst[f.type]}</strong> {fravaerPeriode(f)}
+              <strong>{fravaerNavn(f)}</strong> {fravaerPeriode(f)}
               {dokumentasjonTekst(f) && <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>}
             </span>
             {erSykdom(f.type) && (
@@ -807,7 +839,7 @@ export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId:
           {data.map((f) => (
             <li key={f.id}>
               <button type="button" className="fravaer-rad" disabled={!kanEndre} onClick={() => apne(f)} title={kanEndre ? "Endre fraværet" : undefined}>
-                <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerTekst[f.type]}</span>
+                <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerNavn(f)}</span>
                 <span>
                   {fravaerPeriode(f)} · {dager(f) === 1 ? "1 dag" : `${dager(f)} dager`}
                   {erSykdom(f.type) && <span className="dempet"> · {dokumentasjonTekst(f) ?? "ikke dokumentert"}</span>}

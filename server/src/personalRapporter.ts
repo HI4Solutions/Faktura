@@ -5,7 +5,7 @@ import { alle } from "./db.js";
 import { beregnUke, uke, type Foring } from "./arbeidstid.js";
 import { regler } from "./ansatte.js";
 import { ekstratimer } from "./arbeidsplan.js";
-import { FRAVAERTYPER } from "./fravaer.js";
+import { FRAVAERTYPER, fravaerNavn } from "./fravaer.js";
 import { SALDO, type Saldo } from "./timebank.js";
 import type { Rapportdef } from "./rapportmodul.js";
 
@@ -124,7 +124,7 @@ export const personalRapporter: Rapportdef[] = [
     id: "personal.fravaer",
     modul: "personal",
     navn: "Fravær",
-    beskrivelse: "Fraværet i perioden (sykdom, sykt barn, ferie, permisjon, kurs og annet), med kalenderdagene i perioden.",
+    beskrivelse: "Fraværet i perioden (sykdom, sykt barn, ferie, avspasering, permisjon med og uten lønn, kurs og annet), med kalenderdagene i perioden.",
     funksjon: "vaktplan",
     tilgang: "personal",
     parameter: "periode",
@@ -132,7 +132,7 @@ export const personalRapporter: Rapportdef[] = [
     hent: async (db, org, v) => {
       const rader = await alle<any>(
         db,
-        `select a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type,
+        `select a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.betalt,
                 to_char(greatest(f.fra, $2::date), 'YYYY-MM-DD') as fra, to_char(least(f.til, $3::date), 'YYYY-MM-DD') as til,
                 least(f.til, $3::date) - greatest(f.fra, $2::date) + 1 as dager
            from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
@@ -149,7 +149,7 @@ export const personalRapporter: Rapportdef[] = [
           { nokkel: "til", navn: "Til", type: "dato" },
           { nokkel: "dager", navn: "Dager", type: "antall", sum: true },
         ],
-        rader: rader.map((f) => ({ ...f, type: (FRAVAERTYPER as Record<string, string>)[f.type] ?? "Fravær" })),
+        rader: rader.map(({ betalt, ...f }) => ({ ...f, type: f.type in FRAVAERTYPER ? fravaerNavn(f.type, betalt) : "Fravær" })),
       };
     },
   },

@@ -6,6 +6,11 @@
 //
 // Lederen (0072_vaktbytte_leder.sql) gir bort eller bytter vakter rett fra vaktplanen, uten
 // godkjenning og med alle aktive i organisasjonen, og ser advarslene før byttet gjøres.
+//
+// Fridagen (0074_vaktbytte_fridag.sql): den som gir bort en fast arbeidsdag uten å få en vakt igjen,
+// velger hva fridagen tas fra (en feriedag, timebanken eller betalt fravær; med timelønn også fri
+// uten lønn). Fraværet registreres når byttet går gjennom, og et bytte med fravær godkjennes alltid
+// av eier eller administrator. Lederen kan velge fridagen når de gir bort en fast arbeidsdag.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, somSystem, type Db } from "./db.js";
@@ -54,7 +59,15 @@ export type Bytte = {
   behandlet_av_navn: string | null;
   hindring: string | null; // hva som hindrer den innloggede i å ta vakten
   av_leder: boolean; // byttet er gjort av lederen i vaktplanen
+  // Fridagen (bare for den som ga bort vakten, og eier og administrator): hva den tas fra, timene
+  // (avspasering og betalt fravær), grunnen til betalt fravær, og fraværet som ble registrert.
+  fri: Fri | null;
+  fri_timer: number | null;
+  fri_grunn: string | null;
+  fravaer_id: string | null;
 };
+export type Fri = "ferie" | "avspasering" | "betalt" | "uten_lonn";
+const FRI = ["ferie", "avspasering", "betalt", "uten_lonn"] as const;
 
 // Hindringene (fra vaktbytte_hindring) for den innloggede selv, og for en kollega (der sies bare
 // at det er en annen vakt; fraværet er bare for eier, administrator og den ansatte selv).
@@ -68,6 +81,27 @@ const selv = (kode: string | null) => (kode ? (SELV[kode] ?? "Du kan ikke ta vak
 const kollega = (kode: string | null) => (!kode ? null : kode === "overlapp" ? "Har en annen vakt som overlapper" : "Kan ikke ta vakten denne dagen");
 
 const tid = (d: string, fra: string, til: string) => `${dag(d)} ${fra}–${til}`;
+const timerTekst = (t: number | null) => `${Number(t ?? 0).toLocaleString("nb-NO", { maximumFractionDigits: 2 })} t`;
+// Hva fridagen tas fra: «en feriedag», «7,5 t fra timebanken», «betalt fravær («Begravelse»)».
+export function friTekst(b: Pick<Bytte, "fri" | "fri_timer" | "fri_grunn">) {
+  switch (b.fri) {
+    case "ferie":
+      return "en feriedag";
+    case "avspasering":
+      return `${timerTekst(b.fri_timer)} fra timebanken`;
+    case "betalt":
+      return `betalt fravær${b.fri_grunn ? ` («${b.fri_grunn}»)` : ""}`;
+    case "uten_lonn":
+      return "fri uten lønn";
+    default:
+      return null;
+  }
+}
+// Fraværet som er registrert for fridagen: « Fridagen er registrert som ferie.»
+const registrert = (b: Bytte) =>
+  b.fravaer_id
+    ? ` Fridagen er registrert som ${b.fri === "ferie" ? "ferie" : b.fri === "avspasering" ? `avspasering (${timerTekst(b.fri_timer)} fra timebanken)` : "permisjon med lønn"}.`
+    : "";
 const vaktTid = (b: Bytte) => tid(b.dato, b.fra, b.til);
 const motTid = (b: Bytte) => (b.mot_dato ? tid(b.mot_dato, b.mot_fra!, b.mot_til!) : "");
 const fornavn = (navn: string | null) => (navn ?? "").split(" ")[0] || "En kollega";
@@ -226,11 +260,29 @@ async function varsleLederBytte(org: string, b: Bytte, bruker: string) {
           { bruker_ider: taker, tittel: "Vakten din er byttet", tekst: `Du har nå ${vaktTid(b)} i stedet for ${motTid(b)} (byttet med ${b.fra_navn}).${melding(b)}`, url: "/vakter?fane=mine" },
         ]
       : [
-          { bruker_ider: giver, tittel: "Vakten din er gitt bort", tekst: `${b.tatt_av_navn} har nå vakten ${vaktTid(b)}.${melding(b)}`, url: "/vakter?fane=mine" },
+          { bruker_ider: giver, tittel: "Vakten din er gitt bort", tekst: `${b.tatt_av_navn} har nå vakten ${vaktTid(b)}.${registrert(b)}${melding(b)}`, url: "/vakter?fane=mine" },
           { bruker_ider: taker, tittel: "Du har fått en vakt", tekst: `${vaktTid(b)} (fra ${b.fra_navn}).${melding(b)}`, url: "/vakter?fane=mine" },
         ],
   );
 }
+
+// Fridagen når en fast arbeidsdag gis bort: hva den tas fra, og grunnen til betalt fravær.
+const friFelt = {
+  fri: z.enum(FRI, { error: "Velg hva fridagen tas fra" }).nullable().optional(),
+  fri_grunn: valgfri(tekst(300, "Grunnen")),
+};
+// Fridagen (vaktbytte_fridag): om den som har vakten, får fri på en fast arbeidsdag, om de spørres,
+// timene, lønnstypen, feriedagene som er igjen og timene i timebanken.
+type Fridag = {
+  fridag: boolean;
+  sporres: boolean;
+  timer: number;
+  lonnstype: "maaned" | "time";
+  ferie_aar: number;
+  ferie_igjen: number;
+  timebank: boolean;
+  timebank_igjen: number | null;
+};
 
 // Vakten lederen bytter: en vakt, eller den faste arbeidsdagen til en ansatt.
 const lederVakt = z
@@ -245,6 +297,7 @@ const lederSkjema = z
     mot_vakt_id: uuid.nullable().optional(), // et bytte: kollegaens vakt
     mot_dato: datoS.nullable().optional(), // eller kollegaens faste arbeidsdag
     melding: valgfri(tekst(300, "Meldingen")),
+    ...friFelt,
     forhandsvis: z.boolean().optional(), // bare advarslene, uten å bytte
   })
   .refine((b) => !b.vakt_id !== !(b.ansatt_id && b.dato), "Velg vakten som skal byttes")
@@ -258,6 +311,7 @@ const tilbudSkjema = z
     mot_vakt_id: uuid.nullable().optional(), // et bytte: kollegaens vakt
     mot_dato: datoS.nullable().optional(), // eller kollegaens faste arbeidsdag
     melding: valgfri(tekst(300, "Meldingen")),
+    ...friFelt,
   })
   .refine((b) => !b.vakt_id !== !b.dato, "Velg vakten du vil bytte");
 
@@ -309,9 +363,11 @@ export function vaktbytteRuter() {
           hindring_meg: string | null;
           hindring_annen: string | null;
         }>(db, "select * from faktura.vaktbytte_kandidater($1, $2, $3, $4, $5)", [orgId(c), q.vakt ?? null, q.dato ?? null, fra, leggTilDager(fra, 55)]);
+        const fridag = await en<Fridag>(db, "select * from faktura.vaktbytte_fridag($1, faktura.min_ansatt($1), $2, $3)", [orgId(c), q.vakt ?? null, q.dato ?? null]);
         return {
           kolleger: kolleger.map((k) => ({ ...k, hindring: kollega(k.hindring) })),
           vakter: vakter.map(({ hindring_meg, hindring_annen, ...v }) => ({ ...v, hindring: selv(hindring_meg) ?? kollega(hindring_annen) })),
+          fridag,
         };
       }),
     );
@@ -322,7 +378,7 @@ export function vaktbytteRuter() {
     const b = tilbudSkjema.parse(await c.req.json().catch(() => ({})));
     if ((b.mot_vakt_id || b.mot_dato) && !b.til_ansatt) throw new ApiFeil(400, "Velg hvem du vil bytte med");
     const bytte = await bruk(c, async (db) => {
-      const ny = await en<{ id: string }>(db, "select (faktura.tilby_vaktbytte($1, $2, $3, $4, $5, $6, $7)).id as id", [
+      const ny = await en<{ id: string }>(db, "select (faktura.tilby_vaktbytte($1, $2, $3, $4, $5, $6, $7, $8, $9)).id as id", [
         orgId(c),
         b.vakt_id ?? null,
         b.dato ?? null,
@@ -330,6 +386,8 @@ export function vaktbytteRuter() {
         b.mot_vakt_id ?? null,
         b.mot_dato ?? null,
         b.melding ?? null,
+        b.fri ?? null,
+        b.fri_grunn ?? null,
       ]);
       return (await enBytte(db, orgId(c), ny!.id))!;
     });
@@ -349,6 +407,9 @@ export function vaktbytteRuter() {
     const b = etter;
     const giver = await innlogging(orgId(c), [b.fra_ansatt], bruker);
     if (b.status === "akseptert") {
+      // Fridagen ser ikke kollegaen som svarte, så den hentes som system til varselet.
+      const fri = await somSystem((db) => en<Pick<Bytte, "fri" | "fri_timer" | "fri_grunn">>(db, "select * from faktura.vaktbytte_fri($1, $2)", [orgId(c), b.id]));
+      const fridag = fri && friTekst(fri) ? ` Fridagen: ${friTekst(fri)}.` : "";
       await send(orgId(c), b, [
         {
           bruker_ider: giver,
@@ -366,7 +427,7 @@ export function vaktbytteRuter() {
         "Vaktbytte til godkjenning",
         b.mot_vakt_id
           ? `${b.fra_navn} og ${b.tatt_av_navn} vil bytte ${vaktTid(b)} og ${motTid(b)}.`
-          : `${b.tatt_av_navn} vil ta vakten til ${b.fra_navn} ${vaktTid(b)}.`,
+          : `${b.tatt_av_navn} vil ta vakten til ${b.fra_navn} ${vaktTid(b)}.${fridag}`,
         "/vakter?fane=bytter",
         `vaktbytte-${b.id}`,
       );
@@ -425,7 +486,7 @@ export function vaktbytteRuter() {
           {
             bruker_ider: giver,
             tittel: "Vaktbyttet er godkjent",
-            tekst: b.mot_vakt_id ? `Du har nå ${motTid(b)} i stedet for ${vaktTid(b)}.` : `${b.tatt_av_navn} tar vakten din ${vaktTid(b)}.`,
+            tekst: b.mot_vakt_id ? `Du har nå ${motTid(b)} i stedet for ${vaktTid(b)}.` : `${b.tatt_av_navn} tar vakten din ${vaktTid(b)}.${registrert(b)}`,
             url: "/vakter?fane=mine",
           },
           {
@@ -467,9 +528,9 @@ export function vaktbytteRuter() {
     return c.json(
       await bruk(c, async (db) => {
         const arg = [orgId(c), q.vakt ?? null, q.ansatt ?? null, q.dato ?? null];
-        const v = await en<{ dato: string; rolle: string | null }>(
+        const v = await en<{ dato: string; rolle: string | null; ansatt_id: string; vakt_id: string | null }>(
           db,
-          `select v.dato, g.navn as rolle from faktura.leder_vaktbytte_vakt($1, $2, $3, $4) v
+          `select v.dato, g.navn as rolle, v.ansatt_id, v.vakt_id from faktura.leder_vaktbytte_vakt($1, $2, $3, $4) v
              join faktura.ansatte a on a.org_id = $1 and a.id = v.ansatt_id
              left join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id`,
           arg,
@@ -485,7 +546,9 @@ export function vaktbytteRuter() {
         const vakter = q.kollega
           ? await alle(db, "select * from faktura.leder_vaktbytte_kandidater($1, $2, $3, $4, $5, $6, $7)", [...arg, q.kollega, fra, til < leggTilDager(fra, 92) ? til : leggTilDager(fra, 92)])
           : [];
-        return { rolle: v.rolle, kolleger, vakter };
+        // Fridagen for den som har vakten (når en fast arbeidsdag gis bort).
+        const fridag = await en<Fridag>(db, "select * from faktura.vaktbytte_fridag($1, $2, $3, $4)", [orgId(c), v.ansatt_id, v.vakt_id, v.dato]);
+        return { rolle: v.rolle, kolleger, vakter, fridag };
       }),
     );
   });
@@ -515,7 +578,7 @@ export function vaktbytteRuter() {
       );
       const foer = await advarselTekster(db, orgId(c), ansatte, fra, til, oppsett, navn);
       await db.query("savepoint leder_bytte");
-      const ny = await en<{ id: string }>(db, "select (faktura.leder_bytt_vakt($1, $2, $3, $4, $5, $6, $7, $8)).id as id", [
+      const ny = await en<{ id: string }>(db, "select (faktura.leder_bytt_vakt($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)).id as id", [
         orgId(c),
         b.vakt_id ?? null,
         b.ansatt_id ?? null,
@@ -524,6 +587,8 @@ export function vaktbytteRuter() {
         b.mot_vakt_id ?? null,
         b.mot_dato ?? null,
         b.melding ?? null,
+        b.fri ?? null,
+        b.fri_grunn ?? null,
       ]);
       const bytte = (await enBytte(db, orgId(c), ny!.id))!;
       // De to får beskjed når en av vaktene er publisert (et utkast ser de når uka publiseres).
