@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   createUserWithEmailAndPassword,
   getMultiFactorResolver,
@@ -45,7 +45,7 @@ function Merkevarepanel() {
     </aside>
   );
 }
-import { erAvbrutt, loggInnMedPasskey, passkeyFeil, stotterPasskey } from "../passkey";
+import { forberedPasskey, loggInnMedPasskey, passkeyFeil, stotterPasskey, venterAllerede } from "../passkey";
 
 const feiltekst: Record<string, string> = {
   "auth/invalid-credential": "Feil e-post eller passord.",
@@ -75,16 +75,42 @@ export function Innlogging() {
   const moduler = useModuler(modus === "ny");
   const [valgte, settValgte] = useState<string[]>([]);
 
+  // Passkey: utfordringen hentes på forhånd (og fornyes før den går ut), så trykket åpner
+  // passkey-vinduet med en gang. Knappen kan trykkes igjen mens appen venter (kom det ikke
+  // opp noe vindu, starter et nytt trykk en ny forespørsel); feil vises bare fra det siste.
+  const passkeyMulig = !resolver && modus === "inn" && stotterPasskey();
+  const [venterPasskey, settVenterPasskey] = useState(false);
+  const [lenge, settLenge] = useState(false); // ingenting har skjedd på en stund
+  const forsok = useRef(0);
+  useEffect(() => {
+    if (!passkeyMulig) return;
+    const forbered = () => document.visibilityState === "visible" && void forberedPasskey().catch(() => undefined);
+    forbered();
+    const t = setInterval(forbered, 60_000);
+    document.addEventListener("visibilitychange", forbered);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", forbered);
+    };
+  }, [passkeyMulig]);
+
   async function passkey() {
+    const nr = ++forsok.current;
     settFeil(null);
-    settOpptatt(true);
+    settVenterPasskey(true);
+    settLenge(false);
+    const t = window.setTimeout(() => forsok.current === nr && settLenge(true), 6000);
     try {
       await loggInnMedPasskey();
     } catch (e) {
       console.error("Passkey-innlogging feilet", e);
-      if (!erAvbrutt(e)) settFeil(passkeyFeil(e));
+      if (forsok.current === nr && !venterAllerede(e)) settFeil(passkeyFeil(e));
     } finally {
-      settOpptatt(false);
+      clearTimeout(t);
+      if (forsok.current === nr) {
+        settVenterPasskey(false);
+        settLenge(false);
+      }
     }
   }
 
@@ -186,7 +212,7 @@ export function Innlogging() {
             {resolver ? "Bekreft" : modus === "ny" ? "Lag konto" : modus === "glemt" ? "Send lenke" : "Logg inn"}
           </button>
         </div>
-        {!resolver && modus === "inn" && stotterPasskey() && (
+        {passkeyMulig && (
           <>
             <div className="skille">eller</div>
             <button type="button" data-passkey onClick={passkey} disabled={opptatt} style={{ width: "100%", justifyContent: "center", padding: "10px 16px" }}>
@@ -196,8 +222,13 @@ export function Innlogging() {
                 <circle cx="18" cy="15" r="2.5" />
                 <path d="M18 17.5V22M18 20h2" />
               </svg>
-              Logg inn med passkey
+              {venterPasskey ? "Venter på passkey …" : "Logg inn med passkey"}
             </button>
+            {lenge && (
+              <p className="liten dempet" role="status" style={{ marginTop: 8, textAlign: "center" }}>
+                Kom det ikke opp noe vindu? Trykk på knappen igjen, eller logg inn med passord.
+              </p>
+            )}
           </>
         )}
         {!resolver && (

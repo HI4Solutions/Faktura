@@ -25,6 +25,7 @@ async function offentlig(sti: string, kropp?: unknown) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(kropp ?? {}),
+    signal: typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(20_000) : undefined, // henger ikke for alltid
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new ApiFeil(r.status, data.error ?? `Feil ${r.status}`);
@@ -44,14 +45,50 @@ export function passkeyFeil(e: unknown): string {
   if (navn === "InvalidStateError") return "Denne enheten har allerede en passkey for kontoen din.";
   if (navn === "SecurityError") return `Nettleseren godtok ikke domenet for passkey (${melding}). Bruk https://faktura.hi4.no.`;
   if (navn === "NotSupportedError") return "Enheten eller nettleseren støtter ikke passkeys.";
+  if (navn === "AbortError") return "Passkey ble avbrutt. Trykk på knappen for å prøve igjen.";
+  if (navn === "TimeoutError") return "Fikk ikke svar fra HI4 Faktura i tide. Sjekk nettet og prøv igjen.";
+  if (navn === "TypeError" && /fetch|load failed|network/i.test(melding)) return "Fikk ikke kontakt med HI4 Faktura. Sjekk nettet og prøv igjen.";
   return melding || "Noe gikk galt med passkey.";
 }
 
+// En forespørsel som venter fra før (Chrome avviser en ny mens vinduet er oppe): ikke en feil.
+export const venterAllerede = (e: unknown) => /pending/i.test((e as Error)?.message ?? "");
+
+// Utfordringen fra serveren hentes på forhånd (den er gyldig i fem minutter), så trykket på
+// «Logg inn med passkey» kan åpne passkey-vinduet med en gang. Må den hentes etter trykket,
+// kan Safari og iPhone miste trykket og la være å vise vinduet.
+type Utfordring = { utfordring_id: string; valg: any; hentet: number };
+const FERSK = 4 * 60_000;
+let forberedt: Utfordring | null = null;
+let henter: Promise<Utfordring> | null = null;
+const fersk = (u: Utfordring | null) => (u && Date.now() - u.hentet < FERSK ? u : null);
+
+export function forberedPasskey(): Promise<Utfordring> {
+  const u = fersk(forberedt);
+  if (u) return Promise.resolve(u);
+  henter ??= offentlig("/start")
+    .then((s) => (forberedt = { ...s, hentet: Date.now() }))
+    .finally(() => {
+      henter = null;
+    });
+  return henter;
+}
+
+// Kall den rett fra trykket: med en utfordring som er hentet på forhånd, startes passkey-
+// vinduet før noe annet ventes på. Hver utfordring brukes bare én gang.
 export async function loggInnMedPasskey() {
-  const start = await offentlig("/start");
-  const svar = await utenAvbrudd(() => startAuthentication({ optionsJSON: start.valg }));
-  const { token } = await offentlig("/fullfor", { utfordring_id: start.utfordring_id, svar });
-  await signInWithCustomToken(await hentAuth(), token);
+  const klar = fersk(forberedt);
+  forberedt = null;
+  const start = klar ?? (await offentlig("/start"));
+  try {
+    const svar = await utenAvbrudd(() => startAuthentication({ optionsJSON: start.valg }));
+    const { token } = await offentlig("/fullfor", { utfordring_id: start.utfordring_id, svar });
+    await signInWithCustomToken(await hentAuth(), token);
+  } catch (e) {
+    // Klar til neste forsøk.
+    void forberedPasskey().catch(() => undefined);
+    throw e;
+  }
 }
 
 export async function leggTilPasskey(navn: string) {
