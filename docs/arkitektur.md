@@ -771,7 +771,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `rapport_utsendinger` (bare workeren skriver), og måneden månedsrapportene er lagt i kø for,
   står i `rapport_maanedsutsendinger`, så hver måned sendes én gang
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
-- `revisjonslogg`: alle endringer og regnskapsføreres oppslag
+- `revisjonslogg`: alle endringer og regnskapsføreres oppslag. Loggen for de ansatte, lønnen,
+  lønnshistorikken, a-meldingene og lønnsbilagene er bare for dem som ser lønnen, og loggen for
+  fraværet og inntektsmeldingene til NAV bare for eier og administrator (`0081_revisjonslogg_lonn.sql`)
 
 ### Roller
 
