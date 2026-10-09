@@ -280,7 +280,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   utgått; et tilbud som ikke er besvart når vakten begynner, vises som utgått. De to, kollegaene
   (åpne tilbud) og eier og administrator (til godkjenning) får push-varsler (`vakter`). Den
   ansatte ser byttene de er med i og de åpne tilbudene fra kolleger (`vaktbytte_liste`), eier,
-  administrator og regnskap alle; alt annet går gjennom funksjonene
+  administrator og regnskap alle; alt annet går gjennom funksjonene.
+  Eier og administrator gir bort eller bytter en vakt eller fast arbeidsdag rett fra vaktplanen
+  (`0072_vaktbytte_leder.sql`, «Bytt eller gi bort» i vaktskjemaet,
+  `GET /vaktbytter/leder/muligheter` og `POST /vaktbytter/leder`): uten godkjenning og uansett
+  innstillingen, med alle aktive i organisasjonen (også med en annen rolle eller uten innlogging),
+  og også vakter som ikke er publisert. `leder_bytt_vakt` lagrer byttet som godkjent
+  (`av_leder`, «Gitt bort»/«Byttet» av lederen i lista) og gjør det med `vaktbytte_utfor`, med de
+  samme sjekkene; vakter med førte timer byttes ikke. Med `forhandsvis` gjøres byttet og rulles
+  tilbake (savepoint), så lederen ser de nye advarslene etter arbeidsmiljøloven før det
+  bekreftes. De to får beskjed når en av vaktene er publisert
 - `fravaer`: sykdom, sykt barn, ferie, permisjon, kurs og annet fravær per ansatt (fra og med, til
   og med). Eier og administrator registrerer alt; den ansatte melder selv sykdom (fra og med
   i går) og kan bare endre sluttdatoen på den etterpå. Melder den ansatte seg syk, får eier og
@@ -602,7 +611,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Innstillinger, kontonummer, medlemmer, integrasjoner, regnskapsfører | ✓ | ✓ | | | | |
 | Se ansatte, hele vaktplanen (også utkast), tavla, fraværet og alle timer | ✓ | ✓ | | ✓ | | |
 | Se den publiserte vaktplanen (dag, uke og måned) og tavla (kollegaenes fravær bare som «F») | ✓ | ✓ | ✓¹ | ✓ | ✓¹ | ✓² |
-| Endre ansatte, gi innlogging, planlegge og publisere vakter, sette inn vikarer, styre tavla, registrere fravær, godkjenne og avvise timer | ✓ | ✓ | | | | |
+| Endre ansatte, gi innlogging, planlegge og publisere vakter, gi bort og bytte vakter for de ansatte, sette inn vikarer, styre tavla, registrere fravær, godkjenne og avvise timer | ✓ | ✓ | | | | |
 | Se egne vakter og plasser og ta ledige, melde seg syk, føre og levere egne timer | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Legge beskjeder til rollene eller alle, og se dem som er til en selv | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Se alle beskjedene | ✓ | ✓ | | ✓ | | |

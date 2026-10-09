@@ -15,14 +15,14 @@ import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
 import { erAdmin, kanPersonal, kanSePersonal, useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
-import { IkonHoyre, IkonKalender, IkonPluss, IkonVarsel, IkonVenstre } from "../ikoner";
+import { IkonHoyre, IkonKalender, IkonPluss, IkonRullering, IkonVarsel, IkonVenstre } from "../ikoner";
 import { apenDag, erHelg, gyldigDato, Klokkeslett, mandag, middag, nesteDag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
 import { borteTekst, FravaerDialog, fravaerKlasse, fravaerTekst, FravaerListe, MittFravaer, VikarSkjema, type Fravaer, type FravaerType } from "./Fravaer";
 import { iFasen, Tavle, visLangDag } from "./Tavle";
 import { Bemanning, gyldigMaaned } from "./Bemanning";
 import { ArbeidsplanDialog, fastTid, fastTider } from "./Arbeidsplan";
 import { helligdag } from "../helligdager";
-import { aapentPaa, ByttDialog, Bytter, fraKolleger, type ByttSvar, type ByttVakt, type Bytte, type Innstilling } from "./Vaktbytte";
+import { aapentPaa, ByttDialog, Bytter, fraKolleger, LederByttDialog, type ByttSvar, type ByttVakt, type Bytte, type Innstilling, type LederVakt } from "./Vaktbytte";
 import { rollevalg, Rollevalg, useRollevalg, type Rolle, type Rollevalget } from "./Roller";
 
 export type Vakt = {
@@ -361,6 +361,8 @@ function Vaktplan({
   // Fravær og arbeidstid for en ansatt, rett fra vaktplanen (samme som i ansattkortet).
   const [fravaerFor, settFravaerFor] = useState<Partial<Fravaer> | null>(null);
   const [planFor, settPlanFor] = useState<string | null>(null);
+  // Lederen gir bort eller bytter vakten (eller den faste arbeidsdagen).
+  const [byttFor, settByttFor] = useState<LederVakt | null>(null);
   const [kopierer, settKopierer] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
   const h = useHandling();
@@ -525,7 +527,7 @@ function Vaktplan({
   // sette inn vikar når den ansatte er borte.
   const apneFast = (f: Fast) => {
     if (f.fravaer) settVikarFor({ id: "", dato: f.dato, ...fastTider(f), oppgave: null, ansatt_id: f.ansatt_id, ansatt_navn: navn.get(f.ansatt_id) ?? null });
-    else settApen({ dato: f.dato, ansatt_id: f.ansatt_id, ...fastTider(f), pause_min: f.pause_min, fraPlan: true });
+    else settApen({ dato: f.dato, ansatt_id: f.ansatt_id, ...fastTider(f), pause_min: f.pause_min, timer: f.timer, fraPlan: true });
   };
   const fastChip = (f: Fast, medNavn = false) => {
     const tittel = f.fravaer
@@ -866,9 +868,31 @@ function Vaktplan({
               settApen(null);
               settPlanFor(ansatt_id);
             }}
+            bytt={() => {
+              settApen(null);
+              settByttFor({
+                id: apen.id ?? null,
+                ansatt_id: apen.ansatt_id!,
+                navn: apen.ansatt_navn ?? navn.get(apen.ansatt_id!) ?? "",
+                dato: apen.dato!,
+                fra: apen.fra ?? null,
+                til: apen.til ?? null,
+                timer: Number(apen.timer ?? 0),
+                publisert: !!apen.fraPlan || !!apen.publisert, // en fast arbeidsdag er en del av planen
+              });
+            }}
           />
         )}
       </Dialog>
+      <LederByttDialog
+        vakt={byttFor}
+        lukk={() => settByttFor(null)}
+        ferdig={(m) => {
+          settByttFor(null);
+          settMelding(m);
+          endret();
+        }}
+      />
       <FravaerDialog
         fravaer={fravaerFor}
         ansatte={ansatte.data}
@@ -1217,6 +1241,7 @@ function VaktSkjema({
   settInnVikar,
   registrerFravaer,
   endrePlan,
+  bytt,
 }: {
   vakt: Partial<Vakt> & { fraPlan?: boolean };
   ansatte: Ansatt[];
@@ -1228,6 +1253,8 @@ function VaktSkjema({
   // Fravær og faste dager for den ansatte på vakten (samme som i ansattkortet).
   registrerFravaer?: (ansattId: string, dato: string) => void;
   endrePlan?: (ansattId: string) => void;
+  // Gi bort eller bytt vakten (lederen, 0072_vaktbytte_leder.sql).
+  bytt?: () => void;
 }) {
   const { org } = useKonto();
   const [v, settV] = useState(() => {
@@ -1249,6 +1276,10 @@ function VaktSkjema({
   const utregnet = klokke(v.fra) && klokke(v.til) && v.fra !== v.til && Number.isFinite(pause) ? regnTimer(v.fra, v.til, pause) : null;
   // Ansatte som kan settes på vakten: aktive og ansatt den dagen (og den som har den nå).
   const valg = ansatte.filter((a) => a.id === vakt.ansatt_id || (a.aktiv && a.ansatt_fra <= v.dato && (!a.ansatt_til || a.ansatt_til >= v.dato)));
+  // Vakten (eller den faste arbeidsdagen) kan gis bort eller byttes når noen har den, den ikke har
+  // begynt, timene ikke er ført, og den som har den, ikke er borte (da settes det inn vikar).
+  const kanBytte =
+    kanEndre && !!bytt && !!vakt.ansatt_id && (!!vakt.id || !!vakt.fraPlan) && !begynt(vakt.dato!, vakt.fra ?? null) && !vakt.fort && !vakt.fravaer && !vakt.har_vikar;
 
   async function lagre(e: FormEvent) {
     e.preventDefault();
@@ -1385,6 +1416,11 @@ function VaktSkjema({
         <button type="button" onClick={avbryt}>
           {kanEndre ? "Avbryt" : "Lukk"}
         </button>
+        {kanBytte && (
+          <button type="button" disabled={h.opptatt} onClick={bytt}>
+            <IkonRullering storrelse={16} /> Bytt eller gi bort
+          </button>
+        )}
         {vakt.id && kanEndre && (
           <button type="button" className="fare" style={{ marginLeft: "auto" }} disabled={h.opptatt} onClick={slett}>
             Slett

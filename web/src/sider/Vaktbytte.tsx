@@ -3,11 +3,15 @@
 // (ByttDialog), åpne tilbud fra kolleger står blant de ledige vaktene, og fanen «Bytter» viser det
 // som er til den ansatte, det de selv har tilbudt, og byttene som venter på godkjenning (eier og
 // administrator), med advarslene etter arbeidsmiljøloven byttet gir.
-import { useState, type FormEvent, type ReactNode } from "react";
+//
+// Lederen (eier og administrator) gir bort eller bytter vakter rett fra vaktplanen (LederByttDialog,
+// 0072_vaktbytte_leder.sql): uten godkjenning, med alle aktive i organisasjonen, og med advarslene
+// byttet gir før det bekreftes.
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
 import { useKonto } from "../konto";
-import { IkonRullering, IkonVarsel } from "../ikoner";
+import { IkonHake, IkonRullering, IkonVarsel } from "../ikoner";
 import { timer, visDag } from "../uke";
 
 export type Innstilling = "av" | "godkjenning" | "fritt";
@@ -40,6 +44,7 @@ export type Bytte = {
   behandlet_av_navn: string | null;
   hindring: string | null; // hva som hindrer deg i å ta vakten
   advarsler: string[]; // for den som godkjenner
+  av_leder: boolean; // byttet er gjort av lederen i vaktplanen
 };
 export type ByttSvar = { innstilling: Innstilling; bytter: Bytte[] };
 // Vakten (eller den faste arbeidsdagen, uten id) som skal byttes.
@@ -68,7 +73,7 @@ export function statusMerke(b: Bytte) {
     case "akseptert":
       return { tekst: "Venter på godkjenning", klasse: "merke-advarsel" };
     case "godkjent":
-      return { tekst: b.mot_vakt_id ? "Byttet" : "Tatt over", klasse: "merke-ok" };
+      return { tekst: b.mot_vakt_id ? "Byttet" : b.av_leder ? "Gitt bort" : "Tatt over", klasse: "merke-ok" };
     case "avslatt":
       return { tekst: "Nei takk", klasse: "merke-noytral" };
     case "avvist":
@@ -84,6 +89,11 @@ export function statusMerke(b: Bytte) {
 function beskrivelse(b: Bytte, egen: string | null) {
   const navn = (id: string | null, n: string | null, objekt = false) => (id && id === egen ? (objekt ? "deg" : "Du") : (n ?? ""));
   const gjort = b.status === "godkjent";
+  if (b.av_leder) {
+    const av = b.behandlet_av_navn ?? "Lederen";
+    if (b.mot_vakt_id) return `${av} byttet vakten mellom ${navn(b.fra_ansatt, b.fra_navn, true)} og ${navn(b.tatt_av, b.tatt_av_navn, true)}, mot ${motTekst(b)}`;
+    return `${av} ga vakten fra ${navn(b.fra_ansatt, b.fra_navn, true)} til ${navn(b.tatt_av, b.tatt_av_navn, true)}`;
+  }
   if (b.mot_vakt_id) {
     if (gjort) return `${navn(b.fra_ansatt, b.fra_navn)} byttet med ${navn(b.til_ansatt, b.til_navn, true)} mot ${motTekst(b)}`;
     if (b.til_ansatt === egen) return `${b.fra_navn} vil bytte mot vakten din ${motTekst(b)}`;
@@ -220,7 +230,217 @@ function ByttSkjema({ vakt, innstilling, lukk, ferdig }: { vakt: ByttVakt; innst
   );
 }
 
+// --- Lederen bytter eller gir bort (vaktplanen) ------------------------------------
+
+// Vakten (eller den faste arbeidsdagen, uten id) lederen bytter, og hvem som har den.
+export type LederVakt = { id: string | null; ansatt_id: string; navn: string; dato: string; fra: string | null; til: string | null; timer: number; publisert: boolean };
+type LederKollega = { ansatt_id: string; navn: string; rolle: string | null; hindring: string | null };
+type LederKandidat = { vakt_id: string | null; dato: string; fra: string; til: string; timer: number; oppgave: string | null; hel_dag: boolean; publisert: boolean; hindring: string | null };
+type LederSvar = Bytte & { utfort: boolean; varslet: boolean };
+
+export function LederByttDialog({ vakt, lukk, ferdig }: { vakt: LederVakt | null; lukk: () => void; ferdig: (melding: string) => void }) {
+  return (
+    <Dialog apen={!!vakt} lukk={lukk} tittel="Bytt eller gi bort vakten">
+      {vakt && <LederByttSkjema key={vakt.id ?? `${vakt.ansatt_id}|${vakt.dato}`} vakt={vakt} lukk={lukk} ferdig={ferdig} />}
+    </Dialog>
+  );
+}
+
+const fornavn = (navn: string) => navn.split(" ")[0] ?? navn;
+// Hindringen uten navnet foran (navnet står i valget): «har en annen vakt som overlapper».
+const utenNavn = (hindring: string, navn: string) => (hindring.startsWith(`${navn} `) ? hindring.slice(navn.length + 1) : hindring);
+const kandidatNokkel = (k: LederKandidat) => k.vakt_id ?? k.dato;
+
+function LederByttSkjema({ vakt, lukk, ferdig }: { vakt: LederVakt; lukk: () => void; ferdig: (melding: string) => void }) {
+  const { org } = useKonto();
+  const sti = `/org/${org!.id}/vaktbytter/leder/muligheter?${vakt.id ? `vakt=${vakt.id}` : `ansatt=${vakt.ansatt_id}&dato=${vakt.dato}`}`;
+  const m = useData(() => hent<{ rolle: string | null; kolleger: LederKollega[] }>(sti), [sti]);
+  const [type, settType] = useState<"gi" | "bytt">("gi");
+  const [til, settTil] = useState("");
+  const [mot, settMot] = useState("");
+  const [melding, settMelding] = useState("");
+  // Vaktene til den det byttes med (svaret huskes med hvem det gjelder, så et nytt valg ikke viser
+  // vaktene til den forrige).
+  const k = useData(
+    () => (type === "bytt" && til ? hent<{ vakter: LederKandidat[] }>(`${sti}&kollega=${til}`).then((r) => ({ kollega: til, vakter: r.vakter })) : Promise.resolve(null)),
+    [sti, type, til],
+  );
+  const kandidater = k.data && k.data.kollega === til ? k.data.vakter : null;
+  const valgt = type === "bytt" ? kandidater?.find((x) => kandidatNokkel(x) === mot) : undefined;
+  const klar = !!til && (type === "gi" || !!valgt);
+  // Forhåndsvisningen: advarslene etter arbeidsmiljøloven byttet gir (eller hvorfor det ikke går).
+  const nokkel = klar ? `${type}|${til}|${type === "bytt" ? mot : ""}` : "";
+  const [forhand, settForhand] = useState<{ nokkel: string; advarsler?: string[]; feil?: string } | null>(null);
+  const h = useHandling();
+
+  const kropp = () => ({
+    ...(vakt.id ? { vakt_id: vakt.id } : { ansatt_id: vakt.ansatt_id, dato: vakt.dato }),
+    til_ansatt: til,
+    ...(valgt ? (valgt.vakt_id ? { mot_vakt_id: valgt.vakt_id } : { mot_dato: valgt.dato }) : {}),
+  });
+  useEffect(() => {
+    if (!nokkel) return;
+    let aktiv = true;
+    settForhand({ nokkel });
+    api<LederSvar>("POST", `/org/${org!.id}/vaktbytter/leder`, { ...kropp(), forhandsvis: true }).then(
+      (r) => aktiv && settForhand({ nokkel, advarsler: r.advarsler }),
+      (e: Error) => aktiv && settForhand({ nokkel, feil: e.message }),
+    );
+    return () => {
+      aktiv = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nokkel]);
+  const visning = forhand && forhand.nokkel === nokkel ? forhand : null;
+
+  if (m.feil) return <Feil melding={m.feil} />;
+  if (!m.data) return <Laster />;
+  const navn = fornavn(vakt.navn);
+  const kollega = m.data.kolleger.find((x) => x.ansatt_id === til);
+  // Rollene: den samme rollen som den som har vakten først, så de andre, og de uten rolle til sist.
+  const roller = [...new Set(m.data.kolleger.map((x) => x.rolle ?? ""))].sort((a, b) =>
+    a === (m.data!.rolle ?? "") ? -1 : b === (m.data!.rolle ?? "") ? 1 : !a ? 1 : !b ? -1 : a.localeCompare(b, "nb"),
+  );
+  const varsles = vakt.publisert || !!valgt?.publisert;
+
+  // Den som er valgt, kan være opptatt da vakten er (det går ved et bytte, men ikke når vakten gis bort).
+  const velgType = (t: "gi" | "bytt") => {
+    settType(t);
+    settMot("");
+    if (t === "gi" && kollega?.hindring) settTil("");
+  };
+  const send = (e: FormEvent) => {
+    e.preventDefault();
+    h.kjor(async () => {
+      if (!til) throw new Error(type === "gi" ? "Velg hvem vakten skal til" : "Velg hvem vakten skal byttes med");
+      if (type === "bytt" && !valgt) throw new Error(`Velg vakten ${navn} skal få i stedet`);
+      const r = await api<LederSvar>("POST", `/org/${org!.id}/vaktbytter/leder`, { ...kropp(), melding: melding.trim() || undefined });
+      const beskjed = r.varslet ? " De to får beskjed." : "";
+      ferdig(
+        r.mot_vakt_id
+          ? `Vaktene er byttet: ${r.fra_navn} har nå ${liten(vaktTekst(r.mot_dato!, r.mot_fra, r.mot_til))}, og ${r.tatt_av_navn} har ${liten(vaktTekst(r.dato, r.fra, r.til))}.${beskjed}`
+          : `Vakten ${liten(vaktTekst(r.dato, r.fra, r.til))} er gitt til ${r.tatt_av_navn}.${beskjed}`,
+      );
+    });
+  };
+
+  const personer = (
+    <>
+      <option value="">{m.data.kolleger.length ? "Velg hvem" : "Ingen andre aktive i organisasjonen"}</option>
+      {roller.map((rolle) => (
+        <optgroup key={rolle} label={rolle || "Uten rolle"}>
+          {m.data!.kolleger
+            .filter((x) => (x.rolle ?? "") === rolle)
+            .map((x) => (
+              // Et bytte kan gå selv om den andre er opptatt akkurat da (vakten de gir fra seg, teller
+              // ikke); hva som hindrer, står da ved vaktene deres.
+              <option key={x.ansatt_id} value={x.ansatt_id} disabled={type === "gi" && !!x.hindring}>
+                {x.navn}
+                {type === "gi" && x.hindring ? ` (${utenNavn(x.hindring, x.navn)})` : ""}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </>
+  );
+
+  return (
+    <form onSubmit={send}>
+      <p className="bytte-vakt">
+        <strong>{vakt.navn}</strong> · {vaktTekst(vakt.dato, vakt.fra, vakt.til)} <span className="dempet">· {timer(vakt.timer)}</span>
+        {!vakt.id && <span className="dempet"> · fast arbeidsdag</span>}
+        {!vakt.publisert && <span className="merke merke-noytral leder-bytte-utkast">Utkast</span>}
+      </p>
+      <div className="faner valg" role="radiogroup" aria-label="Hva vil du?">
+        <button type="button" role="radio" aria-checked={type === "gi"} className={type === "gi" ? "valgt" : undefined} onClick={() => velgType("gi")}>
+          Gi bort
+        </button>
+        <button type="button" role="radio" aria-checked={type === "bytt"} className={type === "bytt" ? "valgt" : undefined} onClick={() => velgType("bytt")}>
+          Bytt mot en annen vakt
+        </button>
+      </div>
+      <label>
+        {type === "gi" ? "Gi vakten til" : "Bytt med"}
+        <select
+          required
+          value={til}
+          onChange={(e) => {
+            settTil(e.target.value);
+            settMot("");
+          }}
+        >
+          {personer}
+        </select>
+        <span className="felt-hjelp">Alle aktive i organisasjonen, også de med en annen rolle og de uten innlogging.</span>
+      </label>
+      {type === "bytt" && til && (
+        <label>
+          Vakten {navn} får i stedet
+          <select required value={mot} onChange={(e) => settMot(e.target.value)} disabled={!kandidater}>
+            <option value="">{!kandidater ? "Laster …" : kandidater.length ? "Velg vakt" : `${kollega ? fornavn(kollega.navn) : "Den andre"} har ingen vakter de neste ukene`}</option>
+            {(kandidater ?? []).map((x) => (
+              <option key={kandidatNokkel(x)} value={kandidatNokkel(x)} disabled={!!x.hindring}>
+                {vaktTekst(x.dato, x.hel_dag ? null : x.fra, x.hel_dag ? null : x.til)}
+                {x.oppgave ? ` · ${x.oppgave}` : ""}
+                {!x.vakt_id ? " · fast dag" : !x.publisert ? " · utkast" : ""}
+                {x.hindring ? ` (${x.hindring})` : ""}
+              </option>
+            ))}
+          </select>
+          <Feil melding={k.feil} />
+          <span className="felt-hjelp">Vaktene og de faste arbeidsdagene til {kollega ? fornavn(kollega.navn) : "den andre"} de neste åtte ukene, også utkast.</span>
+        </label>
+      )}
+      <label>
+        Melding til de ansatte
+        <input maxLength={300} placeholder="Valgfritt, f.eks. hvorfor" value={melding} onChange={(e) => settMelding(e.target.value)} />
+      </label>
+      {klar && (
+        <div className="leder-bytte-sjekk" aria-live="polite">
+          {!visning ? (
+            <p className="liten dempet">Sjekker arbeidsmiljøloven …</p>
+          ) : visning.feil ? (
+            <Feil melding={visning.feil} />
+          ) : visning.advarsler?.length ? (
+            <div className="melding advarsel">
+              <strong>Byttet gir advarsler etter arbeidsmiljøloven</strong>
+              <ul className="bytte-advarsler">
+                {visning.advarsler.map((a) => (
+                  <li key={a}>
+                    <IkonVarsel storrelse={13} /> {a}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="liten leder-bytte-ok">
+              <IkonHake storrelse={14} /> Ingen nye advarsler etter arbeidsmiljøloven.
+            </p>
+          )}
+        </div>
+      )}
+      <p className="felt-hjelp">
+        Byttet gjøres med en gang, uten godkjenning, og plassen på tavla følger med.
+        {!vakt.id ? ` ${navn} får fri denne dagen.` : ""}
+        {varsles ? " De to får beskjed (de som har innlogging)." : " Vakten er ikke publisert, så ingen får beskjed før uka publiseres."}
+      </p>
+      <Feil melding={h.feil} />
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt || !klar || !visning || !!visning.feil}>
+          {type === "gi" ? "Gi bort vakten" : "Bytt vaktene"}
+          {visning?.advarsler?.length ? " likevel" : ""}
+        </button>
+        <button type="button" onClick={lukk}>
+          Avbryt
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // --- Fanen «Bytter» -----------------------------------------------------------------
+
+const SELV_LEDER = "Du kan også gi bort eller bytte en vakt selv: trykk på vakten i vaktplanen og velg «Bytt eller gi bort».";
 
 // leder: godkjenner og kan trekke tilbake (eier og administrator); seAlle: ser alle byttene (også regnskap).
 export function Bytter({
@@ -402,16 +622,26 @@ export function Bytter({
             {egen ? (
               <p>Trykk «Bytt» på en vakt under Mine vakter for å gi den bort eller bytte den med en kollega med samme rolle.</p>
             ) : (
-              <p>Når de ansatte gir bort eller bytter vakter, ser du det her{svar.innstilling === "godkjenning" ? ", og godkjenner byttene" : ""}.</p>
+              <p>
+                Når de ansatte gir bort eller bytter vakter, ser du det her{svar.innstilling === "godkjenning" ? ", og godkjenner byttene" : ""}.
+                {leder ? ` ${SELV_LEDER}` : ""}
+              </p>
             )}
           </Tom>
         </div>
       )}
-      {!tomt && svar.innstilling !== "av" && (
+      {!tomt && (svar.innstilling !== "av" || leder) && (
         <p className="liten dempet">
-          {svar.innstilling === "godkjenning"
-            ? "Et bytte gjelder når en kollega har sagt ja og lederen har godkjent det. Da flyttes vakten, og plassen på tavla følger med."
-            : "Et bytte gjelder med en gang en kollega har sagt ja. Da flyttes vakten, og plassen på tavla følger med."}
+          {[
+            svar.innstilling === "godkjenning"
+              ? "Et bytte gjelder når en kollega har sagt ja og lederen har godkjent det. Da flyttes vakten, og plassen på tavla følger med."
+              : svar.innstilling === "fritt"
+                ? "Et bytte gjelder med en gang en kollega har sagt ja. Da flyttes vakten, og plassen på tavla følger med."
+                : null,
+            leder ? SELV_LEDER : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
         </p>
       )}
     </>

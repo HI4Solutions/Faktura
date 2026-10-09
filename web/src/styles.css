@@ -1646,6 +1646,13 @@ h2.bytte-overskrift:first-child { margin-top: 0.25rem; }
 .bytte-avvis { margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--kant); }
 .bytte-avvis label { margin-bottom: 8px; }
 p.bytte-vakt { margin: 0 0 12px; }
+/* Lederen bytter eller gir bort i vaktplanen: utkastmerket og sjekken mot arbeidsmiljøloven */
+.leder-bytte-utkast { margin-left: 8px; vertical-align: 1px; }
+.leder-bytte-sjekk { margin: 0 0 12px; }
+.leder-bytte-sjekk p { margin: 0; }
+.leder-bytte-sjekk .melding { margin-bottom: 0; }
+.leder-bytte-sjekk .melding strong { display: block; margin-bottom: 4px; }
+.leder-bytte-ok { display: flex; align-items: center; gap: 6px; color: var(--ok); }
 
 /* --------------------------------------------------------------------------
    Beskjeder (Beskjeder.tsx): skjemaet øverst, beskjedene dag for dag med rollene i rollens

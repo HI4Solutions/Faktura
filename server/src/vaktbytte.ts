@@ -3,6 +3,9 @@
 // eller administrator godkjenner (etter innstillingen under Ansatte og timer). Hvem som ser og kan
 // gjøre hva, og selve byttet (vaktene, tavla og fri på faste dager), ligger i databasefunksjonene.
 // Her er rutene, varslene, og advarslene etter arbeidsmiljøloven byttet gir, for den som godkjenner.
+//
+// Lederen (0072_vaktbytte_leder.sql) gir bort eller bytter vakter rett fra vaktplanen, uten
+// godkjenning og med alle aktive i organisasjonen, og ser advarslene før byttet gjøres.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, somSystem, type Db } from "./db.js";
@@ -50,6 +53,7 @@ export type Bytte = {
   behandlet_at: string | null;
   behandlet_av_navn: string | null;
   hindring: string | null; // hva som hindrer den innloggede i å ta vakten
+  av_leder: boolean; // byttet er gjort av lederen i vaktplanen
 };
 
 // Hindringene (fra vaktbytte_hindring) for den innloggede selv, og for en kollega (der sies bare
@@ -181,6 +185,70 @@ async function advarslerEtterBytte(db: Db, org: string, bytter: Bytte[], r: Regl
 }
 
 // --- Rutene -------------------------------------------------------------------------
+
+// Advarslene etter arbeidsmiljøloven for de ansatte fra og med _fra til og med _til, som tekst med
+// navn og dag (eller uke), så det før og etter et bytte kan sammenlignes. Vakter de er borte fra,
+// teller ikke.
+async function advarselTekster(db: Db, org: string, ansatte: string[], fra: string, til: string, r: Regler, navn: Map<string, string>) {
+  const vakter = await alle<PlanVakt>(
+    db,
+    `select v.id, v.ansatt_id, v.dato, to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.timer
+       from faktura.vakter v
+      where v.org_id = $1 and v.ansatt_id = any($2::uuid[]) and v.dato between $3 and $4
+        and not exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til)
+      order by v.dato, v.fra`,
+    [org, ansatte, fra, til],
+  );
+  const ansettelser = new Map(
+    (await alle<Ansettelse & { id: string }>(db, "select id, ansatt_fra, ansatt_til, aktiv, arbeidstaker from faktura.ansatte where org_id = $1 and id = any($2::uuid[])", [org, ansatte])).map(
+      (a) => [a.id, a],
+    ),
+  );
+  const a = advarsler(vakter, r, ansettelser);
+  const ut = new Set<string>();
+  for (const v of vakter) for (const t of a.perVakt.get(v.id) ?? []) ut.add(`${navn.get(v.ansatt_id!)}, ${dag(v.dato)}: ${t}`);
+  for (const [k, liste] of a.perUke) {
+    const [ansatt, mandag] = k.split(":") as [string, string];
+    for (const t of liste) ut.add(`${navn.get(ansatt)}, uke ${uke(mandag).uke}: ${t}`);
+  }
+  return ut;
+}
+
+// Lederen har gitt bort eller byttet vakten: de to får beskjed (når vaktene er publisert).
+async function varsleLederBytte(org: string, b: Bytte, bruker: string) {
+  const [giver, taker] = await Promise.all([innlogging(org, [b.fra_ansatt], bruker), innlogging(org, [b.tatt_av], bruker)]);
+  await send(
+    org,
+    b,
+    b.mot_vakt_id
+      ? [
+          { bruker_ider: giver, tittel: "Vakten din er byttet", tekst: `Du har nå ${motTid(b)} i stedet for ${vaktTid(b)} (byttet med ${b.tatt_av_navn}).${melding(b)}`, url: "/vakter?fane=mine" },
+          { bruker_ider: taker, tittel: "Vakten din er byttet", tekst: `Du har nå ${vaktTid(b)} i stedet for ${motTid(b)} (byttet med ${b.fra_navn}).${melding(b)}`, url: "/vakter?fane=mine" },
+        ]
+      : [
+          { bruker_ider: giver, tittel: "Vakten din er gitt bort", tekst: `${b.tatt_av_navn} har nå vakten ${vaktTid(b)}.${melding(b)}`, url: "/vakter?fane=mine" },
+          { bruker_ider: taker, tittel: "Du har fått en vakt", tekst: `${vaktTid(b)} (fra ${b.fra_navn}).${melding(b)}`, url: "/vakter?fane=mine" },
+        ],
+  );
+}
+
+// Vakten lederen bytter: en vakt, eller den faste arbeidsdagen til en ansatt.
+const lederVakt = z
+  .object({ vakt: uuid.optional(), ansatt: uuid.optional(), dato: datoS.optional(), kollega: uuid.optional() })
+  .refine((x) => !x.vakt !== !(x.ansatt && x.dato), "Velg vakten som skal byttes");
+const lederSkjema = z
+  .object({
+    vakt_id: uuid.optional(),
+    ansatt_id: uuid.optional(), // en fast arbeidsdag: hvem som har den, og dagen
+    dato: datoS.optional(),
+    til_ansatt: z.string({ error: "Velg hvem vakten skal til" }).uuid("Velg hvem vakten skal til"),
+    mot_vakt_id: uuid.nullable().optional(), // et bytte: kollegaens vakt
+    mot_dato: datoS.nullable().optional(), // eller kollegaens faste arbeidsdag
+    melding: valgfri(tekst(300, "Meldingen")),
+    forhandsvis: z.boolean().optional(), // bare advarslene, uten å bytte
+  })
+  .refine((b) => !b.vakt_id !== !(b.ansatt_id && b.dato), "Velg vakten som skal byttes")
+  .refine((b) => !(b.mot_vakt_id && b.mot_dato), "Velg én vakt å bytte mot");
 
 const tilbudSkjema = z
   .object({
@@ -387,6 +455,90 @@ export function vaktbytteRuter() {
     const mottakere = await innlogging(orgId(c), [foer?.tatt_av ?? b.til_ansatt, b.fra_ansatt], bruker);
     await send(orgId(c), b, [{ bruker_ider: mottakere, tittel: "Vaktbytte trukket tilbake", tekst: `Tilbudet om vakten ${vaktTid(b)} er trukket tilbake.`, url: "/vakter?fane=bytter" }]);
     return c.json(b);
+  });
+
+  // --- Lederen bytter eller gir bort -------------------------------------------------
+
+  // Hvem lederen kan gi vakten (eller den faste arbeidsdagen) til, med rollen og hva som hindrer
+  // dem, og med kollega: vaktene og de faste dagene til kollegaen den kan byttes mot (fra i dag og
+  // åtte uker fram, og minst to uker etter vakten). rolle: rollen til den som har vakten.
+  r.get("/vaktbytter/leder/muligheter", async (c) => {
+    const q = lederVakt.parse(c.req.query());
+    return c.json(
+      await bruk(c, async (db) => {
+        const arg = [orgId(c), q.vakt ?? null, q.ansatt ?? null, q.dato ?? null];
+        const v = await en<{ dato: string; rolle: string | null }>(
+          db,
+          `select v.dato, g.navn as rolle from faktura.leder_vaktbytte_vakt($1, $2, $3, $4) v
+             join faktura.ansatte a on a.org_id = $1 and a.id = v.ansatt_id
+             left join faktura.ansattgrupper g on g.org_id = a.org_id and g.id = a.gruppe_id`,
+          arg,
+        );
+        if (!v) throw new ApiFeil(404, "Fant ikke vakten");
+        const kolleger = await alle<{ ansatt_id: string; navn: string; rolle: string | null; hindring: string | null }>(
+          db,
+          "select * from faktura.leder_vaktbytte_kolleger($1, $2, $3, $4)",
+          arg,
+        );
+        const fra = iDag();
+        const til = [leggTilDager(fra, 55), leggTilDager(v.dato, 14)].sort().at(-1)!;
+        const vakter = q.kollega
+          ? await alle(db, "select * from faktura.leder_vaktbytte_kandidater($1, $2, $3, $4, $5, $6, $7)", [...arg, q.kollega, fra, til < leggTilDager(fra, 92) ? til : leggTilDager(fra, 92)])
+          : [];
+        return { rolle: v.rolle, kolleger, vakter };
+      }),
+    );
+  });
+
+  // Gi bort eller bytt vakten. Med forhandsvis: bare advarslene etter arbeidsmiljøloven byttet gir
+  // (byttet gjøres og rulles tilbake), så lederen kan se dem før det bekreftes.
+  r.post("/vaktbytter/leder", async (c) => {
+    const b = lederSkjema.parse(await c.req.json().catch(() => ({})));
+    const bruker = c.get("bruker").id;
+    const svar = await bruk(c, async (db) => {
+      const oppsett = await regler(db, orgId(c));
+      const v = await en<{ ansatt_id: string; navn: string; dato: string }>(db, "select ansatt_id, navn, dato from faktura.leder_vaktbytte_vakt($1, $2, $3, $4)", [
+        orgId(c),
+        b.vakt_id ?? null,
+        b.ansatt_id ?? null,
+        b.dato ?? null,
+      ]);
+      if (!v) throw new ApiFeil(404, "Fant ikke vakten");
+      const mot = b.mot_vakt_id ? (await en<{ dato: string }>(db, "select dato from faktura.vakter where org_id = $1 and id = $2", [orgId(c), b.mot_vakt_id]))?.dato : b.mot_dato;
+      const datoer = [v.dato, mot].filter(Boolean).sort() as string[];
+      const [fra, til] = [leggTilDager(uke(datoer[0]!).fra, -1), leggTilDager(uke(datoer.at(-1)!).til, 1)];
+      const ansatte = [v.ansatt_id, b.til_ansatt];
+      const navn = new Map(
+        (await alle<{ id: string; navn: string }>(db, "select id, fornavn || ' ' || etternavn as navn from faktura.ansatte where org_id = $1 and id = any($2::uuid[])", [orgId(c), ansatte])).map(
+          (a) => [a.id, a.navn],
+        ),
+      );
+      const foer = await advarselTekster(db, orgId(c), ansatte, fra, til, oppsett, navn);
+      await db.query("savepoint leder_bytte");
+      const ny = await en<{ id: string }>(db, "select (faktura.leder_bytt_vakt($1, $2, $3, $4, $5, $6, $7, $8)).id as id", [
+        orgId(c),
+        b.vakt_id ?? null,
+        b.ansatt_id ?? null,
+        b.dato ?? null,
+        b.til_ansatt,
+        b.mot_vakt_id ?? null,
+        b.mot_dato ?? null,
+        b.melding ?? null,
+      ]);
+      const bytte = (await enBytte(db, orgId(c), ny!.id))!;
+      // De to får beskjed når en av vaktene er publisert (et utkast ser de når uka publiseres).
+      const publisert = (await en<{ ja: boolean }>(
+        db,
+        "select bool_or(publisert_at is not null) as ja from faktura.vakter where org_id = $1 and id = any($2::uuid[])",
+        [orgId(c), [bytte.vakt_id, bytte.mot_vakt_id].filter(Boolean)],
+      ))!.ja;
+      const etter = await advarselTekster(db, orgId(c), ansatte, fra, til, oppsett, navn);
+      await db.query(b.forhandsvis ? "rollback to savepoint leder_bytte" : "release savepoint leder_bytte");
+      return { bytte, publisert, advarsler: [...etter].filter((t) => !foer.has(t)) };
+    });
+    const varslet = !b.forhandsvis && svar.publisert;
+    if (varslet) await varsleLederBytte(orgId(c), svar.bytte, bruker);
+    return c.json({ ...svar.bytte, advarsler: svar.advarsler, utfort: !b.forhandsvis, varslet }, b.forhandsvis ? 200 : 201);
   });
 
   return r;
