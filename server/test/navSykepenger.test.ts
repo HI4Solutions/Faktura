@@ -398,7 +398,18 @@ describe.skipIf(!process.env.DATABASE_URL)("sykepenger fra NAV i appen", () => {
     // godkjente inntektsmeldingen gjelder (10 virkedager à 50 000 * 12 / 260, halvparten).
     const rap = (await api("GET", `/api/org/${org}/rapportmodul/lonn.sykepenger?fra=2026-09-01&til=2026-09-30`)).data;
     expect(rap.rader).toEqual([
-      { ansattnummer: 1, navn: "Ola Sykmeldt", syk: 30, gradert: 27, agp: 16, nav: 14, refusjon_mnd: 50000, refusjon: 11538.46, inntektsmelding: expect.stringMatching(/^Godkjent \d{2}\.\d{2}\.\d{4}$/) },
+      {
+        ansattnummer: 1,
+        navn: "Ola Sykmeldt",
+        syk: 30,
+        gradert: 27,
+        agp: 16,
+        nav: 14,
+        refusjon_mnd: 50000,
+        refusjon: 11538.46,
+        mottatt: 0,
+        inntektsmelding: expect.stringMatching(/^Godkjent \d{2}\.\d{2}\.\d{4}$/),
+      },
     ]);
   });
 

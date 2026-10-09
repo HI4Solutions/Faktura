@@ -1,7 +1,8 @@
 // Sykepengene i rapportmodulen (rapportmodul.ts, del av Lønn): sykefraværet i perioden per ansatt
 // fordelt på arbeidsgiverperioden (arbeidsgiveren betaler) og dagene etter (NAV), gradert
 // sykmelding, og inntektsmeldingen med refusjonskravet til NAV og det refusjonen er beregnet til
-// for perioden (for regnskapet: krav på refusjon av sykepenger). Helseopplysninger: bare eier og
+// for perioden (for regnskapet: krav på refusjon av sykepenger), og refusjonene for sykepenger
+// som er mottatt fra NAV i perioden (0085_nav_refusjon.sql). Helseopplysninger: bare eier og
 // administrator (og regnskapsføreren når de sendes).
 import { alle, type Db } from "./db.js";
 import { arbeidsgiverperiode, grunnbelop, pluss, rund, virkedag } from "./lonnsberegning.js";
@@ -67,18 +68,26 @@ export const sykepengerRapporter: Rapportdef[] = [
           order by m.ansatt_id, (m.status = 'godkjent') desc, m.opprettet desc`,
         [org, v.fra, v.til],
       );
+      // Refusjonene for sykepenger som er mottatt fra NAV i perioden.
+      const mottatt = await alle<{ ansatt_id: string; belop: number }>(
+        db,
+        `select ansatt_id, sum(belop)::float8 as belop from faktura.nav_refusjoner
+          where org_id = $1 and type = 'sykepenger' and ansatt_id is not null and dato between $2 and $3 group by 1`,
+        [org, v.fra, v.til],
+      );
       const rader: Record<string, unknown>[] = [];
       for (const a of ansatte) {
         const egne = fravaer.filter((f) => f.ansatt_id === a.id);
         const m = im.find((x) => x.ansatt_id === a.id);
-        if (!egne.length && !m) continue;
+        const fraNav = rund(Number(mottatt.find((x) => x.ansatt_id === a.id)?.belop ?? 0));
+        if (!egne.length && !m && !fraNav) continue;
         const p = arbeidsgiverperiode(
           egne.map((f) => ({ fra: f.fra, til: f.til, type: "syk" })),
           a.ansatt_fra,
         );
         const dager: { dato: string; grad: number }[] = [];
         for (const f of egne) for (let d = f.fra > v.fra ? f.fra : v.fra; d <= f.til && d <= v.til; d = pluss(d, 1)) dager.push({ dato: d, grad: Number(f.grad) });
-        if (!dager.length && !m) continue;
+        if (!dager.length && !m && !fraNav) continue;
         const nav = dager.filter((d) => p.etter.has(d.dato) || p.utenOpptjening.has(d.dato));
         const refusjon = m?.refusjon ?? null;
         rader.push({
@@ -90,12 +99,13 @@ export const sykepengerRapporter: Rapportdef[] = [
           nav: nav.length,
           refusjon_mnd: refusjon ? refusjonPaaDag(refusjon, v.til) : 0,
           refusjon: refusjon && m!.status !== "avvist" ? beregnetRefusjon(refusjon, nav) : 0,
+          mottatt: fraNav,
           inntektsmelding: m ? `${IM_STATUS[m.status] ?? m.status}${m.sendt ? ` ${visDato(m.sendt)}` : ""}` : "",
         });
       }
       return {
         merknad:
-          "Dagene er kalenderdager i perioden. Refusjonen er beregnet som dagsats (månedsbeløpet i inntektsmeldingen, høyst 6 G, ganger 12 delt på 260) for virkedagene etter arbeidsgiverperioden, ganget med sykmeldingsgraden; NAV fastsetter beløpet.",
+          "Dagene er kalenderdager i perioden. Refusjonen er beregnet som dagsats (månedsbeløpet i inntektsmeldingen, høyst 6 G, ganger 12 delt på 260) for virkedagene etter arbeidsgiverperioden, ganget med sykmeldingsgraden; NAV fastsetter beløpet. Mottatt: refusjonene for sykepenger som er registrert med dato i perioden (Lønn → Sykepenger).",
         kolonner: [
           { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
           { nokkel: "navn", navn: "Ansatt" },
@@ -105,6 +115,7 @@ export const sykepengerRapporter: Rapportdef[] = [
           { nokkel: "nav", navn: "Etter (NAV)", type: "antall", sum: true },
           { nokkel: "refusjon_mnd", navn: "Refusjon per måned", type: "kr", sum: true, pdf: false },
           { nokkel: "refusjon", navn: "Beregnet refusjon", type: "kr", sum: true },
+          { nokkel: "mottatt", navn: "Mottatt fra NAV", type: "kr", sum: true },
           { nokkel: "inntektsmelding", navn: "Inntektsmelding" },
         ],
         rader,

@@ -45,7 +45,8 @@ type Grunnlag = {
     permisjoner?: { navn: string; fra: string; til: string | null; prosent: number }[];
   }[];
 };
-type Maaned = { maaned: string; frist: string; med_lonn: number; arbeidsforhold: number; skattetrekk: number; brutto: number; siste: Melding | null };
+// endret: lønnen i måneden er endret etter at meldingen ble levert (server/src/avstemming.ts).
+type Maaned = { maaned: string; frist: string; med_lonn: number; arbeidsforhold: number; skattetrekk: number; brutto: number; siste: Melding | null; endret?: boolean };
 
 const BESKRIVELSE: Record<string, string> = {
   fastloenn: "Fastlønn",
@@ -168,7 +169,14 @@ function AmeldingListe({ aar, velgAar, apne }: { aar: number; velgAar: (a: numbe
   if (!d.data) return <Laster />;
   const status = (m: Maaned) =>
     m.siste ? (
-      merke(m.siste.status)
+      <>
+        {merke(m.siste.status)}
+        {m.endret && (
+          <span className="merke merke-advarsel" title="Lønnen i måneden er endret etter at a-meldingen ble levert. Lag en ny melding (den erstatter den forrige).">
+            Lønnen er endret
+          </span>
+        )}
+      </>
     ) : m.med_lonn || m.arbeidsforhold ? (
       <span className={`merke ${m.frist < iDag ? "merke-fare" : "merke-advarsel"}`}>{m.frist < iDag ? "Ikke levert" : "Skal leveres"}</span>
     ) : (

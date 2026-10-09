@@ -34,6 +34,7 @@ export type Kontorolle =
   | "reiseutlegg"
   | "naturalytelser"
   | "naturalytelser_mot"
+  | "nav_refusjon"
   | "skyldig_aga"
   | "paalopt_aga_feriepenger"
   | "skyldig_lonn"
@@ -59,6 +60,8 @@ export const KONTOROLLER: { rolle: Kontorolle; navn: string; standard: string }[
   { rolle: "reiseutlegg", navn: "Reisekostnader (utlegg)", standard: "7140" },
   { rolle: "naturalytelser", navn: "Naturalytelser", standard: "5280" },
   { rolle: "naturalytelser_mot", navn: "Motkonto for naturalytelser", standard: "5290" },
+  // Refusjonene fra NAV (0085, navRefusjon.ts): bank mot denne kontoen når pengene kommer.
+  { rolle: "nav_refusjon", navn: "Refusjon fra NAV (sykepenger o.l.)", standard: "5800" },
   { rolle: "skyldig_aga", navn: "Skyldig arbeidsgiveravgift", standard: "2770" },
   { rolle: "paalopt_aga_feriepenger", navn: "Påløpt arbeidsgiveravgift på feriepenger", standard: "2785" },
   { rolle: "skyldig_lonn", navn: "Skyldig lønn", standard: "2930" },
@@ -282,8 +285,8 @@ export type LagretBilag = {
   posteringer: Postering[];
 };
 
-// Bilagene (med posteringene) for en kjøring, eller for kjøringene med bilag i perioden. Nyeste
-// først for en kjøring; i rekkefølgen i serien for perioden.
+// Bilagene (med posteringene) for en kjøring, eller for kjøringene og refusjonene fra NAV (0085)
+// med bilag i perioden. Nyeste først for en kjøring; i rekkefølgen i serien for perioden.
 export async function hentBilag(db: Db, org: string, valg: { kjoring: string } | { fra: string; til: string }): Promise<LagretBilag[]> {
   const plan = kontoplan(await hentBokforingsoppsett(db, org));
   const enKjoring = "kjoring" in valg;
@@ -292,7 +295,7 @@ export async function hentBilag(db: Db, org: string, valg: { kjoring: string } |
     `select b.id, b.serie || '-' || b.aar || '-' || b.nummer as bilagsnummer, to_char(b.dato, 'YYYY-MM-DD') as dato, b.tekst,
             b.reverserer, b.reversert_av, b.opprettet, (select coalesce(u.navn, u.epost) from faktura.brukere u where u.id = b.opprettet_av) as opprettet_av
        from faktura.bilag b
-      where b.org_id = $1 and b.kilde = 'lonn' and ${enKjoring ? "b.kilde_id = $2" : "b.dato between $2 and $3"}
+      where b.org_id = $1 and ${enKjoring ? "b.kilde = 'lonn' and b.kilde_id = $2" : "b.kilde in ('lonn', 'nav_refusjon') and b.dato between $2 and $3"}
       order by ${enKjoring ? "b.opprettet desc, b.nummer desc" : "b.aar, b.nummer"}`,
     enKjoring ? [org, valg.kjoring] : [org, valg.fra, valg.til],
   );

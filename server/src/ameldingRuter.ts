@@ -10,7 +10,7 @@ import { config } from "./config.js";
 import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { krevMfa } from "./auth.js";
-import { hentGrunnlag, kontroller, oppsummer } from "./amelding.js";
+import { frist, hentGrunnlag, kontroller, oppsummer } from "./amelding.js";
 import { A_ORDNING } from "./altinn.js";
 import { hentUnderenheter } from "./brreg.js";
 import { pluss, virkedag } from "./lonnsberegning.js";
@@ -22,13 +22,7 @@ const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("
 const maanedS = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Velg en måned (ÅÅÅÅ-MM)");
 const osloIDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
 
-// Fristen: den 5. i måneden etter, eller neste virkedag.
-export function frist(maaned: string) {
-  const [a, m] = maaned.split("-").map(Number) as [number, number];
-  let d = m === 12 ? `${a + 1}-01-05` : `${a}-${String(m + 1).padStart(2, "0")}-05`;
-  while (!virkedag(d)) d = pluss(d, 1);
-  return d;
-}
+export { frist };
 
 const RAD = `
   select id, to_char(maaned, 'YYYY-MM') as maaned, meldings_id, erstatter, innsending, status, oppsummering, forsendelse_id, tilbakemelding,
@@ -54,10 +48,10 @@ export function ameldingRuter() {
     return c.json(
       await bruk(c, async (db) => {
         await db.query("select faktura.krev($1, 'personal_les')", [orgId(c)]);
-        const lonn = await alle<{ maaned: string; antall: number; skattetrekk: number; brutto: number }>(
+        const lonn = await alle<{ maaned: string; antall: number; skattetrekk: number; trekk_avrundet: number; brutto: number }>(
           db,
           `select to_char(s.utbetalingsdato, 'YYYY-MM') as maaned, count(distinct s.ansatt_id)::int as antall,
-                  sum(s.skattetrekk)::float8 as skattetrekk, sum(s.brutto)::float8 as brutto
+                  sum(s.skattetrekk)::float8 as skattetrekk, sum(round(s.skattetrekk))::float8 as trekk_avrundet, sum(s.brutto)::float8 as brutto
              from faktura.lonnsslipper s join faktura.lonnskjoringer k on k.id = s.kjoring_id
             where s.org_id = $1 and k.status = 'godkjent' and extract(year from s.utbetalingsdato) = $2
             group by 1`,
@@ -79,6 +73,13 @@ export function ameldingRuter() {
           .map((m) => {
             const l = lonn.find((x) => x.maaned === m);
             const siste = meldinger.find((x) => x.maaned === m) ?? null;
+            // Endret etter levering: forskuddstrekket eller antallet med lønn er ikke det samme som i
+            // den siste meldingen som er levert (avstemmingen: avstemming.ts).
+            const levert = meldinger.find((x) => x.maaned === m && ["levert", "sendt", "mottatt"].includes(x.status) && x.oppsummering);
+            const endret =
+              !!levert &&
+              (Math.abs(Number(l?.trekk_avrundet ?? 0) - Number(levert.oppsummering.sum_forskuddstrekk ?? 0)) >= 1 ||
+                (l?.antall ?? 0) !== Number(levert.oppsummering.antall_med_lonn ?? 0));
             return {
               maaned: m,
               frist: frist(m),
@@ -87,6 +88,7 @@ export function ameldingRuter() {
               skattetrekk: l?.skattetrekk ?? 0,
               brutto: l?.brutto ?? 0,
               siste,
+              endret,
             };
           })
           .reverse();

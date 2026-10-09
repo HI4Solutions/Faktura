@@ -12,7 +12,7 @@
 
 import { alle, en, type Db } from "./db.js";
 import { lonnsart } from "./lonnsarter.js";
-import { rund } from "./lonnsberegning.js";
+import { pluss, rund, virkedag } from "./lonnsberegning.js";
 import { PERMISJONSARTER, permisjonNavn, rapporteres, sluttdatoKjent, type PermisjonsArt } from "./permisjoner.js";
 
 export const NAVNEROM = "urn:ske:fastsetting:innsamling:a-meldingen:v2_3";
@@ -59,6 +59,14 @@ export type Grunnlag = {
   permisjoner: Permisjonsrad[];
 };
 export type Avvik = { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string };
+
+// Fristen: den 5. i måneden etter, eller neste virkedag.
+export function frist(maaned: string) {
+  const [a, m] = maaned.split("-").map(Number) as [number, number];
+  let d = m === 12 ? `${a + 1}-01-05` : `${a}-${String(m + 1).padStart(2, "0")}-05`;
+  while (!virkedag(d)) d = pluss(d, 1);
+  return d;
+}
 
 const forste = (maaned: string) => `${maaned}-01`;
 function siste(maaned: string) {

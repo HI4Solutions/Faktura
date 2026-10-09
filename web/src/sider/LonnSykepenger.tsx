@@ -1,13 +1,14 @@
 // Sykepenger og NAV (server/src/navRuter.ts): fanen «Sykepenger» under Lønn. Om hentingen fra NAV
 // er slått på og tilgangen gitt, NAVs forespørsler om inntektsmelding med inntektsmeldingen appen
 // foreslår (arbeidsgiverperioden, inntekten og refusjonskravet), som kan rettes før den sendes, og
-// sykmeldingene fra NAV. En forespørsel som er åpen, står i adressen (?foresporsel=).
+// sykmeldingene fra NAV. En forespørsel som er åpen, står i adressen (?foresporsel=). Og
+// refusjonene NAV har betalt (server/src/navRefusjon.ts), som bokføres når de registreres.
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, useKonto } from "../konto";
-import { dato, kr } from "../format";
+import { dato, iDag, kr } from "../format";
 import { IkonVenstre } from "../ikoner";
 
 type Periode = { fom: string; tom: string };
@@ -292,6 +293,254 @@ function Oversikt({ apne }: { apne: (id: string) => void }) {
           ))}
         </div>
       )}
+
+      {admin && <NavRefusjoner />}
+    </>
+  );
+}
+
+// --- Refusjonene fra NAV --------------------------------------------------------------------
+
+type Refusjonstype = "sykepenger" | "omsorgspenger" | "foreldrepenger" | "svangerskapspenger" | "pleiepenger" | "annet";
+const REFUSJONSTYPER: Record<Refusjonstype, string> = {
+  sykepenger: "Sykepenger",
+  omsorgspenger: "Omsorgspenger",
+  foreldrepenger: "Foreldrepenger",
+  svangerskapspenger: "Svangerskapspenger",
+  pleiepenger: "Pleiepenger",
+  annet: "Annen refusjon",
+};
+type Refusjon = {
+  id: string;
+  ansatt_id: string | null;
+  ansatt_navn: string | null;
+  type: Refusjonstype;
+  dato: string;
+  belop: number;
+  fra: string | null;
+  til: string | null;
+  tekst: string | null;
+  bilag: string | null;
+};
+
+// Det NAV har betalt i året (registreres når pengene er kommet, og bokføres: bank mot kontoen for
+// refusjon fra NAV). En som er registrert feil, slettes (bilaget reverseres).
+function NavRefusjoner() {
+  const { org } = useKonto();
+  const [aar, settAar] = useState(Number(iDag().slice(0, 4)));
+  const sti = `/org/${org!.id}/lonn/nav-refusjoner`;
+  const liste = useData(() => hent<{ refusjoner: Refusjon[]; sum: Record<Refusjonstype, number> }>(`${sti}?aar=${aar}`), [sti, aar]);
+  const ansatte = useData(() => hent<{ id: string; fornavn: string; etternavn: string; aktiv: boolean }[]>(`/org/${org!.id}/ansatte`), [org?.id]);
+  const tomt = { type: "sykepenger" as Refusjonstype, ansatt_id: "", dato: iDag(), belop: "", fra: "", til: "", tekst: "" };
+  const [ny, settNy] = useState<typeof tomt | null>(null);
+  const [melding, settMelding] = useState<string | null>(null);
+  const h = useHandling();
+  const smal = useSmal();
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    if (!ny) return;
+    const r = await h.kjor(() =>
+      api<Refusjon>("POST", sti, {
+        type: ny.type,
+        ansatt_id: ny.ansatt_id || null,
+        dato: ny.dato,
+        belop: tall(ny.belop),
+        fra: ny.fra || null,
+        til: ny.til || null,
+        tekst: ny.tekst.trim() || null,
+      }),
+    );
+    if (r) {
+      settNy(null);
+      settMelding(`Refusjonen på ${kr(r.belop)} er registrert og bokført${r.bilag ? ` (bilag ${r.bilag})` : ""}.`);
+      void liste.last();
+    }
+  }
+  async function slett(r: Refusjon) {
+    if (!confirm(`Slette refusjonen på ${kr(r.belop)} fra ${dato(r.dato)}? Bilaget reverseres.`)) return;
+    if (await h.kjor(async () => (await api("DELETE", `${sti}/${r.id}`), true))) {
+      settMelding("Refusjonen er slettet, og bilaget er reversert.");
+      void liste.last();
+    }
+  }
+  const periode = (r: Refusjon) => (r.fra && r.til ? `${dato(r.fra)}–${dato(r.til)}` : "");
+  // Kortere på mobil: «01.09–30.09.2026» når perioden er i ett år.
+  const kortPeriode = (r: Refusjon) =>
+    r.fra && r.til && r.fra.slice(0, 4) === r.til.slice(0, 4) ? `${dato(r.fra).slice(0, 5)}–${dato(r.til)}` : periode(r);
+  const sum = liste.data ? Object.values(liste.data.sum).reduce((a, b) => a + b, 0) : 0;
+
+  return (
+    <>
+      <h3 className="lonn-under">Refusjon fra NAV</h3>
+      <p className="liten dempet">
+        Registrer refusjonene NAV betaler (sykepenger, omsorgspenger, foreldrepenger og andre) når pengene er kommet. De bokføres (bank mot kontoen for refusjon
+        fra NAV), og avstemmes mot det som er krevd i rapporten «Sykepenger og refusjon».
+      </p>
+      <div className="knapper lonn-knapper">
+        <label>
+          År{" "}
+          <select value={aar} onChange={(e) => settAar(Number(e.target.value))}>
+            {[0, 1, 2].map((i) => {
+              const a = Number(iDag().slice(0, 4)) - i;
+              return (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+        {!ny && (
+          <button type="button" onClick={() => settNy(tomt)}>
+            Registrer refusjon
+          </button>
+        )}
+      </div>
+      {melding && (
+        <div className="melding ok" role="status">
+          {melding}
+        </div>
+      )}
+      {ny && (
+        <form className="kort nav-refusjon-skjema" onSubmit={lagre}>
+          <div className="rad">
+            <label>
+              Gjelder
+              <select value={ny.type} onChange={(e) => settNy({ ...ny, type: e.target.value as Refusjonstype })}>
+                {Object.entries(REFUSJONSTYPER).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Ansatt
+              <select value={ny.ansatt_id} onChange={(e) => settNy({ ...ny, ansatt_id: e.target.value })}>
+                <option value="">Ikke valgt (flere eller ingen)</option>
+                {(ansatte.data ?? []).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.fornavn} {a.etternavn}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="rad">
+            <label>
+              Mottatt
+              <input type="date" required value={ny.dato} onChange={(e) => settNy({ ...ny, dato: e.target.value })} />
+            </label>
+            <label>
+              Beløp (kr)
+              <input inputMode="decimal" required value={ny.belop} onChange={(e) => settNy({ ...ny, belop: e.target.value })} />
+            </label>
+          </div>
+          <div className="rad">
+            <label>
+              Perioden fra
+              <input type="date" value={ny.fra} onChange={(e) => settNy({ ...ny, fra: e.target.value })} />
+            </label>
+            <label>
+              til og med
+              <input type="date" min={ny.fra || undefined} value={ny.til} onChange={(e) => settNy({ ...ny, til: e.target.value })} />
+            </label>
+          </div>
+          <label>
+            Tekst
+            <input maxLength={200} placeholder="Valgfritt, f.eks. referansen fra NAV" value={ny.tekst} onChange={(e) => settNy({ ...ny, tekst: e.target.value })} />
+          </label>
+          <Feil melding={h.feil} />
+          <div className="knapper">
+            <button className="primar" disabled={h.opptatt}>
+              Registrer og bokfør
+            </button>
+            <button type="button" onClick={() => settNy(null)}>
+              Avbryt
+            </button>
+          </div>
+        </form>
+      )}
+      {liste.feil ? (
+        <Feil melding={liste.feil} />
+      ) : !liste.data ? (
+        <Laster />
+      ) : !liste.data.refusjoner.length ? (
+        <div className="kort">
+          <Tom tittel={`Ingen refusjoner registrert i ${aar}`}>
+            <p>Når NAV betaler refusjonen (etter inntektsmeldingen), registrerer du beløpet her.</p>
+          </Tom>
+        </div>
+      ) : smal ? (
+        <div className="kort liste">
+          {liste.data.refusjoner.map((r) => (
+            <div key={r.id} className="liste-rad">
+              <span className="linje">
+                <span className="tittel">
+                  {REFUSJONSTYPER[r.type]}
+                  {r.ansatt_navn ? ` · ${r.ansatt_navn}` : ""}
+                </span>
+                <span className="tall">{kr(r.belop)}</span>
+              </span>
+              <span className="linje">
+                <span className="under">{[dato(r.dato), kortPeriode(r), r.bilag].filter(Boolean).join(" · ")}</span>
+                <button type="button" className="lenke" disabled={h.opptatt} onClick={() => void slett(r)}>
+                  Slett
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="kort tabell">
+          <table>
+            <thead>
+              <tr>
+                <th>Mottatt</th>
+                <th>Gjelder</th>
+                <th>Ansatt</th>
+                <th>Periode</th>
+                <th className="hoyre">Beløp</th>
+                <th>Bilag</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {liste.data.refusjoner.map((r) => (
+                <tr key={r.id}>
+                  <td>{dato(r.dato)}</td>
+                  <td>
+                    {REFUSJONSTYPER[r.type]}
+                    {r.tekst ? <span className="dempet liten"> · {r.tekst}</span> : null}
+                  </td>
+                  <td>{r.ansatt_navn ?? <span className="dempet">–</span>}</td>
+                  <td>{periode(r)}</td>
+                  <td className="tall">{kr(r.belop)}</td>
+                  <td>{r.bilag}</td>
+                  <td className="hoyre">
+                    <button type="button" className="lenke" disabled={h.opptatt} onClick={() => void slett(r)}>
+                      Slett
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={4}>
+                  <strong>Sum {aar}</strong>
+                </td>
+                <td className="tall">
+                  <strong>{kr(sum)}</strong>
+                </td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+      {!ny && <Feil melding={h.feil} />}
     </>
   );
 }

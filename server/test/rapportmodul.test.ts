@@ -47,7 +47,7 @@ describe("rapportmodulen: valg og perioder", () => {
       expect(r.id.startsWith(`${r.modul}.`)).toBe(true);
     }
     expect(RAPPORTER.filter((r) => r.maanedlig).map((r) => r.id)).toEqual(
-      expect.arrayContaining(["faktura.journal", "faktura.mva", "personal.timer", "lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga"]),
+      expect.arrayContaining(["faktura.journal", "faktura.mva", "personal.timer", "lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.avstemming", "lonn.nav_refusjoner"]),
     );
   });
 });
@@ -172,6 +172,9 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "lonn.reiser",
         "lonn.naturalytelser",
         "lonn.permisjoner",
+        "lonn.avstemming",
+        "lonn.avstemming_aar",
+        "lonn.nav_refusjoner",
         "lonn.sykepenger",
       ],
     });
@@ -181,10 +184,13 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     // Regnskap ser lønn og timer, men ikke fraværet og feriebanken (som i personalmodulen).
     const r = await moduler(regnskap);
     expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte"]);
-    // Sykepengene (helseopplysninger) og permisjonene (fravær) ser bare eier og administrator.
-    expect(r.lonn).toHaveLength(12);
+    // Sykepengene og refusjonene fra NAV (helseopplysninger) og permisjonene (fravær) ser bare eier
+    // og administrator; avstemmingen ser regnskap.
+    expect(r.lonn).toHaveLength(14);
     expect(r.lonn).not.toContain("lonn.sykepenger");
+    expect(r.lonn).not.toContain("lonn.nav_refusjoner");
     expect(r.lonn).not.toContain("lonn.permisjoner");
+    expect(r.lonn).toEqual(expect.arrayContaining(["lonn.avstemming", "lonn.avstemming_aar"]));
     expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.sykepenger`, undefined, regnskap)).status).toBe(403);
     expect(await moduler(fakturerer)).toEqual({ faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"] });
     expect(await moduler(ola)).toEqual({});

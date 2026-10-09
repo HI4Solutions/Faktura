@@ -646,7 +646,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   avsetningen; eller kostnadsført når de utbetales) og eventuelt OTP (5945/2990); kontoene kan
   endres (`lonn_oppsett.bokforing_*`). Kjøringer godkjent før bokføringen kom, bokføres fra
   kjøringen. Rapporten «Lønnsbilag» viser bilagene (også til regnskapsføreren når kjøringen
-  godkjennes). Lønnsbilagene ser de som ser lønnen
+  godkjennes). Lønnsbilagene ser de som ser lønnen. Refusjonene fra NAV er den andre kilden
+  (`kilde` nav_refusjon, `0085_nav_refusjon.sql`)
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen
@@ -802,6 +803,29 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   endringsårsaken «Permittering». Eier og administrator lager varselet om permittering som PDF
   (`GET /fravaer/:id/permitteringsvarsel`). Rapporten «Permisjoner og permitteringer»
   (`lonn.permisjoner`, bare eier og administrator, som fraværet)
+- Avstemmingen av lønnen og refusjonene fra NAV (`0085_nav_refusjon.sql`, `server/src/avstemming.ts`,
+  `server/src/navRefusjon.ts`, Lønn → Sykepenger i `web/src/sider/LonnSykepenger.tsx`).
+  Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften
+  (`hentMaaned`): det lønnskjøringene gir i a-meldingen nå (de godkjente kjøringene med
+  utbetaling i måneden, regnet som i meldingen, og eksakt fra slippene), det som står i
+  oppsummeringen til den siste a-meldingen som er levert for måneden (levert, sendt eller
+  mottatt), og det som er bokført i lønnsbilagene i måneden (kontoene for forskuddstrekk og
+  skyldig arbeidsgiveravgift i lønnsoppsettet). Avvikene (`avvik`) sier hva som bør gjøres: a-meldingen er
+  ikke levert (ennå, med fristen), den stemmer ikke med lønnskjøringene (1 kr eller mer; da lages en
+  ny som erstatter den forrige), lønnen er ikke bokført eller bokføringen stemmer ikke (1 øre
+  eller mer), eller det er bokført lønn uten kjøringer. Månedene under Lønn → A-melding merkes
+  «Lønnen er endret» (`endret`) når forskuddstrekket eller antallet med lønn ikke er det samme som
+  i den siste meldingen som er levert. Rapportene «Avstemming per termin» (`lonn.avstemming`,
+  månedene i terminen) og «Årsavstemming» (`lonn.avstemming_aar`: lønnen etter beskrivelsen,
+  forskuddstrekket, avgiften og feriepengene som er opptjent, med månedene som ikke er levert
+  eller ikke stemmer), for dem som ser lønnen. Refusjonene fra NAV (`nav_refusjoner`: sykepenger,
+  omsorgspenger, foreldrepenger, svangerskapspenger, pleiepenger eller annet, med datoen pengene
+  kom, beløpet, perioden og den ansatte) registreres av eier og administrator
+  (`registrer_nav_refusjon`), som bokfører dem med et bilag i serie L (bank mot kontoen for
+  refusjon fra NAV, standard 5800, uten navnet); en refusjon som slettes (`slett_nav_refusjon`),
+  reverseres. Sykepenger er helseopplysninger: refusjonene, rapporten «Refusjoner fra NAV»
+  (`lonn.nav_refusjoner`) og revisjonsloggen for dem ser bare eier og administrator, mens bilaget
+  står i regnskapet som lønnsbilagene. Sykepengerapporten viser det som er mottatt
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -829,14 +853,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   CSV (semikolon, BOM, norske desimaler) og PDF (liggende med mange kolonner) er felles. Lista
   viser bare rapportene organisasjonen har funksjonen til og brukeren har tilgang til
   (fakturarapportene for alle med lesetilgang, timer, timebank, ansatte og lønn for eier,
-  administrator og regnskap, fravær og feriebank for eier og administrator). Faktura: kundereskontro, mva per
+  administrator og regnskap, fravær, feriebank, permisjoner, sykepenger og refusjonene fra NAV for eier og administrator). Faktura: kundereskontro, mva per
   termin, salg per måned, fakturajournal (med alle kolonnene fra den gamle eksporten) og
   innbetalinger (`server/src/rapporter.ts`). Personal: timer per ansatt (ordinære, overtid uke
   for uke, merarbeid og uten overtid), timeliste, fravær, feriebank, timebank, ekstratimer og
   ansatte (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
   per lønnsart (grunnlaget for bokføringen), skattetrekk og arbeidsgiveravgift per termin med
   fristene, feriepengeliste, årsoversikt, OTP, lønns- og stillingsendringer, trekk og betalinger, reiser og
-  godtgjørelser, naturalytelser og permisjoner og permitteringer (`server/src/lonnRapporter.ts`).
+  godtgjørelser, naturalytelser og permisjoner og permitteringer (`server/src/lonnRapporter.ts`),
+  sykepenger og refusjon (`server/src/sykepengerRapporter.ts`), avstemming per termin,
+  årsavstemming og refusjoner fra NAV (`server/src/avstemming.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
   lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
   for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og
@@ -849,8 +875,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag. Loggen for de ansatte, lønnen,
   lønnshistorikken, trekkene, naturalytelsene, reiseregningene, a-meldingene og lønnsbilagene er bare
-  for dem som ser lønnen, og loggen for fraværet og inntektsmeldingene til NAV bare for eier og
-  administrator (`0081_revisjonslogg_lonn.sql`, `0083_naturalytelser_reiser.sql`)
+  for dem som ser lønnen, og loggen for fraværet, inntektsmeldingene og refusjonene fra NAV bare for
+  eier og administrator (`0081_revisjonslogg_lonn.sql`, `0083_naturalytelser_reiser.sql`,
+  `0085_nav_refusjon.sql`)
 
 ### Roller
 
