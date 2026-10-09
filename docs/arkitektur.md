@@ -293,6 +293,23 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   regnskap) ser bare at den ansatte har fravær («F») i fraværslista, vaktplanen, på tavla og i
   bemanningskalenderen, og fraværet står ikke i revisjonsloggen for dem
   (`faktura.fravaer_type`, `0047_fravaer_skjult.sql`)
+- Egenmelding (`0071_egenmelding.sql`, `server/src/fravaer.ts`, «Meld deg syk» og «Send
+  egenmelding» under Mine vakter): den ansatte sender egenmelding for egen sykdom eller sykt barn
+  når sykdommen meldes, eller etterpå for sykdom de siste 16 dagene, og bekrefter erklæringen
+  (og svarer på om fraværet har sammenheng med arbeidet); eier og administrator får varsel.
+  `fravaer.dokumentasjon` er egenmelding (med `egenmeldt` og `egenmeldt_av`) eller sykmelding
+  (legeerklæring for sykt barn), som lederen registrerer, også en egenmelding på papir. Den
+  ansatte kan ikke endre eller fjerne dokumentasjonen etterpå. Databasen sjekker reglene
+  (`faktura.fravaer_egenmelding`): egen sykdom inntil 3 kalenderdager på rad og 4 ganger i
+  løpet av 12 måneder, etter to måneder i jobben (folketrygdloven § 8-24); arbeidsgiveren kan
+  gi mer under Innstillinger → Ansatte og timer (`lonn_oppsett.egenmelding_dager`,
+  `egenmelding_ganger`, `egenmelding_dager_aar`, f.eks. IA-ordningen med 8 dager per gang og 24
+  dager i løpet av 12 måneder), aldri mindre: lovens regler gjelder alltid. Sykt barn: inntil 3
+  dager på rad (`egenmelding_barn_dager`), og telles ikke med i de fire gangene. Fravær med
+  egenmelding som henger sammen (dagen etter), er samme tilfelle
+  (`faktura.egenmelding_tilfeller`, `faktura.egenmelding_brukt`). Dokumentasjonen følger typen:
+  bare eier, administrator og den ansatte selv ser den. Rapporten «Sykefravær og egenmeldinger»
+  ligger i rapportmodulen
 - Feriebank (`0050_feriebank.sql`, `ferie.ts`, siden «Ferie»): feriedagene hver ansatt har i
   ferieåret (kalenderåret), hva som er avviklet (til og med i dag) og planlagt, og hva som er
   igjen. Avviklet og planlagt regnes av fraværet med typen ferie (`ferie_saldo`), så banken

@@ -2391,3 +2391,16 @@ table.rapport-tabell tfoot td:first-child { background: var(--flate-2); }
   table.rapport-tabell th:last-child, table.rapport-tabell td:last-child { padding-right: 16px; }
   table.rapport-tabell td:first-child { white-space: normal; min-width: 110px; max-width: 42vw; }
 }
+
+/* Egenmelding (sider/Fravaer.tsx): erklæringen i skjemaet, dokumentasjonen som merke, og knappene i Mine vakter */
+fieldset.egenmelding { padding: 10px 14px 4px; }
+fieldset.egenmelding legend { padding: 0 4px; font-size: 0.83rem; font-weight: 600; color: var(--tekst-2); }
+label.egenmelding-valg { display: flex; align-items: flex-start; gap: 8px; font-weight: 450; line-height: 1.45; }
+label.egenmelding-valg input[type="checkbox"] { flex: none; margin: 2px 0 0; }
+fieldset.egenmelding .felt-hjelp { margin-bottom: 10px; }
+fieldset.egenmelding .melding { margin-bottom: 8px; }
+.egenmelding-sendt { margin-bottom: 14px; }
+.merke.merke-dok { margin-left: 6px; background: var(--flate-2); color: var(--tekst-2); border: 1px solid var(--kant); }
+.mitt-fravaer-knapper { display: flex; flex: none; gap: 14px; }
+.mitt-fravaer > .knapper { margin-top: 2px; }
+.egenmelding-saldo { margin: 0 0 10px; }

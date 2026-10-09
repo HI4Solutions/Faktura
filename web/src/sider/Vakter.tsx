@@ -1472,7 +1472,7 @@ function MineVakter({
           {melding}
         </div>
       )}
-      <MittFravaer fravaer={svar.fravaer.filter((f) => f.ansatt_id === egen)} endret={endret} />
+      <MittFravaer ansattId={egen} versjon={svar} endret={endret} />
       {ledige > 0 && (
         <div className="melding info venter">
           <span>{ledige === 1 ? "Én ledig vakt" : `${ledige} ledige vakter`} de neste ukene.</span>

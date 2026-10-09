@@ -148,7 +148,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
   it("rapportene etter rolle og funksjon", async () => {
     expect(await moduler()).toEqual({
       faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"],
-      personal: ["personal.timer", "personal.timeliste", "personal.fravaer", "personal.ferie", "personal.ekstratimer", "personal.ansatte"],
+      personal: ["personal.timer", "personal.timeliste", "personal.fravaer", "personal.sykefravaer", "personal.ferie", "personal.ekstratimer", "personal.ansatte"],
       lonn: ["lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.feriepenger", "lonn.aarsoversikt", "lonn.otp"],
     });
     const liste = (await kall("GET", `/api/org/${org}/rapportmodul`)).data;

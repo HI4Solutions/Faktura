@@ -139,6 +139,13 @@ const oppsettSkjema = z.object({
   feriepenger_prosent: z.number().min(10.2, "Feriepengene er minst 10,2 %").max(20, "Feriepengene kan være høyst 20 %").optional(),
   lonnsdag: z.number().int().min(1, "Velg en dag fra 1 til 31").max(31, "Velg en dag fra 1 til 31").optional(),
   halv_skatt: z.enum(["november", "desember"]).optional(),
+  // Egenmelding (0071_egenmelding.sql): dager per gang og grensene i løpet av 12 måneder for egen
+  // sykdom (null: ingen grense; lovens 3 dager og 4 ganger gjelder alltid), og dager per gang for
+  // sykt barn.
+  egenmelding_dager: z.number().int().min(3, "Egenmelding gjelder minst 3 dager per gang (loven)").max(16, "Høyst 16 dager (arbeidsgiverperioden)").optional(),
+  egenmelding_ganger: z.number().int().min(4, "Loven gir minst 4 ganger i løpet av 12 måneder").max(52).nullable().optional(),
+  egenmelding_dager_aar: z.number().int().min(12, "Minst 12 dager (4 ganger 3 dager)").max(366).nullable().optional(),
+  egenmelding_barn_dager: z.number().int().min(3, "Egenmelding for sykt barn gjelder minst 3 dager per gang").max(30).optional(),
 });
 
 const foringSkjema = z.object({
@@ -211,12 +218,16 @@ type Oppsett = Regler & {
   feriepenger_prosent: number;
   lonnsdag: number;
   halv_skatt: "november" | "desember";
+  egenmelding_dager: number;
+  egenmelding_ganger: number | null;
+  egenmelding_dager_aar: number | null;
+  egenmelding_barn_dager: number;
 };
 export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
     `select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
-            aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt
+            aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt, egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager
        from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
@@ -234,6 +245,10 @@ export async function regler(db: Db, org: string): Promise<Oppsett> {
       feriepenger_prosent: 12,
       lonnsdag: 20,
       halv_skatt: "desember",
+      egenmelding_dager: 3,
+      egenmelding_ganger: 4,
+      egenmelding_dager_aar: null,
+      egenmelding_barn_dager: 3,
     }
   );
 }
@@ -299,13 +314,16 @@ export function ansattRuter() {
         const ny = { ...naa, ...Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined)) };
         await db.query(
           `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
-                                             aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                                             aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt,
+                                             egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
              full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg,
              aga_sone = excluded.aga_sone, otp_prosent = excluded.otp_prosent, feriepenger_prosent = excluded.feriepenger_prosent,
-             lonnsdag = excluded.lonnsdag, halv_skatt = excluded.halv_skatt`,
+             lonnsdag = excluded.lonnsdag, halv_skatt = excluded.halv_skatt, egenmelding_dager = excluded.egenmelding_dager,
+             egenmelding_ganger = excluded.egenmelding_ganger, egenmelding_dager_aar = excluded.egenmelding_dager_aar,
+             egenmelding_barn_dager = excluded.egenmelding_barn_dager`,
           [
             orgId(c),
             ny.aktiv,
@@ -322,6 +340,10 @@ export function ansattRuter() {
             ny.feriepenger_prosent,
             ny.lonnsdag,
             ny.halv_skatt,
+            ny.egenmelding_dager,
+            ny.egenmelding_ganger,
+            ny.egenmelding_dager_aar,
+            ny.egenmelding_barn_dager,
           ],
         );
         return regler(db, orgId(c));

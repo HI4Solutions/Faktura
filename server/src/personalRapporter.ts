@@ -1,5 +1,6 @@
 // Rapportene for Personal i rapportmodulen (rapportmodul.ts): timene per ansatt med overtid og
-// merarbeid, timelisten, fraværet, feriebanken, ekstratimene og ansattlisten.
+// merarbeid, timelisten, fraværet, sykefraværet med egenmeldingene, feriebanken, ekstratimene og
+// ansattlisten.
 import { alle } from "./db.js";
 import { beregnUke, uke, type Foring } from "./arbeidstid.js";
 import { regler } from "./ansatte.js";
@@ -150,6 +151,53 @@ export const personalRapporter: Rapportdef[] = [
         rader: rader.map((f) => ({ ...f, type: (FRAVAERTYPER as Record<string, string>)[f.type] ?? "Fravær" })),
       };
     },
+  },
+  {
+    id: "personal.sykefravaer",
+    modul: "personal",
+    navn: "Sykefravær og egenmeldinger",
+    beskrivelse:
+      "Sykefraværet i perioden per ansatt: dager med egenmelding, med sykmelding og uten dokumentasjon, dager med sykt barn, og egenmeldingene i løpet av 12 måneder.",
+    funksjon: "vaktplan",
+    tilgang: "personal",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => ({
+      merknad: "Dagene er kalenderdager i perioden. «Siste 12 mnd» er egenmeldingene for egen sykdom i 12 måneder fram til slutten av perioden.",
+      kolonner: [
+        { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+        { nokkel: "navn", navn: "Ansatt" },
+        { nokkel: "egenmeldinger", navn: "Egenmeldinger", type: "antall", sum: true },
+        { nokkel: "egenmeldt", navn: "Egenmeldt", type: "antall", sum: true },
+        { nokkel: "sykmeldt", navn: "Sykmeldt", type: "antall", sum: true },
+        { nokkel: "udokumentert", navn: "Uten dokumentasjon", type: "antall", sum: true },
+        { nokkel: "sykt_barn", navn: "Sykt barn", type: "antall", sum: true },
+        { nokkel: "ganger_12", navn: "Siste 12 mnd (ganger)", type: "antall" },
+        { nokkel: "dager_12", navn: "Siste 12 mnd (dager)", type: "antall" },
+      ],
+      rader: await alle(
+        db,
+        `with d as (
+           select f.ansatt_id, f.type, f.dokumentasjon, least(f.til, $3::date) - greatest(f.fra, $2::date) + 1 as dager
+             from faktura.fravaer f
+            where f.org_id = $1 and f.type in ('syk', 'sykt_barn') and f.fra <= $3 and f.til >= $2
+         ), p as (
+           select d.ansatt_id,
+                  coalesce(sum(d.dager) filter (where d.type = 'syk' and d.dokumentasjon = 'egenmelding'), 0)::int as egenmeldt,
+                  coalesce(sum(d.dager) filter (where d.type = 'syk' and d.dokumentasjon = 'sykmelding'), 0)::int as sykmeldt,
+                  coalesce(sum(d.dager) filter (where d.type = 'syk' and d.dokumentasjon is null), 0)::int as udokumentert,
+                  coalesce(sum(d.dager) filter (where d.type = 'sykt_barn'), 0)::int as sykt_barn
+             from d group by d.ansatt_id
+         )
+         select a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn,
+                (select count(*) from faktura.egenmelding_tilfeller($1, a.id, 'syk') t where t.fra between $2 and $3)::int as egenmeldinger,
+                p.egenmeldt, p.sykmeldt, p.udokumentert, p.sykt_barn, b.ganger as ganger_12, b.dager as dager_12
+           from p join faktura.ansatte a on a.org_id = $1 and a.id = p.ansatt_id
+           cross join lateral faktura.egenmelding_brukt($1, a.id, $3::date) b
+          order by a.ansattnummer`,
+        [org, v.fra, v.til],
+      ),
+    }),
   },
   {
     id: "personal.ferie",

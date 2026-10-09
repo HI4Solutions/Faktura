@@ -121,6 +121,11 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
       feriepenger_prosent: 12,
       lonnsdag: 20,
       halv_skatt: "desember",
+      // Egenmelding etter loven (0071_egenmelding.sql).
+      egenmelding_dager: 3,
+      egenmelding_ganger: 4,
+      egenmelding_dager_aar: null,
+      egenmelding_barn_dager: 3,
     });
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { overtid_prosent: 30 })).data.error).toBe("Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).data).toMatchObject({ aktiv: true, daglig_grense: 9 });

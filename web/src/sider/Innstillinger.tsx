@@ -163,6 +163,22 @@ const AGA_SONER: [string, string][] = [
   ["4a", "Sone 4a – 7,9 %"],
   ["5", "Sone 5 – 0 % (Finnmark og Nord-Troms)"],
 ];
+// Egenmelding (0071_egenmelding.sql): lovens regler, IA-ordningen eller en egen ordning.
+type Egenmeldingsordning = "lov" | "ia" | "egen";
+const ordning = (dager: number, ganger: number | null, dagerAar: number | null): Egenmeldingsordning =>
+  dager === 3 && ganger === 4 && dagerAar == null ? "lov" : dager === 8 && ganger == null && dagerAar === 24 ? "ia" : "egen";
+const valgfrittTall = (t: string) => (t.trim() ? tall(t) : null);
+function egenmeldingsregler(o: { egenmelding: Egenmeldingsordning; egenmelding_dager: string; egenmelding_ganger: string; egenmelding_dager_aar: string; egenmelding_barn_dager: string }) {
+  const barn = { egenmelding_barn_dager: tall(o.egenmelding_barn_dager) };
+  if (o.egenmelding === "lov") return { egenmelding_dager: 3, egenmelding_ganger: 4, egenmelding_dager_aar: null, ...barn };
+  if (o.egenmelding === "ia") return { egenmelding_dager: 8, egenmelding_ganger: null, egenmelding_dager_aar: 24, ...barn };
+  return {
+    egenmelding_dager: tall(o.egenmelding_dager),
+    egenmelding_ganger: valgfrittTall(o.egenmelding_ganger),
+    egenmelding_dager_aar: valgfrittTall(o.egenmelding_dager_aar),
+    ...barn,
+  };
+}
 function PersonalOppsett() {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
@@ -181,6 +197,11 @@ function PersonalOppsett() {
     feriepenger_prosent: string;
     lonnsdag: string;
     halv_skatt: "november" | "desember";
+    egenmelding: Egenmeldingsordning;
+    egenmelding_dager: string;
+    egenmelding_ganger: string;
+    egenmelding_dager_aar: string;
+    egenmelding_barn_dager: string;
   } | null>(null);
   const [lagret, settLagret] = useState(false);
   const h = useHandling();
@@ -202,6 +223,11 @@ function PersonalOppsett() {
         feriepenger_prosent: tekst(data.feriepenger_prosent ?? 12),
         lonnsdag: String(data.lonnsdag ?? 20),
         halv_skatt: data.halv_skatt ?? "desember",
+        egenmelding: ordning(data.egenmelding_dager ?? 3, data.egenmelding_ganger === undefined ? 4 : data.egenmelding_ganger, data.egenmelding_dager_aar ?? null),
+        egenmelding_dager: String(data.egenmelding_dager ?? 3),
+        egenmelding_ganger: data.egenmelding_ganger == null ? "" : String(data.egenmelding_ganger),
+        egenmelding_dager_aar: data.egenmelding_dager_aar == null ? "" : String(data.egenmelding_dager_aar),
+        egenmelding_barn_dager: String(data.egenmelding_barn_dager ?? 3),
       });
   }, [data]);
   if (!o) return <Laster />;
@@ -220,6 +246,7 @@ function PersonalOppsett() {
         ferie_dager: tall(o!.ferie_dager),
         vaktbytte: o!.vaktbytte,
         helg: o!.helg,
+        ...(harFunksjon(org, "vaktplan") ? egenmeldingsregler(o!) : {}),
         ...(harFunksjon(org, "lonn")
           ? {
               aga_sone: o!.aga_sone,
@@ -273,6 +300,41 @@ function PersonalOppsett() {
               Feriebanken regnes av dette: 25 er fem uker, 21 er lovens fire uker og én dag. Ansatte som jobber færre dager i uka får like mange uker, regnet i
               dagene de jobber, og fra året de fyller 60 en uke ekstra. Hver ansatt kan ha sin egen avtale.
             </span>
+          </label>
+          <h3>Egenmelding</h3>
+          <label>
+            Egenmelding for egen sykdom
+            <select value={o.egenmelding} onChange={(e) => settO({ ...o, egenmelding: e.target.value as Egenmeldingsordning })}>
+              <option value="lov">Lovens regler: inntil 3 dager, 4 ganger i løpet av 12 måneder</option>
+              <option value="ia">IA-ordningen: inntil 8 dager per gang og 24 dager i løpet av 12 måneder</option>
+              <option value="egen">Egen ordning</option>
+            </select>
+            <span className="felt-hjelp">
+              De ansatte sender egenmeldingen i appen (under Mine vakter), og du får beskjed. Loven gir alltid inntil 3 dager 4 ganger i løpet av 12 måneder,
+              etter to måneder i jobben; dere kan gi mer, ikke mindre.
+            </span>
+          </label>
+          {o.egenmelding === "egen" && (
+            <div className="rad">
+              <label>
+                Dager per gang
+                <input inputMode="numeric" required value={o.egenmelding_dager} onChange={(e) => settO({ ...o, egenmelding_dager: e.target.value })} />
+                <span className="felt-hjelp">3–16 (arbeidsgiverperioden)</span>
+              </label>
+              <label>
+                Ganger i løpet av 12 måneder
+                <input inputMode="numeric" placeholder="Ingen grense" value={o.egenmelding_ganger} onChange={(e) => settO({ ...o, egenmelding_ganger: e.target.value })} />
+              </label>
+              <label>
+                Dager i løpet av 12 måneder
+                <input inputMode="numeric" placeholder="Ingen grense" value={o.egenmelding_dager_aar} onChange={(e) => settO({ ...o, egenmelding_dager_aar: e.target.value })} />
+              </label>
+            </div>
+          )}
+          <label>
+            Egenmelding for sykt barn: dager per gang
+            <input inputMode="numeric" required value={o.egenmelding_barn_dager} onChange={(e) => settO({ ...o, egenmelding_barn_dager: e.target.value })} />
+            <span className="felt-hjelp">Loven: 3 dager, deretter kan dere kreve legeerklæring. Dere kan godta flere (høyst 30).</span>
           </label>
           <h3>Vaktbytte</h3>
           <label>

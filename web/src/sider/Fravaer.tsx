@@ -4,7 +4,11 @@
 // slags fravær det er, ser bare eier, administrator og den ansatte selv (andre ser «F»). Fraværet
 // registreres ett sted og vises i vaktplanen, på tavla, i bemanningskalenderen, i timelista og
 // i ansattkortet, og kan registreres og endres fra alle (FravaerDialog).
-import { useState, type FormEvent } from "react";
+//
+// Egenmelding (0071_egenmelding.sql): den ansatte sender egenmelding når sykdommen meldes, eller
+// etterpå (for sykdom de siste 16 dagene), med erklæringen; reglene står i skjemaet, og databasen
+// sjekker dem. Lederen ser dokumentasjonen og registrerer sykmelding (legeerklæring for sykt barn).
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
@@ -16,7 +20,32 @@ import { visDag } from "../uke";
 // «fravaer»: typen er skjult. Bare eier, administrator og den ansatte selv ser hva slags fravær det
 // er (0047_fravaer_skjult.sql); andre ser bare at den ansatte er borte (F).
 export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "kurs" | "annet" | "fravaer";
-export type Fravaer = { id: string; ansatt_id: string; ansatt_navn: string; type: FravaerType; fra: string; til: string; notat?: string | null };
+export type Dokumentasjon = "egenmelding" | "sykmelding";
+export type Fravaer = {
+  id: string;
+  ansatt_id: string;
+  ansatt_navn: string;
+  type: FravaerType;
+  fra: string;
+  til: string;
+  notat?: string | null;
+  // Sykdom: egenmelding eller sykmelding (legeerklæring for sykt barn), og egenmeldingen.
+  dokumentasjon?: Dokumentasjon | null;
+  arbeidsrelatert?: boolean | null;
+  egenmeldt?: string | null;
+  egenmeldt_selv?: boolean | null;
+};
+// Egenmeldingene til en ansatt (GET /egenmelding): reglene, retten etter to måneder, det som er
+// brukt i løpet av 12 måneder (egen sykdom) og dagene med sykt barn i år.
+type EgenmeldingStatus = {
+  ansatt_id: string;
+  regler: { dager: number; ganger: number | null; dager_aar: number | null; barn_dager: number };
+  ansatt_fra: string;
+  opptjent_fra: string;
+  brukt: { ganger: number; dager: number };
+  tilfeller: { fra: string; til: string; dager: number }[];
+  sykt_barn: { aar: number; dager: number };
+};
 export type Ansatt = {
   id: string;
   fornavn: string;
@@ -57,22 +86,31 @@ export const borteTekst: Record<FravaerType, string> = {
 
 export const fravaerPeriode = (f: Pick<Fravaer, "fra" | "til">) => (f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)} – ${visDag(f.til)}`);
 const dager = (f: Pick<Fravaer, "fra" | "til">) => Math.round((Date.parse(`${f.til}T12:00:00Z`) - Date.parse(`${f.fra}T12:00:00Z`)) / 86_400_000) + 1;
+const erSykdom = (t?: FravaerType) => t === "syk" || t === "sykt_barn";
+// «Egenmelding», «Sykmelding» eller «Legeerklæring» (sykt barn).
+export const dokumentasjonTekst = (f: Pick<Fravaer, "type" | "dokumentasjon">) =>
+  f.dokumentasjon === "egenmelding" ? "Egenmelding" : f.dokumentasjon === "sykmelding" ? (f.type === "sykt_barn" ? "Legeerklæring" : "Sykmelding") : null;
+const tidspunkt = (t: string) => new Date(t).toLocaleString("nb-NO", { timeZone: "Europe/Oslo", dateStyle: "short", timeStyle: "short" });
+const flertall = (n: number, en: string, flere: string) => `${n} ${n === 1 ? en : flere}`;
 export const iArbeid = (a: Ansatt, dato: string) => a.aktiv && a.ansatt_fra <= dato && (!a.ansatt_til || a.ansatt_til >= dato);
 export const borte = (fravaer: Pick<Fravaer, "ansatt_id" | "fra" | "til" | "type">[], ansatt: string | null, dato: string) =>
   (ansatt && fravaer.find((f) => f.ansatt_id === ansatt && f.fra <= dato && f.til >= dato)?.type) || null;
 
 // Registrer eller endre fravær. Den ansatte selv (selv) kan bare melde sykdom og deretter
-// endre sluttdatoen; eier og administrator velger ansatt og type.
+// endre sluttdatoen, og sende egenmelding (egenmelding: avkrysset fra start); eier og
+// administrator velger ansatt og type, og dokumentasjonen for sykdom.
 export function FravaerSkjema({
   fravaer,
   ansatte,
   selv,
+  egenmelding,
   ferdig,
   avbryt,
 }: {
   fravaer: Partial<Fravaer>;
   ansatte?: Ansatt[];
   selv?: boolean;
+  egenmelding?: boolean;
   ferdig: (melding: string, berort?: BerortVakt[]) => void;
   avbryt: () => void;
 }) {
@@ -83,17 +121,31 @@ export function FravaerSkjema({
     fra: fravaer.fra ?? iDag(),
     til: fravaer.til ?? fravaer.fra ?? iDag(),
     notat: fravaer.notat ?? "",
+    dokumentasjon: (fravaer.dokumentasjon ?? "") as Dokumentasjon | "",
   }));
+  // Egenmeldingen den ansatte sender (med erklæringen) og svaret om arbeidet.
+  const [egen, settEgen] = useState({ send: !!egenmelding && !fravaer.dokumentasjon, arbeidsrelatert: "nei" as "nei" | "ja" | "vet_ikke" });
   const h = useHandling();
   const sett = (e: Partial<typeof f>) => settF({ ...f, ...e });
   const typer: FravaerType[] = selv ? ["syk", "sykt_barn"] : FRAVAERTYPER;
-  // Den ansatte endrer bare sluttdatoen på en sykmelding som er meldt.
+  // Den ansatte endrer bare sluttdatoen på sykdom som er meldt (og kan sende egenmelding for den).
   const bareSlutt = !!selv && !!fravaer.id;
   const valg = (ansatte ?? []).filter((a) => a.id === fravaer.ansatt_id || a.aktiv);
+  const sendEgen = !!selv && egen.send && !fravaer.dokumentasjon;
+  const arbeid = f.type === "syk" ? { arbeidsrelatert: egen.arbeidsrelatert === "ja" ? true : egen.arbeidsrelatert === "nei" ? false : null } : {};
 
   async function lagre(e: FormEvent) {
     e.preventDefault();
-    const kropp = bareSlutt ? { til: f.til } : { type: f.type, fra: f.fra, til: f.til, notat: f.notat.trim() || null };
+    const egenmeldingen = sendEgen ? { dokumentasjon: "egenmelding", erklaering: true, ...arbeid } : {};
+    const kropp = bareSlutt
+      ? { til: f.til, ...egenmeldingen }
+      : {
+          type: f.type,
+          fra: f.fra,
+          til: f.til,
+          notat: f.notat.trim() || null,
+          ...(selv ? egenmeldingen : { dokumentasjon: erSykdom(f.type) ? f.dokumentasjon || null : null }),
+        };
     const r = await h.kjor(() =>
       fravaer.id
         ? api("PATCH", `/org/${org!.id}/fravaer/${fravaer.id}`, kropp)
@@ -102,17 +154,19 @@ export function FravaerSkjema({
     if (!r) return;
     const hvem = selv ? "Du" : r.ansatt_navn;
     ferdig(
-      fravaer.id
-        ? "Fraværet er endret."
-        : selv
-          ? `Sykdommen er meldt (${fravaerPeriode(r)}). Lederen din har fått beskjed.`
-          : `${fravaerTekst[r.type as FravaerType]} for ${hvem} er registrert (${fravaerPeriode(r)}).`,
+      sendEgen
+        ? `Egenmeldingen er sendt (${fravaerPeriode(r)}). Lederen din har fått beskjed.`
+        : fravaer.id
+          ? "Fraværet er endret."
+          : selv
+            ? `Sykdommen er meldt (${fravaerPeriode(r)}). Lederen din har fått beskjed.`
+            : `${fravaerTekst[r.type as FravaerType]} for ${hvem} er registrert (${fravaerPeriode(r)}).`,
       r.vakter,
     );
   }
 
   async function slett() {
-    if (!confirm(selv ? "Slette sykmeldingen?" : `Slette fraværet for ${fravaer.ansatt_navn}?`)) return;
+    if (!confirm(selv ? "Slette sykdommen du har meldt?" : `Slette fraværet for ${fravaer.ansatt_navn}?`)) return;
     const r = await h.kjor(async () => (await api("DELETE", `/org/${org!.id}/fravaer/${fravaer.id}`), true));
     if (r) ferdig("Fraværet er slettet.");
   }
@@ -142,25 +196,60 @@ export function FravaerSkjema({
       <div className="rad">
         <label>
           Fra og med
-          <input type="date" required disabled={bareSlutt} min={selv && !fravaer.id ? leggTilDager(iDag(), -1) : undefined} value={f.fra} onChange={(e) => sett({ fra: e.target.value, til: f.til < e.target.value ? e.target.value : f.til })} />
+          <input
+            type="date"
+            required
+            disabled={bareSlutt}
+            min={selv && !fravaer.id ? leggTilDager(iDag(), sendEgen ? -16 : -1) : undefined}
+            value={f.fra}
+            onChange={(e) => sett({ fra: e.target.value, til: f.til < e.target.value ? e.target.value : f.til })}
+          />
         </label>
         <label>
-          {f.type === "syk" || f.type === "sykt_barn" ? "Til og med (siste sykedag)" : "Til og med"}
+          {erSykdom(f.type) ? "Til og med (siste sykedag)" : "Til og med"}
           <input type="date" required min={f.fra} value={f.til} onChange={(e) => sett({ til: e.target.value })} />
         </label>
       </div>
       {!selv && f.type === "ferie" && f.ansatt_id && /^\d{4}/.test(f.fra) && <FerieSaldo ansattId={f.ansatt_id} aar={Number(f.fra.slice(0, 4))} />}
+      {selv && (
+        <EgenmeldingValg
+          fravaer={fravaer}
+          type={f.type}
+          periode={{ fra: f.fra, til: f.til }}
+          send={sendEgen}
+          arbeidsrelatert={egen.arbeidsrelatert}
+          endre={(e) => settEgen({ ...egen, ...e })}
+        />
+      )}
+      {!selv && erSykdom(f.type) && (
+        <label>
+          Dokumentasjon
+          <select value={f.dokumentasjon} onChange={(e) => sett({ dokumentasjon: e.target.value as Dokumentasjon | "" })}>
+            <option value="">Ikke levert ennå</option>
+            <option value="egenmelding">Egenmelding</option>
+            <option value="sykmelding">{f.type === "sykt_barn" ? "Legeerklæring" : "Sykmelding fra lege"}</option>
+          </select>
+          {fravaer.egenmeldt && f.dokumentasjon === "egenmelding" ? (
+            <span className="felt-hjelp">
+              Egenmelding {fravaer.egenmeldt_selv ? "sendt av den ansatte" : "registrert"} {tidspunkt(fravaer.egenmeldt)}.
+              {fravaer.type === "syk" && fravaer.arbeidsrelatert != null && (fravaer.arbeidsrelatert ? " Har sammenheng med arbeidet." : " Har ikke sammenheng med arbeidet.")}
+            </span>
+          ) : (
+            <span className="felt-hjelp">Egenmelding på papir eller sykmelding fra lege. Den ansatte kan også sende egenmeldingen selv i appen.</span>
+          )}
+        </label>
+      )}
       {!bareSlutt && (
         <label>
           Notat
           <input maxLength={500} placeholder={selv ? "Valgfritt, f.eks. når du regner med å være tilbake" : "Valgfritt"} value={f.notat} onChange={(e) => sett({ notat: e.target.value })} />
-          {(f.type === "syk" || f.type === "sykt_barn") && <span className="felt-hjelp">Ikke skriv hva sykdommen gjelder.</span>}
+          {erSykdom(f.type) && <span className="felt-hjelp">Ikke skriv hva sykdommen gjelder.</span>}
         </label>
       )}
       <Feil melding={h.feil} />
       <div className="knapper">
         <button className="primar" disabled={h.opptatt}>
-          {fravaer.id ? "Lagre" : selv ? "Meld sykdom" : "Registrer"}
+          {sendEgen ? "Send egenmelding" : fravaer.id ? "Lagre" : selv ? "Meld sykdom" : "Registrer"}
         </button>
         <button type="button" onClick={avbryt}>
           Avbryt
@@ -173,6 +262,111 @@ export function FravaerSkjema({
       </div>
     </form>
   );
+}
+
+// Egenmeldingen i skjemaet til den ansatte: erklæringen (avkrysningen), spørsmålet om arbeidet og
+// reglene med det som er brukt. Sendt fra før: når, og hva slags dokumentasjon.
+function EgenmeldingValg({
+  fravaer,
+  type,
+  periode,
+  send,
+  arbeidsrelatert,
+  endre,
+}: {
+  fravaer: Partial<Fravaer>;
+  type: FravaerType;
+  periode: { fra: string; til: string };
+  send: boolean;
+  arbeidsrelatert: "nei" | "ja" | "vet_ikke";
+  endre: (e: { send?: boolean; arbeidsrelatert?: "nei" | "ja" | "vet_ikke" }) => void;
+}) {
+  const { org } = useKonto();
+  const status = useData(() => hent<EgenmeldingStatus>(`/org/${org!.id}/egenmelding`), [org?.id]);
+  const s = status.data;
+  const barn = type === "sykt_barn";
+  // Før retten er opptjent (egen sykdom): ikke egenmelding.
+  const forTidlig = !!s && !barn && periode.fra < s.opptjent_fra;
+  useEffect(() => {
+    if (forTidlig && send) endre({ send: false });
+  }, [forTidlig, send, endre]);
+
+  if (fravaer.dokumentasjon)
+    return (
+      <p className="melding info egenmelding-sendt">
+        {fravaer.dokumentasjon === "egenmelding"
+          ? `Egenmelding ${fravaer.egenmeldt_selv ? "sendt" : "registrert av lederen din"}${fravaer.egenmeldt ? ` ${tidspunkt(fravaer.egenmeldt)}` : ""}.`
+          : `${barn ? "Legeerklæring" : "Sykmelding fra lege"} er registrert av lederen din.`}
+      </p>
+    );
+  const maks = !s ? null : barn ? s.regler.barn_dager : Math.max(3, s.regler.dager);
+  const lengde = dager(periode);
+  const fortid = periode.til < iDag();
+  return (
+    <fieldset className="egenmelding">
+      <legend>Egenmelding</legend>
+      <label className="egenmelding-valg">
+        <input type="checkbox" checked={send} disabled={forTidlig} onChange={(e) => endre({ send: e.target.checked })} />
+        <span>
+          <strong>Send egenmelding.</strong>{" "}
+          {barn
+            ? `Jeg erklærer at jeg ${fortid ? "var" : "er"} borte fra arbeidet fordi barnet mitt ${fortid ? "var" : "er"} sykt, eller fordi den som har tilsyn med barnet, ${fortid ? "var" : "er"} syk.`
+            : `Jeg erklærer at jeg ${fortid ? "var" : "er"} borte fra arbeidet på grunn av egen sykdom eller skade.`}
+        </span>
+      </label>
+      {send && !barn && (
+        <label>
+          Har fraværet sammenheng med arbeidet?
+          <select value={arbeidsrelatert} onChange={(e) => endre({ arbeidsrelatert: e.target.value as "nei" | "ja" | "vet_ikke" })}>
+            <option value="nei">Nei</option>
+            <option value="ja">Ja</option>
+            <option value="vet_ikke">Vet ikke</option>
+          </select>
+          <span className="felt-hjelp">Svaret går til lederen din, så arbeidsplassen kan følge opp. Ikke skriv hva sykdommen gjelder.</span>
+        </label>
+      )}
+      {status.feil ? (
+        <Feil melding={status.feil} />
+      ) : !s ? (
+        <Laster />
+      ) : forTidlig ? (
+        <p className="felt-hjelp">
+          Egenmelding kan brukes etter to måneder i jobben, fra {visDag(s.opptjent_fra)}. Før det trengs sykmelding fra lege.
+        </p>
+      ) : (
+        <>
+          {send && maks != null && lengde > maks && (
+            <div className="melding advarsel">
+              Perioden er {lengde} dager. En egenmelding kan gjelde høyst {maks} dager på rad (kalenderdager, også helg); lengre fravær trenger{" "}
+              {barn ? "legeerklæring" : "sykmelding fra lege"}.
+            </div>
+          )}
+          <p className="felt-hjelp">{barn ? reglerBarn(s) : reglerSyk(s)}</p>
+        </>
+      )}
+    </fieldset>
+  );
+}
+
+// «Egenmelding gjelder inntil 3 dager på rad, 4 ganger i løpet av 12 måneder. Du har brukt 1 (2 dager).»
+function reglerSyk(s: EgenmeldingStatus, du = true) {
+  const r = s.regler;
+  const lov = r.dager === 3 && r.ganger === 4 && r.dager_aar == null;
+  const grenser = [r.ganger != null ? `${r.ganger} ganger` : null, r.dager_aar != null ? `${r.dager_aar} dager` : null].filter(Boolean).join(" og ");
+  const regel = lov
+    ? "Egenmelding gjelder inntil 3 dager på rad (kalenderdager, også helg), 4 ganger i løpet av 12 måneder."
+    : `Egenmelding gjelder inntil ${r.dager} dager på rad${grenser ? ` og ${grenser} i løpet av 12 måneder` : ""} (loven gir alltid 3 dager, 4 ganger).`;
+  const brukt = s.brukt.ganger
+    ? `${du ? "Du har" : "Har"} brukt ${flertall(s.brukt.ganger, "gang", "ganger")} (${flertall(s.brukt.dager, "dag", "dager")}) de siste 12 månedene.`
+    : `${du ? "Du har" : "Har"} ikke brukt egenmelding de siste 12 månedene.`;
+  return `${regel} ${brukt}`;
+}
+function reglerBarn(s: EgenmeldingStatus) {
+  return `Egenmelding for sykt barn gjelder inntil ${s.regler.barn_dager} dager på rad, og telles ikke med i egenmeldingene for egen sykdom. Sykt barn i ${s.sykt_barn.aar}: ${flertall(
+    s.sykt_barn.dager,
+    "arbeidsdag",
+    "arbeidsdager",
+  )} (de fleste har 10 omsorgsdager i året, 15 med tre barn eller flere, og dobbelt så mange alene om omsorgen).`;
 }
 
 // Vikar for en vakt: velg en som er i arbeid og ikke borte den dagen, eller legg inn en ny
@@ -356,6 +550,7 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
               <span className="linje">
                 <span className="tittel">{f.ansatt_navn}</span>
                 <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerTekst[f.type]}</span>
+                {dokumentasjonTekst(f) && <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>}
               </span>
               <span className="linje">
                 <span className="under">
@@ -391,11 +586,22 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
   );
 }
 
-// Den ansattes eget fravær (i «Mine vakter»): meld deg syk, friskmeld deg.
-export function MittFravaer({ fravaer, endret }: { fravaer: Fravaer[]; endret: () => void }) {
-  const [apen, settApen] = useState<Partial<Fravaer> | null>(null);
+// Den ansattes eget fravær (i «Mine vakter»): meld deg syk, send egenmelding (også etterpå, for
+// sykdom de siste 16 dagene), friskmeld deg.
+// Fraværet hentes her (med dokumentasjonen), fra 16 dager tilbake; versjon: endret utenfra.
+export function MittFravaer({ ansattId, versjon: utenfra, endret }: { ansattId: string; versjon?: unknown; endret: () => void }) {
+  const { org } = useKonto();
+  const [apen, settApen] = useState<{ f: Partial<Fravaer>; egenmelding: boolean } | null>(null);
   const [melding, settMelding] = useState<string | null>(null);
-  const aktuelt = fravaer.filter((f) => f.til >= iDag());
+  const [versjon, settVersjon] = useState(0);
+  const liste = useData(
+    () => hent<Fravaer[]>(`/org/${org!.id}/fravaer?fra=${leggTilDager(iDag(), -16)}&til=${leggTilDager(iDag(), 365)}&ansatt=${ansattId}`),
+    [org?.id, ansattId, versjon, utenfra],
+  );
+  // Det som pågår eller kommer, og sykdom som er over uten egenmelding eller sykmelding (den kan
+  // sendes nå).
+  const aktuelt = (liste.data ?? []).filter((f) => f.til >= iDag() || (erSykdom(f.type) && !f.dokumentasjon));
+  const tittel = !apen ? "" : apen.egenmelding ? "Send egenmelding" : apen.f.id ? "Endre sykdom" : "Meld deg syk";
   return (
     <>
       {melding && (
@@ -408,26 +614,43 @@ export function MittFravaer({ fravaer, endret }: { fravaer: Fravaer[]; endret: (
           <div key={f.id} className="melding info mitt-fravaer-rad">
             <span>
               <strong>{fravaerTekst[f.type]}</strong> {fravaerPeriode(f)}
+              {dokumentasjonTekst(f) && <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>}
             </span>
-            {(f.type === "syk" || f.type === "sykt_barn") && (
-              <button type="button" className="lenke" onClick={() => settApen(f)}>
-                Endre
-              </button>
+            {erSykdom(f.type) && (
+              <span className="mitt-fravaer-knapper">
+                {!f.dokumentasjon && (
+                  <button type="button" className="lenke" onClick={() => settApen({ f, egenmelding: true })}>
+                    Send egenmelding
+                  </button>
+                )}
+                {f.til >= iDag() && (
+                  <button type="button" className="lenke" onClick={() => settApen({ f, egenmelding: false })}>
+                    Endre
+                  </button>
+                )}
+              </span>
             )}
           </div>
         ))}
-        <button type="button" onClick={() => settApen({})}>
-          Meld deg syk
-        </button>
+        <div className="knapper">
+          <button type="button" onClick={() => settApen({ f: {}, egenmelding: false })}>
+            Meld deg syk
+          </button>
+          <button type="button" onClick={() => settApen({ f: {}, egenmelding: true })}>
+            Send egenmelding
+          </button>
+        </div>
       </div>
-      <Dialog apen={!!apen} lukk={() => settApen(null)} tittel={apen?.id ? "Endre sykmelding" : "Meld deg syk"}>
+      <Dialog apen={!!apen} lukk={() => settApen(null)} tittel={tittel}>
         {apen && (
           <FravaerSkjema
-            fravaer={apen}
+            fravaer={apen.f}
             selv
+            egenmelding={apen.egenmelding}
             ferdig={(m) => {
               settApen(null);
               settMelding(m);
+              settVersjon((v) => v + 1);
               endret();
             }}
             avbryt={() => settApen(null)}
@@ -513,6 +736,7 @@ export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId:
         Vises i vaktplanen, på tavla og i timelista, og kan registreres og endres der også.
       </p>
       {kanEndre && <FerieSaldo key={versjon} ansattId={ansattId} aar={aar} lenke />}
+      {kanEndre && <EgenmeldingSaldo key={`e${versjon}`} ansattId={ansattId} />}
       {feil ? (
         <Feil melding={feil} />
       ) : !data ? (
@@ -527,6 +751,7 @@ export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId:
                 <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerTekst[f.type]}</span>
                 <span>
                   {fravaerPeriode(f)} · {dager(f) === 1 ? "1 dag" : `${dager(f)} dager`}
+                  {erSykdom(f.type) && <span className="dempet"> · {dokumentasjonTekst(f) ?? "ikke dokumentert"}</span>}
                 </span>
                 {f.fra <= iDag() && f.til >= iDag() && <span className="merke merke-advarsel">Nå</span>}
               </button>
@@ -540,5 +765,18 @@ export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId:
         </button>
       )}
     </section>
+  );
+}
+
+// Egenmeldingene til den ansatte i løpet av 12 måneder (i ansattkortet, for eier og administrator).
+function EgenmeldingSaldo({ ansattId }: { ansattId: string }) {
+  const { org } = useKonto();
+  const { data } = useData(() => hent<EgenmeldingStatus>(`/org/${org!.id}/egenmelding?ansatt=${ansattId}`).catch(() => null), [org?.id, ansattId]);
+  if (!data) return null;
+  return (
+    <p className="felt-hjelp egenmelding-saldo">
+      {iDag() < data.opptjent_fra ? `Egenmelding fra ${visDag(data.opptjent_fra)} (to måneder i jobben). ` : ""}
+      {reglerSyk(data, false)}
+    </p>
   );
 }
