@@ -90,6 +90,9 @@ interface Kjoring {
   feriepenger_prosent: number;
   trekktabeller: { aar: number; lastet: boolean };
   frister: { skattetrekk: string; aga: string };
+  betalingsfil_lastet: string | null;
+  betalingsfil_antall: number;
+  betalingsfil_av: string | null;
   sum: Summer;
   slipper: Slipp[];
 }
@@ -121,6 +124,12 @@ type SlippDetaljer = Slipp & {
 };
 
 const kjoringNavn = (k: { periode: string; type: string }) => `${maaned(k.periode)}${k.type === "ekstra" ? " (ekstra)" : ""}`;
+// Dato og klokkeslett (norsk tid), f.eks. «20.11.2026 kl. 10.15».
+const tidspunkt = (iso: string) => {
+  const d = new Date(iso);
+  const t = new Intl.DateTimeFormat("nb-NO", { timeZone: "Europe/Oslo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
+  return `${dato(new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(d))} kl. ${t.replace(":", ".")}`;
+};
 const tallTekst = (n: number, maks = 2) => new Intl.NumberFormat("nb-NO", { maximumFractionDigits: maks }).format(n);
 const prosentArt = (art: string) => art === "feriepenger" || art === "feriepenger_60";
 const AGA_SONER: Record<string, string> = { "1": "sone 1, 14,1 %", "1a": "sone 1a, 10,6 % til fribeløpet", "2": "sone 2, 10,6 %", "3": "sone 3, 6,4 %", "4": "sone 4, 5,1 %", "4a": "sone 4a, 7,9 %", "5": "sone 5, 0 %" };
@@ -416,6 +425,26 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
     settApne(s);
   };
   const manglerTabell = !d.trekktabeller.lastet && d.slipper.some((s) => s.trekkmetode.startsWith("Tabell"));
+  const filnavn = `lonn-${d.periode.slice(0, 7)}${d.type === "ekstra" ? "-ekstra" : ""}`;
+  // Betalingsfila (pain.001) til nettbanken; lastet ned før, spør appen først (dobbel betaling).
+  const betalingsfil = async () => {
+    if (
+      d.betalingsfil_lastet &&
+      !confirm(
+        `Betalingsfila ble lastet ned ${tidspunkt(d.betalingsfil_lastet)}${d.betalingsfil_av ? ` av ${d.betalingsfil_av}` : ""}. Lastes den opp i nettbanken igjen, kan lønnen bli betalt to ganger. Laste den ned likevel?`,
+      )
+    )
+      return;
+    const ok = await h.kjor(async () => {
+      await lastNed(`${sti}/betalingsfil`, `${filnavn}.xml`, "POST");
+      return true;
+    });
+    if (!ok) return;
+    settMelding(
+      `Betalingsfila er lastet ned. Last den opp i nettbanken (betaling med fil) og godkjenn den der. Forskuddstrekket på ${kr(d.sum.skattetrekk)} betales til Skatteetaten senest ${dato(d.frister.skattetrekk)}.`,
+    );
+    void k.last();
+  };
 
   return (
     <>
@@ -432,6 +461,7 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
         {d.halv_skatt && " Halv skatt (tabelltrekk) denne måneden."}
         {d.feriepenger && ` Feriepengene for ${Number(d.utbetalingsdato.slice(0, 4)) - 1} utbetales.`}
         {!utkast && d.godkjent_at && ` Godkjent ${dato(d.godkjent_at)}${d.godkjent_av ? ` av ${d.godkjent_av}` : ""}.`}
+        {!utkast && d.betalingsfil_lastet && ` Betalingsfila ble lastet ned ${tidspunkt(d.betalingsfil_lastet)}${d.betalingsfil_av ? ` av ${d.betalingsfil_av}` : ""}.`}
       </p>
       {d.notat && <p className="lonn-notat">{d.notat}</p>}
       {melding && (
@@ -503,7 +533,12 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
             Åpne igjen
           </button>
         )}
-        <button type="button" disabled={h.opptatt || !d.slipper.length} onClick={() => void h.kjor(() => lastNed(`${sti}/csv`, `lonn-${d.periode.slice(0, 7)}${d.type === "ekstra" ? "-ekstra" : ""}.csv`))}>
+        {!utkast && d.slipper.some((s) => s.netto > 0) && (
+          <button type="button" className="primar" disabled={h.opptatt} onClick={() => void betalingsfil()}>
+            Betalingsfil til nettbanken
+          </button>
+        )}
+        <button type="button" disabled={h.opptatt || !d.slipper.length} onClick={() => void h.kjor(() => lastNed(`${sti}/csv`, `${filnavn}.csv`))}>
           Last ned (CSV)
         </button>
         {kanEndre && (
@@ -586,8 +621,8 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
           </p>
         )}
         <p className="liten dempet">
-          Lønnen regnes ut på nytt først. Kjøringen låses, timene merkes som lønnet, og de ansatte får lønnsslippen (med varsel). Betal lønnen i nettbanken (CSV-fila har
-          kontonumrene), og skattetrekket til Skatteetaten senest {dato(d.frister.skattetrekk)}.
+          Lønnen regnes ut på nytt først. Kjøringen låses, timene merkes som lønnet, og de ansatte får lønnsslippen (med varsel). Betal lønnen med betalingsfila i
+          nettbanken, og skattetrekket til Skatteetaten senest {dato(d.frister.skattetrekk)}.
         </p>
         <div className="knapper">
           <button

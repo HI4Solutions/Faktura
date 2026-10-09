@@ -199,6 +199,9 @@ function PersonalOppsett() {
     feriepenger_prosent: string;
     lonnsdag: string;
     halv_skatt: "november" | "desember";
+    lonnskonto: string;
+    bank_bic: string;
+    betalingsfil_format: "pain.001.001.03" | "pain.001.001.09";
     egenmelding: Egenmeldingsordning;
     egenmelding_dager: string;
     egenmelding_ganger: string;
@@ -227,6 +230,9 @@ function PersonalOppsett() {
         feriepenger_prosent: tekst(data.feriepenger_prosent ?? 12),
         lonnsdag: String(data.lonnsdag ?? 20),
         halv_skatt: data.halv_skatt ?? "desember",
+        lonnskonto: data.lonnskonto ? data.lonnskonto.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3") : "",
+        bank_bic: data.bank_bic ?? "",
+        betalingsfil_format: data.betalingsfil_format ?? "pain.001.001.03",
         egenmelding: ordning(data.egenmelding_dager ?? 3, data.egenmelding_ganger === undefined ? 4 : data.egenmelding_ganger, data.egenmelding_dager_aar ?? null),
         egenmelding_dager: String(data.egenmelding_dager ?? 3),
         egenmelding_ganger: data.egenmelding_ganger == null ? "" : String(data.egenmelding_ganger),
@@ -260,6 +266,9 @@ function PersonalOppsett() {
               feriepenger_prosent: tall(o!.feriepenger_prosent),
               lonnsdag: tall(o!.lonnsdag),
               halv_skatt: o!.halv_skatt,
+              lonnskonto: o!.lonnskonto.trim() || null,
+              bank_bic: o!.bank_bic.trim() || null,
+              betalingsfil_format: o!.betalingsfil_format,
             }
           : {}),
       }),
@@ -452,6 +461,47 @@ function PersonalOppsett() {
               <span className="felt-hjelp">Med tabelltrekk trekkes det halv skatt én måned i året.</span>
             </label>
           </div>
+          <h4 className="lonn-under">Betalingsfil til nettbanken</h4>
+          <div className="rad">
+            <label>
+              Lønnskonto (lønnen betales fra)
+              <input
+                inputMode="numeric"
+                placeholder="Organisasjonens kontonummer"
+                value={o.lonnskonto}
+                onChange={(e) => settO({ ...o, lonnskonto: e.target.value })}
+              />
+              <span className="felt-hjelp">Tom: organisasjonens kontonummer.</span>
+            </label>
+            <label>
+              BIC for banken
+              <input
+                autoCapitalize="characters"
+                placeholder="DNBANOKK"
+                list="lonn-bic"
+                value={o.bank_bic}
+                onChange={(e) => settO({ ...o, bank_bic: e.target.value.toUpperCase() })}
+              />
+              <datalist id="lonn-bic">
+                <option value="DNBANOKK">DNB</option>
+                <option value="NDEANOKK">Nordea</option>
+                <option value="HANDNOKK">Handelsbanken</option>
+                <option value="DABANO22">Danske Bank</option>
+              </datalist>
+              <span className="felt-hjelp">SWIFT-adressen til banken lønnskontoen er i (står i nettbanken), f.eks. DNBANOKK for DNB.</span>
+            </label>
+          </div>
+          <label>
+            Format
+            <select value={o.betalingsfil_format} onChange={(e) => settO({ ...o, betalingsfil_format: e.target.value as "pain.001.001.03" | "pain.001.001.09" })}>
+              <option value="pain.001.001.03">ISO 20022 pain.001.001.03 (alle norske banker)</option>
+              <option value="pain.001.001.09">ISO 20022 pain.001.001.09</option>
+            </select>
+            <span className="felt-hjelp">
+              Den godkjente lønnskjøringen lastes ned som betalingsfil (lønn, så bare de med lønnstilgang i nettbanken ser beløpene) og lastes opp og godkjennes i
+              nettbanken.
+            </span>
+          </label>
           <p className="liten dempet">
             Skattekortet registreres på hver ansatt, eller hentes fra Skatteetaten når dere har koblet til (under). Lønnskjøringene er under{" "}
             <Link to="/lonn">Lønn</Link>.

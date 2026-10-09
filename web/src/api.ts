@@ -115,8 +115,8 @@ export async function apneVedlegg(orgId: string, fakturaId: string, v: Vedlegg) 
   }
 }
 
-export async function lastNed(sti: string, filnavn: string) {
-  const blob = await api<Blob>("GET", sti);
+export async function lastNed(sti: string, filnavn: string, metode = "GET") {
+  const blob = await api<Blob>(metode, sti);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

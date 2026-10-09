@@ -2469,3 +2469,4 @@ fieldset.egenmelding .melding { margin-bottom: 8px; }
 .lonn-aar-valg select { width: auto; }
 .lonn-aar-status { margin: 0 0 10px; }
 .lonn-visning .summer.lonn-summer + p, .lonn-visning .tabell + p { margin-top: 10px; }
+h4.lonn-under { margin: 18px 0 6px; font-size: 0.92rem; }

@@ -602,6 +602,18 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   godkjente kjøringer (`min_lonnsslipp`). En ansatt med lønnsslipper i godkjente kjøringer kan
   ikke slettes, og en organisasjon med godkjente kjøringer stenges i stedet for å slettes
   (oppbevares fem år etter siste utbetaling)
+- Betalingsfila (`0076_lonn_betalingsfil.sql`, `server/src/betalingsfil.ts`): en godkjent kjøring
+  lastes ned som ISO 20022-betalingsfil (pain.001.001.03, som alle norske banker tar imot, eller
+  .09 under Innstillinger → Ansatte og timer) og lastes opp og godkjennes i nettbanken. Én betaling
+  med alle de ansatte: lønn (`CtgyPurp` SALA, så bare dem med lønnstilgang i nettbanken ser
+  beløpene), samlet bokført, på utbetalingsdatoen, fra lønnskontoen (`lonn_oppsett.lonnskonto`,
+  ellers organisasjonens kontonummer) i banken med BIC-en i oppsettet (`bank_bic`). Hver ansatt
+  med noe til utbetaling får nettolønnen til kontonummeret sitt (fra godkjenningen, ellers det på
+  den ansatte nå; et ugyldig eller manglende kontonummer stopper fila med navnene).
+  Meldings-ID-en er den samme for samme godkjenning, så banken avviser en fil som lastes opp to
+  ganger. `lonn_betalingsfil` merker kjøringen (når, av hvem og hvor mange ganger; for de som
+  ser lønnen), og appen advarer før fila lastes ned igjen. Fila valideres mot ISO-skjemaene i
+  testene (`server/test/xsd`)
 - Årsoversikten (`0075_lonn_aarsoversikt.sql`, `server/src/lonnAarsoversikt.ts`,
   `server/src/aarsoversiktPdf.ts`, `web/src/sider/LonnAar.tsx`): sammenstillingsoppgaven
   arbeidsgiveren skal gi hver ansatt innen 31. januar. Tallene er de godkjente kjøringene med
@@ -679,7 +691,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Legge beskjeder til rollene eller alle, og se dem som er til en selv | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Se alle beskjedene | ✓ | ✓ | | ✓ | | |
 | Slette andres beskjeder | ✓ | ✓ | | | | |
-| Se lønnskjøringene og alle lønnsslippene | ✓ | ✓ | | ✓ | | |
+| Se lønnskjøringene og alle lønnsslippene, og laste ned betalingsfila | ✓ | ✓ | | ✓ | | |
 | Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
 | Se egne lønnsslipper og egen årsoversikt (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Se årsoversiktene til alle, og laste dem ned | ✓ | ✓ | | ✓ | | |
@@ -812,4 +824,4 @@ og hastighetsgrenser i API-et.
       arbeidsgiveravgift, feriepengeliste og ~~årsoversikt for den ansatte~~ (ferdig). ~~Skattekort fra
       Skatteetaten~~ Ferdig (systembruker i Altinn; slås på når Maskinporten er satt opp).
       OTP rapporteres i a-meldingen med pensjonsinnretningens organisasjonsnummer
-   5. Utbetaling: betalingsfil (pain.001) til nettbanken først, direkte bankintegrasjon senere
+   5. Utbetaling: ~~betalingsfil (pain.001) til nettbanken~~ (ferdig), direkte bankintegrasjon senere

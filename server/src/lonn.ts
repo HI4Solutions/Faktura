@@ -46,11 +46,18 @@ import { lagLonnsslippPdf } from "./lonnsslippPdf.js";
 import { hentLogo } from "./dokument.js";
 import { leggIKo } from "./tjenester.js";
 import { lonnsrapportOppgave } from "./rapportmodul.js";
+import { lagBetalingsfil, meldingId, type Format } from "./betalingsfil.js";
+import { kontonrGyldig } from "./regler.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
 const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("bruker").id, fn);
 const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato");
+// Klokka nå i norsk tid (ÅÅÅÅ-MM-DDTtt:mm:ss), til betalingsfila.
+const osloTid = () =>
+  new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+    .format(new Date())
+    .replace(" ", "T");
 
 type Kjoring = {
   id: string;
@@ -484,7 +491,9 @@ export async function hentKjoring(db: Db, org: string, id: string) {
     db,
     `select k.id, to_char(k.periode, 'YYYY-MM-DD') as periode, k.type, to_char(k.utbetalingsdato, 'YYYY-MM-DD') as utbetalingsdato, k.status,
             k.feriepenger, k.halv_skatt, k.notat, k.godkjent_at, k.opprettet,
-            (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = k.godkjent_av) as godkjent_av
+            (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = k.godkjent_av) as godkjent_av,
+            k.betalingsfil_lastet, k.betalingsfil_antall,
+            (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = k.betalingsfil_av) as betalingsfil_av
        from faktura.lonnskjoringer k where k.org_id = $1 and k.id = $2`,
     [org, id],
   );
@@ -917,6 +926,48 @@ export function lonnRuter() {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="lonn-${k.periode.slice(0, 7)}${k.type === "ekstra" ? "-ekstra" : ""}.csv"`,
     });
+  });
+
+  // Betalingsfila til nettbanken (0076, betalingsfil.ts) for en godkjent kjøring: nettolønnen til
+  // hver ansatt fra lønnskontoen på utbetalingsdatoen. Kjøringen merkes med når og av hvem.
+  r.post("/lonn/kjoringer/:id/betalingsfil", async (c) => {
+    const f = await bruk(c, async (db) => {
+      const k = await hentKjoring(db, orgId(c), id(c));
+      if (k.status !== "godkjent") throw new ApiFeil(409, "Godkjenn lønnen før betalingsfila lastes ned");
+      const o = await en<{ lonnskonto: string | null; bank_bic: string | null; betalingsfil_format: Format }>(
+        db,
+        "select lonnskonto, bank_bic, betalingsfil_format from faktura.lonn_oppsett where org_id = $1",
+        [orgId(c)],
+      );
+      const org = await en<{ navn: string; orgnr: string | null; kontonr: string | null }>(db, "select navn, orgnr, kontonr from faktura.organisasjoner where id = $1", [
+        orgId(c),
+      ]);
+      const fra = o?.lonnskonto ?? org?.kontonr ?? null;
+      if (!fra) throw new ApiFeil(400, "Legg inn lønnskontoen (kontoen lønnen betales fra) under Innstillinger → Ansatte og timer.");
+      if (!o?.bank_bic) throw new ApiFeil(400, "Legg inn BIC for banken lønnskontoen er i (står i nettbanken, f.eks. DNBANOKK for DNB) under Innstillinger → Ansatte og timer.");
+      const betales = (k.slipper as any[]).filter((s) => Number(s.netto) > 0);
+      if (!betales.length) throw new ApiFeil(400, "Ingen har noe til utbetaling i denne kjøringen.");
+      const mangler = betales.filter((s) => !s.kontonr || !kontonrGyldig(s.kontonr));
+      if (mangler.length)
+        throw new ApiFeil(400, `${mangler.length === 1 ? "Mangler" : "Disse mangler"} gyldig kontonummer: ${mangler.map((s) => s.navn).join(", ")}. Legg det inn på den ansatte.`);
+      await db.query("select faktura.lonn_betalingsfil($1)", [id(c)]);
+      const mid = meldingId(k.periode, k.id, new Date(k.godkjent_at).toISOString());
+      return {
+        navn: `lonn-${k.periode.slice(0, 7)}${k.type === "ekstra" ? "-ekstra" : ""}.xml`,
+        xml: lagBetalingsfil({
+          format: o.betalingsfil_format,
+          meldingId: mid,
+          opprettet: osloTid(),
+          avsender: { navn: org!.navn, orgnr: org!.orgnr },
+          fraKonto: fra,
+          bic: o.bank_bic,
+          dato: k.utbetalingsdato,
+          tekst: `Lønn ${maanedNavn(k.periode)}`,
+          betalinger: betales.map((s) => ({ navn: s.navn, kontonr: s.kontonr, belop: Number(s.netto), referanse: `${mid}-${s.ansattnummer}` })),
+        }),
+      };
+    });
+    return c.body(f.xml, 200, { "content-type": "application/xml; charset=utf-8", "content-disposition": `attachment; filename="${f.navn}"` });
   });
 
   // Den ansattes egne lønnsslipper (godkjente kjøringer).

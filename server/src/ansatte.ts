@@ -151,6 +151,16 @@ const oppsettSkjema = z.object({
   egenmelding_ganger: z.number().int().min(4, "Loven gir minst 4 ganger i løpet av 12 måneder").max(52).nullable().optional(),
   egenmelding_dager_aar: z.number().int().min(12, "Minst 12 dager (4 ganger 3 dager)").max(366).nullable().optional(),
   egenmelding_barn_dager: z.number().int().min(3, "Egenmelding for sykt barn gjelder minst 3 dager per gang").max(30).optional(),
+  // Betalingsfila fra lønnskjøringen (0076_lonn_betalingsfil.sql): kontoen lønnen betales fra
+  // (null: organisasjonens kontonummer), BIC for banken den er i, og formatet.
+  lonnskonto: valgfri(siffer("Lønnskontoen", 11, kontonrGyldig, "Lønnskontoen er ikke gyldig (sjekk sifrene)")),
+  bank_bic: valgfri(
+    z
+      .string()
+      .transform((v) => v.replace(/\s/g, "").toUpperCase())
+      .pipe(z.string().regex(/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/, "BIC har 8 eller 11 tegn, f.eks. DNBANOKK for DNB")),
+  ),
+  betalingsfil_format: z.enum(["pain.001.001.03", "pain.001.001.09"]).optional(),
 });
 
 const foringSkjema = z.object({
@@ -241,13 +251,16 @@ type Oppsett = Regler & {
   egenmelding_barn_dager: number;
   timebank: boolean;
   vaktbytte_fridag: boolean;
+  lonnskonto: string | null;
+  bank_bic: string | null;
+  betalingsfil_format: "pain.001.001.03" | "pain.001.001.09";
 };
 export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
     `select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
             aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt, egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager,
-            timebank, vaktbytte_fridag
+            timebank, vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format
        from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
@@ -271,6 +284,9 @@ export async function regler(db: Db, org: string): Promise<Oppsett> {
       egenmelding_barn_dager: 3,
       timebank: false,
       vaktbytte_fridag: true,
+      lonnskonto: null,
+      bank_bic: null,
+      betalingsfil_format: "pain.001.001.03",
     }
   );
 }
@@ -341,8 +357,8 @@ export function ansattRuter() {
           `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
                                              aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt,
                                              egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager, timebank,
-                                             vaktbytte_fridag)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                                             vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
              full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg,
@@ -350,7 +366,8 @@ export function ansattRuter() {
              lonnsdag = excluded.lonnsdag, halv_skatt = excluded.halv_skatt, egenmelding_dager = excluded.egenmelding_dager,
              egenmelding_ganger = excluded.egenmelding_ganger, egenmelding_dager_aar = excluded.egenmelding_dager_aar,
              egenmelding_barn_dager = excluded.egenmelding_barn_dager, timebank = excluded.timebank,
-             vaktbytte_fridag = excluded.vaktbytte_fridag`,
+             vaktbytte_fridag = excluded.vaktbytte_fridag, lonnskonto = excluded.lonnskonto, bank_bic = excluded.bank_bic,
+             betalingsfil_format = excluded.betalingsfil_format`,
           [
             orgId(c),
             ny.aktiv,
@@ -373,6 +390,9 @@ export function ansattRuter() {
             ny.egenmelding_barn_dager,
             ny.timebank,
             ny.vaktbytte_fridag,
+            ny.lonnskonto ?? null,
+            ny.bank_bic ?? null,
+            ny.betalingsfil_format,
           ],
         );
         return regler(db, orgId(c));
