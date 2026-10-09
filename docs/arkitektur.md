@@ -826,6 +826,29 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   reverseres. Sykepenger er helseopplysninger: refusjonene, rapporten «Refusjoner fra NAV»
   (`lonn.nav_refusjoner`) og revisjonsloggen for dem ser bare eier og administrator, mens bilaget
   står i regnskapet som lønnsbilagene. Sykepengerapporten viser det som er mottatt
+- Regnskapsmodulen, anleggsmidlene (`0086_regnskap_anlegg.sql`, `server/src/anlegg.ts`,
+  `server/src/saldo.ts`, `server/src/regnskapRuter.ts`, `server/src/regnskapRapporter.ts`,
+  `web/src/sider/Regnskap.tsx`, `docs/regnskap.md`): funksjonen og modulen «Regnskap», og handlingen
+  `regnskap` i `faktura.kan` (eier, administrator og regnskap). `anleggsmidler` har kategorien,
+  kostprisen, restverdien, levetiden i måneder, måneden avskrivningen begynner, balanse- og
+  avskrivningskontoen, den skattemessige behandlingen (saldogruppe a–j, lineært eller ingen, med
+  egen kostpris og sats), det som er avskrevet i et annet system før (til og med en måned), og
+  avgangen (settes av bokføringen). Avskrivningsplanen regnes i API-et (`avskrivningsplan`, i øre):
+  lineært ned til restverdien, det som står igjen delt på månedene som er igjen, så nedskrivning,
+  reversering og ny levetid gjelder framover. Bokføringen går gjennom `bokfor_anlegg` (bilag i serie A,
+  kilde anlegg, posteringene regnet ut av API-et) med hendelsene i `anleggshendelser` (anskaffelse,
+  avskrivning per måned, nedskrivning, reversering og avgang); databasen kontrollerer at bilaget
+  går i null, at avskrivningene kommer i rekkefølge og ikke før det som er ført før, at verdien ikke
+  blir negativ, at avgangen tar ut den bokførte verdien, og at nedskrivning av goodwill ikke
+  reverseres. `reverser_anlegg` reverserer det siste bilaget for et anleggsmiddel (med motsatte
+  beløp), og hendelsene gjelder ikke lenger. Kategorien, kostprisen, datoene og kontoen kan ikke
+  endres når noe er bokført (trigger), og et anleggsmiddel med bilag slettes ikke. Månedsavslutningen
+  (`/regnskap/avskrivninger`) fører et bilag per måned for det som mangler. Saldoavskrivningene
+  (`saldoskjema`) regnes år for år fra registeret, `regnskap_oppsett` (det første året og
+  inngående saldoer) og `saldo_satser` (lavere sats for et år og en gruppe). Rapportene
+  «Anleggsregister», «Avskrivningsplan», «Avskrivninger og avganger» og «Saldoskjema»
+  (`regnskap.*`, tilgangen regnskap). En organisasjon med bilag stenges i stedet for å slettes
+  (`slett_organisasjon`), og regnskapsmaterialet oppbevares i fem år
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -862,7 +885,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   fristene, feriepengeliste, årsoversikt, OTP, lønns- og stillingsendringer, trekk og betalinger, reiser og
   godtgjørelser, naturalytelser og permisjoner og permitteringer (`server/src/lonnRapporter.ts`),
   sykepenger og refusjon (`server/src/sykepengerRapporter.ts`), avstemming per termin,
-  årsavstemming og refusjoner fra NAV (`server/src/avstemming.ts`).
+  årsavstemming og refusjoner fra NAV (`server/src/avstemming.ts`). Regnskap: anleggsregister,
+  avskrivningsplan, avskrivninger og avganger, og saldoskjema (`server/src/regnskapRapporter.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
   lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
   for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og
@@ -875,9 +899,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag. Loggen for de ansatte, lønnen,
   lønnshistorikken, trekkene, naturalytelsene, reiseregningene, a-meldingene og lønnsbilagene er bare
-  for dem som ser lønnen, og loggen for fraværet, inntektsmeldingene og refusjonene fra NAV bare for
-  eier og administrator (`0081_revisjonslogg_lonn.sql`, `0083_naturalytelser_reiser.sql`,
-  `0085_nav_refusjon.sql`)
+  for dem som ser lønnen, loggen for anleggsmidlene og regnskapsoppsettet for dem som ser
+  regnskapet, og loggen for fraværet, inntektsmeldingene og refusjonene fra NAV bare for eier og
+  administrator (`0081_revisjonslogg_lonn.sql`, `0083_naturalytelser_reiser.sql`,
+  `0085_nav_refusjon.sql`, `0086_regnskap_anlegg.sql`)
 
 ### Roller
 
@@ -921,6 +946,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Rapporter: timer, timebank, ansatte og lønn | ✓ | ✓ | | ✓ | | |
 | Rapporter: fravær og feriebank | ✓ | ✓ | | | | |
 | Sende rapporter og endre utsendingen til regnskapsføreren | ✓ | ✓ | | | | |
+| Regnskap: anleggsmidlene, bokføringen av dem (anskaffelse, avskrivninger, nedskrivning, salg og utrangering), saldoavskrivningene, kontoene og rapportene | ✓ | ✓ | | ✓ | | |
 
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 ² Så lenge den ansatte er aktiv (ikke etter at de har sluttet).

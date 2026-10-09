@@ -43,7 +43,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
   it("modulene kan hentes uten innlogging", async () => {
     const r = await kall("GET", "/api/offentlig/moduler", null);
     expect(r.status).toBe(200);
-    expect(r.data.map((m: any) => m.kode)).toEqual(["faktura", "bemanning"]);
+    expect(r.data.map((m: any) => m.kode)).toEqual(["faktura", "bemanning", "regnskap"]);
     expect(r.data[1]).toMatchObject({ navn: "Bemanning", beskrivelse: expect.stringContaining("vaktplan") });
     expect(r.headers.get("cache-control")).toContain("max-age");
   });

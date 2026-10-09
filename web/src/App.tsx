@@ -4,7 +4,7 @@ import { hentAuth } from "./firebase";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster, Tom } from "./felles";
-import { KontoProvider, erAdmin, erAnsatt, harFunksjon, kanSePersonal, kanSkrive, useKonto, type Funksjon } from "./konto";
+import { KontoProvider, erAdmin, erAnsatt, harFunksjon, kanSePersonal, kanSeRegnskap, kanSkrive, useKonto, type Funksjon } from "./konto";
 import { BekreftEpost, Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
@@ -25,6 +25,7 @@ import { Vakter } from "./sider/Vakter";
 import { Ferie } from "./sider/Ferie";
 import { Beskjeder, useUlesteBeskjeder } from "./sider/Beskjeder";
 import { Lonn } from "./sider/Lonn";
+import { Regnskap } from "./sider/Regnskap";
 import { Logo } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
@@ -35,7 +36,7 @@ import { iFakturadelen } from "./fakturameny";
 import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
   IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonNokkel, IkonOversikt, IkonPluss,
-  IkonProdukter, IkonRapport, IkonSkjold, IkonTavle, IkonVelg,
+  IkonProdukter, IkonRapport, IkonRegnskap, IkonSkjold, IkonTavle, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -182,7 +183,10 @@ function Ramme() {
   const visLonn = harFunksjon(org, "lonn") && !!org?.personal && ((!ansatt && kanSePersonal(org.rolle)) || !!org.ansatt_id);
   // Rapporter (felles rapportmodul): fakturarapportene med funksjonen «Rapporter», og personal- og
   // lønnsrapportene for eier, administrator og regnskap. Serveren velger rapport for rapport.
-  const visRapporter = !ansatt && (harFunksjon(org, "rapporter") || (kanSePersonal(org?.rolle) && (harFunksjon(org, "ansatte") || harFunksjon(org, "lonn"))));
+  // Regnskap (anleggsmidlene og saldoavskrivningene): eier, administrator og regnskap.
+  const visRegnskap = !ansatt && harFunksjon(org, "regnskap") && kanSeRegnskap(org?.rolle);
+  const visRapporter =
+    !ansatt && (harFunksjon(org, "rapporter") || visRegnskap || (kanSePersonal(org?.rolle) && (harFunksjon(org, "ansatte") || harFunksjon(org, "lonn"))));
   const uleste = useUlesteBeskjeder(org?.id, visBeskjeder);
   const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
   // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
@@ -424,6 +428,12 @@ function Ramme() {
                 Rapporter
               </NavLink>
             )}
+            {visRegnskap && (
+              <NavLink to="/regnskap">
+                <IkonRegnskap />
+                Regnskap
+              </NavLink>
+            )}
           </>
         )}
         {!ansatt && (visAnsatte || visTimer || visBeskjeder) && (
@@ -535,7 +545,8 @@ function Ramme() {
             <Route path="/bank/tilbake" element={<Krever kode="bank" navn="Bank"><BankTilbake /></Krever>} />
             <Route path="/kunder" element={<Kunder />} />
             <Route path="/kunder/importer" element={<Krever kode="import" navn="Importer kunder"><Importer key="kunder" type="kunder" /></Krever>} />
-            <Route path="/rapporter" element={<Krever kode={["rapporter", "ansatte", "lonn"]} navn="Rapporter"><Rapporter /></Krever>} />
+            <Route path="/rapporter" element={<Krever kode={["rapporter", "ansatte", "lonn", "regnskap"]} navn="Rapporter"><Rapporter /></Krever>} />
+            <Route path="/regnskap" element={<Krever kode="regnskap" navn="Regnskap"><Regnskap /></Krever>} />
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/produkter/importer" element={<Krever kode="import" navn="Importer produkter"><Importer key="produkter" type="produkter" /></Krever>} />
             <Route path="/ansatte" element={<Ansatte />} />

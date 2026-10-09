@@ -32,6 +32,7 @@ describe("rutene og funksjonene de krever", () => {
     expect(funksjonerFor("/egenmelding")).toEqual(["vaktplan"]);
     expect(funksjonerFor("/rapportmodul/lonn.journal")).toEqual([]); // rapport for rapport (rapportmodul.ts)
     expect(funksjonerFor("/lonn/kjoringer")).toEqual(["lonn"]);
+    expect(funksjonerFor("/regnskap/anleggsmidler")).toEqual(["regnskap"]);
     expect(funksjonerFor("/lonn-oppsett")).toEqual(["ansatte"]);
     // Rollene hører til de ansatte (om personen er ansatt, følger rollen).
     expect(funksjonerFor("/ansattgrupper/fra-stillinger")).toEqual(["ansatte"]);
@@ -62,7 +63,7 @@ describe.skipIf(!process.env.DATABASE_URL)("funksjoner per organisasjon", () => 
 
   it("en ny organisasjon har alle funksjonene, og appen får lista", async () => {
     const o = await meg();
-    expect(o.funksjoner).toEqual(["ehf", "bank", "ai", "gjentakende", "flere", "paaminnelser", "rapporter", "import", "google_disk", "ansatte", "vaktplan", "lonn"]);
+    expect(o.funksjoner).toEqual(["ehf", "bank", "ai", "gjentakende", "flere", "paaminnelser", "rapporter", "import", "google_disk", "ansatte", "vaktplan", "lonn", "regnskap"]);
     expect(o.personal).toBe(true);
     expect((await kall("GET", `/api/org/${org}/vakter?fra=2026-10-05&til=2026-10-11`)).status).toBe(200);
   });

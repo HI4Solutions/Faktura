@@ -28,7 +28,7 @@ export interface MinOrg {
   timebank?: boolean;
 }
 
-export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan" | "lonn";
+export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan" | "lonn" | "regnskap";
 // Om organisasjonen har funksjonen. Uten lista (eldre API) er alt på.
 export const harFunksjon = (org: Pick<MinOrg, "funksjoner"> | null | undefined, kode: Funksjon) => !!org && (!org.funksjoner || org.funksjoner.includes(kode));
 
@@ -143,3 +143,5 @@ export const erAdmin = (rolle?: string) => ["eier", "admin"].includes(rolle ?? "
 export const erAnsatt = (rolle?: string) => rolle === "ansatt";
 export const kanPersonal = erAdmin;
 export const kanSePersonal = (rolle?: string) => ["eier", "admin", "regnskap"].includes(rolle ?? "");
+// Regnskapet (anleggsmidlene, bilagene): eier, administrator og regnskap.
+export const kanSeRegnskap = (rolle?: string) => ["eier", "admin", "regnskap"].includes(rolle ?? "");

@@ -129,6 +129,14 @@ export const IkonKroner = (p: P) => (
     <path d="M6 9.5v.01M18 14.5v.01" />
   </Ikon>
 );
+// Regnskapsbok: regnskapet (anleggsmidler og saldoavskrivninger).
+export const IkonRegnskap = (p: P) => (
+  <Ikon {...p}>
+    <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H18a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6.5A1.5 1.5 0 0 1 5 18.5z" />
+    <path d="M5 17.5A1.5 1.5 0 0 1 6.5 16H19" />
+    <path d="M9 7.5h6M9 10.5h6" />
+  </Ikon>
+);
 // Lommebok: lønn og lønnsslipper.
 export const IkonLonn = (p: P) => (
   <Ikon {...p}>

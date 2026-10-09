@@ -23,14 +23,16 @@ import { personalRapporter } from "./personalRapporter.js";
 import { lonnRapporter } from "./lonnRapporter.js";
 import { avstemmingRapporter } from "./avstemming.js";
 import { sykepengerRapporter } from "./sykepengerRapporter.js";
+import { regnskapRapporter } from "./regnskapRapporter.js";
 
 // --- Typene ---------------------------------------------------------------------------------------
 
-export type Modul = "faktura" | "personal" | "lonn";
+export type Modul = "faktura" | "personal" | "lonn" | "regnskap";
 export const MODULER: { id: Modul; navn: string }[] = [
   { id: "faktura", navn: "Faktura" },
   { id: "personal", navn: "Personal" },
   { id: "lonn", navn: "Lønn" },
+  { id: "regnskap", navn: "Regnskap" },
 ];
 
 // Valgene en rapport har: en periode (fra–til), en mva-/avgiftstermin, et år, eller ingen (status nå).
@@ -47,7 +49,7 @@ export type Rapportdef = {
   navn: string;
   beskrivelse: string;
   funksjon: string; // funksjonen organisasjonen må ha (faktura.har_funksjon)
-  tilgang: "les" | "personal_les" | "personal"; // handlingen brukeren må kunne (faktura.kan)
+  tilgang: "les" | "personal_les" | "personal" | "regnskap"; // handlingen brukeren må kunne (faktura.kan)
   parameter: Parameter;
   maanedlig?: boolean; // kan sendes til regnskapsføreren hver måned (for forrige måned)
   hent: (db: Db, org: string, v: Valg) => Promise<Rapportdata>;
@@ -65,7 +67,7 @@ export type Rapportresultat = Rapportdata & {
 };
 
 // Alle rapportene, modul for modul.
-export const RAPPORTER: Rapportdef[] = [...fakturaRapporter, ...personalRapporter, ...lonnRapporter, ...avstemmingRapporter, ...sykepengerRapporter];
+export const RAPPORTER: Rapportdef[] = [...fakturaRapporter, ...personalRapporter, ...lonnRapporter, ...avstemmingRapporter, ...sykepengerRapporter, ...regnskapRapporter];
 const PER_ID = new Map(RAPPORTER.map((r) => [r.id, r]));
 export const rapport = (id: string) => PER_ID.get(id);
 

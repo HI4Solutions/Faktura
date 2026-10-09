@@ -28,7 +28,7 @@ grant execute on all functions in schema test to public;
 
 \c :api
 -- Modulene kan alle se, og hver funksjon hører til en.
-select test.er((select array_agg(kode order by rekkefolge) from faktura.moduler), array['faktura', 'bemanning'], 'Faktura og Bemanning');
+select test.er((select array_agg(kode order by rekkefolge) from faktura.moduler), array['faktura', 'bemanning', 'regnskap'], 'Faktura, Bemanning og Regnskap');
 select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'bemanning'), array['ansatte', 'vaktplan', 'lonn'], 'Bemanning har ansatte, vaktplan og lønn');
 select test.er((select count(*) from faktura.funksjoner where modul is null), 0::bigint, 'alle funksjonene har en modul');
 
@@ -59,7 +59,7 @@ select test.er((select moduler from faktura.admin_brukere() where id = :'u'), ar
 select test.feiler($$select faktura.behandle_konto('$$ || :'u2' || $$', true, null, '{}')$$, 'FA400');
 select test.er((faktura.behandle_konto(:'u2', true, null, array['faktura', 'bemanning'])).status, 'godkjent', 'godkjent med en modul til');
 select test.er((select moduler from faktura.admin_brukere() where id = :'u2'), array['faktura', 'bemanning'], 'med begge modulene');
-select test.er((select jsonb_agg(m ->> 'kode') from jsonb_array_elements(faktura.admin_funksjoner() -> 'moduler') m), '["faktura", "bemanning"]'::jsonb, 'modulene i funksjonsoversikten');
+select test.er((select jsonb_agg(m ->> 'kode') from jsonb_array_elements(faktura.admin_funksjoner() -> 'moduler') m), '["faktura", "bemanning", "regnskap"]'::jsonb, 'modulene i funksjonsoversikten');
 select test.er((select f ->> 'modul' from jsonb_array_elements(faktura.admin_funksjoner() -> 'funksjoner') f where f ->> 'kode' = 'vaktplan'), 'bemanning', 'med modulen per funksjon');
 select set_config('app.betrodd', '', false);
 

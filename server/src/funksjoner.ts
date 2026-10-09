@@ -33,6 +33,7 @@ const RUTER: [RegExp, string][] = [
   [/^\/skattekort(\/|$)/, "lonn"],
   [/^\/(amelding|amelding-virksomheter)(\/|$)/, "lonn"],
   [/^\/nav(\/|$)/, "lonn"],
+  [/^\/regnskap(\/|$)/, "regnskap"],
 ];
 
 export const funksjonerFor = (sti: string) => [...new Set(RUTER.filter(([re]) => re.test(sti)).map(([, kode]) => kode))];
@@ -68,6 +69,7 @@ const NAVN: Record<string, string> = {
   ansatte: "Ansatte og timer",
   vaktplan: "Vaktplan og bemanning",
   lonn: "Lønn",
+  regnskap: "Regnskap",
 };
 export const ikkePaa = (kode: string) => new ApiFeil(403, `${NAVN[kode] ?? kode} er ikke slått på for organisasjonen`);
 
