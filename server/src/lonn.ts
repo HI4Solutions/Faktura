@@ -15,6 +15,8 @@ import { beregnBemanning } from "./arbeidsplan.js";
 import { lonnsart, LONNSARTER } from "./lonnsarter.js";
 import { bokforKjoring } from "./lonnBokforing.js";
 import { endringstekster, etterbetaling, fastlonnLinjer, gjeldende, kjent, ukeDato, type Etterbetalt, type GodkjentKjoring, type Lonnsendring } from "./lonnsendringer.js";
+import { aktive, fagforeningslinjer, trekkEtterSkatt, type Lonnstrekk } from "./lonnstrekk.js";
+import { hentBetalinger } from "./lonnBetalinger.js";
 import {
   andelAnsatt,
   arbeidsgiverperiode,
@@ -135,6 +137,35 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
   const ordinar = k.type === "ordinar";
 
   const ansatte = await alle<Ansatt & { aktiv: boolean }>(db, `${ANSATTE} where a.org_id = $1 and a.arbeidstaker order by a.ansattnummer`, [org]);
+  // Faste trekk (0082, lonnstrekk.ts) i den ordinære kjøringen, og det som alt er trukket for
+  // hvert av dem i godkjente kjøringer.
+  const lonnstrekk = ordinar
+    ? aktive(
+        await alle<Lonnstrekk>(
+          db,
+          `select id, ansatt_id, type, tekst, belop::float8 as belop, prosent::float8 as prosent, totalt::float8 as totalt,
+                  to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, mottaker, kontonr, kid, melding
+             from faktura.lonnstrekk where org_id = $1 and fra <= $3::date and (til is null or til >= $2::date)`,
+          [org, fra, til],
+        ),
+        fra,
+        til,
+      )
+    : [];
+  const trukketSum = new Map(
+    (lonnstrekk.length
+      ? await alle<{ nokkel: string; trukket: number }>(
+          db,
+          `select l.nokkel, -sum(l.belop)::float8 as trukket
+             from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id join faktura.lonnskjoringer k on k.id = s.kjoring_id
+            where l.org_id = $1 and k.status = 'godkjent' and k.id <> $2 and not l.fjernet and l.nokkel like 'trekk:%'
+            group by l.nokkel`,
+          [org, k.id],
+        )
+      : []
+    ).map((x) => [x.nokkel, Number(x.trukket)]),
+  );
+  const trukket = (id: string) => trukketSum.get(`trekk:${id}`) ?? 0;
   const tillegg = await alle<Tillegg & { ansatt_id: string }>(
     db,
     `select id, ansatt_id, navn, belop::float8 as belop, per, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til
@@ -501,16 +532,34 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
   const halv = k.halv_skatt;
   const beregnet = resultater.map((r) => {
     const hoppOver = new Set(r.manuelle.map((m) => m.nokkel).filter(Boolean));
-    const auto = r.auto.filter((l) => !l.nokkel || !hoppOver.has(l.nokkel));
-    const alleLinjer: Linje[] = [...auto, ...r.manuelle];
     const frikortBrukt = Number(iAar(r.a.id, aar)?.trekkpliktig ?? 0) + Number(inn(r.a.id, aar)?.trekkpliktig ?? 0);
-    const s = summer(
-      alleLinjer,
-      o,
-      { ansatt: r.a, aar, ekstra: !ordinar, halvSkatt: halv, tabell: r.a.skattekort === "tabell" && r.a.skatt_tabell ? (tabellrader.get(Number(r.a.skatt_tabell)) ?? null) : null, frikortBrukt },
-      k.utbetalingsdato,
-      r.slipp?.skattetrekk_manuell ? Number(r.slipp.skattetrekk) : null,
-    );
+    const regn = (linjer: Linje[]) =>
+      summer(
+        [...linjer, ...r.manuelle],
+        o,
+        { ansatt: r.a, aar, ekstra: !ordinar, halvSkatt: halv, tabell: r.a.skattekort === "tabell" && r.a.skatt_tabell ? (tabellrader.get(Number(r.a.skatt_tabell)) ?? null) : null, frikortBrukt },
+        k.utbetalingsdato,
+        r.slipp?.skattetrekk_manuell ? Number(r.slipp.skattetrekk) : null,
+      );
+    const uten = (l: Linje[]) => l.filter((x) => !x.nokkel || !hoppOver.has(x.nokkel));
+    let auto = uten(r.auto);
+    let s = regn(auto);
+    // Faste trekk: fagforeningskontingenten (gjør grunnlaget for skattetrekket mindre), så de andre.
+    // (Et trekk med en linje som er endret eller fjernet for hånd, er med slik det er der.)
+    const egneTrekk = lonnstrekk.filter((t) => t.ansatt_id === r.a.id && !hoppOver.has(`trekk:${t.id}`));
+    if (egneTrekk.length) {
+      const f = fagforeningslinjer(egneTrekk, s.brutto, trukket);
+      if (f.length) {
+        auto = [...auto, ...f];
+        s = regn(auto);
+      }
+      const t = trekkEtterSkatt(egneTrekk, s.brutto, s.netto, trukket);
+      if (t.linjer.length) {
+        auto = [...auto, ...t.linjer];
+        s = regn(auto);
+      }
+      s.merknader.push(...t.merknader);
+    }
     if (!r.a.kontonr && s.netto > 0) s.merknader.push("Mangler kontonummer på den ansatte.");
     return { r, auto, s };
   });
@@ -604,7 +653,7 @@ export async function hentKjoring(db: Db, org: string, id: string) {
     `select k.id, to_char(k.periode, 'YYYY-MM-DD') as periode, k.type, to_char(k.utbetalingsdato, 'YYYY-MM-DD') as utbetalingsdato, k.status,
             k.feriepenger, k.halv_skatt, k.notat, k.godkjent_at, k.opprettet,
             (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = k.godkjent_av) as godkjent_av,
-            k.betalingsfil_lastet, k.betalingsfil_antall,
+            k.betalingsfil_lastet, k.betalingsfil_antall, k.forskuddstrekk_kid,
             (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = k.betalingsfil_av) as betalingsfil_av
        from faktura.lonnskjoringer k where k.org_id = $1 and k.id = $2`,
     [org, id],
@@ -1064,6 +1113,9 @@ export function lonnRuter() {
       const mangler = betales.filter((s) => !s.kontonr || !kontonrGyldig(s.kontonr));
       if (mangler.length)
         throw new ApiFeil(400, `${mangler.length === 1 ? "Mangler" : "Disse mangler"} gyldig kontonummer: ${mangler.map((s) => s.navn).join(", ")}. Legg det inn på den ansatte.`);
+      // Forskuddstrekket og trekkene med mottaker og kontonummer (0082), første virkedag etter.
+      const b = await hentBetalinger(db, orgId(c), k);
+      const trekk = [...(b.forskuddstrekk ? [b.forskuddstrekk] : []), ...b.trekk].filter((x) => !x.mangler && x.kontonr);
       await db.query("select faktura.lonn_betalingsfil($1)", [id(c)]);
       const mid = meldingId(k.periode, k.id, new Date(k.godkjent_at).toISOString());
       return {
@@ -1078,10 +1130,34 @@ export function lonnRuter() {
           dato: k.utbetalingsdato,
           tekst: `Lønn ${maanedNavn(k.periode)}`,
           betalinger: betales.map((s) => ({ navn: s.navn, kontonr: s.kontonr, belop: Number(s.netto), referanse: `${mid}-${s.ansattnummer}` })),
+          trekk: trekk.length
+            ? {
+                dato: b.trekkdato,
+                betalinger: trekk.map((x, i) => ({ navn: x.mottaker, kontonr: x.kontonr!, belop: x.belop, referanse: `${mid}-T${i + 1}`, kid: x.kid, tekst: x.tekst })),
+              }
+            : null,
         }),
       };
     });
     return c.body(f.xml, 200, { "content-type": "application/xml; charset=utf-8", "content-disposition": `attachment; filename="${f.navn}"` });
+  });
+
+  // Betalingene fra kjøringen (lonnBetalinger.ts): nettolønnen, forskuddstrekket og trekkene, med
+  // det som mangler for at de skal være med i betalingsfila.
+  r.get("/lonn/kjoringer/:id/betalinger", async (c) => c.json(await bruk(c, async (db) => hentBetalinger(db, orgId(c), await hentKjoring(db, orgId(c), id(c))))));
+
+  // KID-en for forskuddstrekket i måneden (fra Skatteetatens KID-generator), også når kjøringen er
+  // godkjent.
+  r.put("/lonn/kjoringer/:id/forskuddstrekk-kid", async (c) => {
+    const b = z
+      .object({ kid: z.string().trim().transform((x) => x.replace(/\s/g, "")).pipe(z.string().regex(/^(\d{19})?$/, "KID-en for forskuddstrekk har 19 siffer")).nullable() })
+      .parse(await c.req.json().catch(() => ({})));
+    return c.json(
+      await bruk(c, async (db) => {
+        await db.query("select faktura.sett_forskuddstrekk_kid($1, $2)", [id(c), b.kid || null]);
+        return hentBetalinger(db, orgId(c), await hentKjoring(db, orgId(c), id(c)));
+      }),
+    );
   });
 
   // Den ansattes egne lønnsslipper (godkjente kjøringer).

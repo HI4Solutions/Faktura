@@ -20,6 +20,7 @@ import { Aarsoversikter, MineAarsoversikter } from "./LonnAar";
 import { Ameldinger } from "./LonnAmelding";
 import { Sykepenger } from "./LonnSykepenger";
 import { KjoringBokforing } from "./LonnBokforing";
+import { LonnBetalinger } from "./LonnBetalinger";
 
 export interface Linje {
   id: string;
@@ -570,6 +571,8 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
           </button>
         )}
       </div>
+
+      {!utkast && d.slipper.length > 0 && <LonnBetalinger sti={sti} kanEndre={admin} versjon={`${d.godkjent_at}-${d.betalingsfil_antall}`} />}
 
       {!d.slipper.length ? (
         <div className="kort">

@@ -25,7 +25,10 @@ export type Kontorolle =
   | "otp"
   | "utgifter"
   | "forskuddstrekk"
+  | "paaleggstrekk"
+  | "bidragstrekk"
   | "andre_trekk"
+  | "forskudd"
   | "skyldig_aga"
   | "paalopt_aga_feriepenger"
   | "skyldig_lonn"
@@ -42,7 +45,10 @@ export const KONTOROLLER: { rolle: Kontorolle; navn: string; standard: string }[
   { rolle: "otp", navn: "Pensjon (OTP)", standard: "5945" },
   { rolle: "utgifter", navn: "Utgiftsgodtgjørelse", standard: "7790" },
   { rolle: "forskuddstrekk", navn: "Forskuddstrekk", standard: "2600" },
+  { rolle: "paaleggstrekk", navn: "Påleggstrekk (utleggstrekk)", standard: "2610" },
+  { rolle: "bidragstrekk", navn: "Bidragstrekk", standard: "2620" },
   { rolle: "andre_trekk", navn: "Andre trekk", standard: "2690" },
+  { rolle: "forskudd", navn: "Forskudd til ansatte", standard: "1570" },
   { rolle: "skyldig_aga", navn: "Skyldig arbeidsgiveravgift", standard: "2770" },
   { rolle: "paalopt_aga_feriepenger", navn: "Påløpt arbeidsgiveravgift på feriepenger", standard: "2785" },
   { rolle: "skyldig_lonn", navn: "Skyldig lønn", standard: "2930" },
@@ -81,6 +87,12 @@ export type Bilagsslipp = {
   // Feriepengene som utbetales på slippen (lønnsartene feriepenger og feriepenger_60).
   feriepenger: number;
   feriepenger_60: number;
+  // Trekkene (0082, positive beløp): utleggstrekk, bidragstrekk og tilbakebetalt forskudd (resten av
+  // trekkene etter skatt er andre trekk), og forskudd på lønn som er utbetalt.
+  paaleggstrekk?: number;
+  bidragstrekk?: number;
+  forskudd_trekk?: number;
+  forskudd_utbetalt?: number;
 };
 export type Bilagsgrunnlag = {
   kjoring: { id: string; periode: string; type: "ordinar" | "ekstra"; utbetalingsdato: string };
@@ -99,7 +111,11 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
   const ferie60 = sum((s) => ore(s.feriepenger_60));
   const utgifter = sum((s) => ore(s.utgifter));
   const skatt = sum((s) => ore(s.skattetrekk));
-  const andreTrekk = -sum((s) => ore(s.trekk_etter_skatt));
+  const paalegg = sum((s) => ore(s.paaleggstrekk ?? 0));
+  const bidrag = sum((s) => ore(s.bidragstrekk ?? 0));
+  const forskuddTrekk = sum((s) => ore(s.forskudd_trekk ?? 0));
+  const forskuddUt = sum((s) => ore(s.forskudd_utbetalt ?? 0));
+  const andreTrekk = -sum((s) => ore(s.trekk_etter_skatt)) - paalegg - bidrag - forskuddTrekk;
   const netto = sum((s) => ore(s.netto));
   const aga = sum((s) => ore(s.aga));
   // Avgiften av feriepengene som utbetales (tas fra avsetningen), og av dem som avsettes.
@@ -117,8 +133,12 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
     post("skyldige_feriepenger", ferie, "Feriepenger utbetalt");
     post("feriepenger", ferie60, "Feriepenger for den ekstra ferieuka");
   } else post("feriepenger", ferie + ferie60, "Feriepenger utbetalt");
-  post("utgifter", utgifter, "Utgiftsgodtgjørelse");
+  post("utgifter", utgifter - forskuddUt, "Utgiftsgodtgjørelse");
+  post("forskudd", forskuddUt, "Forskudd på lønn");
   post("forskuddstrekk", -skatt, "Forskuddstrekk");
+  post("paaleggstrekk", -paalegg, "Utleggstrekk");
+  post("bidragstrekk", -bidrag, "Bidragstrekk");
+  post("forskudd", -forskuddTrekk, "Tilbakebetalt forskudd");
   post("andre_trekk", -andreTrekk, "Trekk i lønn");
   post(o.netto === "bank" ? "bank" : "skyldig_lonn", -netto, "Nettolønn");
   if (avsetning) {
@@ -178,7 +198,12 @@ export async function hentBilagsgrunnlag(db: Db, org: string, kjoring: string): 
     `select s.brutto::float8 as brutto, s.skattetrekk::float8 as skattetrekk, s.utgifter::float8 as utgifter, s.trekk_etter_skatt::float8 as trekk_etter_skatt,
             s.netto::float8 as netto, s.feriepenger_opptjent::float8 as feriepenger_opptjent, s.otp::float8 as otp, s.aga::float8 as aga, s.aga_sats::float8 as aga_sats,
             coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'feriepenger'), 0)::float8 as feriepenger,
-            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'feriepenger_60'), 0)::float8 as feriepenger_60
+            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'feriepenger_60'), 0)::float8 as feriepenger_60,
+            coalesce((select -sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet
+                        and l.lonnsart in ('utleggstrekk_samordnet', 'utleggstrekk_skatt', 'utleggstrekk')), 0)::float8 as paaleggstrekk,
+            coalesce((select -sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'bidragstrekk'), 0)::float8 as bidragstrekk,
+            coalesce((select -sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'forskudd_trekk'), 0)::float8 as forskudd_trekk,
+            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'forskudd_utbetalt'), 0)::float8 as forskudd_utbetalt
        from faktura.lonnsslipper s
       where s.org_id = $1 and s.kjoring_id = $2
       order by s.ansattnummer`,

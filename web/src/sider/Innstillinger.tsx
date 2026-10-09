@@ -210,6 +210,7 @@ function PersonalOppsett() {
     lonnsdag: string;
     halv_skatt: "november" | "desember";
     lonnskonto: string;
+    skatt_kontonr: string;
     bank_bic: string;
     betalingsfil_format: "pain.001.001.03" | "pain.001.001.09";
     virksomhet_orgnr: string;
@@ -244,6 +245,7 @@ function PersonalOppsett() {
         lonnsdag: String(data.lonnsdag ?? 20),
         halv_skatt: data.halv_skatt ?? "desember",
         lonnskonto: data.lonnskonto ? data.lonnskonto.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3") : "",
+        skatt_kontonr: data.skatt_kontonr ? data.skatt_kontonr.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3") : "",
         bank_bic: data.bank_bic ?? "",
         betalingsfil_format: data.betalingsfil_format ?? "pain.001.001.03",
         virksomhet_orgnr: data.virksomhet_orgnr ?? "",
@@ -283,6 +285,7 @@ function PersonalOppsett() {
               lonnsdag: tall(o!.lonnsdag),
               halv_skatt: o!.halv_skatt,
               lonnskonto: o!.lonnskonto.trim() || null,
+              skatt_kontonr: o!.skatt_kontonr.trim() || null,
               bank_bic: o!.bank_bic.trim() || null,
               betalingsfil_format: o!.betalingsfil_format,
               virksomhet_orgnr: o!.virksomhet_orgnr.replace(/\s/g, "") || null,
@@ -522,6 +525,14 @@ function PersonalOppsett() {
               <span className="felt-hjelp">SWIFT-adressen til banken lønnskontoen er i (står i nettbanken), f.eks. DNBANOKK for DNB.</span>
             </label>
           </div>
+          <label>
+            Skatteetatens kontonummer (forskuddstrekk og utleggstrekk)
+            <input inputMode="numeric" value={o.skatt_kontonr} onChange={(e) => settO({ ...o, skatt_kontonr: e.target.value })} />
+            <span className="felt-hjelp">
+              Står på skatteetaten.no (betaling av forskuddstrekk). Da er forskuddstrekket med i betalingsfila, første virkedag etter lønnsdagen, med KID-en for
+              måneden som legges inn på lønnskjøringen.
+            </span>
+          </label>
           <label>
             Format
             <select value={o.betalingsfil_format} onChange={(e) => settO({ ...o, betalingsfil_format: e.target.value as "pain.001.001.03" | "pain.001.001.09" })}>

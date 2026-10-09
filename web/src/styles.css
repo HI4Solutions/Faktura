@@ -2392,6 +2392,20 @@ button.lenke.lonn-pdf { padding: 0 16px; flex: none; }
 .tidligere-lonn table { margin: 8px 0; font-size: 0.88rem; }
 .tidligere-lonn td.hoyre { white-space: nowrap; }
 .tidligere-skjema { margin-top: 10px; }
+/* Betalingene fra en godkjent lønnskjøring (LonnBetalinger.tsx). */
+.lonn-betalinger { margin: 12px 0; }
+.lonn-betalinger h3 { margin: 0 0 8px; }
+.lonn-betalinger ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
+.lonn-betalinger li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; }
+.lonn-betalinger li > .liten { grid-column: 1 / -1; }
+.lonn-betaling-hva { font-weight: 500; }
+.lonn-betaling-kid { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lonn-betaling-kid input { flex: 1 1 14em; max-width: 22em; font-variant-numeric: tabular-nums; }
+/* De faste trekkene på den ansatte (LonnsTrekk.tsx). */
+.lonnstrekk-liste { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; font-size: 0.9rem; }
+.lonnstrekk-liste li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: baseline; }
+.lonnstrekk-liste li .liten { grid-column: 1 / -1; }
+.lonnstrekk-knapper { display: flex; gap: 10px; }
 /* Lønnshistorikken (Lonnsendringer.tsx) og datoen en endring i skjemaet gjelder fra. */
 .lonnsendring-liste { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; font-size: 0.9rem; }
 .lonnsendring-liste li { display: grid; grid-template-columns: 6.2em 1fr auto; gap: 10px; align-items: baseline; }

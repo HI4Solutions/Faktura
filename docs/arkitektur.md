@@ -727,6 +727,29 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   A-meldingen tar stillingsprosenten og datoene for siste lønns- og stillingsendring fra
   historikken ved månedsslutt (`lonn_endringsdatoer`). Rapporten «Lønns- og stillingsendringer»
   (`lonn.endringer`) viser endringene som gjelder fra perioden, med lønnen før og etter
+- Trekk i lønnen (`0082_lonnstrekk.sql`, `server/src/lonnstrekk.ts`, `server/src/lonnstrekkRuter.ts`,
+  `server/src/lonnBetalinger.ts`, `web/src/sider/LonnsTrekk.tsx`, `web/src/sider/LonnBetalinger.tsx`):
+  faste trekk per ansatt (`lonnstrekk`: samordnet utleggstrekk, utleggstrekk for skattekrav, andre
+  utleggstrekk, bidragstrekk, fagforeningskontingent, forskudd og annet), som et beløp per kjøring
+  eller en prosent av bruttolønnen, fra og til en dato og eventuelt til en sum er trukket, med
+  mottaker, kontonummer og KID eller melding. De som ser lønnen og den ansatte selv ser dem; eier og
+  administrator endrer, og et trekk som er brukt i en godkjent kjøring, avsluttes i stedet for å
+  slettes. Den ordinære kjøringen legger inn fagforeningskontingenten først (lønnsarten
+  `fagforening` gjør grunnlaget for forskuddstrekket mindre med høyst en tolvdel av det årlige
+  fradraget, `fagforeningsfradrag`), og de andre etter forskuddstrekket i rekkefølgen dekningsloven
+  gir (bidrag, utlegg, forskudd, annet), aldri mer enn nettolønnen som er igjen; pålegg i hele
+  kroner. Linjene har nøkkelen `trekk:<id>`, så en linje som er endret eller fjernet for hånd,
+  gjelder, og det som er trukket summeres fra godkjente kjøringer. Betalingene
+  (`hentBetalinger`): nettolønnen på lønnsdagen, og forskuddstrekket (til
+  `lonn_oppsett.skatt_kontonr` med KID-en for måneden, `lonnskjoringer.forskuddstrekk_kid`, som
+  kan settes også når kjøringen er godkjent, `sett_forskuddstrekk_kid`) og trekkene med
+  kontonummer første virkedag etter, som en egen betaling i betalingsfila (KID som SCOR, ellers
+  meldingen). A-meldingen: fagforeningskontingenten som `fradrag`, utleggstrekkene til
+  Skatteetaten som `utleggstrekk` (`utleggstrekkSamordnet` og `utleggstrekkSkatt`, med datoen for
+  trekket) med `sumUtleggstrekk`, og forskuddstrekket med beskrivelsen `ordinaert`. Lønnsbilaget
+  fører påleggstrekk (2610), bidragstrekk (2620) og forskudd til ansatte (1570, også forskudd som
+  utbetales med lønnsarten `forskudd_utbetalt`) på egne kontoer. Rapporten «Trekk og betalinger»
+  (`lonn.trekk`) har betalingene med mottaker, KID og frist
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -760,7 +783,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   for uke, merarbeid og uten overtid), timeliste, fravær, feriebank, timebank, ekstratimer og
   ansatte (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
   per lønnsart (grunnlaget for bokføringen), skattetrekk og arbeidsgiveravgift per termin med
-  fristene, feriepengeliste, årsoversikt, OTP og lønns- og stillingsendringer (`server/src/lonnRapporter.ts`).
+  fristene, feriepengeliste, årsoversikt, OTP, lønns- og stillingsendringer og trekk og betalinger (`server/src/lonnRapporter.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
   lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
   for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og
@@ -772,7 +795,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   står i `rapport_maanedsutsendinger`, så hver måned sendes én gang
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag. Loggen for de ansatte, lønnen,
-  lønnshistorikken, a-meldingene og lønnsbilagene er bare for dem som ser lønnen, og loggen for
+  lønnshistorikken, trekkene, a-meldingene og lønnsbilagene er bare for dem som ser lønnen, og loggen for
   fraværet og inntektsmeldingene til NAV bare for eier og administrator (`0081_revisjonslogg_lonn.sql`)
 
 ### Roller
@@ -795,6 +818,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
 | Se lønnshistorikken (lønns- og stillingsendringene) til de ansatte | ✓ | ✓ | | ✓ | | |
 | Legge inn og fjerne lønns- og stillingsendringer med datoen de gjelder fra | ✓ | ✓ | | | | |
+| Se de faste trekkene i lønnen og betalingene fra en kjøring | ✓ | ✓ | | ✓ | | |
+| Legge inn, endre og avslutte faste trekk, og KID-en for forskuddstrekket | ✓ | ✓ | | | | |
+| Se egne faste trekk | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Se lønnsbilagene | ✓ | ✓ | | ✓ | | |
 | Endre kontoene for lønnsbilaget, og bokføre en kjøring som ble godkjent før bokføringen kom | ✓ | ✓ | | | | |
 | Se a-meldingene (månedene, grunnlaget og avvikene) | ✓ | ✓ | | ✓ | | |

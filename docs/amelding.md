@@ -48,6 +48,10 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
    lønnsendring og endring i stillingsprosent kommer fra lønnshistorikken på den ansatte (det som
    gjelder ved utgangen av måneden); endres lønnen eller stillingen, velger du datoen den gjelder
    fra. Etterbetaling eller trekk for en tidligere måned får opptjeningsperioden i meldingen.
+   Faste trekk (på den ansatte): fagforeningskontingenten blir fradrag, utleggstrekkene til
+   Skatteetaten (samordnet og for skattekrav) blir utleggstrekk med datoen for trekket og summen i
+   betalingsinformasjonen, og forskuddstrekket har beskrivelsen «ordinaert». Bidragstrekk og andre
+   utleggstrekk rapporteres ikke.
 3. **Hver måned:** godkjenn lønnskjøringen, åpne måneden under Lønn → A-melding, rett det som
    mangler, og lag fila eller send den.
 4. **Tilgang for innsending fra appen** (når den er slått på): kunder som allerede har koblet til

@@ -1,12 +1,14 @@
 // Rapportene for Lønn i rapportmodulen (rapportmodul.ts), fra de godkjente lønnskjøringene:
 // lønnsjournalen, summene per lønnsart, lønnsbilaget (konteringen, lonnBokforing.ts), skattetrekk
 // og arbeidsgiveravgift per termin med fristene, feriepengelisten, årsoversikten og OTP; og
-// lønns- og stillingsendringene som gjelder fra perioden (lonnsendringer.ts).
+// lønns- og stillingsendringene som gjelder fra perioden (lonnsendringer.ts); og trekkene og
+// betalingene til Skatteetaten og andre (lonnstrekk.ts, lonnBetalinger.ts).
 // Journalen, lønnsartene og bilaget kan gjelde én kjøring (valget kjoring); de sendes til
 // regnskapsføreren når kjøringen godkjennes, om det er slått på.
 import { alle, en, type Db } from "./db.js";
 import { AMELDING_NAVN, lonnsart } from "./lonnsarter.js";
 import { frister, maanedNavn } from "./lonnsberegning.js";
+import { TREKKTYPER, type Trekktype } from "./lonnstrekk.js";
 import { hentBilag } from "./lonnBokforing.js";
 import type { Rapportdef, Valg } from "./rapportmodul.js";
 import { gjeldende, kjent, type Lonnsendring } from "./lonnsendringer.js";
@@ -439,6 +441,72 @@ export const lonnRapporter: Rapportdef[] = [
           { nokkel: "registrert", navn: "Registrert", type: "dato", pdf: false },
         ],
         rader: ut.sort((x, y) => String(x.gjelder_fra).localeCompare(String(y.gjelder_fra)) || Number(x.ansattnummer) - Number(y.ansattnummer)),
+      };
+    },
+  },
+  {
+    id: "lonn.trekk",
+    modul: "lonn",
+    navn: "Trekk og betalinger",
+    beskrivelse:
+      "Forskuddstrekket og trekkene i lønnen (utleggstrekk, bidragstrekk, fagforeningskontingent, forskudd og andre trekk) i de godkjente kjøringene med utbetaling i perioden, med mottakeren, KID-en og fristen for betalingen.",
+    funksjon: "lonn",
+    tilgang: "personal_les",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      const kjoringer = await alle<{ id: string; utbetalt: string; kid: string | null; skatt: number }>(
+        db,
+        `select k.id, to_char(k.utbetalingsdato, 'YYYY-MM-DD') as utbetalt, k.forskuddstrekk_kid as kid,
+                (select coalesce(sum(s.skattetrekk), 0) from faktura.lonnsslipper s where s.kjoring_id = k.id)::float8 as skatt
+           from faktura.lonnskjoringer k where ${KJORINGER} order by k.utbetalingsdato, k.periode`,
+        parametre(org, v),
+      );
+      const kontonr = (await en<{ skatt_kontonr: string | null }>(db, "select skatt_kontonr from faktura.lonn_oppsett where org_id = $1", [org]))?.skatt_kontonr ?? null;
+      const trekk = await alle<{ utbetalt: string; ansattnummer: number; navn: string; lonnsart: string; tekst: string; type: Trekktype | null; mottaker: string | null; kontonr: string | null; kid: string | null; melding: string | null; belop: number }>(
+        db,
+        `select to_char(s.utbetalingsdato, 'YYYY-MM-DD') as utbetalt, s.ansattnummer, s.navn, l.lonnsart, l.tekst, t.type, t.mottaker, t.kontonr, t.kid, t.melding,
+                -l.belop::float8 as belop
+           from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id join faktura.lonnskjoringer k on k.id = s.kjoring_id
+           left join faktura.lonnstrekk t on t.org_id = l.org_id and 'trekk:' || t.id::text = l.nokkel
+          where ${KJORINGER} and not l.fjernet and l.belop < 0
+            and l.lonnsart in ('utleggstrekk_samordnet', 'utleggstrekk_skatt', 'utleggstrekk', 'bidragstrekk', 'fagforening', 'forskudd_trekk', 'trekk_etter_skatt')
+          order by s.utbetalingsdato, s.ansattnummer, l.rekkefolge`,
+        parametre(org, v),
+      );
+      const rader: Record<string, unknown>[] = [];
+      for (const k of kjoringer) {
+        const frist = frister(k.utbetalt).skattetrekk;
+        if (k.skatt > 0)
+          rader.push({ utbetalt: k.utbetalt, betales: frist, hva: "Forskuddstrekk", ansattnummer: "", navn: "", mottaker: "Skatteetaten", kontonr: kontonr ?? "", kid: k.kid ?? "", belop: rund(k.skatt) });
+        for (const t of trekk.filter((x) => x.utbetalt === k.utbetalt)) {
+          const betales = Boolean(t.kontonr) || (t.type != null && t.type !== "forskudd" && t.type !== "annet");
+          rader.push({
+            utbetalt: t.utbetalt,
+            betales: betales ? frist : null,
+            hva: t.type ? TREKKTYPER[t.type].navn : lonnsart(t.lonnsart).navn,
+            ansattnummer: String(t.ansattnummer),
+            navn: t.navn,
+            mottaker: t.mottaker ?? (t.type === "utlegg_samordnet" || t.type === "utlegg_skatt" ? "Skatteetaten" : betales ? "" : "Arbeidsgiveren"),
+            kontonr: t.kontonr ?? "",
+            kid: t.kid ?? t.melding ?? "",
+            belop: rund(t.belop),
+          });
+        }
+      }
+      return {
+        kolonner: [
+          { nokkel: "utbetalt", navn: "Utbetalt", type: "dato" },
+          { nokkel: "betales", navn: "Betales innen", type: "dato" },
+          { nokkel: "hva", navn: "Trekk" },
+          { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "mottaker", navn: "Mottaker" },
+          { nokkel: "kontonr", navn: "Kontonummer", type: "tekst" },
+          { nokkel: "kid", navn: "KID eller melding", type: "tekst" },
+          { nokkel: "belop", navn: "Beløp", type: "kr", sum: true },
+        ],
+        rader,
       };
     },
   },

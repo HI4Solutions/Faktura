@@ -468,6 +468,11 @@ export type Trekkgrunnlag = {
   frikortBrukt: number; // trekkpliktig lønn i år før denne kjøringen
 };
 
+// Fagforeningskontingenten som trekkes i lønnen, reduserer grunnlaget for forskuddstrekket med
+// en forholdsmessig del av det årlige fradraget ved hver ordinære lønnsutbetaling (en tolvdel;
+// skattebetalingshåndboken § 5-9). Det årlige fradraget fastsettes hvert år (2026: 8 700 kr).
+export const fagforeningsfradrag = (aar: number) => (aar >= 2026 ? 8700 : 7700);
+
 export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: string, manueltTrekk: number | null): Summer {
   const aktive = linjer.filter((l) => !l.fjernet);
   const merknader: string[] = [];
@@ -480,6 +485,7 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   let agaGrunnlag = 0;
   let unntatt = 0; // feriepenger uten tabelltrekk (utbetalt i ferieåret)
   let ferie60 = 0;
+  let fradrag = 0; // fagforeningskontingent trukket i lønnen (positiv)
   for (const l of aktive) {
     const art = lonnsart(l.lonnsart);
     const b = Number(l.belop);
@@ -492,22 +498,24 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
     if (art.aga) agaGrunnlag += b;
     if (l.lonnsart === "feriepenger" && l.opptjeningsaar != null && l.opptjeningsaar < t.aar) unntatt += b;
     if (l.lonnsart === "feriepenger_60") ferie60 += b;
+    if (art.fradrag) fradrag -= b;
   }
   brutto = rund(brutto);
   trekkpliktig = rund(trekkpliktig);
 
-  // Skattetrekket.
+  // Skattetrekket. Fagforeningskontingenten trekkes fra grunnlaget (ikke i ekstra kjøringer).
   const a = t.ansatt;
+  const minus = t.ekstra ? 0 : rund(Math.max(0, Math.min(fradrag, fagforeningsfradrag(t.aar) / 12)));
   const prosent = (p: number, g: number) => Math.max(0, Math.floor((g * p) / 100));
   let trekk = 0;
   let metode = "";
-  let grunnlag = trekkpliktig;
+  let grunnlag = rund(Math.max(0, trekkpliktig - minus));
   if (!a.skattekort) {
-    trekk = prosent(UTEN_SKATTEKORT, trekkpliktig);
+    trekk = prosent(UTEN_SKATTEKORT, grunnlag);
     metode = `Uten skattekort (${UTEN_SKATTEKORT} %)`;
     if (trekkpliktig > 0) merknader.push(`Mangler skattekort: det trekkes ${UTEN_SKATTEKORT} %. Registrer skattekortet på den ansatte.`);
   } else if (a.skattekort === "prosent") {
-    trekk = prosent(Number(a.skatt_prosent), trekkpliktig);
+    trekk = prosent(Number(a.skatt_prosent), grunnlag);
     metode = `Prosenttrekk ${tall(Number(a.skatt_prosent))} %`;
   } else if (a.skattekort === "frikort" && a.skatt_frikort == null) {
     // Frikort uten beløpsgrense (eller ikke trekkplikt): ingen trekk.
@@ -527,7 +535,7 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
       trekk = prosent(p, grunnlag);
       metode = `Prosenttrekk ${tall(p)} % (tabellkort, ekstra kjøring)`;
     } else {
-      grunnlag = rund(trekkpliktig - unntatt - ferie60);
+      grunnlag = rund(Math.max(0, trekkpliktig - unntatt - ferie60 - minus));
       if (t.tabell) {
         const oppslag = tabelloppslag(t.tabell, Math.max(0, grunnlag));
         trekk = oppslag.trekk;

@@ -3,7 +3,8 @@
 // grunnlaget for OTP. type: lønn (bruttolønnen), utgift (godtgjørelse som ikke er
 // skattepliktig, utbetales i tillegg) eller trekk (trekkes etter skatt). fortegn: vanlig fortegn
 // på beløpet (trekk er negative). manuell: kan velges når en linje legges til.
-// amelding: beskrivelsen i a-meldingen (steg 4).
+// amelding: beskrivelsen i a-meldingen (steg 4). fradrag: trekket reduserer grunnlaget for
+// forskuddstrekket (fagforeningskontingent, 0082).
 //
 // Feriepenger er trekkpliktige, men ved tabelltrekk trekkes det ikke skatt av feriepenger som
 // utbetales i ferieåret (opptjent året før); tillegget for den ekstra ferieuka over 60 år trekkes
@@ -21,6 +22,7 @@ export type Lonnsart = {
   fortegn: 1 | -1;
   manuell: boolean;
   amelding: string | null;
+  fradrag?: boolean;
 };
 
 const lonn = (kode: string, navn: string, x: Partial<Lonnsart> = {}): Lonnsart => ({
@@ -32,6 +34,20 @@ const lonn = (kode: string, navn: string, x: Partial<Lonnsart> = {}): Lonnsart =
   ferie: true,
   otp: true,
   fortegn: 1,
+  manuell: true,
+  amelding: null,
+  ...x,
+});
+
+const trekk = (kode: string, navn: string, x: Partial<Lonnsart> = {}): Lonnsart => ({
+  kode,
+  navn,
+  type: "trekk",
+  trekk: false,
+  aga: false,
+  ferie: false,
+  otp: false,
+  fortegn: -1,
   manuell: true,
   amelding: null,
   ...x,
@@ -71,6 +87,17 @@ export const LONNSARTER: Lonnsart[] = [
   lonn("trekk_permisjon", "Trekk for permisjon uten lønn", { fortegn: -1, amelding: "fastloenn" }),
   { kode: "utgift", navn: "Utgiftsgodtgjørelse (ikke skattepliktig)", type: "utgift", trekk: false, aga: false, ferie: false, otp: false, fortegn: 1, manuell: true, amelding: null },
   { kode: "trekk_etter_skatt", navn: "Trekk etter skatt", type: "trekk", trekk: false, aga: false, ferie: false, otp: false, fortegn: -1, manuell: true, amelding: null },
+  // Faste trekk (0082, lonnstrekk.ts): etter pålegg (utleggstrekk og bidragstrekk, i a-meldingen
+  // bare utleggstrekkene til Skatteetaten), fagforeningskontingent (fradrag i a-meldingen, og
+  // grunnlaget for forskuddstrekket blir mindre) og tilbakebetaling av forskudd. Forskuddet selv er
+  // et lån som utbetales uten skatt (ikke i a-meldingen).
+  trekk("utleggstrekk_samordnet", "Utleggstrekk (samordnet, Skatteetaten)"),
+  trekk("utleggstrekk_skatt", "Utleggstrekk for skattekrav"),
+  trekk("utleggstrekk", "Utleggstrekk (namsmannen og andre)"),
+  trekk("bidragstrekk", "Bidragstrekk"),
+  trekk("fagforening", "Fagforeningskontingent", { fradrag: true }),
+  trekk("forskudd_trekk", "Tilbakebetaling av forskudd"),
+  { kode: "forskudd_utbetalt", navn: "Forskudd på lønn (lån)", type: "utgift", trekk: false, aga: false, ferie: false, otp: false, fortegn: 1, manuell: true, amelding: null },
 ];
 
 // Beskrivelsene i a-meldingen som lønnsartene rapporteres som, med navnet den ansatte ser

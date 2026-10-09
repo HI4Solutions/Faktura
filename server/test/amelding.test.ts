@@ -135,7 +135,7 @@ describe("a-meldingen (uten database)", () => {
       },
     ]);
     // Trekket er negativt for den ansatte; utgiften og trekket etter skatt er ikke med.
-    expect(kari.forskuddstrekk).toEqual([{ beloep: -17500 }]);
+    expect(kari.forskuddstrekk).toEqual([{ beskrivelse: "ordinaert", beloep: -17500 }]);
     expect(kari.inntekt).toEqual([
       { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "50000.00", arbeidsforholdId: "1", loennsinntekt: { beskrivelse: "fastloenn" } },
       { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "5000.00", arbeidsforholdId: "1", loennsinntekt: { beskrivelse: "bonus" } },

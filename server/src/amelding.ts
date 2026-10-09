@@ -178,6 +178,32 @@ export function inntekter(slipper: Slippdata[]): Map<string, Inntekt[]> {
   );
 }
 
+// Trekkene i lønnen (0082) som skal i a-meldingen: fagforeningskontingenten som fradrag (negativt
+// beløp), og utleggstrekkene til Skatteetaten (samordnet, og for skattekrav etter det gamle
+// regelverket) i hele kroner med datoen for trekket (lønnsdatoen). Bidragstrekk og andre
+// utleggstrekk rapporteres ikke.
+const UTLEGG: Record<string, string> = { utleggstrekk_samordnet: "utleggstrekkSamordnet", utleggstrekk_skatt: "utleggstrekkSkatt" };
+export function trekkILonn(slipper: Slippdata[]) {
+  const fradrag = new Map<string, number>();
+  const utlegg = new Map<string, { beskrivelse: string; beloep: number; dato: string }[]>();
+  let sumUtlegg = 0;
+  for (const s of slipper)
+    for (const l of s.linjer) {
+      if (l.lonnsart === "fagforening") fradrag.set(s.ansatt_id, rund((fradrag.get(s.ansatt_id) ?? 0) - Number(l.belop)));
+      const beskrivelse = UTLEGG[l.lonnsart];
+      if (!beskrivelse) continue;
+      const b = Math.round(-Number(l.belop));
+      if (!b) continue;
+      const liste = utlegg.get(s.ansatt_id) ?? [];
+      const x = liste.find((y) => y.beskrivelse === beskrivelse && y.dato === s.utbetalingsdato);
+      if (x) x.beloep += b;
+      else liste.push({ beskrivelse, beloep: b, dato: s.utbetalingsdato });
+      utlegg.set(s.ansatt_id, liste);
+      sumUtlegg += b;
+    }
+  return { fradrag, utlegg, sumUtlegg };
+}
+
 // Forskuddstrekket i hele kroner, per ansatt og per lønnsdato (summene stemmer med hverandre).
 export function forskuddstrekk(slipper: Slippdata[]) {
   const perAnsatt = new Map<string, number>();
@@ -269,6 +295,7 @@ export function oppsummer(g: Grunnlag) {
     inntekt: rund([...inn.values()].flat().reduce((x, i) => x + i.belop, 0)),
     forskuddstrekk: trekk.perDato.map(([dato, b]) => ({ dato, belop: b })),
     sum_forskuddstrekk: trekk.perDato.reduce((x, [, b]) => x + b, 0),
+    sum_utleggstrekk: trekkILonn(g.slipper).sumUtlegg,
     arbeidsgiveravgift: sumAvgift(avgift),
     avgiftsgrunnlag: avgift,
     mottakere: g.arbeidsforhold
@@ -316,13 +343,16 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
   const inn = inntekter(g.slipper);
   const trekk = forskuddstrekk(g.slipper);
   const avgift = avgiftsgrunnlag(g.slipper, g.sone);
+  const iLonn = trekkILonn(g.slipper);
   const mottakere = g.arbeidsforhold
     .map((f) => {
       const fnr = v.fnr(f.id);
       if (!fnr) throw new Error(`${f.navn} mangler fødselsnummer`);
       const x: Record<string, unknown> = { norskIdentifikator: fnr, arbeidsforhold: [arbeidsforhold(f, g)] };
+      const fradrag = iLonn.fradrag.get(f.id) ?? 0;
+      if (fradrag) x.fradrag = [{ beskrivelse: "fagforeningskontingent", beloep: belop(-fradrag) }];
       const t = trekk.perAnsatt.get(f.id) ?? 0;
-      if (t) x.forskuddstrekk = [{ beloep: -t }];
+      if (t) x.forskuddstrekk = [{ beskrivelse: "ordinaert", beloep: -t }];
       const i = inn.get(f.id) ?? [];
       if (i.length)
         x.inntekt = i.map((y) => ({
@@ -334,6 +364,8 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
           arbeidsforholdId: String(f.ansattnummer),
           loennsinntekt: y.antall != null && y.antall > 0 ? { beskrivelse: y.beskrivelse, antall: desimal(y.antall) } : { beskrivelse: y.beskrivelse },
         }));
+      const u = iLonn.utlegg.get(f.id) ?? [];
+      if (u.length) x.utleggstrekk = u.map((y) => ({ beskrivelse: y.beskrivelse, beloep: -y.beloep, datoForUtleggstrekk: y.dato }));
       return x;
     })
     .filter((m) => m.arbeidsforhold || m.inntekt);
@@ -356,6 +388,7 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
   const oppgave: Record<string, unknown> = {};
   if (g.slipper.length) {
     const betaling: Record<string, unknown> = { sumArbeidsgiveravgift: sumAvgift(avgift) };
+    if (iLonn.sumUtlegg) betaling.sumUtleggstrekk = iLonn.sumUtlegg;
     const perDato = trekk.perDato.filter(([, b]) => b !== 0);
     if (perDato.length) betaling.sumForskuddstrekkPerLoennsutbetalingsdato = perDato.map(([dato, b]) => ({ loennsutbetalingsdato: dato, beloep: b }));
     oppgave.betalingsinformasjon = betaling;

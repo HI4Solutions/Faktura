@@ -18,6 +18,7 @@ import { tallformat } from "../uke";
 import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
 import { AnsattFravaer, FravaerDialog, type Fravaer } from "./Fravaer";
 import { Lonnsendringer, type GjeldendeLonn } from "./Lonnsendringer";
+import { LonnsTrekk } from "./LonnsTrekk";
 import { IKKE_ANSATT_HJELP, RollerOppsett, type Rolle } from "./Roller";
 import { SkattekortFraSkatteetaten, type Trekk } from "./Skattekort";
 
@@ -1147,6 +1148,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       </fieldset>
       {ansatt.id && vaktplan && <AnsattFravaer ansattId={ansatt.id} versjon={fravaerVersjon} kanEndre={kanEndre} apne={settFravaer} />}
       {ansatt.id && arbeidstaker && <Lonnsendringer ansattId={ansatt.id} ansattFra={ansatt.ansatt_fra ?? a.ansatt_fra} kanEndre={kanEndre} endret={fraHistorikken} />}
+      {ansatt.id && medLonn && arbeidstaker && <LonnsTrekk ansattId={ansatt.id} kanEndre={kanEndre} />}
       {ansatt.id && medLonn && arbeidstaker && <TidligereLonn ansattId={ansatt.id} kanEndre={kanEndre} />}
       {ansatt.id && <Tilgang ansatt={ansatt as Ansatt} kanEndre={kanEndre} epostEndret={(a.epost.trim().toLowerCase() || null) !== (ansatt.epost ?? null)} oppdatert={oppdatert} />}
       <Feil melding={h.feil} />
