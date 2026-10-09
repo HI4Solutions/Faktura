@@ -7,6 +7,9 @@
 // (med erklæringen), når sykdommen meldes eller etterpå; databasen sjekker reglene (dager per
 // gang, ganger og dager i løpet av 12 måneder, to måneder i jobben). Lederen registrerer
 // sykmelding fra lege (legeerklæring for sykt barn), eller en egenmelding på papir.
+//
+// Avspasering (0073_timebank.sql): fri fra timebanken i hele dager, med timene den tar fra banken.
+// Lederen registrerer den her; den ansatte søker om den (server/src/timebank.ts).
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
@@ -20,7 +23,15 @@ const orgId = (c: Context) => uuid.parse(c.req.param("org"));
 const id = (c: Context) => uuid.parse(c.req.param("id"));
 const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("bruker").id, fn);
 
-export const FRAVAERTYPER = { syk: "Syk", sykt_barn: "Sykt barn", ferie: "Ferie", permisjon: "Permisjon", kurs: "Kurs", annet: "Annet fravær" } as const;
+export const FRAVAERTYPER = {
+  syk: "Syk",
+  sykt_barn: "Sykt barn",
+  ferie: "Ferie",
+  permisjon: "Permisjon",
+  kurs: "Kurs",
+  avspasering: "Avspasering",
+  annet: "Annet fravær",
+} as const;
 type Type = keyof typeof FRAVAERTYPER;
 
 const dagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
@@ -29,10 +40,12 @@ export const periode = (fra: string, til: string) => (fra === til ? dag(fra) : `
 
 const skjema = z.object({
   ansatt_id: uuid.optional(), // standard: den innloggede selv
-  type: z.enum(["syk", "sykt_barn", "ferie", "permisjon", "kurs", "annet"], { error: "Velg hva slags fravær" }),
+  type: z.enum(["syk", "sykt_barn", "ferie", "permisjon", "kurs", "avspasering", "annet"], { error: "Velg hva slags fravær" }),
   fra: datoS,
   til: datoS,
   notat: valgfri(tekst(500, "Notatet")),
+  // Avspasering: timene den tar fra timebanken.
+  timer: z.number({ error: "Skriv antall timer" }).gt(0, "Skriv antall timer").max(2000, "For mange timer").nullable().optional(),
   // Sykdom: egenmelding eller sykmelding (legeerklæring for sykt barn), og den ansattes svar på om
   // fraværet har sammenheng med arbeidet. erklaering: den ansatte bekrefter egenmeldingen.
   dokumentasjon: z.enum(["egenmelding", "sykmelding"]).nullable().optional(),
@@ -49,6 +62,7 @@ const FRAVAER = `
          case when s.ser then f.dokumentasjon end as dokumentasjon,
          case when s.ser then f.arbeidsrelatert end as arbeidsrelatert,
          case when s.ser then f.egenmeldt end as egenmeldt,
+         case when s.ser then f.timer end as timer,
          case when s.ser and f.egenmeldt is not null then f.egenmeldt_av is not distinct from a.bruker_id end as egenmeldt_selv,
          f.opprettet, f.opprettet_av = faktura.bruker_id() as min
     from faktura.fravaer f
@@ -90,8 +104,8 @@ export function fravaerRuter() {
       if (b.dokumentasjon === "egenmelding" && ansatt === selv && !b.erklaering) throw new ApiFeil(400, ERKLAERING);
       const ny = await en<{ id: string }>(
         db,
-        "insert into faktura.fravaer (org_id, ansatt_id, type, fra, til, notat, dokumentasjon, arbeidsrelatert) values ($1, $2, $3, $4, $5, $6, $7, $8) returning id",
-        [orgId(c), ansatt, b.type, b.fra, b.til, b.notat ?? null, b.dokumentasjon ?? null, b.arbeidsrelatert ?? null],
+        "insert into faktura.fravaer (org_id, ansatt_id, type, fra, til, notat, dokumentasjon, arbeidsrelatert, timer) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id",
+        [orgId(c), ansatt, b.type, b.fra, b.til, b.notat ?? null, b.dokumentasjon ?? null, b.arbeidsrelatert ?? null, b.type === "avspasering" ? (b.timer ?? null) : null],
       );
       const f = (await en<Fravaer>(db, `${FRAVAER} where f.id = $1`, [ny!.id]))!;
       const vakter = await alle<{ id: string; dato: string; fra: string; til: string; oppgave: string | null }>(

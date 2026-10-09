@@ -44,6 +44,10 @@ export const LONNSARTER: Lonnsart[] = [
   // Timer uten overtidstillegg etter avtale (fastlønn: timesatsen; timelønn: med i timelønnen).
   lonn("ekstratimer", "Ekstratimer (uten overtid)", { amelding: "timeloenn" }),
   lonn("overtid", "Overtid", { otp: false, amelding: "overtidsgodtgjoerelse" }),
+  // Timebanken (0073): timer tatt ut som fri lønnes for den med timelønn når de tas ut, og timer
+  // kan betales ut fra banken. Regnes av banken, så de legges ikke til for hånd.
+  lonn("avspasering", "Avspasering fra timebanken", { manuell: false, amelding: "timeloenn" }),
+  lonn("timebank", "Utbetalt fra timebanken", { manuell: false, amelding: "timeloenn" }),
   lonn("fast_tillegg", "Fast tillegg", { amelding: "fastTillegg" }),
   lonn("uregelmessig_tillegg", "Tillegg for kveld, natt eller helg", { amelding: "uregelmessigeTilleggKnyttetTilArbeidetTid" }),
   lonn("bonus", "Bonus", { otp: false, amelding: "bonus" }),

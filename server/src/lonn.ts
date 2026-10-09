@@ -29,7 +29,9 @@ import {
   summer,
   sykelinjer,
   tilleggslinjer,
+  timebanklinjer,
   timelinjer,
+  avspasertIPerioden,
   utbetalingsdato,
   virkedag,
   type Ansatt,
@@ -132,13 +134,22 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
   // De godkjente timene i ukene som har timer som ikke er lønnet (uker som begynner i perioden
   // eller før), i ordinære kjøringer: hele uka, også det som er lønnet før (overtiden regnes på uka).
   const foringer = ordinar
-    ? await alle<{ id: string; ansatt_id: string; dato: string; timer: number; overtid_prosent: number | null; uten_overtid: boolean; lonnskjoring_id: string | null }>(
+    ? await alle<{
+        id: string;
+        ansatt_id: string;
+        dato: string;
+        timer: number;
+        overtid_prosent: number | null;
+        uten_overtid: boolean;
+        timebank: boolean;
+        lonnskjoring_id: string | null;
+      }>(
         db,
         `with uker as (
            select distinct ansatt_id, date_trunc('week', dato)::date as uke from faktura.timeforinger
             where org_id = $1 and status = 'godkjent' and lonnskjoring_id is null and dato <= $2 and dato >= $3
          )
-         select t.id, t.ansatt_id, to_char(t.dato, 'YYYY-MM-DD') as dato, t.timer::float8 as timer, t.overtid_prosent, t.uten_overtid, t.lonnskjoring_id
+         select t.id, t.ansatt_id, to_char(t.dato, 'YYYY-MM-DD') as dato, t.timer::float8 as timer, t.overtid_prosent, t.uten_overtid, t.timebank, t.lonnskjoring_id
            from faktura.timeforinger t join uker u on u.ansatt_id = t.ansatt_id and date_trunc('week', t.dato)::date = u.uke
           where t.org_id = $1 and t.status = 'godkjent'`,
         [org, pluss(til, 6), pluss(fra, -400)],
@@ -152,10 +163,32 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     ukerPer.set(f.ansatt_id, per);
     const x = per.get(u) ?? { alle: [], betalt: [], ider: [] };
     per.set(u, x);
-    x.alle.push({ id: f.id, dato: f.dato, timer: Number(f.timer), overtid_prosent: f.overtid_prosent, uten_overtid: f.uten_overtid });
-    if (f.lonnskjoring_id) x.betalt.push({ dato: f.dato, timer: Number(f.timer), overtid_prosent: f.overtid_prosent, uten_overtid: f.uten_overtid });
+    x.alle.push({ id: f.id, dato: f.dato, timer: Number(f.timer), overtid_prosent: f.overtid_prosent, uten_overtid: f.uten_overtid, timebank: f.timebank });
+    if (f.lonnskjoring_id)
+      x.betalt.push({ dato: f.dato, timer: Number(f.timer), overtid_prosent: f.overtid_prosent, uten_overtid: f.uten_overtid, timebank: f.timebank });
     else x.ider.push(f.id);
   }
+  // Timebanken (0073): avspasering i perioden (hele dager som fravær, og timer), og utbetalinger fra
+  // banken som ikke er lønnet ennå (i ordinære kjøringer).
+  const avspasering = ordinar
+    ? await alle<{ ansatt_id: string; fra: string; til: string; timer: number }>(
+        db,
+        `select ansatt_id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, timer::float8 as timer
+           from faktura.fravaer where org_id = $1 and type = 'avspasering' and til >= $2 and fra <= $3
+         union all
+         select ansatt_id, to_char(dato, 'YYYY-MM-DD'), to_char(dato, 'YYYY-MM-DD'), -timer::float8
+           from faktura.timebank_poster where org_id = $1 and type = 'avspasering' and dato between $2 and $3`,
+        [org, fra, til],
+      )
+    : [];
+  const utbetalinger = ordinar
+    ? await alle<{ id: string; ansatt_id: string; timer: number }>(
+        db,
+        `select id, ansatt_id, -timer::float8 as timer from faktura.timebank_poster
+          where org_id = $1 and type = 'utbetaling' and lonnskjoring_id is null and dato <= $2 order by dato, opprettet`,
+        [org, til],
+      )
+    : [];
   // Sykefravær og sykt barn (for arbeidsgiverperioden og omsorgsdagene), og de planlagte timene.
   const fravaer = ordinar
     ? await alle<{ ansatt_id: string; fra: string; til: string; type: string }>(
@@ -248,7 +281,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     [k.id],
   );
 
-  type Resultat = { a: Ansatt; slipp: Slipp | undefined; auto: Linje[]; manuelle: LagretLinje[]; timeforinger: string[]; merknader: string[] };
+  type Resultat = { a: Ansatt; slipp: Slipp | undefined; auto: Linje[]; manuelle: LagretLinje[]; timeforinger: string[]; timebankPoster: string[]; merknader: string[] };
   const resultater: Resultat[] = [];
   for (const a of ansatte) {
     const slipp = slipper.find((s) => s.ansatt_id === a.id);
@@ -260,14 +293,21 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     const merknader: string[] = [];
     const auto: Linje[] = [];
     let timeforinger: string[] = [];
+    let timebankPoster: string[] = [];
     if (ordinar) {
       const f = ansatt ? fastlonn(a, fra, til) : null;
       if (f) auto.push(f);
       const t = timelinjer(a, o, uker);
       auto.push(...t.linjer);
       timeforinger = uker.flatMap((u) => u.ider);
+      // Timebanken: avspasering (timelønn) og utbetaling; timene teller også for tilleggene per time.
+      const avspasert = a.lonnstype === "time" ? avspasering.filter((x) => x.ansatt_id === a.id).reduce((sum, x) => sum + avspasertIPerioden(x, fra, til), 0) : 0;
+      const egneUtbetalinger = utbetalinger.filter((x) => x.ansatt_id === a.id);
+      const utbetalt = egneUtbetalinger.reduce((sum, x) => sum + Number(x.timer), 0);
+      auto.push(...timebanklinjer(a, avspasert, utbetalt));
+      timebankPoster = egneUtbetalinger.map((x) => x.id);
       const egneTillegg = tillegg.filter((x) => x.ansatt_id === a.id && (ansatt || (x.per === "time" && a.lonnstype === "time")));
-      auto.push(...tilleggslinjer(a, egneTillegg, fra, til, t.timer, t.ekstraTimer));
+      auto.push(...tilleggslinjer(a, egneTillegg, fra, til, t.timer + avspasert + utbetalt, t.ekstraTimer + utbetalt));
       // Sykdom: arbeidsgiverperioden, og sykt barn (omsorgsdagene i året).
       const egne = fravaer.filter((x) => x.ansatt_id === a.id);
       if (egne.length) {
@@ -310,7 +350,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     }
     if (!ansatt && !uker.length && !auto.length && !manuelle.length && !slipp) continue;
     if (!ordinar && !k.feriepenger && !slipp) continue;
-    resultater.push({ a, slipp, auto, manuelle, timeforinger, merknader });
+    resultater.push({ a, slipp, auto, manuelle, timeforinger, timebankPoster, merknader });
   }
 
   // Sluttoppgjør: feriepengene opptjent i år (og i fjor, om de ikke er utbetalt) for den som slutter
@@ -378,6 +418,8 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       aga[i]!.sats,
       r.timeforinger,
       [...r.merknader, ...s.merknader],
+      // Utbetalingene fra timebanken, om linjen ikke er fjernet for hånd.
+      auto.some((l) => l.nokkel === "timebank") || r.manuelle.some((m) => m.nokkel === "timebank" && !m.fjernet) ? r.timebankPoster : [],
     ];
     let slippId = r.slipp?.id;
     if (slippId) {
@@ -385,7 +427,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         `update faktura.lonnsslipper set navn = $2, ansattnummer = $3, lonnstype = $4, periode = $5, utbetalingsdato = $6, trekkmetode = $7, trekkpliktig = $8,
                 trekkgrunnlag = $9, skattetrekk = $10, skattetrekk_manuell = $11, brutto = $12, utgifter = $13, trekk_etter_skatt = $14, netto = $15,
                 feriepengegrunnlag = $16, feriepenger_opptjent = $17, otp_grunnlag = $18, otp = $19, aga_grunnlag = $20, aga = $21, aga_sats = $22,
-                timeforinger = $23, merknader = $24
+                timeforinger = $23, merknader = $24, timebank_poster = $25
           where id = $1`,
         [slippId, ...felles],
       );
@@ -395,8 +437,8 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         db,
         `insert into faktura.lonnsslipper (org_id, kjoring_id, ansatt_id, navn, ansattnummer, lonnstype, periode, utbetalingsdato, trekkmetode, trekkpliktig,
                 trekkgrunnlag, skattetrekk, skattetrekk_manuell, brutto, utgifter, trekk_etter_skatt, netto, feriepengegrunnlag, feriepenger_opptjent,
-                otp_grunnlag, otp, aga_grunnlag, aga, aga_sats, timeforinger, merknader)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26) returning id`,
+                otp_grunnlag, otp, aga_grunnlag, aga, aga_sats, timeforinger, merknader, timebank_poster)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) returning id`,
         [org, k.id, r.a.id, ...felles],
       ))!.id;
     }

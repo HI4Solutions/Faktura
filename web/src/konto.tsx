@@ -24,6 +24,8 @@ export interface MinOrg {
   ser_planen?: boolean;
   // Åpent i helgene (0064_helg.sql); stengt: personalmodulen viser bare mandag–fredag.
   helg?: boolean;
+  // Timebanken er slått på (0073_timebank.sql): overtid og ekstratimer kan avspaseres senere.
+  timebank?: boolean;
 }
 
 export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan" | "lonn";

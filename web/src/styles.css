@@ -1333,6 +1333,7 @@ fieldset.naken { border: 0; padding: 0; margin: 0; background: none; min-width: 
 .faner.valg button { flex: 1; justify-content: center; }
 /* Fraværstypene: tre og tre */
 .faner.valg.fravaertyper { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
+.faner.valg.fravaertyper.siste-hel button:last-child { grid-column: 1 / -1; }
 /* Fra, til og pause: klokkefeltene får mest plass */
 .rad.tre { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.75fr); }
 .rad.tre input.klokkeslett { padding-left: 10px; padding-right: 8px; font-variant-numeric: tabular-nums; }
@@ -1646,6 +1647,39 @@ h2.bytte-overskrift:first-child { margin-top: 0.25rem; }
 .bytte-avvis { margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--kant); }
 .bytte-avvis label { margin-bottom: 8px; }
 p.bytte-vakt { margin: 0 0 12px; }
+
+/* --------------------------------------------------------------------------
+   Timebank: saldoen, søknadene om avspasering og historikken (Timebank.tsx)
+   -------------------------------------------------------------------------- */
+.merke-timebank { background: var(--fv-avspasering-lys); color: var(--fv-avspasering); }
+label.timebank-valg { display: flex; align-items: flex-start; gap: 8px; font-weight: 450; line-height: 1.45; margin-top: 10px; }
+label.timebank-valg input[type="checkbox"] { flex: none; margin: 3px 0 0; }
+label.timebank-valg strong { display: block; color: var(--tekst); }
+label.timebank-valg .felt-hjelp { margin-top: 2px; }
+.summer .summer-timebank span { color: var(--fv-avspasering); }
+.timebank-ansatt .tilbake { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+h2.timebank-navn { margin: 0 0 12px; }
+.timebank-knapper { margin: -6px 0 12px; }
+.timebank-ansatt h3 { margin: 18px 0 8px; }
+ul.timebank-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.timebank-soknad .ferie-soknad-tekst { min-width: 0; overflow-wrap: anywhere; }
+.timebank-soknad .knapper { justify-content: flex-end; }
+form.timebank-svar { display: grid; gap: 6px; grid-column: 1 / -1; }
+form.timebank-svar label { margin-bottom: 4px; }
+.timebank-historikk { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.timebank-historikk li { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) auto auto; align-items: baseline; gap: 4px 12px; padding: 9px 0; border-bottom: 1px solid var(--kant); }
+.timebank-historikk li:last-child { border-bottom: 0; }
+.timebank-dato { color: var(--tekst-2); font-size: 0.88rem; }
+.timebank-tekst { min-width: 0; overflow-wrap: anywhere; }
+.timebank-timer { font-weight: 650; color: var(--ok); }
+.timebank-timer.ut { color: var(--tekst); }
+@media (max-width: 700px) {
+  .timebank-historikk li { grid-template-columns: minmax(0, 1fr) auto; }
+  .timebank-historikk .timebank-dato { grid-column: 1 / -1; }
+  .timebank-historikk li .lenke { grid-column: 1 / -1; justify-self: start; }
+  .timebank-soknad { grid-template-columns: minmax(0, 1fr) !important; }
+  .timebank-soknad .knapper { justify-content: flex-start; }
+}
 /* Lederen bytter eller gir bort i vaktplanen: utkastmerket og sjekken mot arbeidsmiljøloven */
 .leder-bytte-utkast { margin-left: 8px; vertical-align: 1px; }
 .leder-bytte-sjekk { margin: 0 0 12px; }
@@ -1855,6 +1889,7 @@ table.hvem-kan tbody tr:last-child td { border-bottom: 0; }
   --fv-permisjon: #7d5d00; --fv-permisjon-lys: #fcf1c6;
   --fv-kurs: #0e7068; --fv-kurs-lys: #daf3ee;
   --fv-annet: #6b2fd0; --fv-annet-lys: #efe7fd;
+  --fv-avspasering: #a3226f; --fv-avspasering-lys: #fbe6f2;
   --fv-fravaer: #475569; --fv-fravaer-lys: #e8edf3;
   --fv-ekstra: #0f7a47; --fv-ekstra-lys: #e2f6ea;
 }
@@ -1865,6 +1900,7 @@ table.hvem-kan tbody tr:last-child td { border-bottom: 0; }
   --fv-permisjon: #f0d061; --fv-permisjon-lys: #33290f;
   --fv-kurs: #62d6c6; --fv-kurs-lys: #0f2f2b;
   --fv-annet: #c6a9ff; --fv-annet-lys: #2a1f47;
+  --fv-avspasering: #f59ad0; --fv-avspasering-lys: #3a1630;
   --fv-fravaer: #a8b3c4; --fv-fravaer-lys: #222a36;
   --fv-ekstra: #5fd39a; --fv-ekstra-lys: #12301f;
 }
@@ -1874,6 +1910,7 @@ table.hvem-kan tbody tr:last-child td { border-bottom: 0; }
 .fravaer-permisjon { --fv: var(--fv-permisjon); --fv-lys: var(--fv-permisjon-lys); }
 .fravaer-kurs { --fv: var(--fv-kurs); --fv-lys: var(--fv-kurs-lys); }
 .fravaer-annet { --fv: var(--fv-annet); --fv-lys: var(--fv-annet-lys); }
+.fravaer-avspasering { --fv: var(--fv-avspasering); --fv-lys: var(--fv-avspasering-lys); }
 .fravaer-fravaer { --fv: var(--fv-fravaer); --fv-lys: var(--fv-fravaer-lys); }
 .merke-fravaer { background: var(--fv-lys); color: var(--fv); }
 

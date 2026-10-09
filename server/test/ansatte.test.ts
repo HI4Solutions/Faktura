@@ -126,6 +126,8 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
       egenmelding_ganger: 4,
       egenmelding_dager_aar: null,
       egenmelding_barn_dager: 3,
+      // Timebanken er av til den slås på (0073_timebank.sql).
+      timebank: false,
     });
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { overtid_prosent: 30 })).data.error).toBe("Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).data).toMatchObject({ aktiv: true, daglig_grense: 9 });

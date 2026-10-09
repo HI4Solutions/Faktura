@@ -158,7 +158,7 @@ const tekst = (beskrivelse: string): Skjema => ({ type: "STRING", nullable: true
 export const personalFelt: Record<string, Skjema> = {
   ansatt: tekst("Den ansatte det gjelder: id-en fra listen (A1, A2 …), ellers navnet slik brukeren sa det. Brukeren selv er merket (deg). null når det ikke gjelder én ansatt"),
   vikar: tekst("fravaer og vikar: den som tar over vaktene (id-en fra listen eller navnet), ellers null"),
-  fravaerstype: { type: "STRING", nullable: true, enum: ["syk", "sykt_barn", "ferie", "permisjon", "kurs", "annet"], description: "fravaer: hva slags fravær, ellers null" },
+  fravaerstype: { type: "STRING", nullable: true, enum: ["syk", "sykt_barn", "ferie", "avspasering", "permisjon", "kurs", "annet"], description: "fravaer: hva slags fravær, ellers null" },
   fra_dato: tekst("Første dag (ÅÅÅÅ-MM-DD), eller null"),
   til_dato: tekst("Siste dag (ÅÅÅÅ-MM-DD), eller null"),
   datoer: { type: "ARRAY", items: { type: "STRING" }, description: "ny_vakt, plasser og for_timer: alle dagene det gjelder (ÅÅÅÅ-MM-DD)" },
@@ -174,7 +174,7 @@ export const personalFelt: Record<string, Skjema> = {
 };
 
 export const personalHandlingtekst = [
-  "- fravaer: registrere fravær («Kari er syk i dag», «jeg er syk», «Ola har ferie 1.–5. juli», «jeg har sykt barn i morgen»). fravaerstype, fra_dato og til_dato (samme dag når bare én dag er sagt). Sier brukeren hvem som tar vaktene («… og Per er vikar»), sett vikar.",
+  "- fravaer: registrere fravær («Kari er syk i dag», «jeg er syk», «Ola har ferie 1.–5. juli», «jeg har sykt barn i morgen», «jeg vil avspasere fredag»). fravaerstype, fra_dato og til_dato (samme dag når bare én dag er sagt). Sier brukeren hvem som tar vaktene («… og Per er vikar»), sett vikar.",
   "- vikar: sette inn en vikar for en ansatt som er borte («Per er vikar for Kari på fredag»). ansatt er den som er borte, vikar den som tar over, fra_dato og til_dato dagene.",
   "- ny_vakt: legge inn vakter («legg inn vakt for Kari fredag 08–16», «Ola jobber 9–17 mandag til onsdag», «lag en ledig vakt lørdag 10–18»). datoer (alle dagene), klokke_fra og klokke_til, pause_min og oppgave når de sies. En ledig vakt har ansatt null.",
   "- publiser_vakter: publisere vaktplanen så de ansatte ser den («publiser neste uke», «send ut vaktplanen»). fra_dato og til_dato (mandag til søndag for en uke).",
@@ -351,6 +351,15 @@ async function fravaer(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSv
   if (!h.a) return { tekst: "Hvem gjelder fraværet?" };
   if (!h.selv && !k.p.kan.personal) return ingen("registrere fravær for andre");
   const type: Fravaerstype = ai.fravaerstype && ai.fravaerstype in FRAVAERTYPER ? ai.fravaerstype : "annet";
+  // Avspasering tar timer fra timebanken (0073_timebank.sql): den ansatte søker om den, og lederen
+  // registrerer den med timene, så assistenten åpner timebanken i stedet for å foreslå fraværet.
+  if (type === "avspasering") {
+    const paa = (await en<{ paa: boolean }>(k.db, "select faktura.timebank_paa($1) as paa", [k.orgId]))?.paa;
+    if (!paa) return { tekst: "Timebanken er ikke slått på (Innstillinger → Ansatte og timer)." };
+    return h.selv && !k.p.kan.personal
+      ? { tekst: "Åpner timebanken. Der søker du om avspasering, med timene den tar fra banken.", gaa_til: "/timer?fane=timebank" }
+      : { tekst: `Åpner timebanken til ${h.a.navn}. Der registrerer du avspaseringen, med timene den tar fra banken.`, gaa_til: `/timer?fane=timebank&ansatt=${h.a.id}` };
+  }
   // Den ansatte melder selv sykdom (fra og med i går, som i databasen); resten registrerer lederen.
   if (h.selv && !k.p.kan.personal && type !== "syk" && type !== "sykt_barn")
     return { tekst: "Selv kan du melde sykdom og sykt barn. Ferie, permisjon og annet fravær registrerer lederen din." };

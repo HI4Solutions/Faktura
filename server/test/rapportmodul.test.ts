@@ -148,7 +148,16 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
   it("rapportene etter rolle og funksjon", async () => {
     expect(await moduler()).toEqual({
       faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"],
-      personal: ["personal.timer", "personal.timeliste", "personal.fravaer", "personal.sykefravaer", "personal.ferie", "personal.ekstratimer", "personal.ansatte"],
+      personal: [
+        "personal.timer",
+        "personal.timeliste",
+        "personal.fravaer",
+        "personal.sykefravaer",
+        "personal.ferie",
+        "personal.timebank",
+        "personal.ekstratimer",
+        "personal.ansatte",
+      ],
       lonn: ["lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.feriepenger", "lonn.aarsoversikt", "lonn.otp"],
     });
     const liste = (await kall("GET", `/api/org/${org}/rapportmodul`)).data;
@@ -156,7 +165,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     expect(liste.moduler[2].rapporter[0]).toEqual({ id: "lonn.journal", navn: "Lønnsjournal", beskrivelse: expect.any(String), parameter: "periode", maanedlig: true });
     // Regnskap ser lønn og timer, men ikke fraværet og feriebanken (som i personalmodulen).
     const r = await moduler(regnskap);
-    expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.ekstratimer", "personal.ansatte"]);
+    expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte"]);
     expect(r.lonn).toHaveLength(6);
     expect(await moduler(fakturerer)).toEqual({ faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"] });
     expect(await moduler(ola)).toEqual({});
@@ -241,6 +250,24 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
       ["Ola Time", "250 kr/t"],
     ]);
     expect(a.data.periode).toMatch(/^per \d{2}\.\d{2}\.\d{4}$/);
+
+    // Timebanken (0073): saldoen med verdien (timelønnen, eller timesatsen for fastlønn).
+    expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { timebank: true })).data.timebank).toBe(true);
+    for (const [ansatt, timer, tekst] of [
+      [kari, 7.5, "Jobbet 1. mai"],
+      [olaId, 4, "Saldo fra før"],
+    ] as const)
+      expect((await kall("POST", `/api/org/${org}/timebank/poster`, { ansatt_id: ansatt, type: "justering", timer, tekst })).status).toBe(201);
+    const tb = await kall("GET", `/api/org/${org}/rapportmodul/personal.timebank`);
+    expect(tb.status, JSON.stringify(tb.data)).toBe(200);
+    expect(tb.data.rader).toEqual([
+      expect.objectContaining({ navn: "Kari Fast", justert: 7.5, saldo: 7.5, dager: 1, sats: 307.6923, verdi: 2307.69 }),
+      expect.objectContaining({ navn: "Ola Time", justert: 4, saldo: 4, sats: 250, verdi: 1000 }),
+    ]);
+    expect(tb.data.sum).toMatchObject({ saldo: 11.5, verdi: 3307.69 });
+    expect(tb.data.merknad).toContain("uten feriepenger og arbeidsgiveravgift");
+    expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.timebank`, undefined, regnskap)).status).toBe(200);
+    expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.timebank`, undefined, fakturerer)).status).toBe(403);
   });
 
   it("utsendingsoppsettet: bare eier og administrator, med totrinn, og eierne varsles om nye mottakere", async () => {

@@ -26,7 +26,7 @@ const RUTER: [RegExp, string][] = [
   [/^\/ansatte\/[^/]+\/arbeidsplan(\/|$)/, "vaktplan"],
   // Rollene (ansattgrupper) hører til de ansatte: om personen er ansatt, følger rollen. Beskjedene
   // går til rollene (0062_beskjeder.sql).
-  [/^\/(ansatte|ansattgrupper|timer|lonn-oppsett|beskjeder)(\/|$)/, "ansatte"],
+  [/^\/(ansatte|ansattgrupper|timer|timebank|lonn-oppsett|beskjeder)(\/|$)/, "ansatte"],
   [/^\/(vakter|vaktbytter|tavle|fravaer|egenmelding|feriebank|ferie|kolleger)(\/|$)/, "vaktplan"],
   [/^\/ekstratimer(\.csv|\.pdf)?$/, "vaktplan"],
   [/^\/lonn(\/|$)/, "lonn"],

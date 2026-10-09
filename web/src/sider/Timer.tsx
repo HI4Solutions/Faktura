@@ -2,8 +2,11 @@
 // avviser og ser alle ansattes uker (regnskap ser dem også). Overtiden regnes av serveren
 // (server/src/arbeidstid.ts) etter grensene under Innstillinger → Ansatte og timer.
 //
-// Fanen står i adressen (?fane=mine|alle|godkjenning), uka med mandagen (?uke=2026-10-05),
-// og den ansatte man ser på under «Alle ansatte» med ?ansatt=.
+// Fanen står i adressen (?fane=mine|alle|godkjenning|timebank), uka med mandagen
+// (?uke=2026-10-05), og den ansatte man ser på under «Alle ansatte» med ?ansatt=.
+//
+// Timebanken (0073_timebank.sql, Timebank.tsx): overtid og ekstratimer kan føres «til
+// timebanken» og avspaseres senere; fanen Timebank viser saldoen, søknadene og historikken.
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
@@ -16,6 +19,7 @@ import type { VaktSvar } from "./Vakter";
 import { ArbeidsplanDialog, fastTid } from "./Arbeidsplan";
 import { FravaerDialog, fravaerKlasse, fravaerTekst, type Fravaer } from "./Fravaer";
 import { helligdag } from "../helligdager";
+import { Timebank } from "./Timebank";
 
 type Status = "utkast" | "levert" | "godkjent" | "avvist";
 
@@ -30,6 +34,7 @@ type Foring = {
   timer: number;
   overtid_prosent: number | null;
   uten_overtid: boolean; // ekstratimer uten overtid (etter avtale)
+  timebank: boolean; // til timebanken: avspaseres senere i stedet for å lønnes nå
   beskrivelse: string | null;
   status: Status;
   avvist_grunn: string | null;
@@ -49,6 +54,7 @@ type Uke = {
   overtid: { prosent: number; timer: number }[];
   merarbeid: number;
   uten_overtid: number;
+  timebank: number; // av summen: timene til timebanken
   sum: number;
   status: Status;
   antall: number;
@@ -130,6 +136,7 @@ export function Timer() {
         {antallVenter > 0 && <span className="teller">{antallVenter}</span>}
       </>,
     ]);
+  if (org?.timebank && (egen || seAlle)) faner.push(["timebank", "Timebank"]);
   const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? (seAlle ? "alle" : egen ? "mine" : null);
   const uke = mandag(gyldigDato(sok.get("uke")) ? sok.get("uke")! : iDag());
   const valgt = sok.get("ansatt");
@@ -203,12 +210,13 @@ export function Timer() {
       {fane === "godkjenning" && (
         <Godkjenning svar={venter.data ?? undefined} feil={venter.feil} endret={endret} apne={(id, u) => ga({ fane: "alle", ansatt: id, uke: u })} />
       )}
+      {fane === "timebank" && <Timebank versjon={versjon} endret={endret} valgt={valgt} velg={(id) => ga({ ansatt: id })} />}
     </>
   );
 }
 
 // Delene av ukesummen: ordinære timer, overtid per tillegg, merarbeid og timer uten overtid.
-function Summer({ u }: { u?: Pick<Uke, "ordinare" | "overtid" | "merarbeid" | "uten_overtid"> }) {
+function Summer({ u }: { u?: Pick<Uke, "ordinare" | "overtid" | "merarbeid" | "uten_overtid" | "timebank"> }) {
   return (
     <div className="summer">
       <div>
@@ -231,6 +239,12 @@ function Summer({ u }: { u?: Pick<Uke, "ordinare" | "overtid" | "merarbeid" | "u
         <div title="Ekstra timer etter avtale, uten overtidstillegg">
           <span>Uten overtid</span>
           <span className="tall">{timer(u.uten_overtid)}</span>
+        </div>
+      )}
+      {!!u?.timebank && (
+        <div className="summer-timebank" title="Av timene over: de som settes i timebanken og avspaseres senere (overtidstillegget utbetales)">
+          <span>Til timebanken</span>
+          <span className="tall">{timer(u.timebank)}</span>
         </div>
       )}
     </div>
@@ -528,6 +542,7 @@ function Ukeside({
                         <span className="merker">
                           {f.overtid_prosent && <span className="merke merke-advarsel">Overtid {f.overtid_prosent} %</span>}
                           {f.uten_overtid && <span className="merke merke-noytral">Uten overtid</span>}
+                          {f.timebank && <span className="merke merke-timebank">Timebank</span>}
                           {f.status !== "utkast" && <span className={`merke ${statusMerke[f.status].klasse}`}>{statusMerke[f.status].tekst}</span>}
                         </span>
                       </span>
@@ -605,9 +620,12 @@ function ForingSkjema({
       // vanlig: overtiden regnes ut; overtid: hele føringen er overtid; uten: ekstratimer uten overtid.
       overtid: (foring.overtid_prosent ? "overtid" : foring.uten_overtid ? "uten" : "vanlig") as "vanlig" | "overtid" | "uten",
       prosent: String(foring.overtid_prosent ?? regler.overtid_prosent),
+      // Til timebanken (overtid og ekstratimer): avspaseres senere i stedet for å lønnes nå.
+      timebank: !!foring.timebank,
       beskrivelse: foring.beskrivelse ?? "",
     };
   });
+  const kanTimebank = (!!org?.timebank || !!foring.timebank) && f.overtid !== "vanlig";
   const h = useHandling();
   const sett = (e: Partial<typeof f>) => settF({ ...f, ...e });
   const pause = f.pause.trim() === "" ? 0 : tall(f.pause);
@@ -624,6 +642,7 @@ function ForingSkjema({
         : { fra: null, til: null, pause_min: 0, timer: tall(f.timer) }),
       overtid_prosent: f.overtid === "overtid" ? Number(f.prosent) : null,
       uten_overtid: f.overtid === "uten",
+      timebank: kanTimebank && f.timebank,
       beskrivelse: f.beskrivelse.trim() || null,
     };
     const r = await h.kjor(() =>
@@ -738,8 +757,23 @@ function ForingSkjema({
             ? "Ekstra timer etter avtale (f.eks. fleksitid eller timer den ansatte selv vil jobbe): de blir aldri overtid og regnes ikke med i grensene, og lønnes som vanlige timer."
             : f.overtid === "overtid"
               ? "Hele føringen er pålagt overtid, for eksempel med 100 % tillegg."
-              : `Timer over ${tallformat.format(regler.daglig_grense)} per dag eller ${tallformat.format(regler.ukentlig_grense)} per uke blir overtid av seg selv.`}
+              : `Timer over ${tallformat.format(regler.daglig_grense)} per dag eller ${tallformat.format(regler.ukentlig_grense)} per uke blir overtid av seg selv.${
+                  org?.timebank ? " Vil du sette ekstra timer i timebanken, før dem for seg som overtid eller uten overtid." : ""
+                }`}
         </span>
+        {kanTimebank && (
+          <label className="avkryss timebank-valg">
+            <input type="checkbox" checked={f.timebank} onChange={(e) => sett({ timebank: e.target.checked })} />
+            <span>
+              <strong>Til timebanken</strong>
+              <span className="felt-hjelp">
+                {f.overtid === "overtid"
+                  ? "Timene avspaseres senere i stedet for å lønnes nå. Overtidstillegget utbetales likevel (arbeidsmiljøloven § 10-6)."
+                  : "Timene avspaseres senere i stedet for å lønnes nå."}
+              </span>
+            </span>
+          </label>
+        )}
         <label>
           Beskrivelse
           <input value={f.beskrivelse} maxLength={500} placeholder="Hva du jobbet med (valgfritt)" onChange={(e) => sett({ beskrivelse: e.target.value })} />
@@ -1037,6 +1071,7 @@ function Godkjenning({ svar, feil, endret, apne }: { svar?: TimerSvar; feil: str
                   ))}
                   {u.merarbeid > 0 && <span>Merarbeid {timer(u.merarbeid)}</span>}
                   {u.uten_overtid > 0 && <span>Uten overtid {timer(u.uten_overtid)}</span>}
+                  {u.timebank > 0 && <span>Til timebanken {timer(u.timebank)}</span>}
                   {u.antall_status.utkast + u.antall_status.avvist > 0 && (
                     <span className="advarsel-tekst">
                       {antallForinger(u.antall_status.utkast + u.antall_status.avvist)} i uka er ikke levert
@@ -1057,6 +1092,7 @@ function Godkjenning({ svar, feil, endret, apne }: { svar?: TimerSvar; feil: str
                         <td className="hoyre">
                           {f.overtid_prosent ? <span className="merke merke-advarsel">Overtid {f.overtid_prosent} %</span> : null}
                           {f.uten_overtid ? <span className="merke merke-noytral">Uten overtid</span> : null}
+                          {f.timebank ? <span className="merke merke-timebank">Timebank</span> : null}
                         </td>
                       </tr>
                     ))}

@@ -8,7 +8,8 @@
 // timer over den avtalte arbeidstiden (deltid), som ikke er overtid.
 
 export type Regler = { daglig_grense: number; ukentlig_grense: number; overtid_prosent: number };
-export type Foring = { dato: string; timer: number; overtid_prosent: number | null; uten_overtid?: boolean };
+// timebank: timene settes i timebanken (0073) og lønnes ikke nå (overtidstillegget lønnes likevel).
+export type Foring = { dato: string; timer: number; overtid_prosent: number | null; uten_overtid?: boolean; timebank?: boolean };
 export type Ukesum = { ordinare: number; overtid: { prosent: number; timer: number }[]; merarbeid: number; uten_overtid: number; sum: number };
 
 export const AML: Regler = { daglig_grense: 9, ukentlig_grense: 40, overtid_prosent: 40 };

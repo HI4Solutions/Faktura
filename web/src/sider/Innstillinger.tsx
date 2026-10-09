@@ -148,10 +148,10 @@ function SlettOrg() {
   );
 }
 
-// Ansatte og timer: slås på per organisasjon, med grensene for overtid, bursdagsvarslene, om de
-// ansatte kan bytte vakter (Vaktbytte.tsx), om det er åpent i helgene (0064_helg.sql) og
-// lønnsoppsettet (0065_lonn.sql: sone for arbeidsgiveravgift, OTP, feriepenger, lønnsdag og
-// måneden med halv skatt).
+// Ansatte og timer: slås på per organisasjon, med grensene for overtid, timebanken
+// (0073_timebank.sql), bursdagsvarslene, om de ansatte kan bytte vakter (Vaktbytte.tsx), om det er
+// åpent i helgene (0064_helg.sql) og lønnsoppsettet (0065_lonn.sql: sone for arbeidsgiveravgift,
+// OTP, feriepenger, lønnsdag og måneden med halv skatt).
 type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
 type Vaktbytte = "av" | "godkjenning" | "fritt";
 const AGA_SONER: [string, string][] = [
@@ -192,6 +192,7 @@ function PersonalOppsett() {
     ferie_dager: string;
     vaktbytte: Vaktbytte;
     helg: boolean;
+    timebank: boolean;
     aga_sone: string;
     otp_prosent: string;
     feriepenger_prosent: string;
@@ -218,6 +219,7 @@ function PersonalOppsett() {
         ferie_dager: tekst(data.ferie_dager ?? 25),
         vaktbytte: data.vaktbytte ?? "godkjenning",
         helg: data.helg ?? true,
+        timebank: data.timebank ?? false,
         aga_sone: data.aga_sone ?? "1",
         otp_prosent: tekst(data.otp_prosent ?? 2),
         feriepenger_prosent: tekst(data.feriepenger_prosent ?? 12),
@@ -246,6 +248,7 @@ function PersonalOppsett() {
         ferie_dager: tall(o!.ferie_dager),
         vaktbytte: o!.vaktbytte,
         helg: o!.helg,
+        timebank: o!.timebank,
         ...(harFunksjon(org, "vaktplan") ? egenmeldingsregler(o!) : {}),
         ...(harFunksjon(org, "lonn")
           ? {
@@ -260,7 +263,7 @@ function PersonalOppsett() {
     );
     if (!r) return;
     settLagret(true);
-    await oppdater(); // menyen får (eller mister) Ansatte og Timer, og helgen vises eller ikke
+    await oppdater(); // menyen får (eller mister) Ansatte og Timer, og helgen og timebanken vises eller ikke
   }
 
   return (
@@ -370,6 +373,16 @@ function PersonalOppsett() {
       <p className="liten dempet">
         Arbeidsmiljøloven: arbeid ut over 9 timer per dag eller 40 timer per uke er overtid, med minst 40 % tillegg (§ 10-4 og § 10-6). Har dere tariffavtale
         med andre grenser, skriver du dem her.
+      </p>
+      <h3>Timebank</h3>
+      <label>
+        <input type="checkbox" checked={o.timebank} onChange={(e) => settO({ ...o, timebank: e.target.checked })} />
+        Timebank: overtid og ekstratimer kan avspaseres senere
+      </label>
+      <p className="liten dempet">
+        De ansatte kan føre overtid og ekstratimer «til timebanken» i stedet for å få dem lønnet nå, og søke om avspasering (hele dager eller noen timer) når de
+        vil ta dem ut. Du godkjenner timene og avspaseringen, kan justere banken (f.eks. en dag for jobb på en fridag) og betale ut timer i lønnskjøringen. For
+        overtid utbetales overtidstillegget likevel (arbeidsmiljøloven § 10-6); avspasering av overtid må avtales skriftlig, f.eks. i arbeidsavtalen.
       </p>
       {harFunksjon(org, "lonn") && (
         <>

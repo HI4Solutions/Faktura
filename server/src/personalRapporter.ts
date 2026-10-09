@@ -1,11 +1,12 @@
 // Rapportene for Personal i rapportmodulen (rapportmodul.ts): timene per ansatt med overtid og
-// merarbeid, timelisten, fraværet, sykefraværet med egenmeldingene, feriebanken, ekstratimene og
-// ansattlisten.
+// merarbeid, timelisten, fraværet, sykefraværet med egenmeldingene, feriebanken, timebanken,
+// ekstratimene og ansattlisten.
 import { alle } from "./db.js";
 import { beregnUke, uke, type Foring } from "./arbeidstid.js";
 import { regler } from "./ansatte.js";
 import { ekstratimer } from "./arbeidsplan.js";
 import { FRAVAERTYPER } from "./fravaer.js";
+import { SALDO, type Saldo } from "./timebank.js";
 import type { Rapportdef } from "./rapportmodul.js";
 
 const rund = (n: number) => Math.round(n * 100) / 100;
@@ -92,7 +93,7 @@ export const personalRapporter: Rapportdef[] = [
         db,
         `select to_char(t.dato, 'YYYY-MM-DD') as dato, a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn,
                 to_char(t.fra, 'HH24:MI') as fra, to_char(t.til, 'HH24:MI') as til, t.pause_min, t.timer::float8 as timer,
-                t.overtid_prosent, t.uten_overtid, t.status, t.beskrivelse
+                t.overtid_prosent, t.uten_overtid, t.timebank, t.status, t.beskrivelse
            from faktura.timeforinger t join faktura.ansatte a on a.org_id = t.org_id and a.id = t.ansatt_id
           where t.org_id = $1 and t.dato between $2 and $3
           order by t.dato, a.ansattnummer, t.fra nulls last`,
@@ -110,10 +111,10 @@ export const personalRapporter: Rapportdef[] = [
           { nokkel: "status", navn: "Status" },
           { nokkel: "beskrivelse", navn: "Beskrivelse" },
         ],
-        rader: rader.map((f) => ({
+        rader: rader.map(({ timebank, ...f }) => ({
           ...f,
           tid: f.fra ? `${f.fra}–${f.til}` : "",
-          art: f.overtid_prosent ? `Overtid ${f.overtid_prosent} %` : f.uten_overtid ? "Uten overtid" : "Vanlig",
+          art: (f.overtid_prosent ? `Overtid ${f.overtid_prosent} %` : f.uten_overtid ? "Uten overtid" : "Vanlig") + (timebank ? ", til timebanken" : ""),
           status: STATUS[f.status] ?? f.status,
         })),
       };
@@ -225,6 +226,45 @@ export const personalRapporter: Rapportdef[] = [
         [org, v.aar],
       ),
     }),
+  },
+  {
+    id: "personal.timebank",
+    modul: "personal",
+    navn: "Timebank",
+    beskrivelse:
+      "Timene hver ansatt har i timebanken (til avspasering): inn, avspasert, utbetalt, justert og saldoen, med verdien av saldoen (en forpliktelse i regnskapet).",
+    funksjon: "ansatte",
+    tilgang: "personal_les",
+    parameter: "ingen",
+    maanedlig: true,
+    hent: async (db, org) => {
+      const rader = (await alle<Saldo>(db, SALDO, [org])).filter((x) => x.saldo !== 0 || x.inn !== 0 || x.avspasert !== 0 || x.utbetalt !== 0 || x.justert !== 0);
+      return {
+        kolonner: [
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "inn", navn: "Inn", type: "timer", sum: true },
+          { nokkel: "avspasert", navn: "Avspasert", type: "timer", sum: true },
+          { nokkel: "utbetalt", navn: "Utbetalt", type: "timer", sum: true },
+          { nokkel: "justert", navn: "Justert", type: "timer", sum: true },
+          { nokkel: "saldo", navn: "Saldo", type: "timer", sum: true },
+          { nokkel: "dager", navn: "Dager", type: "tall" },
+          { nokkel: "sats", navn: "Sats", type: "kr" },
+          { nokkel: "verdi", navn: "Verdi", type: "kr", sum: true },
+        ],
+        rader: rader.map((x) => ({
+          navn: x.navn,
+          inn: x.inn,
+          avspasert: x.avspasert,
+          utbetalt: x.utbetalt,
+          justert: x.justert,
+          saldo: x.saldo,
+          dager: x.dag_timer ? rund(x.saldo / x.dag_timer) : null,
+          sats: x.sats,
+          verdi: x.sats != null ? rund(x.saldo * x.sats) : null,
+        })),
+        merknad: "Verdien er saldoen ganger timelønnen (eller timesatsen for dem med fastlønn), uten feriepenger og arbeidsgiveravgift.",
+      };
+    },
   },
   {
     id: "personal.ekstratimer",

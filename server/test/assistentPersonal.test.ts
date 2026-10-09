@@ -142,6 +142,26 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten for personal", () => 
     expect(await spor({ handling: "vis", side: "mine_vakter" }, ola)).toMatchObject({ tekst: "Åpner vaktene dine.", gaa_til: "/vakter?fane=mine" });
   });
 
+  it("avspasering: assistenten åpner timebanken (0073) i stedet for å foreslå fravær uten timer", async () => {
+    expect(await spor({ handling: "fravaer", fravaerstype: "avspasering", fra_dato: dag }, ola)).toMatchObject({
+      tekst: "Timebanken er ikke slått på (Innstillinger → Ansatte og timer).",
+      forslag: [],
+      gaa_til: null,
+    });
+    expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { timebank: true })).data.timebank).toBe(true);
+    expect(await spor({ handling: "fravaer", fravaerstype: "avspasering", fra_dato: dag }, ola)).toMatchObject({
+      tekst: "Åpner timebanken. Der søker du om avspasering, med timene den tar fra banken.",
+      forslag: [],
+      gaa_til: "/timer?fane=timebank",
+    });
+    expect(await spor({ handling: "fravaer", ansatt: "A1", fravaerstype: "avspasering", fra_dato: dag })).toMatchObject({
+      tekst: "Åpner timebanken til Kari Berg. Der registrerer du avspaseringen, med timene den tar fra banken.",
+      forslag: [],
+      gaa_til: `/timer?fane=timebank&ansatt=${id.kari}`,
+    });
+    expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { timebank: false })).data.timebank).toBe(false);
+  });
+
   it("vakter, publisering, tavla og rullering", async () => {
     const nye = await spor({ handling: "ny_vakt", ansatt: "Ola Nordmann", datoer: [dag, pluss(dag, 1)], klokke_fra: "9", klokke_til: "17:00", pause_min: 30, oppgave: "O2" });
     expect(nye.forslag).toHaveLength(2);

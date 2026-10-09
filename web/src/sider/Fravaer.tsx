@@ -8,7 +8,11 @@
 // Egenmelding (0071_egenmelding.sql): den ansatte sender egenmelding når sykdommen meldes, eller
 // etterpå (for sykdom de siste 16 dagene), med erklæringen; reglene står i skjemaet, og databasen
 // sjekker dem. Lederen ser dokumentasjonen og registrerer sykmelding (legeerklæring for sykt barn).
-import { useEffect, useState, type FormEvent } from "react";
+//
+// Avspasering (0073_timebank.sql): fri fra timebanken i hele dager, med timene den tar fra banken
+// (foreslått av de planlagte timene). Lederen registrerer den her; den ansatte søker under Timer →
+// Timebank.
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
@@ -19,7 +23,7 @@ import { visDag } from "../uke";
 
 // «fravaer»: typen er skjult. Bare eier, administrator og den ansatte selv ser hva slags fravær det
 // er (0047_fravaer_skjult.sql); andre ser bare at den ansatte er borte (F).
-export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "kurs" | "annet" | "fravaer";
+export type FravaerType = "syk" | "sykt_barn" | "ferie" | "permisjon" | "kurs" | "avspasering" | "annet" | "fravaer";
 export type Dokumentasjon = "egenmelding" | "sykmelding";
 export type Fravaer = {
   id: string;
@@ -34,6 +38,7 @@ export type Fravaer = {
   arbeidsrelatert?: boolean | null;
   egenmeldt?: string | null;
   egenmeldt_selv?: boolean | null;
+  timer?: number | null; // avspasering: timene den tar fra timebanken
 };
 // Egenmeldingene til en ansatt (GET /egenmelding): reglene, retten etter to måneder, det som er
 // brukt i løpet av 12 måneder (egen sykdom) og dagene med sykt barn i år.
@@ -58,18 +63,19 @@ export type Ansatt = {
 };
 type BerortVakt = { id: string; dato: string; fra: string; til: string; oppgave: string | null };
 
-export const FRAVAERTYPER: FravaerType[] = ["ferie", "syk", "sykt_barn", "permisjon", "kurs", "annet"];
+export const FRAVAERTYPER: FravaerType[] = ["ferie", "avspasering", "syk", "sykt_barn", "permisjon", "kurs", "annet"];
 export const fravaerTekst: Record<FravaerType, string> = {
   syk: "Syk",
   sykt_barn: "Sykt barn",
   ferie: "Ferie",
   permisjon: "Permisjon",
   kurs: "Kurs",
+  avspasering: "Avspasering",
   annet: "Annet fravær",
   fravaer: "Fravær",
 };
 // Forkortelsene i bemanningskalenderen. F er fravær uten type (det andre ser).
-export const fravaerKode: Record<FravaerType, string> = { ferie: "Fe", syk: "S", sykt_barn: "SB", permisjon: "P", kurs: "K", annet: "A", fravaer: "F" };
+export const fravaerKode: Record<FravaerType, string> = { ferie: "Fe", syk: "S", sykt_barn: "SB", permisjon: "P", kurs: "K", avspasering: "Av", annet: "A", fravaer: "F" };
 // Hver type har sin farge (styles.css: --fv-ferie osv.), samme i merker, vaktplan og kalender;
 // fravær uten type er grått, så fargen ikke røper typen.
 export const fravaerKlasse = Object.fromEntries([...FRAVAERTYPER, "fravaer"].map((t) => [t, `merke-fravaer fravaer-${t}`])) as Record<FravaerType, string>;
@@ -80,6 +86,7 @@ export const borteTekst: Record<FravaerType, string> = {
   ferie: "har ferie",
   permisjon: "har permisjon",
   kurs: "er på kurs",
+  avspasering: "avspaserer",
   annet: "er borte",
   fravaer: "har fravær",
 };
@@ -122,12 +129,29 @@ export function FravaerSkjema({
     til: fravaer.til ?? fravaer.fra ?? iDag(),
     notat: fravaer.notat ?? "",
     dokumentasjon: (fravaer.dokumentasjon ?? "") as Dokumentasjon | "",
+    timer: fravaer.timer != null ? String(fravaer.timer).replace(".", ",") : "",
   }));
+  // Avspasering: timene foreslås av de planlagte timene, til de endres for hånd.
+  const timerEndret = useRef(fravaer.timer != null);
   // Egenmeldingen den ansatte sender (med erklæringen) og svaret om arbeidet.
   const [egen, settEgen] = useState({ send: !!egenmelding && !fravaer.dokumentasjon, arbeidsrelatert: "nei" as "nei" | "ja" | "vet_ikke" });
   const h = useHandling();
   const sett = (e: Partial<typeof f>) => settF({ ...f, ...e });
-  const typer: FravaerType[] = selv ? ["syk", "sykt_barn"] : FRAVAERTYPER;
+  // Avspasering bare når timebanken er på (eller fraværet alt er avspasering).
+  const typer: FravaerType[] = selv ? ["syk", "sykt_barn"] : FRAVAERTYPER.filter((t) => t !== "avspasering" || org?.timebank || fravaer.type === "avspasering");
+  const avspasering = f.type === "avspasering";
+  useEffect(() => {
+    if (!avspasering || !f.ansatt_id || !/^\d{4}-\d{2}-\d{2}$/.test(f.fra) || !/^\d{4}-\d{2}-\d{2}$/.test(f.til) || f.til < f.fra || timerEndret.current) return;
+    let aktiv = true;
+    hent<{ timer: number }>(`/org/${org!.id}/timebank/forslag?ansatt=${f.ansatt_id}&fra=${f.fra}&til=${f.til}`).then(
+      (r) => aktiv && !timerEndret.current && settF((x) => ({ ...x, timer: String(r.timer).replace(".", ",") })),
+      () => undefined,
+    );
+    return () => {
+      aktiv = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avspasering, f.ansatt_id, f.fra, f.til]);
   // Den ansatte endrer bare sluttdatoen på sykdom som er meldt (og kan sende egenmelding for den).
   const bareSlutt = !!selv && !!fravaer.id;
   const valg = (ansatte ?? []).filter((a) => a.id === fravaer.ansatt_id || a.aktiv);
@@ -145,6 +169,7 @@ export function FravaerSkjema({
           til: f.til,
           notat: f.notat.trim() || null,
           ...(selv ? egenmeldingen : { dokumentasjon: erSykdom(f.type) ? f.dokumentasjon || null : null }),
+          ...(avspasering ? { timer: Number(f.timer.replace(",", ".")) } : {}),
         };
     const r = await h.kjor(() =>
       fravaer.id
@@ -186,7 +211,7 @@ export function FravaerSkjema({
           </select>
         </label>
       )}
-      <div className={`faner valg${selv ? "" : " fravaertyper"}`} role="radiogroup" aria-label="Type fravær">
+      <div className={`faner valg${selv ? "" : " fravaertyper"}${typer.length % 3 === 1 ? " siste-hel" : ""}`} role="radiogroup" aria-label="Type fravær">
         {typer.map((t) => (
           <button key={t} type="button" role="radio" aria-checked={f.type === t} className={f.type === t ? "valgt" : undefined} disabled={bareSlutt} onClick={() => sett({ type: t })}>
             {t === "annet" ? "Annet" : fravaerTekst[t]}
@@ -211,6 +236,22 @@ export function FravaerSkjema({
         </label>
       </div>
       {!selv && f.type === "ferie" && f.ansatt_id && /^\d{4}/.test(f.fra) && <FerieSaldo ansattId={f.ansatt_id} aar={Number(f.fra.slice(0, 4))} />}
+      {avspasering && (
+        <label>
+          Timer fra timebanken
+          <input
+            inputMode="decimal"
+            required
+            placeholder="7,5"
+            value={f.timer}
+            onChange={(e) => {
+              timerEndret.current = true;
+              sett({ timer: e.target.value });
+            }}
+          />
+          <TimebankSaldo ansattId={f.ansatt_id} />
+        </label>
+      )}
       {selv && (
         <EgenmeldingValg
           fravaer={fravaer}
@@ -261,6 +302,24 @@ export function FravaerSkjema({
         )}
       </div>
     </form>
+  );
+}
+
+// Saldoen i timebanken under timene for avspasering (lederen): «Kari har 12,5 t i timebanken».
+function TimebankSaldo({ ansattId }: { ansattId: string }) {
+  const { org } = useKonto();
+  const s = useData(
+    () => (ansattId ? hent<{ saldo: { navn: string; saldo: number; dag_timer: number | null } }>(`/org/${org!.id}/timebank/${ansattId}`) : Promise.resolve(null)),
+    [org?.id, ansattId],
+  );
+  const x = s.data?.saldo;
+  const tall = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
+  const d = x?.dag_timer && x.saldo ? Math.round((x.saldo / x.dag_timer) * 10) / 10 : null;
+  return (
+    <span className="felt-hjelp">
+      Foreslått av de planlagte timene (vakter og faste dager), ellers en vanlig arbeidsdag per dag.
+      {x ? ` ${x.navn.split(" ")[0]} har ${tall(x.saldo)} t i timebanken${d != null ? ` (${tall(d)} ${Math.abs(d) === 1 ? "dag" : "dager"})` : ""}.` : ""}
+    </span>
   );
 }
 

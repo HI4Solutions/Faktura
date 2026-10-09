@@ -171,37 +171,85 @@ export function fastlonn(a: Ansatt, fra: string, til: string): Linje | null {
 // Timene som ikke er lønnet: for hver uke det som er godkjent i alt, minus det som er lønnet før
 // (så overtiden regnes på hele uka). Timelønn for alle timene og overtidstillegg; med fastlønn
 // merarbeid (timelønnen) og overtid (timelønnen med tillegget).
+//
+// Timer i timebanken (0073; bare overtid og ekstratimer, som ikke regnes med i grensene) lønnes
+// ikke nå, men overtidstillegget for dem utbetales likevel (arbeidsmiljøloven § 10-6).
 export function timelinjer(a: Ansatt, r: Regler, uker: Ferieuke[]) {
   const avtalt = (Number(a.ukentlig_arbeidstid) * Number(a.stillingsprosent)) / 100;
   let timer = 0;
   let merarbeid = 0;
   let uten = 0; // ekstratimer uten overtid
   const overtid = new Map<number, number>();
+  const bankTillegg = new Map<number, number>(); // overtid i timebanken: bare tillegget
+  const vanlige = (l: Foring[]) => l.filter((f) => !f.timebank);
+  const iBanken = (m: Map<number, number>, l: Foring[], fortegn: 1 | -1) => {
+    for (const f of l) if (f.timebank && f.overtid_prosent) m.set(f.overtid_prosent, (m.get(f.overtid_prosent) ?? 0) + fortegn * Number(f.timer));
+  };
   for (const u of uker) {
-    const alle: Ukesum = beregnUke(u.alle, r, avtalt);
-    const betalt: Ukesum = beregnUke(u.betalt, r, avtalt);
+    const alle: Ukesum = beregnUke(vanlige(u.alle), r, avtalt);
+    const betalt: Ukesum = beregnUke(vanlige(u.betalt), r, avtalt);
     timer += alle.sum - betalt.sum;
     merarbeid += alle.merarbeid - betalt.merarbeid;
     uten += alle.uten_overtid - betalt.uten_overtid;
     for (const o of alle.overtid) overtid.set(o.prosent, (overtid.get(o.prosent) ?? 0) + o.timer);
     for (const o of betalt.overtid) overtid.set(o.prosent, (overtid.get(o.prosent) ?? 0) - o.timer);
+    iBanken(bankTillegg, u.alle, 1);
+    iBanken(bankTillegg, u.betalt, -1);
   }
   const linjer: Linje[] = [];
   const overtidsliste = [...overtid.entries()].filter(([, t]) => rund(t) > 0).sort((x, y) => x[0] - y[0]);
+  const bankliste = [...bankTillegg.entries()].filter(([, t]) => rund(t) > 0).sort((x, y) => x[0] - y[0]);
+  const sats = a.lonnstype === "time" ? Number(a.timelonn ?? 0) : timesats(a);
   if (a.lonnstype === "time") {
-    const sats = Number(a.timelonn ?? 0);
     if (rund(timer) > 0) linjer.push({ lonnsart: "timelonn", tekst: "Timelønn", antall: rund(timer), sats, belop: rund(rund(timer) * sats), nokkel: "timelonn" });
     for (const [p, t] of overtidsliste)
       linjer.push({ lonnsart: "overtid", tekst: `Overtidstillegg ${p} %`, antall: rund(t), sats: rund4((sats * p) / 100), belop: rund((rund(t) * sats * p) / 100), nokkel: `overtid:${p}` });
   } else {
-    const sats = timesats(a);
     if (rund(merarbeid) > 0) linjer.push({ lonnsart: "merarbeid", tekst: "Merarbeid", antall: rund(merarbeid), sats, belop: rund(rund(merarbeid) * sats), nokkel: "merarbeid" });
     if (rund(uten) > 0)
       linjer.push({ lonnsart: "ekstratimer", tekst: "Ekstratimer (uten overtid)", antall: rund(uten), sats, belop: rund(rund(uten) * sats), nokkel: "ekstratimer" });
     for (const [p, t] of overtidsliste)
       linjer.push({ lonnsart: "overtid", tekst: `Overtid ${p} %`, antall: rund(t), sats: rund4(sats * (1 + p / 100)), belop: rund(rund(t) * sats * (1 + p / 100)), nokkel: `overtid:${p}` });
   }
+  for (const [p, t] of bankliste)
+    linjer.push({
+      lonnsart: "overtid",
+      tekst: `Overtidstillegg ${p} % (timene er i timebanken)`,
+      antall: rund(t),
+      sats: rund4((sats * p) / 100),
+      belop: rund((rund(t) * sats * p) / 100),
+      nokkel: `overtid_timebank:${p}`,
+    });
   return { linjer, timer: rund(timer), ekstraTimer: rund(merarbeid + uten + overtidsliste.reduce((s, [, t]) => s + t, 0)) };
+}
+
+// Timebanken (0073): timer tatt ut som fri (avspasering) lønnes for den med timelønn (med
+// fastlønn går lønnen som vanlig), og timer betales ut fra banken med timelønnen eller timesatsen.
+export function timebanklinjer(a: Ansatt, avspasert: number, utbetalt: number): Linje[] {
+  const sats = a.lonnstype === "time" ? Number(a.timelonn ?? 0) : timesats(a);
+  const ut: Linje[] = [];
+  if (a.lonnstype === "time" && rund(avspasert) > 0)
+    ut.push({ lonnsart: "avspasering", tekst: "Avspasering fra timebanken", antall: rund(avspasert), sats, belop: rund(rund(avspasert) * sats), nokkel: "avspasering" });
+  if (rund(utbetalt) > 0)
+    ut.push({ lonnsart: "timebank", tekst: "Utbetalt fra timebanken", antall: rund(utbetalt), sats, belop: rund(rund(utbetalt) * sats), nokkel: "timebank" });
+  return ut;
+}
+
+// Timene en avspasering i hele dager (fra og med til og med, med timene) tar i perioden: fordelt
+// på virkedagene (uten virkedager: på dagene).
+export function avspasertIPerioden(x: { fra: string; til: string; timer: number }, fra: string, til: string) {
+  const start = maks(x.fra, fra);
+  const slutt = min(x.til, til);
+  if (slutt < start) return 0;
+  let alle = 0;
+  let inne = 0;
+  for (let d = x.fra; d <= x.til; d = pluss(d, 1))
+    if (virkedag(d)) {
+      alle++;
+      if (d >= start && d <= slutt) inne++;
+    }
+  const andel = alle ? inne / alle : (dagerMellom(start, slutt) + 1) / (dagerMellom(x.fra, x.til) + 1);
+  return rund(Number(x.timer) * andel);
 }
 
 // De faste tilleggene: per måned for dagene de gjelder (og den ansatte er ansatt), per time for

@@ -333,6 +333,37 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   Godkjente dager trekkes fra i året de overføres fra og legges til året etter, og ingen kan
   overføre mer enn det som er igjen. Fraværsskjemaet og ansattkortet viser hva som er igjen.
   Som fraværstypen ser bare eier, administrator og den ansatte selv feriebanken
+- Timebank (`0073_timebank.sql`, `timebank.ts`, fanen «Timebank» under Timer): timer den ansatte
+  har jobbet mer enn avtalt, og som tas ut som fri senere. Den slås på per organisasjon
+  (`lonn_oppsett.timebank`, `faktura.timebank_paa`). Inn: godkjente timeføringer merket «til
+  timebanken» (`timeforinger.timebank`), bare overtid eller ekstratimer uten overtid (databasen
+  avviser vanlige timer); levert og ikke godkjent vises som «venter på godkjenning». Ut:
+  avspasering i hele dager er fravær med typen `avspasering` og timene den tar fra banken
+  (`fravaer.timer`; foreslått av de planlagte timene, vakter og faste dager, ellers en vanlig
+  arbeidsdag per dag, `avspasering_forslag`), og noen timer en dag er en post i
+  `timebank_poster` med typen `avspasering`. Eier og administrator kan også justere banken
+  (`justering`, pluss eller minus med en grunn, f.eks. en dag for jobb på en fridag, i timer
+  eller dager) og betale ut timer (`utbetaling`). Saldoen regnes av dataene, ikke lagret
+  (`timebank_saldo`, `timebank`): inn minus avspasert og utbetalt, pluss justert, og vises også
+  i dager (avtalt arbeidstid per uke delt på dagene i den faste planen, ellers fem; `dag_timer`).
+  Den ansatte søker om avspasering (`avspasering_soknader`, `sok_avspasering`): hele dager eller
+  noen timer én dag, fra en uke tilbake og høyst tre måneder, ikke mer enn saldoen minus det som
+  er søkt om fra før, og ikke over annet fravær. Eier og administrator får varsel og godkjenner
+  (timene kan endres, og `behandle_avspasering` lager fraværet eller posten) eller avslår med
+  en grunn; den ansatte får svar og kan trekke søknaden mens den venter. Avspaseringen avtales,
+  så den gjelder først når den er godkjent. Lønnskjøringen lønner ikke timene som settes i
+  banken, men overtidstillegget for dem utbetales med en egen linje (arbeidsmiljøloven § 10-6
+  tolvte ledd: overtid kan avspaseres etter skriftlig avtale, tillegget betales likevel). Med
+  timelønn lønnes avspaseringen i perioden den tas ut («Avspasering fra timebanken», fordelt på
+  virkedagene), og med fastlønn går lønnen som vanlig. Utbetalinger lønnes i neste vanlige
+  kjøring med timelønnen eller timesatsen («Utbetalt fra timebanken»), og merkes med
+  `lonnskjoring_id` når kjøringen godkjennes (`lonnsslipper.timebank_poster`); de kan da ikke
+  endres eller slettes før kjøringen åpnes igjen, og en lønnet føring kan ikke settes i eller
+  tas ut av banken.
+  Eier, administrator og regnskap ser saldoene med verdien (saldoen ganger timelønnen eller
+  timesatsen, uten feriepenger og arbeidsgiveravgift), den ansatte sin egen, og søknadene ser
+  bare eier, administrator og den ansatte selv. Rapporten «Timebank» ligger i rapportmodulen
+  og kan sendes til regnskapsføreren hver måned
 - `vakter.vikar_for`: en vikar settes inn som en egen vakt med samme tid og oppgave som vakten
   til den som er borte (den beholder sin). Vikarvakten publiseres med en gang med varsel til
   vikaren, tar over plassene på tavla, og kopieres ikke til neste uke. Vikaren kan være en ny
@@ -580,12 +611,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   termin, år eller ingen, og en funksjon som gir kolonnene og radene); visningen, summene,
   CSV (semikolon, BOM, norske desimaler) og PDF (liggende med mange kolonner) er felles. Lista
   viser bare rapportene organisasjonen har funksjonen til og brukeren har tilgang til
-  (fakturarapportene for alle med lesetilgang, timer, ansatte og lønn for eier, administrator og
-  regnskap, fravær og feriebank for eier og administrator). Faktura: kundereskontro, mva per
+  (fakturarapportene for alle med lesetilgang, timer, timebank, ansatte og lønn for eier,
+  administrator og regnskap, fravær og feriebank for eier og administrator). Faktura: kundereskontro, mva per
   termin, salg per måned, fakturajournal (med alle kolonnene fra den gamle eksporten) og
   innbetalinger (`server/src/rapporter.ts`). Personal: timer per ansatt (ordinære, overtid uke
-  for uke, merarbeid og uten overtid), timeliste, fravær, feriebank, ekstratimer og ansatte
-  (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
+  for uke, merarbeid og uten overtid), timeliste, fravær, feriebank, timebank, ekstratimer og
+  ansatte (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
   per lønnsart (grunnlaget for bokføringen), skattetrekk og arbeidsgiveravgift per termin med
   fristene, feriepengeliste, årsoversikt og OTP (`server/src/lonnRapporter.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
@@ -619,8 +650,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Se lønnskjøringene og alle lønnsslippene | ✓ | ✓ | | ✓ | | |
 | Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
 | Se egne lønnsslipper (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+| Se timebanken til alle, med verdien | ✓ | ✓ | | ✓ | | |
+| Godkjenne og registrere avspasering, justere timebanken og betale ut timer fra den | ✓ | ✓ | | | | |
+| Se egen timebank og søke om avspasering | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Rapporter: fakturarapportene | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| Rapporter: timer, ansatte og lønn | ✓ | ✓ | | ✓ | | |
+| Rapporter: timer, timebank, ansatte og lønn | ✓ | ✓ | | ✓ | | |
 | Rapporter: fravær og feriebank | ✓ | ✓ | | | | |
 | Sende rapporter og endre utsendingen til regnskapsføreren | ✓ | ✓ | | | | |
 
@@ -635,9 +669,10 @@ klientene.
 Rollen `ansatt` ser bare organisasjonens navn, sitt eget medlemskap, sitt eget ansattkort,
 den publiserte vaktplanen og tavla (se under), vaktbyttene de er med i og
 de åpne tilbudene fra kolleger med samme rolle (`vaktbytte_liste`), sitt eget fravær (med typen),
-sine egne timer og beskjedene til rollen sin og til alle (`ser_beskjed`; `faktura.kan(org,
+sine egne timer, sin egen timebank og sine søknader om avspasering, og beskjedene til rollen sin
+og til alle (`ser_beskjed`; `faktura.kan(org,
 'medlem')`, `faktura.kan(org, 'plan')`, `faktura.er_meg` og `faktura.min_ansatt`), aldri
-fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, notater og typen fravær,
+fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, timebank, notater og typen fravær,
 utkast i vaktplanen eller revisjonsloggen. Varsler til hele organisasjonen og
 Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter (Mine vakter,
 Ledige vakter og Bytter, og fanene Vaktplan og Tavle), Vaktplan og Tavle som egne punkter i
