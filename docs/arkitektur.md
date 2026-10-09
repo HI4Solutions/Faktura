@@ -849,6 +849,24 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   «Anleggsregister», «Avskrivningsplan», «Avskrivninger og avganger» og «Saldoskjema»
   (`regnskap.*`, tilgangen regnskap). En organisasjon med bilag stenges i stedet for å slettes
   (`slett_organisasjon`), og regnskapsmaterialet oppbevares i fem år
+- Regnskapsmodulen, bilagene og periodiseringene (`0087_regnskap_bilag.sql`,
+  `server/src/periodisering.ts`, `server/src/hovedbok.ts`, `server/src/regnskapBilagRuter.ts`,
+  `server/src/kontoplan.ts`, `web/src/sider/RegnskapBilag.tsx`, `RegnskapPeriodiseringer.tsx` og
+  `RegnskapAvslutning.tsx`): `periodiseringer` (type, beløp, den første måneden, antallet måneder,
+  resultat- og balansekontoen, og starten for forskudd: ingen, flytt eller motkonto) og
+  `periodiseringsposter` (starten og månedene som er bokført, med bilaget). Fordelingen regnes i
+  API-et (likt i øre, det som står igjen på månedene som er igjen). `bokfor_periodisering` fører
+  bilaget (serie P, kilde periodisering) og kontrollerer at det går i null, at starten bare er for
+  forskudd, er hele beløpet, bare én gang og før månedene, at månedene er innenfor og kommer i
+  rekkefølge, og at det som er fordelt ikke blir mer enn beløpet; `reverser_periodisering` tar det
+  siste først. Det som ikke kan endres når noe er bokført, stoppes av en trigger. Manuelle bilag
+  (serie M, kilde manuell) går gjennom `bokfor_manuelt` (minst to linjer, i null) og
+  `reverser_manuelt`. `/regnskap/bilag` viser bilagene fra alle kildene og reverserer med
+  funksjonen for kilden (lønn og refusjoner der de kommer fra); `/regnskap/saldobalanse` og
+  `/regnskap/hovedbok` regnes fra posteringene (balansekontoene fra starten, resultatkontoene fra
+  1. januar, og resultatet fra tidligere år på egen linje); `/regnskap/maanedsavslutning` bokfører
+  avskrivningene og periodiseringene som mangler, samlet. Bilagene for anleggsmidlene,
+  periodiseringene og de manuelle bilagene ser de som ser regnskapet (`bilag_les`)
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -885,8 +903,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   fristene, feriepengeliste, årsoversikt, OTP, lønns- og stillingsendringer, trekk og betalinger, reiser og
   godtgjørelser, naturalytelser og permisjoner og permitteringer (`server/src/lonnRapporter.ts`),
   sykepenger og refusjon (`server/src/sykepengerRapporter.ts`), avstemming per termin,
-  årsavstemming og refusjoner fra NAV (`server/src/avstemming.ts`). Regnskap: anleggsregister,
-  avskrivningsplan, avskrivninger og avganger, og saldoskjema (`server/src/regnskapRapporter.ts`).
+  årsavstemming og refusjoner fra NAV (`server/src/avstemming.ts`). Regnskap: saldobalanse,
+  hovedbok, bilagsjournal, anleggsregister, avskrivningsplan, avskrivninger og avganger,
+  saldoskjema og periodiseringer (`server/src/regnskapRapporter.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
   lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
   for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og
@@ -899,10 +918,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `utboks`: hendelser skrevet i samme transaksjon, publisert til Pub/Sub
 - `revisjonslogg`: alle endringer og regnskapsføreres oppslag. Loggen for de ansatte, lønnen,
   lønnshistorikken, trekkene, naturalytelsene, reiseregningene, a-meldingene og lønnsbilagene er bare
-  for dem som ser lønnen, loggen for anleggsmidlene og regnskapsoppsettet for dem som ser
-  regnskapet, og loggen for fraværet, inntektsmeldingene og refusjonene fra NAV bare for eier og
-  administrator (`0081_revisjonslogg_lonn.sql`, `0083_naturalytelser_reiser.sql`,
-  `0085_nav_refusjon.sql`, `0086_regnskap_anlegg.sql`)
+  for dem som ser lønnen, loggen for anleggsmidlene, periodiseringene og regnskapsoppsettet for dem
+  som ser regnskapet, og loggen for fraværet, inntektsmeldingene og refusjonene fra NAV bare for
+  eier og administrator (`0081_revisjonslogg_lonn.sql`, `0083_naturalytelser_reiser.sql`,
+  `0085_nav_refusjon.sql`, `0086_regnskap_anlegg.sql`, `0087_regnskap_bilag.sql`)
 
 ### Roller
 
@@ -946,7 +965,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Rapporter: timer, timebank, ansatte og lønn | ✓ | ✓ | | ✓ | | |
 | Rapporter: fravær og feriebank | ✓ | ✓ | | | | |
 | Sende rapporter og endre utsendingen til regnskapsføreren | ✓ | ✓ | | | | |
-| Regnskap: anleggsmidlene, bokføringen av dem (anskaffelse, avskrivninger, nedskrivning, salg og utrangering), saldoavskrivningene, kontoene og rapportene | ✓ | ✓ | | ✓ | | |
+| Regnskap: bilagene, manuelle bilag og reversering, saldobalansen og hovedboken, anleggsmidlene og bokføringen av dem (anskaffelse, avskrivninger, nedskrivning, salg og utrangering), periodiseringene, månedsavslutningen, saldoavskrivningene, kontoene og rapportene | ✓ | ✓ | | ✓ | | |
 
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 ² Så lenge den ansatte er aktiv (ikke etter at de har sluttet).

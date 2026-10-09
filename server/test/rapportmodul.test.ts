@@ -47,7 +47,7 @@ describe("rapportmodulen: valg og perioder", () => {
       expect(r.id.startsWith(`${r.modul}.`)).toBe(true);
     }
     expect(RAPPORTER.filter((r) => r.maanedlig).map((r) => r.id)).toEqual(
-      expect.arrayContaining(["faktura.journal", "faktura.mva", "personal.timer", "lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.avstemming", "lonn.nav_refusjoner", "regnskap.avskrivninger"]),
+      expect.arrayContaining(["faktura.journal", "faktura.mva", "personal.timer", "lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.avstemming", "lonn.nav_refusjoner", "regnskap.avskrivninger", "regnskap.saldobalanse", "regnskap.bilagsjournal"]),
     );
   });
 });
@@ -177,7 +177,16 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "lonn.nav_refusjoner",
         "lonn.sykepenger",
       ],
-      regnskap: ["regnskap.anleggsregister", "regnskap.avskrivningsplan", "regnskap.avskrivninger", "regnskap.saldoskjema"],
+      regnskap: [
+        "regnskap.saldobalanse",
+        "regnskap.hovedbok",
+        "regnskap.bilagsjournal",
+        "regnskap.anleggsregister",
+        "regnskap.avskrivningsplan",
+        "regnskap.avskrivninger",
+        "regnskap.saldoskjema",
+        "regnskap.periodiseringer",
+      ],
     });
     const liste = (await kall("GET", `/api/org/${org}/rapportmodul`)).data;
     expect(liste.moduler.map((m: any) => m.navn)).toEqual(["Faktura", "Personal", "Lønn", "Regnskap"]);
@@ -192,8 +201,17 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     expect(r.lonn).not.toContain("lonn.nav_refusjoner");
     expect(r.lonn).not.toContain("lonn.permisjoner");
     expect(r.lonn).toEqual(expect.arrayContaining(["lonn.avstemming", "lonn.avstemming_aar"]));
-    // Regnskapet (anleggsmidlene og saldoavskrivningene) ser regnskap, men ikke fakturerer.
-    expect(r.regnskap).toEqual(["regnskap.anleggsregister", "regnskap.avskrivningsplan", "regnskap.avskrivninger", "regnskap.saldoskjema"]);
+    // Regnskapet (hovedbok, anleggsmidler, saldoavskrivninger og periodiseringer) ser regnskap, men ikke fakturerer.
+    expect(r.regnskap).toEqual([
+        "regnskap.saldobalanse",
+        "regnskap.hovedbok",
+        "regnskap.bilagsjournal",
+        "regnskap.anleggsregister",
+        "regnskap.avskrivningsplan",
+        "regnskap.avskrivninger",
+        "regnskap.saldoskjema",
+        "regnskap.periodiseringer",
+      ]);
     expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.sykepenger`, undefined, regnskap)).status).toBe(403);
     expect(await moduler(fakturerer)).toEqual({ faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"] });
     expect(await moduler(ola)).toEqual({});

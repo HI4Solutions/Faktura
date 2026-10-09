@@ -1,10 +1,13 @@
-// Regnskap (0086_regnskap_anlegg.sql, server/src/regnskapRuter.ts): anleggsmidlene med
-// avskrivningsplanen over flere år (også goodwill), månedsavslutningen (avskrivningene bokføres
-// måned for måned i bilagserie A), nedskrivning og reversering, salg og utrangering,
-// saldoavskrivningene (skattemessig, med goodwill i gruppe b) og kontoene. Eier, administrator og
-// regnskap, med funksjonen «Regnskap».
+// Regnskap (0086_regnskap_anlegg.sql, 0087_regnskap_bilag.sql, server/src/regnskapRuter.ts og
+// regnskapBilagRuter.ts): bilagene fra alle kildene med manuelle bilag og reversering
+// (RegnskapBilag.tsx), saldobalansen og hovedboken, anleggsmidlene med avskrivningsplanen over flere
+// år (også goodwill), nedskrivning og reversering, salg og utrangering, periodiseringene
+// (RegnskapPeriodiseringer.tsx), månedsavslutningen (RegnskapAvslutning.tsx), saldoavskrivningene
+// (skattemessig, med goodwill i gruppe b) og kontoene. Eier, administrator og regnskap, med
+// funksjonen «Regnskap».
 //
-// Fanen står i adressen (?fane=anlegg|saldo|kontoer), og anleggsmiddelet som er åpent, med ?anlegg=.
+// Fanen står i adressen (?fane=bilag|saldobalanse|anlegg|periodiseringer|saldo|kontoer), og det som
+// er åpent, med ?anlegg= eller ?periodisering=.
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
@@ -12,7 +15,9 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "
 import { useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
 import { IkonPluss, IkonRegnskap, IkonVenstre } from "../ikoner";
-import { maaned } from "../lonn";
+import { Bilag, Saldobalansen } from "./RegnskapBilag";
+import { Maanedsavslutning, mndNavn, type Bilagsvar } from "./RegnskapAvslutning";
+import { PeriodiseringDetalj, Periodiseringer } from "./RegnskapPeriodiseringer";
 
 type Kategori = { kode: string; navn: string; konto: string; avskrivningskonto: string | null; skatt: string; levetid_mnd: number | null };
 type Kontorad = { rolle: string; navn: string; standard: string; konto: string; endret: boolean };
@@ -68,9 +73,6 @@ type Hendelse = {
 type Planmaaned = { maaned: string; belop: number; bokfort: boolean; bilag: string | null; verdi: number };
 type Planaar = { aar: number; inngaende: number; avskrivning: number; nedskrivning: number; avgang: number; utgaende: number; bokfort: boolean };
 type Detalj = { anleggsmiddel: Anlegg; hendelser: Hendelse[]; plan: Planmaaned[]; aar: Planaar[]; kan_reversere: boolean };
-type Bilagsvar = { id: string; bilagsnummer: string; dato: string; tekst: string; sum?: number };
-
-const mndNavn = (m: string) => maaned(`${m}-01`);
 const levetid = (m: number | null) => (m == null ? "Avskrives ikke" : m % 12 === 0 ? `${m / 12} år` : m < 12 ? `${m} mnd` : `${Math.floor(m / 12)} år og ${m % 12} mnd`);
 const skattNavn = (s: string) => (s === "lineaer" ? "Lineært" : s === "ingen" ? "Avskrives ikke" : `Gruppe ${s}`);
 const tekstTall = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
@@ -95,12 +97,16 @@ const merke = (a: Anlegg) => {
 export function Regnskap() {
   const [sok, settSok] = useSearchParams();
   const faner: [string, string][] = [
+    ["bilag", "Bilag"],
+    ["saldobalanse", "Saldobalanse"],
     ["anlegg", "Anleggsmidler"],
+    ["periodiseringer", "Periodiseringer"],
     ["saldo", "Saldoavskrivninger"],
     ["kontoer", "Kontoer"],
   ];
-  const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? "anlegg";
+  const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? "bilag";
   const anlegg = sok.get("anlegg");
+  const periodisering = sok.get("periodisering");
   const ga = (endring: Record<string, string | null>) => {
     const p = new URLSearchParams(sok);
     for (const [k, v] of Object.entries(endring)) {
@@ -110,6 +116,8 @@ export function Regnskap() {
     settSok(p);
   };
   if (fane === "anlegg" && anlegg) return <AnleggDetalj key={anlegg} id={anlegg} tilbake={() => ga({ anlegg: null })} />;
+  if (fane === "periodiseringer" && periodisering)
+    return <PeriodiseringDetalj key={periodisering} id={periodisering} tilbake={() => ga({ periodisering: null })} />;
   return (
     <>
       <div className="topp">
@@ -117,12 +125,22 @@ export function Regnskap() {
       </div>
       <div className="faner tett" role="tablist">
         {faner.map(([v, t]) => (
-          <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga({ fane: v, anlegg: null })}>
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={fane === v}
+            className={fane === v ? "valgt" : undefined}
+            onClick={() => ga({ fane: v, anlegg: null, periodisering: null })}
+          >
             {t}
           </button>
         ))}
       </div>
+      {fane === "bilag" && <Bilag />}
+      {fane === "saldobalanse" && <Saldobalansen />}
       {fane === "anlegg" && <Anleggsmidler apne={(id) => ga({ anlegg: id })} />}
+      {fane === "periodiseringer" && <Periodiseringer apne={(id) => ga({ periodisering: id })} />}
       {fane === "saldo" && <Saldoavskrivninger />}
       {fane === "kontoer" && <Kontoer />}
     </>
@@ -134,10 +152,7 @@ export function Regnskap() {
 function Anleggsmidler({ apne }: { apne: (id: string) => void }) {
   const { org } = useKonto();
   const sti = `/org/${org!.id}/regnskap`;
-  const liste = useData(
-    () => hent<{ anleggsmidler: Anlegg[]; ikke_bokfort: { til: string; fra: string | null; maaneder: number; sum: number } }>(`${sti}/anleggsmidler`),
-    [sti],
-  );
+  const liste = useData(() => hent<{ anleggsmidler: Anlegg[] }>(`${sti}/anleggsmidler`), [sti]);
   const oppsett = useData(() => hent<Oppsett>(`${sti}/oppsett`), [sti]);
   const [ny, settNy] = useState(false);
   const [visUte, settVisUte] = useState(false);
@@ -157,7 +172,7 @@ function Anleggsmidler({ apne }: { apne: (id: string) => void }) {
         nedskrivning eller en ny levetid gjelder framover. Ved salg eller utrangering avskrives det til og med måneden, og gevinsten eller tapet bokføres. Rapportene
         står under <Link to="/rapporter?fane=regnskap">Rapporter → Regnskap</Link>.
       </p>
-      {alle.length > 0 && <Maanedsavslutning info={liste.data.ikke_bokfort} bokfort={() => void liste.last()} />}
+      <Maanedsavslutning bokfort={() => void liste.last()} visBokfort={alle.length > 0} />
       <div className="knapper lonn-knapper">
         <button type="button" className="primar" onClick={() => settNy(true)}>
           <IkonPluss /> Nytt anleggsmiddel
@@ -251,118 +266,6 @@ function Anleggsmidler({ apne }: { apne: (id: string) => void }) {
       </Dialog>
     </>
   );
-}
-
-// Månedsavslutningen: avskrivningene som ikke er bokført til og med en måned, og bokføringen (et bilag
-// per måned).
-function Maanedsavslutning({ info, bokfort }: { info: { til: string; fra: string | null; maaneder: number; sum: number }; bokfort: () => void }) {
-  const { org } = useKonto();
-  const sti = `/org/${org!.id}/regnskap/avskrivninger`;
-  const [til, settTil] = useState(info.til);
-  const [vis, settVis] = useState(false);
-  const forslag = useData(
-    () => (vis ? hent<{ til: string; maaneder: { maaned: string; navn: string; sum: number; linjer: { nummer: number; navn: string; belop: number }[] }[] }>(`${sti}?til=${til}`) : Promise.resolve(null)),
-    [sti, til, vis],
-  );
-  const h = useHandling();
-  const [melding, settMelding] = useState<string | null>(null);
-  const valg: string[] = [];
-  if (info.fra) for (let m = info.fra; m <= info.til; m = nesteMnd(m)) valg.push(m);
-
-  async function bokfor() {
-    const r = await h.kjor(() => api<{ bilag: Bilagsvar[] }>("POST", sti, { til }));
-    if (r) {
-      settVis(false);
-      settMelding(
-        r.bilag.length
-          ? `Avskrivningene er bokført: ${r.bilag.length === 1 ? `bilag ${r.bilag[0]!.bilagsnummer}` : `${r.bilag.length} bilag (${r.bilag[0]!.bilagsnummer}–${r.bilag.at(-1)!.bilagsnummer})`}.`
-          : "Det var ingenting å bokføre.",
-      );
-      bokfort();
-    }
-  }
-
-  return (
-    <div className="kort regnskap-avslutning">
-      {melding && (
-        <div className="melding ok" role="status">
-          {melding}
-        </div>
-      )}
-      {info.maaneder === 0 ? (
-        <p className="liten" style={{ margin: 0 }}>
-          <span className="merke merke-ok">Bokført</span> Avskrivningene er bokført til og med {mndNavn(info.til)}.
-        </p>
-      ) : (
-        <>
-          <p style={{ marginTop: 0 }}>
-            <strong>Månedsavslutning:</strong> avskrivningene er ikke bokført {info.maaneder === 1 ? `for ${mndNavn(info.fra!)}` : `fra ${mndNavn(info.fra!)}`} (
-            {kr(info.sum)} til og med {mndNavn(info.til)}).
-          </p>
-          <div className="knapper">
-            <label className="liten">
-              Til og med{" "}
-              <select value={til} onChange={(e) => settTil(e.target.value)}>
-                {valg.map((m) => (
-                  <option key={m} value={m}>
-                    {mndNavn(m)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="button" className="primar" onClick={() => settVis(true)}>
-              Se og bokfør
-            </button>
-          </div>
-        </>
-      )}
-      <Dialog apen={vis} lukk={() => settVis(false)} tittel={`Avskrivninger til og med ${mndNavn(til)}`}>
-        {forslag.feil ? (
-          <Feil melding={forslag.feil} />
-        ) : !forslag.data ? (
-          <Laster />
-        ) : (
-          <>
-            <p className="dempet liten">Et bilag per måned, datert den siste dagen i måneden: avskrivningskostnaden mot balansekontoen for hvert anleggsmiddel.</p>
-            <div className="tabell">
-              <table>
-                <tbody>
-                  {forslag.data.maaneder.map((m) => (
-                    <tr key={m.maaned}>
-                      <td>
-                        <strong>{m.navn.charAt(0).toUpperCase() + m.navn.slice(1)}</strong>
-                        <div className="liten dempet">{m.linjer.map((l) => `${l.nummer}. ${l.navn} ${kr(l.belop)}`).join(" · ")}</div>
-                      </td>
-                      <td className="tall">{kr(m.sum)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td>Sum</td>
-                    <td className="tall">{kr(forslag.data.maaneder.reduce((s, m) => s + m.sum, 0))}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-            <Feil melding={h.feil} />
-            <div className="knapper">
-              <button type="button" className="primar" disabled={h.opptatt || !forslag.data.maaneder.length} onClick={() => void bokfor()}>
-                Bokfør {forslag.data.maaneder.length} {forslag.data.maaneder.length === 1 ? "bilag" : "bilag"}
-              </button>
-              <button type="button" onClick={() => settVis(false)}>
-                Avbryt
-              </button>
-            </div>
-          </>
-        )}
-      </Dialog>
-    </div>
-  );
-}
-function nesteMnd(m: string) {
-  const [a, b] = m.split("-").map(Number) as [number, number];
-  return b === 12 ? `${a + 1}-01` : `${a}-${String(b + 1).padStart(2, "0")}`;
 }
 
 // --- Skjemaet (nytt og endre) -----------------------------------------------------------------
@@ -1274,8 +1177,11 @@ function Kontoer() {
   return (
     <>
       <form className="kort" onSubmit={lagre}>
-        <h3 style={{ marginTop: 0 }}>Kontoene for anleggsmidlene</h3>
-        <p className="liten dempet">Standarden er norsk standard kontoplan (NS 4102). Tomt felt: standardkontoen. Endringer gjelder bilagene som føres etterpå.</p>
+        <h3 style={{ marginTop: 0 }}>Kontoene for anleggsmidlene og periodiseringene</h3>
+        <p className="liten dempet">
+          Standarden er norsk standard kontoplan (NS 4102). Tomt felt: standardkontoen. Endringer gjelder bilagene som føres etterpå. Balansekontoene for
+          periodiseringene er forslag; hver periodisering har sine kontoer. Lønnskontoene står under Innstillinger → Ansatte og timer.
+        </p>
         <div className="bokforing-kontoer">
           {o.data.kontoer.map((k) => (
             <label key={k.rolle}>

@@ -129,7 +129,8 @@ export function BokforingOppsett() {
 
 // --- Lønnskjøringen --------------------------------------------------------------------------
 
-function Bilagstabell({ b }: { b: { dato: string; tekst: string; posteringer: Postering[] } }) {
+// Posteringene i et bilag (også i Regnskap → Bilag).
+export function Bilagstabell({ b }: { b: { posteringer: Pick<Postering, "konto" | "navn" | "tekst" | "belop">[] } }) {
   const smal = useSmal();
   const sum = b.posteringer.filter((p) => p.belop > 0).reduce((a, p) => a + p.belop, 0);
   return (

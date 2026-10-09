@@ -2568,8 +2568,59 @@ h5.nav-under { margin: 14px 0 6px; font-size: 0.92rem; }
   dl.nav-forespoersel dd { margin-bottom: 6px; }
 }
 
-/* Regnskap (Regnskap.tsx): månedsavslutningen, valgene og måned for måned. */
+/* Regnskap (Regnskap.tsx, RegnskapBilag.tsx, RegnskapPeriodiseringer.tsx og RegnskapAvslutning.tsx):
+   månedsavslutningen, periodevalget, bilagene, det manuelle bilaget, saldobalansen og valgene. */
 .regnskap-avslutning .knapper { margin-top: 8px; }
+.regnskap-avslutning.forfalt { border-left: 3px solid var(--advarsel); }
+p.regnskap-bokfort { margin: 0 0 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.regnskap-filter { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; padding: 14px 18px; }
+.regnskap-filter > label { min-width: 160px; margin: 0; }
+.regnskap-periode { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; }
+.regnskap-periode > label { margin: 0; }
+.regnskap-periode .knapper { gap: 4px 14px; padding-bottom: 10px; }
+.regnskap-periode button.lenke { font-size: 0.88rem; font-weight: 500; color: var(--dempet); }
+.regnskap-periode button.lenke.valgt { color: var(--aksent); font-weight: 650; }
+.regnskap-bilagsrad { border-bottom: 1px solid var(--kant); }
+.regnskap-bilagsrad:last-child { border-bottom: 0; }
+.regnskap-bilagsrad > .liste-rad { border-bottom: 0; }
+.regnskap-bilagsrad.apen > .liste-rad { background: var(--flate-2); }
+.regnskap-bilagsdetalj { padding: 0 16px 14px; }
+.regnskap-bilagsdetalj .lonn-bilag { margin-top: 4px; }
+.regnskap-bilagsdetalj .knapper, .regnskap-bilagsdetalj p { margin: 10px 0 0; }
+.regnskap-linjer { display: grid; gap: 6px; margin: 6px 0 4px; }
+.regnskap-linje { display: grid; grid-template-columns: 150px minmax(0, 1fr) 130px 130px 48px; gap: 8px; align-items: start; }
+.regnskap-linje > label { margin: 0; }
+.regnskap-linje label > input { margin-top: 0; }
+.regnskap-linje .felt-hjelp { margin-top: 3px; }
+.regnskap-linje input.tall { text-align: right; }
+.regnskap-linje.hode { color: var(--dempet); font-size: 0.8rem; font-weight: 600; }
+.regnskap-linje.sum { align-items: center; font-weight: 650; border-top: 1px solid var(--kant); padding-top: 8px; }
+.regnskap-linje.sum .tall { padding-right: 12px; }
+.regnskap-linje button.fjern { font-size: 0.84rem; padding-top: 10px; color: var(--dempet); }
+.regnskap-linje .smal-etikett { display: none; }
+.regnskap-diff { color: var(--advarsel); font-weight: 600; }
+.regnskap-saldobalanse tr.gruppe td { background: var(--flate-2); font-weight: 650; font-size: 0.86rem; color: var(--tekst-2); }
+.regnskap-saldobalanse tr.delsum td { font-weight: 600; border-top: 1px solid var(--kant); }
+.regnskap-saldobalanse tfoot td, table.regnskap-hovedbok tfoot td { font-weight: 650; }
+table.regnskap-hovedbok td.tall .lonn-art { text-align: right; }
+form .valg.valg-kolonne { flex-direction: column; align-items: flex-start; }
+form .valg.valg-kolonne label { align-items: flex-start; font-weight: 450; }
+form .valg.valg-kolonne input { margin-top: 3px; }
+@media (max-width: 700px) {
+  .regnskap-filter { padding: 12px 14px; }
+  .regnskap-filter > label, .regnskap-periode > label { flex: 1 1 140px; min-width: 0; }
+  .regnskap-linje { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "konto tekst" "debet kredit" "fjern fjern"; border-bottom: 1px solid var(--kant); padding-bottom: 8px; }
+  .regnskap-linje > .konto { grid-area: konto; }
+  .regnskap-linje > .tekst { grid-area: tekst; }
+  .regnskap-linje > .debet { grid-area: debet; }
+  .regnskap-linje > .kredit { grid-area: kredit; }
+  .regnskap-linje > button.fjern { grid-area: fjern; justify-self: end; padding-top: 0; }
+  .regnskap-linje .smal-etikett { display: block; font-size: 0.78rem; color: var(--dempet); font-weight: 600; margin-bottom: 3px; }
+  .regnskap-linje.hode { display: none; }
+  .regnskap-linje.sum { grid-template-areas: none; grid-template-columns: minmax(0, 1fr) auto auto; border-bottom: 0; }
+  .regnskap-linje.sum > span:empty { display: none; }
+  .regnskap-linje.sum > span:first-child { grid-column: 1 / -1; }
+}
 .regnskap-maaneder { margin: 16px 0; }
 .regnskap-maaneder summary { cursor: pointer; color: var(--aksent); font-weight: 550; margin-bottom: 8px; }
 form .valg { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 12px; }

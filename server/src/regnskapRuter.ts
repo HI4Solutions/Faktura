@@ -184,7 +184,7 @@ function reverseringMaks(a: Anleggsmiddel, hendelser: Hendelse[], dato: string) 
 
 // Avskrivningene som mangler til og med måneden, bokført måned for måned (et bilag per måned). Før
 // en avgang (bare): den siste måneden står på avgangsdatoen.
-async function bokforAvskrivninger(db: Db, org: string, til: string, bare?: { id: string; dato: string }) {
+export async function bokforAvskrivninger(db: Db, org: string, til: string, bare?: { id: string; dato: string }) {
   const { anlegg, hendelser } = await hentAnlegg(db, org);
   const k = regnskapskontoer(await hentRegnskapsoppsett(db, org));
   const forslag = avskrivningsforslag(bare ? anlegg.filter((a) => a.id === bare.id) : anlegg, hendelser, til);
@@ -461,24 +461,6 @@ export function regnskapRuter() {
       await bruk(c, async (db) => {
         await krev(db, orgId(c));
         return { bilag: await bokforAvskrivninger(db, orgId(c), b.til) };
-      }),
-      201,
-    );
-  });
-
-  // Reverserer et bilag for anleggsmidlene (det siste først).
-  r.post("/regnskap/bilag/:id/reverser", async (c) => {
-    const id = uuid.parse(c.req.param("id"));
-    const b = z.object({ tekst: z.string().trim().max(300).nullable().optional() }).parse(await c.req.json().catch(() => ({})));
-    return c.json(
-      await bruk(c, async (db) => {
-        await krev(db, orgId(c));
-        const ny = await en<{ id: string }>(db, "select faktura.reverser_anlegg($1, $2, $3) as id", [orgId(c), id, b.tekst ?? null]);
-        return (await en(
-          db,
-          "select id, serie || '-' || aar || '-' || nummer as bilagsnummer, to_char(dato, 'YYYY-MM-DD') as dato, tekst from faktura.bilag where id = $1",
-          [ny!.id],
-        ))!;
       }),
       201,
     );

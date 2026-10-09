@@ -1,12 +1,33 @@
-# Regnskap: anleggsmidler, avskrivninger og saldoavskrivninger
+# Regnskap: bilag, hovedbok, anleggsmidler, periodiseringer og saldoavskrivninger
 
-Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre).
-Første del er anleggsmidlene: anleggsregisteret med avskrivningsplanen over flere år (også
-goodwill), bokføringen av avskrivninger, nedskrivning, salg og utrangering, og de skattemessige
-saldoavskrivningene. Periodiseringer, manuelle bilag, hovedbok og saldobalanse kommer i neste del.
+Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
+bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
+hovedboken, anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
+avskrivninger, nedskrivning, salg og utrangering, periodiseringene over flere måneder og år,
+månedsavslutningen og de skattemessige saldoavskrivningene.
 
-Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap». Eier,
+Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap» med fanene
+Bilag, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
 administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer og les ser den ikke.
+
+## Bilagene og hovedboken
+
+- Et bilag har et nummer i en serie per år, en dato, en tekst og posteringer (konto og beløp,
+  positivt i debet og negativt i kredit) som går i null. Seriene: **L** lønn og refusjoner fra
+  NAV, **A** anleggsmidler, **P** periodiseringer og **M** manuelle bilag.
+- Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp.
+  Anleggsmidlene og periodiseringene reverseres det siste først. Et lønnsbilag reverseres ved å
+  åpne lønnskjøringen igjen, og en refusjon fra NAV ved å slette den (Lønn → Sykepenger).
+- **Manuelle bilag** (Regnskap → Bilag → «Nytt bilag»): linjer med konto (norsk standard
+  kontoplan, NS 4102), tekst og beløp i debet eller kredit, som må gå i null. Den inngående
+  balansen fra et tidligere regnskapssystem føres som et manuelt bilag på den første dagen:
+  eiendelene i debet, egenkapitalen og gjelden i kredit. Datoen kan ikke være fram i tid.
+- **Saldobalansen** for en periode: inngående saldo, debet, kredit og utgående saldo per konto,
+  gruppert etter kontoklassene. Balansekontoene (klasse 1 og 2) har saldoen fra starten;
+  resultatkontoene (klasse 3–8) begynner på null 1. januar. Resultatet fra tidligere år som ikke er
+  ført mot egenkapitalen (årsoppgjøret), står på en egen linje, så saldobalansen går i null.
+  Resultatet i perioden er inntektene minus kostnadene.
+- **Hovedboken** for en konto: inngående saldo, posteringene med bilaget og saldoen etter hver.
 
 ## Anleggsregisteret og avskrivningsplanen
 
@@ -41,6 +62,37 @@ administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer o
 - Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp, og det
   siste først. Kontoene kan endres under Regnskap → Kontoer (norsk standard kontoplan, NS 4102).
 
+## Periodiseringene (bilagserie P)
+
+Et beløp som gjelder flere måneder, fordeles likt på månedene (i øre, den siste tar resten) og
+bokføres måned for måned mellom en resultatkonto og en balansekonto:
+
+| Type | Eksempel | Hver måned | Balansekonto |
+|---|---|---|:-:|
+| Forskuddsbetalt kostnad | forsikring eller leie betalt for et år | kostnaden mot balansekontoen | 1700 |
+| Påløpt kostnad | bonus eller strøm som faktureres senere | kostnaden mot balansekontoen (fakturaen føres mot den når den kommer) | 2960 |
+| Uopptjent inntekt | årsabonnement fakturert på forskudd | inntekten fra balansekontoen | 2970 |
+| Opptjent, ikke fakturert inntekt | arbeid som faktureres senere | inntekten mot balansekontoen (fakturaen føres mot den) | 1530 |
+
+- Et forskudd har en **start** som fører beløpet til balansekontoen: bokføre fakturaen her (fra
+  leverandørgjeld, kundefordringer eller bank, med inngående eller utgående mva), flytte beløpet
+  fra resultatkontoen (fakturaen er ført der), eller ingen (beløpet er alt ført på
+  balansekontoen). Månedene bokføres først når starten er bokført; starten kan også bokføres
+  senere fra periodiseringen.
+- Endres antallet måneder, fordeles det som står igjen på månedene som er igjen. Når noe er
+  bokført, kan beløpet, den første måneden, kontoene og starten ikke endres (reverser bilagene
+  først), og antallet måneder ikke bli færre enn det som er bokført. En periodisering uten
+  bokføringer kan slettes.
+- Bilagene reverseres det siste først (starten når ingen måned er bokført). Et bilag fra
+  månedsavslutningen har månedens del for alle periodiseringene, og reverseres for alle.
+
+## Månedsavslutningen
+
+Avskrivningene og periodiseringene som ikke er bokført til og med en måned, bokføres samlet: et
+bilag per måned for avskrivningene (serie A) og et for periodiseringene (serie P), datert den siste
+dagen i måneden. Kortet står under Bilag, Anleggsmidler og Periodiseringer, og viser månedene som er
+over og ikke bokført; denne måneden kan bokføres når den er over (eller før).
+
 ## Saldoavskrivningene (skattemessig)
 
 Regnet fra registeret år for år (skatteloven kapittel 14), som grunnlag for saldoskjemaet i
@@ -74,15 +126,30 @@ næringsspesifikasjonen (rapporten «Saldoskjema» under Rapporter → Regnskap)
 - Kolonnen «Regnskap» viser den regnskapsmessige verdien ved årsslutt, og forskjellen er den
   midlertidige forskjellen (grunnlaget for utsatt skatt).
 
-## Kontroller
+## Rapportene
 
-Satsene, grensen på 15 000 kr, reglene for gevinst- og tapskontoen og behandlingen ved salg er lagt
-inn etter skatteloven slik den var kjent da modulen ble laget; kontroller dem mot Skatteetatens
-veiledning og skattemeldingen hvert år. Mva-justering for kapitalvarer (merverdiavgiftsloven
-kapittel 9) regnes ikke ut.
+Under Rapporter → Regnskap, som tabell, CSV og PDF, og på e-post til regnskapsføreren:
+Saldobalanse og Bilagsjournal (kan sendes hver måned), Hovedbok, Anleggsregister, Avskrivningsplan,
+Avskrivninger og avganger (kan sendes hver måned), Saldoskjema og Periodiseringer.
+
+## Kontroller og det som ikke er med ennå
+
+- Satsene, grensen på 15 000 kr, reglene for gevinst- og tapskontoen og behandlingen ved salg er
+  lagt inn etter skatteloven slik den var kjent da modulen ble laget; kontroller dem mot
+  Skatteetatens veiledning og skattemeldingen hvert år. Mva-justering for kapitalvarer
+  (merverdiavgiftsloven kapittel 9) regnes ikke ut.
+- Fakturaene og innbetalingene fra fakturadelen føres ikke i regnskapet ennå; salg og betalinger
+  føres med manuelle bilag til det kommer.
+- Perioder låses ikke: et bilag kan føres med en dato i en periode som er rapportert. Årsoppgjøret
+  (resultatet mot egenkapitalen, skatt) føres med et manuelt bilag.
 
 ## Kilder
 
+- Regnskapsloven § 4-1 (grunnleggende regnskapsprinsipper: opptjening og sammenstilling, grunnlaget
+  for periodiseringene): <https://lovdata.no/lov/1998-07-17-56/§4-1>
+- Bokføringsloven § 5 (spesifikasjoner av pliktig regnskapsrapportering: bokføringsspesifikasjon
+  og kontospesifikasjon, her bilagsjournalen og hovedboken) og § 13 (oppbevaring):
+  <https://lovdata.no/lov/2004-11-19-73/§5>
 - Regnskapsloven § 5-3 (avskrivning og nedskrivning av anleggsmidler):
   <https://lovdata.no/lov/1998-07-17-56/§5-3>
 - Skatteloven kapittel 14 (saldoavskrivning, §§ 14-40 til 14-48, og gevinst- og tapskonto):

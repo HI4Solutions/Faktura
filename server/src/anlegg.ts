@@ -42,7 +42,11 @@ export type Regnskapsrolle =
   | "leverandorgjeld"
   | "kundefordringer"
   | "inngaende_mva"
-  | "utgaende_mva";
+  | "utgaende_mva"
+  | "forskuddsbetalt_kostnad"
+  | "paalopt_kostnad"
+  | "uopptjent_inntekt"
+  | "opptjent_inntekt";
 export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: string }[] = [
   { rolle: "avskrivning_bygg", navn: "Avskrivning på bygninger og annen fast eiendom", standard: "6000" },
   { rolle: "avskrivning_driftsmidler", navn: "Avskrivning på transportmidler, maskiner og inventar", standard: "6010" },
@@ -55,6 +59,11 @@ export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: 
   { rolle: "kundefordringer", navn: "Kundefordringer", standard: "1500" },
   { rolle: "inngaende_mva", navn: "Inngående merverdiavgift", standard: "2710" },
   { rolle: "utgaende_mva", navn: "Utgående merverdiavgift", standard: "2700" },
+  // Periodiseringene (periodisering.ts): balansekontoene som foreslås.
+  { rolle: "forskuddsbetalt_kostnad", navn: "Forskuddsbetalt kostnad", standard: "1700" },
+  { rolle: "paalopt_kostnad", navn: "Påløpt kostnad", standard: "2960" },
+  { rolle: "uopptjent_inntekt", navn: "Uopptjent inntekt (forskuddsfakturert)", standard: "2970" },
+  { rolle: "opptjent_inntekt", navn: "Opptjent, ikke fakturert inntekt", standard: "1530" },
 ];
 export const REGNSKAPSROLLER = REGNSKAPSKONTOER.map((k) => k.rolle) as [Regnskapsrolle, ...Regnskapsrolle[]];
 

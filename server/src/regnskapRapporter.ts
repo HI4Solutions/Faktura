@@ -1,9 +1,13 @@
-// Regnskapet i rapportmodulen (rapportmodul.ts, modulen Regnskap): anleggsregisteret ved utgangen
-// av året, avskrivningsplanen over årene framover, det som er bokført for anleggsmidlene i perioden
-// (avskrivninger, nedskrivninger, anskaffelser og avganger), og saldoskjemaet med de skattemessige
-// avskrivningene. Eier, administrator og regnskap (funksjonen «Regnskap»).
+// Regnskapet i rapportmodulen (rapportmodul.ts, modulen Regnskap): saldobalansen, hovedboken og
+// bilagsjournalen (alle bilagene: lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og
+// manuelle bilag), anleggsregisteret ved utgangen av året, avskrivningsplanen over årene framover,
+// det som er bokført for anleggsmidlene i perioden (avskrivninger, nedskrivninger, anskaffelser og
+// avganger), saldoskjemaet med de skattemessige avskrivningene og periodiseringene. Eier,
+// administrator og regnskap (funksjonen «Regnskap»).
 import { aarsplan, avskrivningsplan, hentAnlegg, KATEGORIER, mnd, status, type Hendelse } from "./anlegg.js";
+import { hentRegnskapsbilag, hovedbok, KILDER, saldobalanse } from "./hovedbok.js";
 import { maanedNavn } from "./lonnsberegning.js";
+import { hentPeriodiseringer, PERIODISERINGSTYPER, sisteMaaned, status as periodiseringsstatus } from "./periodisering.js";
 import type { Rapportdef } from "./rapportmodul.js";
 import { hentSaldo } from "./regnskapRuter.js";
 
@@ -21,7 +25,116 @@ const HVA: Record<Hendelse["type"], string> = {
   avgang: "Avgang",
 };
 
+const kortMnd = (m: string) => `${m.slice(5, 7)}.${m.slice(0, 4)}`;
+
 export const regnskapRapporter: Rapportdef[] = [
+  {
+    id: "regnskap.saldobalanse",
+    modul: "regnskap",
+    navn: "Saldobalanse",
+    beskrivelse:
+      "Saldoen per konto: inngående saldo, debet og kredit i perioden og utgående saldo, fra alle bilagene (lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og manuelle bilag), med resultatet i perioden.",
+    funksjon: "regnskap",
+    tilgang: "regnskap",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      const s = await saldobalanse(db, org, v.fra, v.til);
+      const rader: Record<string, unknown>[] = s.rader.map((r) => ({ ...r }));
+      if (s.tidligere) rader.push({ konto: "", navn: "Resultat fra tidligere år (ikke ført mot egenkapitalen)", inngaende: s.tidligere, debet: 0, kredit: 0, utgaende: s.tidligere });
+      return {
+        merknad: [
+          `Resultatet i perioden: ${krTekst(Math.abs(s.resultat))} ${s.resultat >= 0 ? "i overskudd" : "i underskudd"}.`,
+          "Balansekontoene (klasse 1 og 2) har saldo fra starten; resultatkontoene (klasse 3–8) begynner på null 1. januar.",
+          v.fra.slice(0, 4) !== v.til.slice(0, 4) ? `Perioden går over et årsskifte: resultatkontoene er regnet fra 1. januar ${v.fra.slice(0, 4)}.` : "",
+          s.tidligere ? "Resultatet fra tidligere år som ikke er ført mot egenkapitalen (årsoppgjøret), står på en egen linje." : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        kolonner: [
+          { nokkel: "konto", navn: "Konto", type: "tekst" },
+          { nokkel: "navn", navn: "Kontonavn" },
+          { nokkel: "inngaende", navn: "Inngående", type: "kr", sum: true },
+          { nokkel: "debet", navn: "Debet", type: "kr", sum: true },
+          { nokkel: "kredit", navn: "Kredit", type: "kr", sum: true },
+          { nokkel: "utgaende", navn: "Utgående", type: "kr", sum: true },
+        ],
+        rader,
+      };
+    },
+  },
+  {
+    id: "regnskap.hovedbok",
+    modul: "regnskap",
+    navn: "Hovedbok",
+    beskrivelse: "Posteringene per konto i perioden med inngående saldo og saldoen etter hver postering, fra alle bilagene.",
+    funksjon: "regnskap",
+    tilgang: "regnskap",
+    parameter: "periode",
+    hent: async (db, org, v) => {
+      const kontoer = await hovedbok(db, org, v.fra, v.til);
+      const rader = kontoer.flatMap((k) => [
+        { konto: k.konto, navn: k.navn, dato: null, bilag: "", tekst: `${k.navn}: inngående saldo`, debet: null, kredit: null, saldo: k.inngaende },
+        ...k.poster.map((p) => ({ konto: k.konto, navn: k.navn, dato: p.dato, bilag: p.bilag, tekst: p.tekst || p.bilagstekst, debet: p.debet, kredit: p.kredit, saldo: p.saldo })),
+      ]);
+      return {
+        merknad: kontoer.length
+          ? `${kontoer.length} kontoer. Saldoen er debet minus kredit (negativ saldo er kredit). Resultatkontoene begynner på null 1. januar.`
+          : "Ingen posteringer eller saldoer i perioden.",
+        kolonner: [
+          { nokkel: "konto", navn: "Konto", type: "tekst" },
+          { nokkel: "navn", navn: "Kontonavn", pdf: false },
+          { nokkel: "dato", navn: "Dato", type: "dato" },
+          { nokkel: "bilag", navn: "Bilag" },
+          { nokkel: "tekst", navn: "Tekst" },
+          { nokkel: "debet", navn: "Debet", type: "kr", sum: true },
+          { nokkel: "kredit", navn: "Kredit", type: "kr", sum: true },
+          { nokkel: "saldo", navn: "Saldo", type: "kr" },
+        ],
+        rader,
+      };
+    },
+  },
+  {
+    id: "regnskap.bilagsjournal",
+    modul: "regnskap",
+    navn: "Bilagsjournal",
+    beskrivelse: "Alle bilagene i perioden med posteringene, i rekkefølgen dato og bilagsnummer: lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og manuelle bilag.",
+    funksjon: "regnskap",
+    tilgang: "regnskap",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      const bilag = await hentRegnskapsbilag(db, org, { fra: v.fra, til: v.til });
+      const rader = bilag.flatMap((b) =>
+        b.posteringer.map((p) => ({
+          dato: b.dato,
+          bilag: b.bilagsnummer,
+          kilde: KILDER[b.kilde] ?? b.kilde,
+          konto: p.konto,
+          navn: p.navn,
+          tekst: p.tekst || b.tekst,
+          debet: p.belop > 0 ? p.belop : null,
+          kredit: p.belop < 0 ? -p.belop : null,
+        })),
+      );
+      const reversert = bilag.filter((b) => b.reverserer || b.reversert_av).length;
+      return {
+        merknad: `${bilag.length} bilag. Serie L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, M: manuelle bilag.${reversert ? ` ${reversert} av bilagene er reversert eller reverseringer (de går mot hverandre).` : ""}`,
+        kolonner: [
+          { nokkel: "dato", navn: "Dato", type: "dato" },
+          { nokkel: "bilag", navn: "Bilag" },
+          { nokkel: "kilde", navn: "Kilde", pdf: false },
+          { nokkel: "konto", navn: "Konto", type: "tekst" },
+          { nokkel: "navn", navn: "Kontonavn" },
+          { nokkel: "tekst", navn: "Tekst" },
+          { nokkel: "debet", navn: "Debet", type: "kr", sum: true },
+          { nokkel: "kredit", navn: "Kredit", type: "kr", sum: true },
+        ],
+        rader,
+      };
+    },
+  },
   {
     id: "regnskap.anleggsregister",
     modul: "regnskap",
@@ -60,7 +173,7 @@ export const regnskapRapporter: Rapportdef[] = [
         });
       return {
         merknad: mangler.length
-          ? `Avskrivningene er ikke bokført for alle månedene til og med ${maanedNavn(`${sisteMnd}-01`)} for: ${mangler.join(", ")}. Bokfør dem under Regnskap → Anleggsmidler.`
+          ? `Avskrivningene er ikke bokført for alle månedene til og med ${maanedNavn(`${sisteMnd}-01`)} for: ${mangler.join(", ")}. Bokfør dem med månedsavslutningen under Regnskap → Anleggsmidler.`
           : "Verdiene er det som er bokført (avskrivningene måned for måned, nedskrivninger og avganger), og det som er avskrevet før anleggsmiddelet kom inn i HI4.",
         kolonner: [
           { nokkel: "nummer", navn: "Nr", type: "tekst" },
@@ -215,6 +328,65 @@ export const regnskapRapporter: Rapportdef[] = [
           { nokkel: "merknad", navn: "Merknad", pdf: false },
         ],
         rader: s.rader.map((r) => ({ ...r })),
+      };
+    },
+  },
+  {
+    id: "regnskap.periodiseringer",
+    modul: "regnskap",
+    navn: "Periodiseringer",
+    beskrivelse:
+      "Periodiseringene i perioden (forskuddsbetalte og påløpte kostnader, uopptjente og opptjente inntekter): beløpet, månedene, det som er fordelt i perioden og til og med perioden, og det som står igjen.",
+    funksjon: "regnskap",
+    tilgang: "regnskap",
+    parameter: "periode",
+    hent: async (db, org, v) => {
+      const { periodiseringer, poster } = await hentPeriodiseringer(db, org);
+      const [fraM, tilM] = [mnd(v.fra), mnd(v.til)];
+      const iDag = mnd(osloIDag());
+      const sisteMnd = tilM < iDag ? tilM : iDag;
+      const mangler: string[] = [];
+      const rader = periodiseringer.flatMap((p) => {
+        const mine = poster.filter((x) => x.periodisering_id === p.id && !x.reversert && x.type === "maaned");
+        const sum = (l: typeof mine) => rund(l.reduce((t, x) => t + x.belop, 0));
+        const fordelt = sum(mine.filter((x) => x.maaned! <= tilM));
+        const igjen = rund(p.belop - fordelt);
+        const slutt = sisteMaaned(p);
+        if (mnd(p.fra) > tilM || (slutt < fraM && igjen <= 0)) return [];
+        const s = periodiseringsstatus(p, poster);
+        if (s.neste && s.neste.maaned <= sisteMnd) mangler.push(`${p.navn} (nr. ${p.nummer})`);
+        return [
+          {
+            nummer: p.nummer,
+            navn: p.navn,
+            type: PERIODISERINGSTYPER[p.type].navn,
+            kontoer: `${p.resultatkonto} / ${p.balansekonto}`,
+            belop: p.belop,
+            maaneder: `${kortMnd(mnd(p.fra))}–${kortMnd(slutt)}`,
+            i_perioden: sum(mine.filter((x) => x.maaned! >= fraM && x.maaned! <= tilM)),
+            fordelt,
+            igjen,
+            status: s.ferdig ? "Ferdig" : s.neste ? `Neste: ${maanedNavn(`${s.neste.maaned}-01`)}` : "",
+          },
+        ];
+      });
+      return {
+        merknad: mangler.length
+          ? `Periodiseringene er ikke bokført for alle månedene til og med ${maanedNavn(`${sisteMnd}-01`)} for: ${mangler.join(", ")}. Bokfør dem med månedsavslutningen under Regnskap → Periodiseringer.`
+          : "Fordelt: det som er bokført måned for måned (bilagserie P). Kontoer: resultatkontoen / balansekontoen.",
+        kolonner: [
+          { nokkel: "nummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Periodisering" },
+          { nokkel: "type", navn: "Type", pdf: false },
+          { nokkel: "kontoer", navn: "Kontoer" },
+          { nokkel: "belop", navn: "Beløp", type: "kr", sum: true },
+          { nokkel: "maaneder", navn: "Måneder" },
+          { nokkel: "i_perioden", navn: "I perioden", type: "kr", sum: true },
+          { nokkel: "fordelt", navn: "Fordelt til og med", type: "kr", sum: true },
+          { nokkel: "igjen", navn: "Igjen", type: "kr", sum: true },
+          { nokkel: "status", navn: "Status" },
+        ],
+        rader,
       };
     },
   },
