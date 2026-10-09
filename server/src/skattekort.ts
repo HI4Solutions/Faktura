@@ -14,7 +14,7 @@
 import { alle, en, somSystem } from "./db.js";
 import { dekrypter } from "./kryptering.js";
 import { adresser, EtatFeil, etatKall, hentToken, SCOPE, systemId } from "./maskinporten.js";
-import { hentForesporsel, lagForesporsel, registrerSystem } from "./altinn.js";
+import { hentEndringsforesporsel, hentForesporsel, lagEndringsforesporsel, lagForesporsel, registrerSystem, tilgangspakker } from "./altinn.js";
 import { leggIKo } from "./tjenester.js";
 
 const logg = (severity: string, message: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ severity, message, ...data }));
@@ -203,18 +203,25 @@ type Tilgangsrad = {
   orgnr: string | null;
   epost: string | null;
   telefon: string | null;
+  pakker: string[];
+  endring_status: string | null;
+  endring_id: string | null;
+  endring_pakker: string[] | null;
 };
 
-const hentTilgang = (orgId: string) =>
+export const hentTilgang = (orgId: string) =>
   somSystem((db) =>
     en<Tilgangsrad>(
       db,
-      `select t.status, t.foresporsel_id, t.godkjenn_url, o.orgnr, o.epost, o.telefon
+      `select t.status, t.foresporsel_id, t.godkjenn_url, o.orgnr, o.epost, o.telefon, t.pakker, t.endring_status, t.endring_id, t.endring_pakker
          from faktura.skattekort_tilgang t join faktura.organisasjoner o on o.id = t.org_id
         where t.org_id = $1`,
       [orgId],
     ),
   );
+
+// Systembrukeren har tilgangspakken (godkjent i Altinn).
+export const harPakke = (t: Tilgangsrad | null | undefined, pakke: string) => t?.status === "godkjent" && t.pakker.includes(pakke);
 
 // Oppdaterer tilgangen (kolonnenavnene kommer fra koden). Bare når statusen er den forventede, så
 // en tilgang som er koblet fra eller bedt om på nytt i mellomtiden, ikke overskrives.
@@ -244,7 +251,14 @@ export async function lagTilgang(orgId: string) {
   const naa = new Date().toISOString();
   try {
     const f = await lagForesporsel(t.orgnr);
-    const ok = await oppdaterTilgang(orgId, ["venter"], { status: f.status, foresporsel_id: f.id, godkjenn_url: f.godkjennUrl, sjekket: naa, siste_feil: null });
+    const ok = await oppdaterTilgang(orgId, ["venter"], {
+      status: f.status,
+      foresporsel_id: f.id,
+      godkjenn_url: f.godkjennUrl,
+      sjekket: naa,
+      siste_feil: null,
+      pakker: tilgangspakker(),
+    });
     if (ok && f.status === "godkjent") await leggIKo({ type: "skattekort-hent", org_id: orgId, kilde: "godkjent" });
   } catch (e) {
     logg("WARNING", "Forespørselen om tilgang i Altinn feilet", { org_id: orgId, feil: melding(e) });
@@ -281,9 +295,42 @@ export async function sjekkTilgang(orgId: string) {
   }
 }
 
+// --- Endringen av tilgangen (flere tilgangspakker) ---------------------------------------------
+
+// Lager endringsforespørselen i Altinn for tilgangspakkene systemet trenger nå og systembrukeren
+// ikke har (appen har bedt om det), eller sjekker den som venter på godkjenning.
+export async function endreTilgang(orgId: string) {
+  const t = await hentTilgang(orgId);
+  if (!t || t.status !== "godkjent" || !t.orgnr || !t.endring_status) return;
+  const felt = async (x: Record<string, unknown>) =>
+    somSystem((db) => {
+      const k = Object.keys(x);
+      return db.query(`update faktura.skattekort_tilgang set ${k.map((y, i) => `${y} = $${i + 2}`).join(", ")} where org_id = $1`, [orgId, ...k.map((y) => x[y])]);
+    });
+  try {
+    if (t.endring_status === "venter") {
+      const mangler = tilgangspakker().filter((p) => !t.pakker.includes(p));
+      if (!mangler.length) return void (await felt({ endring_status: "godkjent", endring_feil: null }));
+      const f = await lagEndringsforesporsel(t.orgnr, mangler);
+      await felt({ endring_status: f.status, endring_id: f.id, endring_url: f.godkjennUrl, endring_pakker: mangler, endring_feil: null });
+      if (f.status === "godkjent") await felt({ pakker: [...new Set([...t.pakker, ...mangler])] });
+      return;
+    }
+    if (t.endring_status !== "ny" || !t.endring_id) return;
+    const f = await hentEndringsforesporsel(t.endring_id);
+    if (!f) return void (await felt({ endring_status: "utlopt", endring_feil: "Endringsforespørselen finnes ikke lenger i Altinn. Be om det på nytt." }));
+    await felt({ endring_status: f.status, endring_url: f.godkjennUrl, endring_feil: null });
+    if (f.status === "godkjent") await felt({ pakker: [...new Set([...t.pakker, ...(t.endring_pakker ?? [])])] });
+  } catch (e) {
+    logg("WARNING", "Endringen av tilgangen i Altinn feilet", { org_id: orgId, feil: melding(e) });
+    await felt({ endring_status: t.endring_status === "venter" ? "feil" : t.endring_status, endring_feil: melding(e) });
+  }
+}
+
 // Hvert minutt: forespørsler som venter på godkjenning i Altinn, sjekkes hvert andre minutt den
 // første timen og deretter hver halvtime (en forespørsel utløper etter en tid). En forespørsel
-// workeren ikke har fått laget (status venter), prøves igjen etter ti minutter.
+// workeren ikke har fått laget (status venter), prøves igjen etter ti minutter. Det samme gjelder
+// endringsforespørslene (flere tilgangspakker).
 export async function planleggTilgangssjekk(): Promise<number> {
   const rader = await somSystem((db) =>
     alle<{ org_id: string }>(
@@ -295,7 +342,17 @@ export async function planleggTilgangssjekk(): Promise<number> {
     ),
   );
   for (const r of rader) await leggIKo({ type: "skattekort-status", org_id: r.org_id });
-  return rader.length;
+  const endringer = await somSystem((db) =>
+    alle<{ org_id: string }>(
+      db,
+      `update faktura.skattekort_tilgang set sjekket = now()
+        where status = 'godkjent' and endring_status in ('venter', 'ny')
+          and (sjekket is null or sjekket < now() - case when endring_status = 'venter' then interval '10 minutes' else interval '2 minutes' end)
+       returning org_id`,
+    ),
+  );
+  for (const r of endringer) await leggIKo({ type: "altinn-endring", org_id: r.org_id });
+  return rader.length + endringer.length;
 }
 
 // --- Hentingen ----------------------------------------------------------------------------------

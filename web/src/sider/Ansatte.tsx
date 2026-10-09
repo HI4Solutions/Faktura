@@ -68,6 +68,11 @@ type Ansatt = {
   skattekort_utstedt: string | null;
   skattekort_tillegg: string[] | null;
   skattekort_trekk: Trekk[] | null;
+  // Arbeidsforholdet i a-meldingen (0077_amelding.sql).
+  yrkeskode: string | null;
+  arbeidsforhold_type: string;
+  arbeidstidsordning: string;
+  aarsak_sluttdato: string | null;
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -77,6 +82,28 @@ type Ansatt = {
 type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"; fra: string | null; til: string | null };
 
 const ansettelsestype: Record<string, string> = { fast: "Fast", midlertidig: "Midlertidig", tilkalling: "Tilkalling" };
+// Kodene i a-meldingen (0077_amelding.sql).
+const ARBEIDSFORHOLD: Record<string, string> = {
+  ordinaertArbeidsforhold: "Ordinært arbeidsforhold",
+  maritimtArbeidsforhold: "Maritimt arbeidsforhold",
+  frilanserOppdragstakerHonorarPersonerMm: "Frilanser, oppdragstaker eller honorar",
+};
+const ARBEIDSTID: Record<string, string> = {
+  ikkeSkift: "Ikke skift",
+  andreSkift: "Andre skift",
+  skift365: "Skift (36,5 t)",
+  doegnkontinuerligSkiftOgTurnus355: "Døgnkontinuerlig skift og turnus (35,5 t)",
+  helkontinuerligSkiftOgAndreOrdninger336: "Helkontinuerlig skift og andre ordninger (33,6 t)",
+  offshore336: "Offshore (33,6 t)",
+};
+const SLUTTAARSAK: Record<string, string> = {
+  arbeidstakerHarSagtOppSelv: "Den ansatte har sagt opp selv",
+  arbeidsgiverHarSagtOppArbeidstaker: "Arbeidsgiveren har sagt opp den ansatte",
+  kontraktEngasjementEllerVikariatErUtloept: "Kontrakt, engasjement eller vikariat er utløpt",
+  byttetLoenssystemEllerRegnskapsfoerer: "Byttet lønnssystem eller regnskapsfører",
+  endringIOrganisasjonsstrukturEllerByttetJobbInternt: "Endret organisasjon eller byttet jobb internt",
+  arbeidsforholdetSkulleAldriVaertRapportert: "Arbeidsforholdet skulle aldri vært rapportert",
+};
 // De som har en rolle for dem som ikke er ansatt (f.eks. leger som er aksjonærer), er med i
 // vaktplanen, på tavla og i kalenderen, men ikke i lønn, feriebank og arbeidsmiljølovens advarsler.
 const erAnsatt = (a: Pick<Ansatt, "arbeidstaker">) => a.arbeidstaker !== false;
@@ -352,6 +379,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     skatt_frikort: tekstTall(ansatt.skatt_frikort),
     skattekort_aar: String(ansatt.skattekort_aar ?? iDag().slice(0, 4)),
     biarbeidsgiver: ansatt.biarbeidsgiver ?? false,
+    yrkeskode: ansatt.yrkeskode ?? "",
+    arbeidsforhold_type: ansatt.arbeidsforhold_type ?? "ordinaertArbeidsforhold",
+    arbeidstidsordning: ansatt.arbeidstidsordning ?? "ikkeSkift",
+    aarsak_sluttdato: ansatt.aarsak_sluttdato ?? "",
   }));
   // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
   const oppsett = useData(() => hent<{ bursdag_varsel: string; full_stilling: number; ferie_dager: number }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
@@ -544,6 +575,11 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       kropp.skatt_frikort = k === "frikort" && a.skatt_frikort.trim() ? tall(a.skatt_frikort) : null;
       kropp.skattekort_aar = k && a.skattekort_aar.trim() ? Number(a.skattekort_aar) : null;
       kropp.biarbeidsgiver = a.biarbeidsgiver;
+      // Arbeidsforholdet i a-meldingen.
+      kropp.yrkeskode = a.yrkeskode.replace(/\s/g, "") || null;
+      kropp.arbeidsforhold_type = a.arbeidsforhold_type;
+      kropp.arbeidstidsordning = a.arbeidstidsordning;
+      kropp.aarsak_sluttdato = a.ansatt_til && a.aarsak_sluttdato ? a.aarsak_sluttdato : null;
     }
     // Fødselsnummeret sendes bare når det er skrevet inn eller skal fjernes; ellers fødselsdatoen.
     if (a.fjernFnr) kropp.fnr = null;
@@ -993,6 +1029,54 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                   : "Med koblingen til Skatteetaten (Innstillinger → Ansatte og timer) hentes skattekortet av seg selv når fødselsnummeret er registrert."}
               </p>
               {ansatt.id && <SkattekortFraSkatteetaten a={ansatt as Ansatt} />}
+              <h3>A-melding</h3>
+              <div className="rad">
+                <label>
+                  Yrkeskode
+                  <input inputMode="numeric" maxLength={9} placeholder="7 siffer" {...felt("yrkeskode")} />
+                  <span className="felt-hjelp">
+                    SSBs yrkeskode (STYRK-08), 7 siffer.{" "}
+                    <a href="https://www.ssb.no/klass/klassifikasjoner/7" target="_blank" rel="noreferrer">
+                      Finn koden hos SSB
+                    </a>
+                  </span>
+                </label>
+                <label>
+                  Arbeidstidsordning
+                  <select {...felt("arbeidstidsordning")}>
+                    {Object.entries(ARBEIDSTID).map(([v, t]) => (
+                      <option key={v} value={v}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="rad">
+                <label>
+                  Type arbeidsforhold
+                  <select {...felt("arbeidsforhold_type")}>
+                    {Object.entries(ARBEIDSFORHOLD).map(([v, t]) => (
+                      <option key={v} value={v}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {a.ansatt_til && (
+                  <label>
+                    Årsak til sluttdatoen
+                    <select {...felt("aarsak_sluttdato")}>
+                      <option value="">Velg årsak</option>
+                      {Object.entries(SLUTTAARSAK).map(([v, t]) => (
+                        <option key={v} value={v}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
             </>
           )}
           </>

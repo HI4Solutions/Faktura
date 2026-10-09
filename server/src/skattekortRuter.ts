@@ -12,7 +12,7 @@ import { alle, en, somBetrodd, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { krevMfa } from "./auth.js";
 import { skattekortSattOpp, systemId } from "./maskinporten.js";
-import { godkjentUrl, TILGANGSPAKKE } from "./altinn.js";
+import { godkjentUrl, PAKKENAVN, TILGANGSPAKKE, tilgangspakker } from "./altinn.js";
 import { leggIKo } from "./tjenester.js";
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
@@ -29,10 +29,20 @@ type Tilgang = {
   sjekket: string | null;
   sist_hentet: string | null;
   siste_feil: string | null;
+  // Tilgangspakkene systembrukeren har, og endringsforespørselen når systemet trenger flere (0077).
+  pakker: string[];
+  endring_status: string | null;
+  endring_url: string | null;
+  endring_feil: string | null;
 };
 
 const hentTilgang = (db: Db, org: string) =>
-  en<Tilgang>(db, "select status, godkjenn_url, opprettet, oppdatert, sjekket, sist_hentet, siste_feil from faktura.skattekort_tilgang where org_id = $1", [org]);
+  en<Tilgang>(
+    db,
+    `select status, godkjenn_url, opprettet, oppdatert, sjekket, sist_hentet, siste_feil, pakker, endring_status, endring_url, endring_feil
+       from faktura.skattekort_tilgang where org_id = $1`,
+    [org],
+  );
 
 async function status(db: Db, org: string) {
   const aar = iAar();
@@ -52,7 +62,16 @@ async function status(db: Db, org: string) {
     miljo: config.skatteetatenMiljo,
     systemnavn: config.altinnSystemnavn,
     aar,
-    tilgang: tilgang ? { ...tilgang, godkjenn_url: tilgang.status === "ny" ? tilgang.godkjenn_url : null } : null,
+    tilgang: tilgang
+      ? {
+          ...tilgang,
+          godkjenn_url: tilgang.status === "ny" ? tilgang.godkjenn_url : null,
+          endring_url: tilgang.endring_status === "ny" ? tilgang.endring_url : null,
+          // Tilgangspakkene systemet trenger nå og systembrukeren ikke har (be om å utvide tilgangen).
+          mangler: tilgang.status === "godkjent" ? tilgangspakker().filter((p) => !tilgang.pakker.includes(p)).map((p) => PAKKENAVN[p] ?? p) : [],
+          pakkenavn: tilgang.pakker.map((p) => PAKKENAVN[p] ?? p),
+        }
+      : null,
     antall,
   };
 }
@@ -89,7 +108,21 @@ export function skattekortRuter() {
     });
     const nylig = t?.sjekket && Date.now() - Date.parse(String(t.sjekket)) < 5000;
     if (t && (t.status === "ny" || t.status === "venter") && !nylig) await leggIKo({ type: "skattekort-status", org_id: orgId(c) });
-    return c.json({ ok: true, sjekkes: Boolean(t && (t.status === "ny" || t.status === "venter")) });
+    const endring = t?.status === "godkjent" && (t.endring_status === "ny" || t.endring_status === "venter");
+    if (endring && !nylig) await leggIKo({ type: "altinn-endring", org_id: orgId(c) });
+    return c.json({ ok: true, sjekkes: Boolean(t && (t.status === "ny" || t.status === "venter")) || endring });
+  });
+
+  // Utvid tilgangen i Altinn med tilgangspakkene systemet trenger nå (f.eks. «A-ordningen» for
+  // a-meldingen): workeren lager endringsforespørselen, og daglig leder godkjenner den.
+  r.post("/skattekort/utvid", async (c) => {
+    krevMfa(c);
+    const s = await bruk(c, async (db) => {
+      await db.query("select faktura.be_om_utvidet_tilgang($1)", [orgId(c)]);
+      return status(db, orgId(c));
+    });
+    await leggIKo({ type: "altinn-endring", org_id: orgId(c) });
+    return c.json(s);
   });
 
   // Hent skattekortene til alle de ansatte nå (for året, eller neste år i desember).
@@ -133,6 +166,8 @@ export function skattekortAdminRuter() {
           system_id: systemId(),
           systemnavn: config.altinnSystemnavn,
           tilgangspakke: TILGANGSPAKKE,
+          tilgangspakker: tilgangspakker().map((p) => PAKKENAVN[p] ?? p),
+          amelding: config.ameldingInnsending,
           tilbake_url: godkjentUrl(),
         },
         system: (await en(db, "select id, registrert, oppdatert, siste_feil from faktura.altinn_system where id = $1", [systemId()])) ?? null,

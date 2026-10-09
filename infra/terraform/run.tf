@@ -43,6 +43,7 @@ locals {
     LEVERANDOR_ORGNR       = var.leverandor_orgnr
     ALTINN_SYSTEMNAVN      = var.altinn_systemnavn
     ALTINN_SYSTEM_ID       = var.altinn_system_id
+    AMELDING_INNSENDING    = var.amelding_innsending ? "1" : ""
   } : k => v if v != "" }
 }
 

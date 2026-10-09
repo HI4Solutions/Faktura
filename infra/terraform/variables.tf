@@ -129,6 +129,12 @@ variable "maskinporten_klient_id" {
   default     = ""
 }
 
+variable "amelding_innsending" {
+  description = "A-meldingen sendes til Skatteetatens API (Medinnova AS har fått scopet skatteetaten:innrapporteringamelding), og systemet i Altinn ber om tilgangspakken «A-ordningen». Settes med GitHub-variabelen AMELDING_INNSENDING (true)."
+  type        = bool
+  default     = false
+}
+
 variable "maskinporten_nokkel_id" {
   description = "Nøkkel-ID-en (kid) til nøkkelen på Maskinporten-klienten. Settes med GitHub-variabelen MASKINPORTEN_NOKKEL_ID."
   type        = string

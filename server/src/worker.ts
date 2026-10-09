@@ -14,7 +14,8 @@ import { oppdaterEhfKoblinger, sendSomEhf, sjekkEhfLevering } from "./ehfSending
 import { fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, slettBankOkter } from "./bank.js";
 import { sendPaaminnelser } from "./paaminnelser.js";
 import { sendBursdager } from "./bursdager.js";
-import { hentSkattekort, hentSkattekortSvar, lagTilgang, planleggDagligSkattekort, planleggTilgangssjekk, registrerAltinnSystem, sjekkTilgang } from "./skattekort.js";
+import { endreTilgang, hentSkattekort, hentSkattekortSvar, lagTilgang, planleggDagligSkattekort, planleggTilgangssjekk, registrerAltinnSystem, sjekkTilgang } from "./skattekort.js";
+import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingInnsending.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
@@ -158,6 +159,9 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
     return void (await hentSkattekort(o.org_id, { ansattIder: o.ansatt_ider, daglig: o.daglig, aar: o.aar, kilde: o.kilde }));
   if (o.type === "skattekort-svar") return hentSkattekortSvar(o.org_id, o.referanse, o.aar, o.forsok);
   if (o.type === "altinn-system") return void (await registrerAltinnSystem());
+  if (o.type === "altinn-endring") return endreTilgang(o.org_id);
+  if (o.type === "amelding-lag") return lagAmelding(o.org_id, o.amelding_id);
+  if (o.type === "amelding-status") return sjekkAmelding(o.org_id, o.amelding_id, o.forsok);
   if (o.type === "rapport-send") return sendRapporter(o);
   return sendEpost(o);
 }
@@ -602,7 +606,8 @@ export function lagWorker() {
   // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag henter fra banken på de faste
   // hentetidene (planleggingen tar hver hentetid én gang per bank), sjekker nye kunder for
   // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker
-  // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn.
+  // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
+  // a-meldingene som venter på tilbakemelding.
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
@@ -610,6 +615,7 @@ export function lagWorker() {
     await planleggBankhenting().catch((e) => logg("ERROR", "Planlegging av bankhenting feilet", { feil: (e as Error).message }));
     await oppdaterEhf(10, { nye: true }).catch((e) => logg("ERROR", "EHF-oppslag for nye kunder feilet", { feil: (e as Error).message }));
     await planleggTilgangssjekk().catch((e) => logg("ERROR", "Sjekk av tilgangene i Altinn feilet", { feil: (e as Error).message }));
+    await planleggAmeldingssjekk().catch((e) => logg("ERROR", "Sjekk av a-meldingene feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));

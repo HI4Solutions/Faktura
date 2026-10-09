@@ -82,6 +82,11 @@ export type Oppgave =
   | { type: "skattekort-hent"; org_id: string; ansatt_ider?: string[]; daglig?: boolean; aar?: number; kilde?: "godkjent" | "manuell" | "automatisk" | "ansatt" }
   | { type: "skattekort-svar"; org_id: string; referanse: string; aar: number; forsok: number }
   | { type: "altinn-system" }
+  // Flere tilgangspakker for systembrukeren i Altinn (endringsforespørselen).
+  | { type: "altinn-endring"; org_id: string }
+  // A-meldingen: fila (XML) eller innsendingen til Skatteetaten, og tilbakemeldingen.
+  | { type: "amelding-lag"; org_id: string; amelding_id: string }
+  | { type: "amelding-status"; org_id: string; amelding_id: string; forsok?: number }
   // Rapportmodulen: rapporter (CSV og PDF) på e-post til regnskapsføreren.
   | {
       type: "rapport-send";

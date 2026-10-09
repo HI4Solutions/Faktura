@@ -44,6 +44,8 @@ jobs:
       TF_VAR_leverandor_orgnr: ${{ vars.LEVERANDOR_ORGNR || '936564046' }}
       TF_VAR_altinn_systemnavn: ${{ vars.ALTINN_SYSTEMNAVN || 'HI4 Faktura' }}
       TF_VAR_altinn_system_id: ${{ vars.ALTINN_SYSTEM_ID }}
+      # A-meldingen til Skatteetatens API (docs/amelding.md): av til scopet er godkjent.
+      TF_VAR_amelding_innsending: ${{ vars.AMELDING_INNSENDING || 'false' }}
     steps:
       - uses: actions/checkout@v4
 

@@ -629,6 +629,27 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (`ADMIN_EPOSTER`) e-post på mandager fra 10. desember om tabellene for neste år og i januar
   om årets, så lenge de mangler og en organisasjon med lønn har en ansatt med tabelltrekk
   (`trekktabeller_mangler`, `server/src/trekktabeller.ts`); Administrasjon → Drift viser det også
+- A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
+  `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
+  2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen
+  etter beskrivelsen i a-meldingen, forskuddstrekket per person og per utbetalingsdato, og
+  arbeidsgiveravgiften per sone og sats, med OTP-premien for seg) og arbeidsforholdene som er
+  aktive i måneden, også uten lønn. Arbeidsforholdet står på den ansatte (`yrkeskode`,
+  `arbeidsforhold_type`, `arbeidstidsordning`, `aarsak_sluttdato`; `siste_lonnsendring` og
+  `siste_stillingsendring` settes av triggeren `ansatt_endringsdatoer`), virksomheten
+  (underenheten) og pensjonsinnretningen i `lonn_oppsett`. Kontrollen (`kontroller`) stopper
+  meldingen når fødselsnummer, yrkeskode, virksomhet eller pensjonsinnretning mangler, og
+  advarer om utkast, sluttdato uten årsak og permisjon over 14 dager. Eier og administrator
+  bestiller (`bestill_amelding`, med totrinn): en ny melding erstatter den siste som er levert
+  for måneden (`erstatter`), og en måned som venter, får ikke en ny. Bare workeren skriver
+  `ameldinger` og leser fødselsnumrene: den lager fila (XML i bøtta, lenke i fem minutter) eller
+  sender JSON-en til Skatteetatens API med en idempotensnøkkel, og henter tilbakemeldingen fra
+  Dialogporten og Skatteetaten (første gang etter to minutter, så sjeldnere; hjerteslaget tar
+  dem som ikke er sjekket på en halvtime i en uke). Status: lages, klar, levert (fila er merket
+  som lastet opp, `amelding_levert`), sendt, mottatt, avvist eller feil; eier og administrator
+  får varsel. Innsendingen er av til `AMELDING_INNSENDING` er satt; da ber systemet i Altinn også
+  om tilgangspakken «A-ordningen», og kunder som er koblet til, utvider tilgangen med en
+  endringsforespørsel (`be_om_utvidet_tilgang`, `skattekort_tilgang.pakker` og `endring_*`)
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -693,6 +714,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Slette andres beskjeder | ✓ | ✓ | | | | |
 | Se lønnskjøringene og alle lønnsslippene, og laste ned betalingsfila | ✓ | ✓ | | ✓ | | |
 | Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
+| Se a-meldingene (månedene, grunnlaget og avvikene) | ✓ | ✓ | | ✓ | | |
+| Lage og sende a-meldingen, laste ned fila og merke den som lastet opp | ✓ | ✓ | | | | |
 | Se egne lønnsslipper og egen årsoversikt (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Se årsoversiktene til alle, og laste dem ned | ✓ | ✓ | | ✓ | | |
 | Varsle de ansatte om årsoversikten | ✓ | ✓ | | | | |
@@ -820,8 +843,9 @@ og hastighetsgrenser i API-et.
       Skatteetatens trekktabeller, prosent eller frikort), feriepenger og ferietrekk, OTP,
       arbeidsgiveravgift per sone, sykepenger i arbeidsgiverperioden, sluttoppgjør,
       godkjenning med låsing og lønnsslipp som PDF
-   4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og
-      arbeidsgiveravgift, feriepengeliste og ~~årsoversikt for den ansatte~~ (ferdig). ~~Skattekort fra
+   4. Rapportering: ~~a-melding~~ (ferdig: fil til opplasting på skatteetaten.no, og innsending
+      til Skatteetatens API med systembruker når tilgangen er gitt), ~~oversikt over skattetrekk og
+      arbeidsgiveravgift, feriepengeliste og årsoversikt for den ansatte~~ (ferdig). ~~Skattekort fra
       Skatteetaten~~ Ferdig (systembruker i Altinn; slås på når Maskinporten er satt opp).
       OTP rapporteres i a-meldingen med pensjonsinnretningens organisasjonsnummer
    5. Utbetaling: ~~betalingsfil (pain.001) til nettbanken~~ (ferdig), direkte bankintegrasjon senere

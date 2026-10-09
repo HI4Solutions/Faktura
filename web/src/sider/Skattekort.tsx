@@ -23,6 +23,12 @@ export type SkattekortStatus = {
     sjekket: string | null;
     sist_hentet: string | null;
     siste_feil: string | null;
+    // Tilgangspakkene systembrukeren har, de som mangler, og endringsforespørselen (0077).
+    pakkenavn: string[];
+    mangler: string[];
+    endring_status: Tilgangsstatus | null;
+    endring_url: string | null;
+    endring_feil: string | null;
   };
   antall: { med_fnr: number; fra_skatteetaten: number; uten_fnr: number };
 };
@@ -79,20 +85,21 @@ export function SkattekortKobling() {
   const [kopiert, settKopiert] = useState(false);
   const admin = erAdmin(org?.rolle);
   const t = s.data?.tilgang;
-  const venter = t?.status === "venter" || t?.status === "ny" || henter !== null;
+  const endres = t?.status === "godkjent" && (t.endring_status === "venter" || t.endring_status === "ny");
+  const venter = t?.status === "venter" || t?.status === "ny" || henter !== null || endres;
 
   // Mens forespørselen lages eller venter på godkjenning, og mens skattekortene hentes: spør igjen.
   const last = useRef(s.last);
   last.current = s.last;
   useEffect(() => {
     if (!venter) return;
-    const i = window.setInterval(() => void last.current(), t?.status === "ny" ? 10_000 : 2500);
+    const i = window.setInterval(() => void last.current(), t?.status === "ny" || t?.endring_status === "ny" ? 10_000 : 2500);
     const slutt = window.setTimeout(() => settHenter(null), 150_000);
     return () => {
       window.clearInterval(i);
       window.clearTimeout(slutt);
     };
-  }, [venter, t?.status]);
+  }, [venter, t?.status, t?.endring_status]);
   useEffect(() => {
     if (henter !== null && t && (t.sist_hentet ?? "") !== henter) settHenter(null);
     if (henter !== null && t?.siste_feil) settHenter(null);
@@ -114,6 +121,10 @@ export function SkattekortKobling() {
   const hentNa = async (aar?: number) => {
     const r = await h.kjor(() => api("POST", `/org/${org!.id}/skattekort/hent`, aar ? { aar } : {}));
     if (r) settHenter(t?.sist_hentet ?? "");
+  };
+  const utvid = async () => {
+    const r = await h.kjor(() => api<SkattekortStatus>("POST", `/org/${org!.id}/skattekort/utvid`));
+    if (r) s.settData(r);
   };
   const kobleFra = async () => {
     if (!window.confirm("Koble fra Skatteetaten? Skattekortene som er hentet, blir stående på de ansatte, men hentes ikke lenger.")) return;
@@ -231,6 +242,37 @@ export function SkattekortKobling() {
             )}
           </p>
           {t.siste_feil && <p className="liten fare-tekst">Siste henting feilet: {t.siste_feil}</p>}
+          <p className="liten dempet">Tilgangspakker i Altinn: {t.pakkenavn.join(", ")}.</p>
+          {(t.mangler.length > 0 || endres) && (
+            <div className="melding info">
+              {t.endring_status === "venter" ? (
+                <>
+                  <span className="spinner" /> Lager endringsforespørselen i Altinn …
+                </>
+              ) : t.endring_status === "ny" ? (
+                <>
+                  Endringen venter på godkjenning i Altinn (tilgangspakken {t.mangler.map((m) => `«${m}»`).join(" og ")}).{" "}
+                  {t.endring_url && (
+                    <a className="lenke" href={t.endring_url}>
+                      Godkjenn i Altinn
+                    </a>
+                  )}
+                </>
+              ) : (
+                <>
+                  {d.systemnavn} trenger også tilgangspakken {t.mangler.map((m) => `«${m}»`).join(" og ")} (for a-meldingen). Daglig leder godkjenner det i Altinn.
+                  {t.endring_feil && <span className="fare-tekst"> {t.endring_feil}</span>}
+                  {admin && (
+                    <div className="knapper">
+                      <button type="button" className="primar" onClick={utvid} disabled={h.opptatt}>
+                        Utvid tilgangen i Altinn
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
           {admin && (
             <div className="knapper">
               <button type="button" onClick={() => hentNa()} disabled={h.opptatt || henter !== null}>
@@ -344,7 +386,19 @@ export function SkattekortFraSkatteetaten({ a }: { a: { skattekort_kilde: string
 // --- Admin → Drift ------------------------------------------------------------------------------
 
 type AdminSkattekort = {
-  oppsett: { miljo: string; klient_id: boolean; nokkel_id: boolean; leverandor_orgnr: string; system_id: string; systemnavn: string; tilgangspakke: string; tilbake_url: string };
+  oppsett: {
+    miljo: string;
+    klient_id: boolean;
+    nokkel_id: boolean;
+    leverandor_orgnr: string;
+    system_id: string;
+    systemnavn: string;
+    tilgangspakke: string;
+    // Tilgangspakkene systemet ber om, og om a-meldingen sendes til API-et (AMELDING_INNSENDING).
+    tilgangspakker: string[];
+    amelding: boolean;
+    tilbake_url: string;
+  };
   system: { id: string; registrert: string | null; oppdatert: string; siste_feil: string | null } | null;
   organisasjoner: { status: Tilgangsstatus; antall: number }[];
 };
@@ -396,7 +450,13 @@ export function SkattekortOppsett() {
                 : "Systemet er ikke registrert i Altinn ennå."}
           </p>
           <p className="liten dempet">
-            Tilgangspakke {o.tilgangspakke}, tilbake til {o.tilbake_url}. Registreringen oppdaterer også navnet og klient-ID-en.
+            Tilgangspakker: {o.tilgangspakker.join(", ")}. Tilbake til {o.tilbake_url}. Registreringen oppdaterer også navnet, klient-ID-en og tilgangspakkene.
+          </p>
+          <p className="liten dempet">
+            A-meldingen:{" "}
+            {o.amelding
+              ? "sendes til Skatteetatens API (AMELDING_INNSENDING er på). Kundene som har koblet til, utvider tilgangen i Altinn fra innstillingene."
+              : "som fil til opplasting på skatteetaten.no. Innsending fra appen slås på med AMELDING_INNSENDING (se docs/amelding.md)."}
           </p>
           <div className="knapper">
             <button

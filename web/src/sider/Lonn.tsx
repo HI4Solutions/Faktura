@@ -5,8 +5,9 @@
 // lønnsslippen. Regnskap ser kjøringene. De ansatte ser sine egne lønnsslipper («Mine
 // lønnsslipper»).
 //
-// Fanen står i adressen (?fane=kjoringer|aar|mine), kjøringen som er åpen med ?kjoring=, og året
-// for årsoversikten med ?aar= (LonnAar.tsx).
+// Fanen står i adressen (?fane=kjoringer|amelding|aar|mine), kjøringen som er åpen med ?kjoring=,
+// måneden i a-meldingen med ?maaned= (LonnAmelding.tsx), og året for årsoversikten med ?aar=
+// (LonnAar.tsx).
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent, lastNed } from "../api";
@@ -16,6 +17,7 @@ import { dato, iDag, kr } from "../format";
 import { IkonLonn, IkonPluss, IkonVarsel, IkonVenstre } from "../ikoner";
 import { apnePdf, maaned } from "../lonn";
 import { Aarsoversikter, MineAarsoversikter } from "./LonnAar";
+import { Ameldinger } from "./LonnAmelding";
 
 export interface Linje {
   id: string;
@@ -144,10 +146,12 @@ export function Lonn() {
   const leder = !erAnsatt(org?.rolle) && kanSePersonal(org?.rolle);
   const egen = !!org?.ansatt_id;
   const faner: [string, string][] = [];
-  if (leder) faner.push(["kjoringer", "Lønnskjøringer"], ["aar", "Årsoversikt"]);
+  if (leder) faner.push(["kjoringer", "Lønnskjøringer"], ["amelding", "A-melding"], ["aar", "Årsoversikt"]);
   if (egen) faner.push(["mine", "Mine lønnsslipper"]);
   const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? faner[0]?.[0] ?? null;
   const kjoring = sok.get("kjoring");
+  // Kjøringen og måneden i a-meldingen har sin egen overskrift og lenke tilbake.
+  const detalj = (fane === "kjoringer" && !!kjoring) || (fane === "amelding" && !!sok.get("maaned"));
   const ga = (endring: Record<string, string | null>) => {
     const p = new URLSearchParams(sok);
     for (const [k, v] of Object.entries(endring)) {
@@ -177,7 +181,7 @@ export function Lonn() {
 
   return (
     <>
-      {!(fane === "kjoringer" && kjoring) && (
+      {!detalj && (
         <>
           <div className="topp">
             <h1>{leder ? "Lønn" : "Lønnsslipper"}</h1>
@@ -185,7 +189,7 @@ export function Lonn() {
           {faner.length > 1 && (
             <div className="faner tett" role="tablist">
               {faner.map(([v, t]) => (
-                <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga({ fane: v, kjoring: null, aar: null })}>
+                <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga({ fane: v, kjoring: null, aar: null, maaned: null })}>
                   {t}
                 </button>
               ))}
@@ -194,6 +198,7 @@ export function Lonn() {
         </>
       )}
       {fane === "kjoringer" && (kjoring ? <KjoringSide id={kjoring} tilbake={() => ga({ kjoring: null })} /> : <Kjoringer apne={(id) => ga({ kjoring: id })} />)}
+      {fane === "amelding" && <Ameldinger />}
       {fane === "aar" && <Aarsoversikter />}
       {fane === "mine" && <MineSlipper />}
     </>

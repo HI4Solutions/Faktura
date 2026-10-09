@@ -10,7 +10,8 @@ Funksjonen er skjult til klient-ID-en til Maskinporten er satt (GitHub-variabele
 ## Slik virker det
 
 1. Medinnova har én klient i Maskinporten og ett system i Altinns systemregister (system-ID
-   `936564046_lonn`, tilgangspakken «Lønn», `urn:altinn:accesspackage:lonn`).
+   `936564046_lonn`, tilgangspakken «Lønn», `urn:altinn:accesspackage:lonn`). Når a-meldingen
+   sendes fra appen, ber systemet også om «A-ordningen» (se [amelding.md](amelding.md)).
 2. Kunden trykker «Koble til Skatteetaten» under Innstillinger → Ansatte og timer. Appen lager en
    forespørsel om systemtilgang i Altinn, og daglig leder (eller den som har tilgangsstyring i
    Altinn) godkjenner den. Altinn sender brukeren tilbake til `<APP_URL>/skattekort/godkjent`.

@@ -182,6 +182,14 @@ function egenmeldingsregler(o: { egenmelding: Egenmeldingsordning; egenmelding_d
 function PersonalOppsett() {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
+  // Virksomhetene (underenhetene) i Enhetsregisteret, til a-meldingen.
+  const virksomheter = useData(
+    () =>
+      harFunksjon(org, "lonn")
+        ? hent<{ orgnr: string; navn: string; adresse: string | null }[]>(`/org/${org!.id}/amelding-virksomheter`).catch(() => [])
+        : Promise.resolve([] as { orgnr: string; navn: string; adresse: string | null }[]),
+    [org?.id],
+  );
   const [o, settO] = useState<{
     aktiv: boolean;
     daglig_grense: string;
@@ -202,6 +210,8 @@ function PersonalOppsett() {
     lonnskonto: string;
     bank_bic: string;
     betalingsfil_format: "pain.001.001.03" | "pain.001.001.09";
+    virksomhet_orgnr: string;
+    pensjonsinnretning_orgnr: string;
     egenmelding: Egenmeldingsordning;
     egenmelding_dager: string;
     egenmelding_ganger: string;
@@ -233,6 +243,8 @@ function PersonalOppsett() {
         lonnskonto: data.lonnskonto ? data.lonnskonto.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3") : "",
         bank_bic: data.bank_bic ?? "",
         betalingsfil_format: data.betalingsfil_format ?? "pain.001.001.03",
+        virksomhet_orgnr: data.virksomhet_orgnr ?? "",
+        pensjonsinnretning_orgnr: data.pensjonsinnretning_orgnr ?? "",
         egenmelding: ordning(data.egenmelding_dager ?? 3, data.egenmelding_ganger === undefined ? 4 : data.egenmelding_ganger, data.egenmelding_dager_aar ?? null),
         egenmelding_dager: String(data.egenmelding_dager ?? 3),
         egenmelding_ganger: data.egenmelding_ganger == null ? "" : String(data.egenmelding_ganger),
@@ -269,6 +281,8 @@ function PersonalOppsett() {
               lonnskonto: o!.lonnskonto.trim() || null,
               bank_bic: o!.bank_bic.trim() || null,
               betalingsfil_format: o!.betalingsfil_format,
+              virksomhet_orgnr: o!.virksomhet_orgnr.replace(/\s/g, "") || null,
+              pensjonsinnretning_orgnr: o!.pensjonsinnretning_orgnr.replace(/\s/g, "") || null,
             }
           : {}),
       }),
@@ -502,8 +516,41 @@ function PersonalOppsett() {
               nettbanken.
             </span>
           </label>
+          <h4 className="lonn-under" id="amelding">
+            A-melding
+          </h4>
+          <div className="rad">
+            <label>
+              Virksomhet (underenhet)
+              <input inputMode="numeric" list="amelding-virksomheter" placeholder="9 siffer" value={o.virksomhet_orgnr} onChange={(e) => settO({ ...o, virksomhet_orgnr: e.target.value })} />
+              <datalist id="amelding-virksomheter">
+                {(virksomheter.data ?? []).map((v) => (
+                  <option key={v.orgnr} value={v.orgnr}>
+                    {v.navn}
+                    {v.adresse ? `, ${v.adresse}` : ""}
+                  </option>
+                ))}
+              </datalist>
+              <span className="felt-hjelp">
+                Organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) der de ansatte jobber.
+                {virksomheter.data?.length === 1 && o.virksomhet_orgnr !== virksomheter.data[0]!.orgnr && (
+                  <>
+                    {" "}
+                    <button type="button" className="lenke" onClick={() => settO({ ...o, virksomhet_orgnr: virksomheter.data![0]!.orgnr })}>
+                      Bruk {virksomheter.data[0]!.navn} ({virksomheter.data[0]!.orgnr})
+                    </button>
+                  </>
+                )}
+              </span>
+            </label>
+            <label>
+              Pensjonsleverandør (OTP)
+              <input inputMode="numeric" placeholder="9 siffer" value={o.pensjonsinnretning_orgnr} onChange={(e) => settO({ ...o, pensjonsinnretning_orgnr: e.target.value })} />
+              <span className="felt-hjelp">Organisasjonsnummeret til pensjonsinnretningen (står i OTP-avtalen). Må med i a-meldingen når det er OTP.</span>
+            </label>
+          </div>
           <p className="liten dempet">
-            Skattekortet registreres på hver ansatt, eller hentes fra Skatteetaten når dere har koblet til (under). Lønnskjøringene er under{" "}
+            Skattekortet registreres på hver ansatt, eller hentes fra Skatteetaten når dere har koblet til (under). Lønnskjøringene og a-meldingen er under{" "}
             <Link to="/lonn">Lønn</Link>.
           </p>
         </>

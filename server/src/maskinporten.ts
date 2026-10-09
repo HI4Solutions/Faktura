@@ -28,8 +28,18 @@ export class EtatFeil extends Error {
 }
 
 const ADRESSER = {
-  test: { maskinporten: "https://test.maskinporten.no", altinn: "https://platform.tt02.altinn.no", skattekort: "https://api-test.sits.no/api/forskudd" },
-  prod: { maskinporten: "https://maskinporten.no", altinn: "https://platform.altinn.no", skattekort: "https://api.skatteetaten.no/api/forskudd" },
+  test: {
+    maskinporten: "https://test.maskinporten.no",
+    altinn: "https://platform.tt02.altinn.no",
+    skattekort: "https://api-test.sits.no/api/forskudd",
+    amelding: "https://innrapporteringamelding.api.skatteetaten-test.no/v1",
+  },
+  prod: {
+    maskinporten: "https://maskinporten.no",
+    altinn: "https://platform.altinn.no",
+    skattekort: "https://api.skatteetaten.no/api/forskudd",
+    amelding: "https://innrapporteringamelding.api.skatteetaten.no/v1",
+  },
 };
 
 export function adresser() {
@@ -38,6 +48,7 @@ export function adresser() {
     maskinporten: config.maskinportenUrl ?? a.maskinporten,
     altinn: config.altinnUrl ?? a.altinn,
     skattekort: config.skattekortUrl ?? a.skattekort,
+    amelding: config.ameldingUrl ?? a.amelding,
   };
 }
 
@@ -52,6 +63,10 @@ export const SCOPE = {
   foresporselLes: "altinn:authentication/systemuser.request.read",
   foresporselSkriv: "altinn:authentication/systemuser.request.write",
   skattekort: "skatteetaten:skattekorttilarbeidsgiver",
+  // A-meldingen: innsending og tilbakemelding (docs/amelding.md), og Dialogporten (der
+  // tilbakemeldingen ligger).
+  amelding: "skatteetaten:innrapporteringamelding",
+  dialogporten: "digdir:dialogporten",
 };
 
 const b64 = (x: string | Buffer) => Buffer.from(x).toString("base64url");

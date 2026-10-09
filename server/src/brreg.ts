@@ -132,3 +132,22 @@ export function finnRolle(roller: Rolle[], navn: string | null | undefined): Rol
 
 // Er e-postadressen nøyaktig den som står på foretaket (også gratis e-post som Gmail)?
 export const erForetaketsEpost = (epost: string, enhet: Enhet) => Boolean(enhet.epost && enhet.epost.trim().toLowerCase() === epost.trim().toLowerCase());
+
+// Underenhetene (virksomhetene) til en juridisk enhet, til a-meldingen (arbeidsforholdene
+// rapporteres under virksomheten). Nedlagte er ikke med.
+export async function hentUnderenheter(nr: string): Promise<{ orgnr: string; navn: string; adresse: string | null }[]> {
+  if (!orgnrGyldig(nr)) throw new ApiFeil(400, "Ugyldig organisasjonsnummer");
+  const r = await fetch(`https://data.brreg.no/enhetsregisteret/api/underenheter?overordnetEnhet=${nr}&size=50`, { headers: { accept: "application/json" } });
+  if (!r.ok) throw new ApiFeil(502, "Enhetsregisteret svarer ikke");
+  const d: any = await r.json();
+  return ((d?._embedded?.underenheter ?? []) as any[])
+    .filter((u) => !u.nedleggelsesdato && !u.slettedato)
+    .map((u) => {
+      const a = u.beliggenhetsadresse ?? u.postadresse ?? {};
+      return {
+        orgnr: String(u.organisasjonsnummer),
+        navn: String(u.navn ?? ""),
+        adresse: [(a.adresse ?? []).join(", "), [a.postnummer, a.poststed].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null,
+      };
+    });
+}

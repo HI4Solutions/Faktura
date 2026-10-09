@@ -2470,3 +2470,18 @@ fieldset.egenmelding .melding { margin-bottom: 8px; }
 .lonn-aar-status { margin: 0 0 10px; }
 .lonn-visning .summer.lonn-summer + p, .lonn-visning .tabell + p { margin-top: 10px; }
 h4.lonn-under { margin: 18px 0 6px; font-size: 0.92rem; }
+
+/* A-meldingen (LonnAmelding.tsx) */
+.amelding-avvik li.fare-tekst { background: var(--fare-lys); color: var(--fare); }
+.amelding-avvik li a { margin-left: auto; flex: none; white-space: nowrap; }
+.kort.amelding-handling { display: flex; flex-direction: column; gap: 10px; }
+.kort.amelding-handling label { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-weight: 500; }
+.kort.amelding-handling label input { width: auto; margin-top: 3px; }
+.kort.amelding-handling .knapper, .kort.amelding-handling p { margin: 0; }
+.amelding-rad { display: flex; flex-direction: column; gap: 6px; padding: 12px 18px; border-bottom: 1px solid var(--kant); }
+.amelding-rad:last-child { border-bottom: 0; }
+.amelding-rad .linje { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.amelding-rad .merke { flex: none; }
+.amelding-rad .knapper { margin: 2px 0 0; }
+.amelding-tilbakemelding { margin: 0; padding-left: 18px; color: var(--tekst-2); }
+.melding > .knapper { margin-top: 10px; }

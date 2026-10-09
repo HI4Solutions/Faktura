@@ -134,6 +134,9 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
       lonnskonto: null,
       bank_bic: null,
       betalingsfil_format: "pain.001.001.03",
+      // A-meldingen: virksomheten og pensjonsleverandøren legges inn (0077_amelding.sql).
+      virksomhet_orgnr: null,
+      pensjonsinnretning_orgnr: null,
     });
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { overtid_prosent: 30 })).data.error).toBe("Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).data).toMatchObject({ aktiv: true, daglig_grense: 9 });

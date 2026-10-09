@@ -10,6 +10,11 @@ import { adresser, EtatFeil, etatKall, hentToken, SCOPE, systemId } from "./mask
 
 // Tilgangspakken Skatteetaten krever for skattekort til arbeidsgiver.
 export const TILGANGSPAKKE = "urn:altinn:accesspackage:lonn";
+// Tilgangspakken for a-meldingen (docs/amelding.md); «Lønn» gjelder ikke der.
+export const A_ORDNING = "urn:altinn:accesspackage:a-ordning";
+// Tilgangspakkene systemet trenger nå: «Lønn» alltid, og de for funksjonene som er slått på.
+export const tilgangspakker = () => [TILGANGSPAKKE, ...(config.ameldingInnsending ? [A_ORDNING] : [])];
+export const PAKKENAVN: Record<string, string> = { [TILGANGSPAKKE]: "Lønn", [A_ORDNING]: "A-ordningen" };
 // Adressen Altinn sender brukeren tilbake til (må stå i systemregisteret, nøyaktig slik).
 export const godkjentUrl = () => `${config.appUrl}/skattekort/godkjent`;
 
@@ -34,12 +39,18 @@ export function systemdefinisjon() {
     id: systemId(),
     vendor: { authority: "iso6523-actorid-upis", ID: `0192:${config.leverandorOrgnr}` },
     name: { nb: navn, nn: navn, en: navn },
-    description: {
-      nb: `${navn} henter skattekortene til de ansatte fra Skatteetaten til lønnskjøringen.`,
-      nn: `${navn} hentar skattekorta til dei tilsette frå Skatteetaten til lønnskøyringa.`,
-      en: `${navn} retrieves the employees' tax deduction cards from the Norwegian Tax Administration for payroll.`,
-    },
-    accessPackages: [{ urn: TILGANGSPAKKE }],
+    description: config.ameldingInnsending
+      ? {
+          nb: `${navn} henter skattekortene til de ansatte fra Skatteetaten og sender a-meldingen fra lønnskjøringen.`,
+          nn: `${navn} hentar skattekorta til dei tilsette frå Skatteetaten og sender a-meldinga frå lønnskøyringa.`,
+          en: `${navn} retrieves the employees' tax deduction cards and submits the a-melding from payroll.`,
+        }
+      : {
+          nb: `${navn} henter skattekortene til de ansatte fra Skatteetaten til lønnskjøringen.`,
+          nn: `${navn} hentar skattekorta til dei tilsette frå Skatteetaten til lønnskøyringa.`,
+          en: `${navn} retrieves the employees' tax deduction cards from the Norwegian Tax Administration for payroll.`,
+        },
+    accessPackages: tilgangspakker().map((urn) => ({ urn })),
     clientId: config.maskinportenKlientId ? [config.maskinportenKlientId] : [],
     allowedRedirectUrls: [godkjentUrl()],
     // Bare leverandøren lager forespørsler (fra appen); systemet vises ikke i Altinn-portalen.
@@ -107,7 +118,7 @@ export async function lagForesporsel(orgnr: string, forsok = 0): Promise<Forespo
   const token = await hentToken(SCOPE.foresporselSkriv);
   const r = await etatKall(`${api()}/systemuser/request/vendor`, token, {
     metode: "POST",
-    kropp: { systemId: systemId(), partyOrgNo: orgnr, accessPackages: [{ urn: TILGANGSPAKKE }], redirectUrl: godkjentUrl() },
+    kropp: { systemId: systemId(), partyOrgNo: orgnr, accessPackages: tilgangspakker().map((urn) => ({ urn })), redirectUrl: godkjentUrl() },
     hvem: "Altinn",
   });
   if (r.status < 300) return somForesporsel(r.data);
@@ -134,5 +145,38 @@ export async function hentForesporsel(id: string): Promise<Foresporsel | null> {
   const r = await etatKall(`${api()}/systemuser/request/vendor/${encodeURIComponent(id)}`, token, { hvem: "Altinn" });
   if (r.status === 404) return null;
   if (r.status >= 300) throw altinnFeil(r, "Kunne ikke hente forespørselen fra Altinn");
+  return somForesporsel(r.data);
+}
+
+// --- Endringsforespørsler (flere tilgangspakker for en systembruker som finnes) ----------------
+
+// Ber kunden godkjenne flere tilgangspakker for systembrukeren (f.eks. «A-ordningen» når
+// a-meldingen slås på). Har systembrukeren dem alt, er den godkjent.
+// https://docs.altinn.studio/nb/api/authentication/systemuserapi/scopes/
+export async function lagEndringsforesporsel(orgnr: string, pakker: string[]): Promise<Foresporsel> {
+  const token = await hentToken(SCOPE.foresporselSkriv);
+  const r = await etatKall(`${api()}/systemuser/changerequest/vendor`, token, {
+    metode: "POST",
+    kropp: {
+      systemId: systemId(),
+      partyOrgNo: orgnr,
+      externalRef: orgnr,
+      requiredAccessPackages: pakker.map((urn) => ({ urn })),
+      redirectUrl: godkjentUrl(),
+    },
+    hvem: "Altinn",
+  });
+  if (r.status < 300) return somForesporsel(r.data);
+  const feil = altinnFeil(r, "Kunne ikke lage endringsforespørselen i Altinn");
+  // Systembrukeren har alt pakkene.
+  if (feil.kode === "AUTH-00004" || feil.kode === "AUTH-00006" || /already|allerede/i.test(feil.message)) return { id: null, status: "godkjent", godkjennUrl: null };
+  throw feil;
+}
+
+export async function hentEndringsforesporsel(id: string): Promise<Foresporsel | null> {
+  const token = await hentToken(SCOPE.foresporselLes);
+  const r = await etatKall(`${api()}/systemuser/changerequest/vendor/${encodeURIComponent(id)}`, token, { hvem: "Altinn" });
+  if (r.status === 404) return null;
+  if (r.status >= 300) throw altinnFeil(r, "Kunne ikke hente endringsforespørselen fra Altinn");
   return somForesporsel(r.data);
 }

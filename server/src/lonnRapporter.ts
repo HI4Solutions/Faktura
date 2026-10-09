@@ -4,11 +4,16 @@
 // Journalen og lønnsartene kan gjelde én kjøring (valget kjoring); de sendes til
 // regnskapsføreren når kjøringen godkjennes, om det er slått på.
 import { alle, en, type Db } from "./db.js";
-import { lonnsart } from "./lonnsarter.js";
+import { AMELDING_NAVN, lonnsart } from "./lonnsarter.js";
 import { frister, maanedNavn } from "./lonnsberegning.js";
 import type { Rapportdef, Valg } from "./rapportmodul.js";
 
 const rund = (n: number) => Math.round(n * 100) / 100;
+// Rekkefølgen på beskrivelsene i a-meldingsgrunnlaget (forskuddstrekket sist).
+const rekke = (navn: string) => {
+  const i = Object.values(AMELDING_NAVN).indexOf(navn);
+  return navn === "Forskuddstrekk" ? 1000 : i < 0 ? 999 : i;
+};
 const visDato = (d: string) => d.split("-").reverse().join(".");
 
 // De godkjente kjøringene rapporten gjelder: én kjøring, eller de med utbetaling i perioden.
@@ -150,6 +155,60 @@ export const lonnRapporter: Rapportdef[] = [
           const f = frister(r.utbetalt);
           return { ...r, kjoring: `${maanedNavn(r.periode)}${r.type === "ekstra" ? " (ekstra)" : ""}`, frist_skattetrekk: f.skattetrekk, frist_aga: f.aga };
         }),
+      };
+    },
+  },
+  {
+    id: "lonn.amelding",
+    modul: "lonn",
+    navn: "A-meldingsgrunnlag",
+    beskrivelse: "Lønnen per ansatt og måned etter beskrivelsen i a-meldingen, og forskuddstrekket, fra de godkjente kjøringene med utbetaling i perioden (til avstemming mot a-meldingen).",
+    funksjon: "lonn",
+    tilgang: "personal_les",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      const linjer = await alle<{ maaned: string; ansattnummer: number; navn: string; lonnsart: string; belop: number }>(
+        db,
+        `select to_char(s.utbetalingsdato, 'YYYY-MM') as maaned, s.ansattnummer, s.navn, l.lonnsart, sum(l.belop)::float8 as belop
+           from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id join faktura.lonnskjoringer k on k.id = s.kjoring_id
+          where ${KJORINGER} and not l.fjernet
+          group by 1, 2, 3, 4`,
+        parametre(org, v),
+      );
+      const trekk = await alle<{ maaned: string; ansattnummer: number; navn: string; skattetrekk: number }>(
+        db,
+        `select to_char(s.utbetalingsdato, 'YYYY-MM') as maaned, s.ansattnummer, s.navn, sum(round(s.skattetrekk))::float8 as skattetrekk
+           from faktura.lonnsslipper s join faktura.lonnskjoringer k on k.id = s.kjoring_id
+          where ${KJORINGER}
+          group by 1, 2, 3`,
+        parametre(org, v),
+      );
+      const per = new Map<string, { maaned: string; ansattnummer: number; navn: string; beskrivelse: string; belop: number | null; forskuddstrekk: number | null }>();
+      for (const l of linjer) {
+        const art = lonnsart(l.lonnsart);
+        if (art.type !== "lonn" || !art.amelding) continue;
+        const nokkel = `${l.maaned}|${l.ansattnummer}|${art.amelding}`;
+        const x = per.get(nokkel) ?? { maaned: l.maaned, ansattnummer: l.ansattnummer, navn: l.navn, beskrivelse: AMELDING_NAVN[art.amelding] ?? art.amelding, belop: 0, forskuddstrekk: null };
+        x.belop = rund((x.belop ?? 0) + l.belop);
+        per.set(nokkel, x);
+      }
+      for (const t of trekk)
+        if (t.skattetrekk) per.set(`${t.maaned}|${t.ansattnummer}|~trekk`, { ...t, beskrivelse: "Forskuddstrekk", belop: null, forskuddstrekk: rund(t.skattetrekk) });
+      return {
+        kolonner: [
+          { nokkel: "maaned", navn: "Måned", type: "tekst" },
+          { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "beskrivelse", navn: "Beskrivelse" },
+          { nokkel: "belop", navn: "Lønn", type: "kr", sum: true },
+          { nokkel: "forskuddstrekk", navn: "Forskuddstrekk", type: "kr", sum: true },
+        ],
+        // Måned, ansatt, beskrivelsene i a-meldingens rekkefølge, og forskuddstrekket sist.
+        rader: [...per.values()]
+          .filter((x) => x.belop !== 0)
+          .sort((a, b) => a.maaned.localeCompare(b.maaned) || a.ansattnummer - b.ansattnummer || rekke(a.beskrivelse) - rekke(b.beskrivelse))
+          .map(({ maaned, ansattnummer, navn, beskrivelse, belop, forskuddstrekk }) => ({ maaned, ansattnummer, navn, beskrivelse, belop, forskuddstrekk })),
       };
     },
   },

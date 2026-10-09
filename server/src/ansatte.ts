@@ -14,7 +14,7 @@ import { fnrGyldig, fodselsdato } from "./fnr.js";
 import { ansattFeil, ansattFinnes, ansattnokler, ansattOppslag, planlegg } from "./importer.js";
 import { krypter } from "./kryptering.js";
 import { AML, beregnUke, uke, type Regler, type Ukesum } from "./arbeidstid.js";
-import { dato as visDato, iDag, kontonrGyldig } from "./regler.js";
+import { dato as visDato, iDag, kontonrGyldig, orgnrGyldig } from "./regler.js";
 import { leggIKo } from "./tjenester.js";
 import { beregnBemanning } from "./arbeidsplan.js";
 import { kortFraTrekk, type Trekk } from "./skattekort.js";
@@ -112,6 +112,23 @@ const ansattSkjema = z.object({
   // Biarbeidsgiver: den ansatte har hovedarbeidsgiveren et annet sted, og trekket for lønn fra
   // biarbeidsgiver brukes (0068; skattekortet fra Skatteetaten regnes om).
   biarbeidsgiver: z.boolean().optional(),
+  // A-meldingen (0077_amelding.sql): yrkeskoden (7 siffer, SSBs yrkeskoder), typen arbeidsforhold,
+  // arbeidstidsordningen og årsaken til sluttdatoen.
+  yrkeskode: valgfri(siffer("Yrkeskoden", 7)),
+  arbeidsforhold_type: z.enum(["ordinaertArbeidsforhold", "maritimtArbeidsforhold", "frilanserOppdragstakerHonorarPersonerMm"]).optional(),
+  arbeidstidsordning: z
+    .enum(["ikkeSkift", "andreSkift", "skift365", "doegnkontinuerligSkiftOgTurnus355", "helkontinuerligSkiftOgAndreOrdninger336", "offshore336"])
+    .optional(),
+  aarsak_sluttdato: valgfri(
+    z.enum([
+      "arbeidstakerHarSagtOppSelv",
+      "arbeidsgiverHarSagtOppArbeidstaker",
+      "kontraktEngasjementEllerVikariatErUtloept",
+      "byttetLoenssystemEllerRegnskapsfoerer",
+      "endringIOrganisasjonsstrukturEllerByttetJobbInternt",
+      "arbeidsforholdetSkulleAldriVaertRapportert",
+    ]),
+  ),
 });
 
 const oppsettSkjema = z.object({
@@ -161,6 +178,10 @@ const oppsettSkjema = z.object({
       .pipe(z.string().regex(/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/, "BIC har 8 eller 11 tegn, f.eks. DNBANOKK for DNB")),
   ),
   betalingsfil_format: z.enum(["pain.001.001.03", "pain.001.001.09"]).optional(),
+  // A-meldingen (0077_amelding.sql): virksomheten (underenheten) arbeidsforholdene rapporteres
+  // under, og pensjonsinnretningen (OTP-leverandøren).
+  virksomhet_orgnr: valgfri(siffer("Organisasjonsnummeret til virksomheten", 9, orgnrGyldig, "Organisasjonsnummeret til virksomheten er ikke gyldig")),
+  pensjonsinnretning_orgnr: valgfri(siffer("Organisasjonsnummeret til pensjonsleverandøren", 9, orgnrGyldig, "Organisasjonsnummeret til pensjonsleverandøren er ikke gyldig")),
 });
 
 const foringSkjema = z.object({
@@ -189,6 +210,9 @@ const ANSATT = `
          a.skattekort, a.skatt_tabell, a.skatt_prosent, a.skatt_frikort, a.skattekort_aar, a.biarbeidsgiver, a.skattekort_kilde,
          a.skattekort_hentet, a.skattekort_resultat, to_char(a.skattekort_utstedt, 'YYYY-MM-DD') as skattekort_utstedt, a.skattekort_tillegg,
          a.skattekort_trekk,
+         -- Arbeidsforholdet i a-meldingen (0077_amelding.sql).
+         a.yrkeskode, a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato,
+         to_char(a.siste_lonnsendring, 'YYYY-MM-DD') as siste_lonnsendring, to_char(a.siste_stillingsendring, 'YYYY-MM-DD') as siste_stillingsendring,
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
          coalesce((select g.tavle from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id), true) as tavle,
@@ -254,13 +278,15 @@ type Oppsett = Regler & {
   lonnskonto: string | null;
   bank_bic: string | null;
   betalingsfil_format: "pain.001.001.03" | "pain.001.001.09";
+  virksomhet_orgnr: string | null;
+  pensjonsinnretning_orgnr: string | null;
 };
 export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
     `select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
             aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt, egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager,
-            timebank, vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format
+            timebank, vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr
        from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
@@ -287,6 +313,8 @@ export async function regler(db: Db, org: string): Promise<Oppsett> {
       lonnskonto: null,
       bank_bic: null,
       betalingsfil_format: "pain.001.001.03",
+      virksomhet_orgnr: null,
+      pensjonsinnretning_orgnr: null,
     }
   );
 }
@@ -357,8 +385,8 @@ export function ansattRuter() {
           `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
                                              aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt,
                                              egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager, timebank,
-                                             vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                                             vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
              full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg,
@@ -367,7 +395,8 @@ export function ansattRuter() {
              egenmelding_ganger = excluded.egenmelding_ganger, egenmelding_dager_aar = excluded.egenmelding_dager_aar,
              egenmelding_barn_dager = excluded.egenmelding_barn_dager, timebank = excluded.timebank,
              vaktbytte_fridag = excluded.vaktbytte_fridag, lonnskonto = excluded.lonnskonto, bank_bic = excluded.bank_bic,
-             betalingsfil_format = excluded.betalingsfil_format`,
+             betalingsfil_format = excluded.betalingsfil_format, virksomhet_orgnr = excluded.virksomhet_orgnr,
+             pensjonsinnretning_orgnr = excluded.pensjonsinnretning_orgnr`,
           [
             orgId(c),
             ny.aktiv,
@@ -393,6 +422,8 @@ export function ansattRuter() {
             ny.lonnskonto ?? null,
             ny.bank_bic ?? null,
             ny.betalingsfil_format,
+            ny.virksomhet_orgnr ?? null,
+            ny.pensjonsinnretning_orgnr ?? null,
           ],
         );
         return regler(db, orgId(c));

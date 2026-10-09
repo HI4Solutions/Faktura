@@ -158,7 +158,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "personal.ekstratimer",
         "personal.ansatte",
       ],
-      lonn: ["lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.feriepenger", "lonn.aarsoversikt", "lonn.otp"],
+      lonn: ["lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.amelding", "lonn.feriepenger", "lonn.aarsoversikt", "lonn.otp"],
     });
     const liste = (await kall("GET", `/api/org/${org}/rapportmodul`)).data;
     expect(liste.moduler.map((m: any) => m.navn)).toEqual(["Faktura", "Personal", "Lønn"]);
@@ -166,7 +166,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     // Regnskap ser lønn og timer, men ikke fraværet og feriebanken (som i personalmodulen).
     const r = await moduler(regnskap);
     expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte"]);
-    expect(r.lonn).toHaveLength(6);
+    expect(r.lonn).toHaveLength(7);
     expect(await moduler(fakturerer)).toEqual({ faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"] });
     expect(await moduler(ola)).toEqual({});
     expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.journal`, undefined, fakturerer)).status).toBe(403);
@@ -413,6 +413,11 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     ]);
     const sa = (await kall("GET", `/api/org/${org}/rapportmodul/lonn.skatt_aga?aar=2026&termin=5`)).data;
     expect(sa.rader).toEqual([expect.objectContaining({ utbetalt: "2026-10-20", kjoring: "oktober 2026", slipper: 1, skattetrekk: 15000, aga: 7191, frist_aga: "2026-11-16" })]);
+    // A-meldingsgrunnlaget: lønnen etter beskrivelsen i a-meldingen, og forskuddstrekket.
+    expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.amelding?fra=2026-10-01&til=2026-10-31`)).data.rader).toEqual([
+      expect.objectContaining({ maaned: "2026-10", navn: "Kari Fast", beskrivelse: "Fastlønn", belop: 50000, forskuddstrekk: null }),
+      expect.objectContaining({ maaned: "2026-10", navn: "Kari Fast", beskrivelse: "Forskuddstrekk", belop: null, forskuddstrekk: 15000 }),
+    ]);
     expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.aarsoversikt?aar=2026`)).data.rader).toEqual([
       expect.objectContaining({ navn: "Kari Fast", brutto: 50000, forskuddstrekk: 15000, aga: 7191 }),
     ]);

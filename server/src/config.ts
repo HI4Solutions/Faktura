@@ -63,10 +63,15 @@ export const config = {
   altinnSystemId: valgfri("ALTINN_SYSTEM_ID"),
   // Navnet kunden ser i Altinn når tilgangen godkjennes.
   altinnSystemnavn: valgfri("ALTINN_SYSTEMNAVN") ?? "HI4 Faktura",
+  // A-meldingen til Skatteetatens API (docs/amelding.md): på når Medinnova AS har fått scopet
+  // skatteetaten:innrapporteringamelding. Da ber systemet også om tilgangspakken «A-ordningen».
+  // Uten: a-meldingen lastes ned som XML og lastes opp på skatteetaten.no.
+  ameldingInnsending: ["1", "true", "ja"].includes((valgfri("AMELDING_INNSENDING") ?? "").toLowerCase()),
   // Adressene (standard etter miljøet over); settes i tester.
   maskinportenUrl: valgfri("MASKINPORTEN_URL"),
   altinnUrl: valgfri("ALTINN_URL"),
   skattekortUrl: valgfri("SKATTEKORT_URL"),
+  ameldingUrl: valgfri("AMELDING_URL"),
 
   // AI: Gemini på Vertex AI i prosjektet (uten prosjekt er AI-funksjonene skjult), i EU.
   // Regionen kan også være multiregionen «eu» eller «global».
