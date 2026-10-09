@@ -35,6 +35,7 @@ import {
 } from "./anlegg.js";
 import { maanedNavn } from "./lonnsberegning.js";
 import { GRUPPER, maksSats, SALDOGRUPPER, saldoskjema } from "./saldo.js";
+import { kundefordringerVedStart } from "./salgBokforing.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -53,10 +54,16 @@ const kort = (n: number) => `${n.toLocaleString("nb-NO", { minimumFractionDigits
 async function oppsett(db: Db, org: string) {
   const o = await hentRegnskapsoppsett(db, org);
   const plan = regnskapskontoer(o);
+  // Kundefordringene ved startdatoen for bokføringen av salget: det som hører til den inngående
+  // balansen.
+  const ved_start = o.salg_fra ? await kundefordringerVedStart(db, org, o.salg_fra) : null;
   return {
     kontoer: REGNSKAPSKONTOER.map((k) => ({ ...k, konto: plan[k.rolle], endret: plan[k.rolle] !== k.standard })),
     saldo_fra_aar: o.saldo_fra_aar,
     saldo_inngaende: o.saldo_inngaende,
+    salg_fra: o.salg_fra,
+    uten_mva: o.uten_mva,
+    kundefordringer_ved_start: ved_start,
     kategorier: KATEGORIKODER.map((kode) => ({
       kode,
       navn: KATEGORIER[kode].navn,
@@ -71,6 +78,10 @@ async function oppsett(db: Db, org: string) {
 
 const oppsettSkjema = z.object({
   kontoer: z.partialRecord(z.enum(REGNSKAPSROLLER), kontoS.nullable()).optional(),
+  // Fakturaene og innbetalingene bokføres fra og med datoen (null: alle), og salg uten avgift er
+  // unntatt eller fritatt (salgBokforing.ts).
+  salg_fra: datoS.nullable().optional(),
+  uten_mva: z.enum(["unntatt", "fritatt"]).optional(),
   saldo_fra_aar: z.number().int().min(2000, "Ugyldig år").max(2100, "Ugyldig år").nullable().optional(),
   saldo_inngaende: z.partialRecord(z.enum(["a", "c", "d", "gevinst_tap"]), z.number().finite().gt(-1e12).lt(1e12).nullable()).optional(),
 });
@@ -226,10 +237,19 @@ export function regnskapRuter() {
           else inngaende[g] = Math.round(v * 100) / 100;
         }
         await db.query(
-          `insert into faktura.regnskap_oppsett (org_id, kontoer, saldo_fra_aar, saldo_inngaende, oppdatert) values ($1, $2, $3, $4, now())
+          `insert into faktura.regnskap_oppsett (org_id, kontoer, saldo_fra_aar, saldo_inngaende, salg_fra, uten_mva, oppdatert)
+           values ($1, $2, $3, $4, $5, $6, now())
            on conflict (org_id) do update set kontoer = excluded.kontoer, saldo_fra_aar = excluded.saldo_fra_aar,
-                                              saldo_inngaende = excluded.saldo_inngaende, oppdatert = now()`,
-          [orgId(c), JSON.stringify(kontoer), b.saldo_fra_aar !== undefined ? b.saldo_fra_aar : naa.saldo_fra_aar, JSON.stringify(inngaende)],
+                                              saldo_inngaende = excluded.saldo_inngaende, salg_fra = excluded.salg_fra,
+                                              uten_mva = excluded.uten_mva, oppdatert = now()`,
+          [
+            orgId(c),
+            JSON.stringify(kontoer),
+            b.saldo_fra_aar !== undefined ? b.saldo_fra_aar : naa.saldo_fra_aar,
+            JSON.stringify(inngaende),
+            b.salg_fra !== undefined ? b.salg_fra : naa.salg_fra,
+            b.uten_mva ?? naa.uten_mva,
+          ],
         );
         return oppsett(db, orgId(c));
       }),

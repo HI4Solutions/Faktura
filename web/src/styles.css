@@ -2386,6 +2386,7 @@ table.lonn-linjer th { background: transparent; }
 table.lonn-linjer tr.fjernet td { color: var(--dempet); }
 table.lonn-linjer tr.fjernet td:not(:last-child) { text-decoration: line-through; }
 .lonn-art { display: block; font-size: 0.78rem; color: var(--dempet); }
+.mva-kode { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--kant-sterk); border-radius: 999px; font-size: 0.72rem; line-height: 1.5; color: var(--dempet); white-space: nowrap; vertical-align: 1px; }
 .lonn-handlinger { white-space: nowrap; text-align: right; }
 .lonn-handlinger button + button { margin-left: 12px; }
 button.lenke.fare-lenke { color: var(--fare); }

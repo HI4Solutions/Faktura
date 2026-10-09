@@ -25,6 +25,9 @@ type Oppsett = {
   kontoer: Kontorad[];
   saldo_fra_aar: number | null;
   saldo_inngaende: Partial<Record<"a" | "c" | "d" | "gevinst_tap", number>>;
+  salg_fra: string | null;
+  uten_mva: "unntatt" | "fritatt";
+  kundefordringer_ved_start: number | null;
   kategorier: Kategori[];
   saldogrupper: { gruppe: string; navn: string; sats: number; samlet: boolean }[];
 };
@@ -1146,6 +1149,73 @@ function Saldoavskrivninger() {
 
 // --- Kontoene ----------------------------------------------------------------------------------
 
+// Fakturaene og innbetalingene i regnskapet (server/src/salgBokforing.ts): fra hvilken dato de
+// bokføres, og om salg uten mva er utenfor merverdiavgiftsloven eller fritatt.
+function Salget({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => void }) {
+  const { org } = useKonto();
+  const sti = `/org/${org!.id}/regnskap/oppsett`;
+  const [skjema, settSkjema] = useState<{ fra: string; uten: Oppsett["uten_mva"] } | null>(null);
+  const [ok, settOk] = useState(false);
+  const h = useHandling();
+  const v = skjema ?? { fra: o.salg_fra ?? "", uten: o.uten_mva };
+  const kundefordringer = o.kontoer.find((k) => k.rolle === "kundefordringer")?.konto ?? "1500";
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    settOk(false);
+    const r = await h.kjor(() => api<Oppsett>("PUT", sti, { salg_fra: v.fra || null, uten_mva: v.uten }));
+    if (r) {
+      lagret(r);
+      settSkjema(null);
+      settOk(true);
+    }
+  }
+
+  return (
+    <form className="kort" onSubmit={lagre}>
+      <h3 style={{ marginTop: 0 }}>Fakturaene og innbetalingene</h3>
+      <p className="liten dempet">
+        Fakturaene, kreditnotaene og innbetalingene bokføres av seg selv, hvert minutt og når regnskapet vises. Hver faktura og kreditnota får et bilag i serie F:
+        kundefordringen mot salget og den utgående avgiften per sats, med mva-kodene fra Skatteetaten. Hver innbetaling og refusjon får et bilag i serie B: banken
+        mot kundefordringen, og purregebyret når det er betalt. En faktura rettes med en kreditnota, og en betaling som tas bort, blir reversert.
+      </p>
+      <div className="rad">
+        <label>
+          Bokfør fra og med
+          <input type="date" value={v.fra} onChange={(e) => settSkjema({ ...v, fra: e.target.value })} />
+          <span className="felt-hjelp">Tomt felt: alle. Det som er fra før, hører til den inngående balansen.</span>
+        </label>
+        <label>
+          Salg uten mva (0 %)
+          <select value={v.uten} onChange={(e) => settSkjema({ ...v, uten: e.target.value as Oppsett["uten_mva"] })}>
+            <option value="unntatt">Utenfor mva-loven, f.eks. helsetjenester (3200, kode 6)</option>
+            <option value="fritatt">Fritatt for mva, f.eks. bøker og aviser (3100, kode 5)</option>
+          </select>
+          <span className="felt-hjelp">Uten mva-registrering føres alt salg på 3200, uten mva-kode.</span>
+        </label>
+      </div>
+      {o.salg_fra && o.kundefordringer_ved_start !== null && (
+        <p className="liten salg-start">
+          Kundefordringene ved {dato(o.salg_fra)}: <strong>{kr(o.kundefordringer_ved_start)}</strong> (fakturaene før datoen minus det som er betalt før den). Før
+          dem i den inngående balansen, på konto {kundefordringer}; det som betales etter datoen, bokføres mot dem.
+        </p>
+      )}
+      <p className="liten dempet">Flyttes datoen fram, reverseres bilagene før den; flyttes den tilbake, bokføres de på nytt.</p>
+      <Feil melding={h.feil} />
+      {ok && (
+        <div className="melding ok" role="status">
+          Lagret.
+        </div>
+      )}
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt || !skjema}>
+          Lagre
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function Kontoer() {
   const { org } = useKonto();
   const sti = `/org/${org!.id}/regnskap/oppsett`;
@@ -1176,8 +1246,9 @@ function Kontoer() {
 
   return (
     <>
+      <Salget o={o.data} lagret={(r) => o.settData(r)} />
       <form className="kort" onSubmit={lagre}>
-        <h3 style={{ marginTop: 0 }}>Kontoene for anleggsmidlene og periodiseringene</h3>
+        <h3 style={{ marginTop: 0 }}>Kontoene for salget, anleggsmidlene og periodiseringene</h3>
         <p className="liten dempet">
           Standarden er norsk standard kontoplan (NS 4102). Tomt felt: standardkontoen. Endringer gjelder bilagene som føres etterpå. Balansekontoene for
           periodiseringene er forslag; hver periodisering har sine kontoer. Lønnskontoene står under Innstillinger → Ansatte og timer.

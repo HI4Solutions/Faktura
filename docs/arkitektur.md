@@ -653,7 +653,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   endres (`lonn_oppsett.bokforing_*`). Kjøringer godkjent før bokføringen kom, bokføres fra
   kjøringen. Rapporten «Lønnsbilag» viser bilagene (også til regnskapsføreren når kjøringen
   godkjennes). Lønnsbilagene ser de som ser lønnen. Refusjonene fra NAV er den andre kilden
-  (`kilde` nav_refusjon, `0085_nav_refusjon.sql`)
+  (`kilde` nav_refusjon, `0085_nav_refusjon.sql`). Fakturaene og innbetalingene
+  (`0089_regnskap_salg.sql`, `server/src/salgBokforing.ts`, `docs/regnskap.md`) bokføres av seg
+  selv, som en avstemming som kan kjøres når som helst: workeren (`/jobber/utboks`, hvert minutt)
+  og visningen av bilagene og saldobalansen fører det som mangler (`bokfor_salg`: serie F for
+  fakturaer og kreditnotaer på fakturadatoen, serie B for innbetalinger og refusjoner på
+  betalingsdatoen, ett gjeldende bilag per kilde) og reverserer bilagene for det som er slettet
+  eller er fra før startdatoen (`reverser_salg`; `regnskap_oppsett.salg_fra`). Posteringene
+  regnes i API-et (kundefordringen, salget og avgiften per sats med mva-koden i
+  `posteringer.mva_kode`, og purregebyret av det som er betalt utover), og databasen kontrollerer
+  dem. `reverser_bilag` tar med mva-kodene
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen

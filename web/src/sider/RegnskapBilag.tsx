@@ -1,7 +1,7 @@
 // Regnskap → Bilag og Saldobalanse (server/src/regnskapBilagRuter.ts, hovedbok.ts): bilagene fra alle
-// kildene (lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og manuelle bilag) med
-// posteringene, manuelle bilag (også den inngående balansen) og reversering, saldobalansen for en
-// periode og hovedboken for en konto.
+// kildene (fakturaer og innbetalinger, lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og
+// manuelle bilag) med posteringene og mva-kodene, manuelle bilag (også den inngående balansen) og
+// reversering, saldobalansen for en periode og hovedboken for en konto.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
@@ -12,7 +12,7 @@ import { IkonPluss, IkonRegnskap } from "../ikoner";
 import { Bilagstabell } from "./LonnBokforing";
 import { Maanedsavslutning } from "./RegnskapAvslutning";
 
-type Postering = { konto: string; navn: string; tekst: string; belop: number };
+type Postering = { konto: string; navn: string; tekst: string; belop: number; mva_kode?: string | null };
 type Regnskapsbilag = {
   id: string;
   bilagsnummer: string;
@@ -23,22 +23,28 @@ type Regnskapsbilag = {
   reverserer: string | null;
   reversert_av: string | null;
   opprettet_av: string | null;
+  lenke?: string | null; // fakturaen eller lønnskjøringen bilaget kommer fra
   posteringer: Postering[];
 };
 type Konto = { konto: string; navn: string };
 
 export const KILDER: Record<string, string> = {
+  faktura: "Faktura",
+  innbetaling: "Innbetaling",
   lonn: "Lønn",
   nav_refusjon: "Refusjon fra NAV",
   anlegg: "Anleggsmidler",
   periodisering: "Periodisering",
   manuell: "Manuelt bilag",
 };
-// Hvor bilag fra lønnen og refusjonene reverseres.
+// Hvor bilag fra fakturaene, innbetalingene, lønnen og refusjonene rettes.
 const ANDRE_STEDER: Record<string, string> = {
+  faktura: "En faktura rettes med en kreditnota (Fakturaer), og kreditnotaen bokføres av seg selv.",
+  innbetaling: "En innbetaling reverseres ved å ta bort betalingen på fakturaen (eller koble innbetalingen fra fakturaen under Innbetalinger).",
   lonn: "Et lønnsbilag reverseres ved å åpne lønnskjøringen igjen (Lønn → Lønnskjøringer).",
   nav_refusjon: "En refusjon fra NAV reverseres ved å slette den (Lønn → Sykepenger).",
 };
+const LENKETEKST: Record<string, string> = { faktura: "Åpne fakturaen", innbetaling: "Åpne fakturaen", lonn: "Åpne lønnskjøringen" };
 const aarsstart = () => `${iDag().slice(0, 4)}-01-01`;
 const debetsum = (b: { posteringer: Postering[] }) => b.posteringer.reduce((s, p) => s + (p.belop > 0 ? p.belop : 0), 0);
 
@@ -106,8 +112,9 @@ export function Bilag() {
   return (
     <>
       <p className="dempet liten">
-        Alle bilagene i regnskapet: lønn (serie L, også refusjoner fra NAV), anleggsmidler (A), periodiseringer (P) og manuelle bilag (M), som den inngående balansen.
-        Et bilag endres aldri; det reverseres med et nytt bilag med motsatte beløp. Bilagsjournalen, hovedboken og saldobalansen står også under{" "}
+        Alle bilagene i regnskapet: fakturaer og kreditnotaer (serie F) og innbetalinger (B), som bokføres av seg selv, lønn (L, også refusjoner fra NAV),
+        anleggsmidler (A), periodiseringer (P) og manuelle bilag (M), som den inngående balansen. Et bilag endres aldri; det reverseres med et nytt bilag med
+        motsatte beløp. Bilagsjournalen, hovedboken og saldobalansen står også under{" "}
         <Link to="/rapporter?fane=regnskap">Rapporter → Regnskap</Link> (CSV og PDF).
       </p>
       <Maanedsavslutning bokfort={() => void liste.last()} />
@@ -143,7 +150,7 @@ export function Bilag() {
       ) : !bilag.length ? (
         <div className="kort">
           <Tom ikon={<IkonRegnskap storrelse={22} />} tittel="Ingen bilag i perioden">
-            <p>Bilagene kommer fra lønnskjøringene, refusjonene fra NAV, anleggsmidlene og periodiseringene, og fra manuelle bilag.</p>
+            <p>Bilagene kommer fra fakturaene og innbetalingene, lønnskjøringene, refusjonene fra NAV, anleggsmidlene og periodiseringene, og fra manuelle bilag.</p>
           </Tom>
         </div>
       ) : (
@@ -171,6 +178,11 @@ export function Bilag() {
                 {aapen && (
                   <div className="regnskap-bilagsdetalj">
                     <Bilagstabell b={b} />
+                    {b.lenke && LENKETEKST[b.kilde] && (
+                      <p className="liten">
+                        <Link to={b.lenke}>{LENKETEKST[b.kilde]}</Link>
+                      </p>
+                    )}
                     {kanReverseres ? (
                       <div className="knapper">
                         <button type="button" disabled={h.opptatt} onClick={() => void reverser(b)}>

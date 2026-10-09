@@ -19,6 +19,7 @@ import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingIn
 import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepenger.js";
 import { aktiverLonnsendringer } from "./lonnsendringer.js";
 import { lonnHverMorgen, oppdaterLonnsutkast } from "./lonnAutomatikk.js";
+import { bokforSalgForAlle } from "./salgBokforing.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
@@ -619,7 +620,8 @@ export function lagWorker() {
   // hentetidene (planleggingen tar hver hentetid én gang per bank), sjekker nye kunder for
   // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker
   // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
-  // a-meldingene som venter på tilbakemelding. Lønnsutkastene der noe er endret, regnes ut på nytt.
+  // a-meldingene som venter på tilbakemelding. Lønnsutkastene der noe er endret, regnes ut på nytt,
+  // og fakturaene og innbetalingene som ikke er bokført, bokføres (salgBokforing.ts).
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
@@ -630,6 +632,7 @@ export function lagWorker() {
     await planleggAmeldingssjekk().catch((e) => logg("ERROR", "Sjekk av a-meldingene feilet", { feil: (e as Error).message }));
     await planleggNavHenting().catch((e) => logg("ERROR", "Planlegging av hentingen fra NAV feilet", { feil: (e as Error).message }));
     await oppdaterLonnsutkast().catch((e) => logg("ERROR", "Omregningen av lønnsutkastene feilet", { feil: (e as Error).message }));
+    await bokforSalgForAlle().catch((e) => logg("ERROR", "Bokføringen av fakturaene og innbetalingene feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));

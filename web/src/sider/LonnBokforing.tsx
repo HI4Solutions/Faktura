@@ -130,9 +130,20 @@ export function BokforingOppsett() {
 // --- Lønnskjøringen --------------------------------------------------------------------------
 
 // Posteringene i et bilag (også i Regnskap → Bilag).
-export function Bilagstabell({ b }: { b: { posteringer: Pick<Postering, "konto" | "navn" | "tekst" | "belop">[] } }) {
+// mva_kode: koden fra Skatteetatens standard mva-koder (fakturaene og innbetalingene i regnskapet).
+export function Bilagstabell({ b }: { b: { posteringer: (Pick<Postering, "konto" | "navn" | "tekst" | "belop"> & { mva_kode?: string | null })[] } }) {
   const smal = useSmal();
   const sum = b.posteringer.filter((p) => p.belop > 0).reduce((a, p) => a + p.belop, 0);
+  const tekst = (p: (typeof b.posteringer)[number]) => (
+    <>
+      {p.tekst}
+      {p.mva_kode && (
+        <span className="mva-kode" title="Mva-koden (Skatteetatens standard mva-koder)">
+          kode {p.mva_kode}
+        </span>
+      )}
+    </>
+  );
   return (
     <div className="tabell lonn-bilag">
       <table className="lonn-linjer">
@@ -149,9 +160,9 @@ export function Bilagstabell({ b }: { b: { posteringer: Pick<Postering, "konto" 
             <tr key={i}>
               <td>
                 {p.konto} {p.navn}
-                {smal && <span className="lonn-art">{p.tekst}</span>}
+                {smal && <span className="lonn-art">{tekst(p)}</span>}
               </td>
-              {!smal && <td>{p.tekst}</td>}
+              {!smal && <td>{tekst(p)}</td>}
               <td className="tall">{p.belop > 0 ? kr(p.belop) : ""}</td>
               <td className="tall">{p.belop < 0 ? kr(-p.belop) : ""}</td>
             </tr>

@@ -46,7 +46,17 @@ export type Regnskapsrolle =
   | "forskuddsbetalt_kostnad"
   | "paalopt_kostnad"
   | "uopptjent_inntekt"
-  | "opptjent_inntekt";
+  | "opptjent_inntekt"
+  | "salg"
+  | "salg_middels"
+  | "salg_rafisk"
+  | "salg_lav"
+  | "salg_fritatt"
+  | "salg_unntatt"
+  | "utgaende_mva_middels"
+  | "utgaende_mva_rafisk"
+  | "utgaende_mva_lav"
+  | "purregebyr";
 export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: string }[] = [
   { rolle: "avskrivning_bygg", navn: "Avskrivning på bygninger og annen fast eiendom", standard: "6000" },
   { rolle: "avskrivning_driftsmidler", navn: "Avskrivning på transportmidler, maskiner og inventar", standard: "6010" },
@@ -58,7 +68,19 @@ export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: 
   { rolle: "leverandorgjeld", navn: "Leverandørgjeld", standard: "2400" },
   { rolle: "kundefordringer", navn: "Kundefordringer", standard: "1500" },
   { rolle: "inngaende_mva", navn: "Inngående merverdiavgift", standard: "2710" },
-  { rolle: "utgaende_mva", navn: "Utgående merverdiavgift", standard: "2700" },
+  { rolle: "utgaende_mva", navn: "Utgående merverdiavgift (høy sats)", standard: "2700" },
+  // Fakturaene og innbetalingene (salgBokforing.ts): avgiften og salgsinntekten per sats (kontoene i
+  // Skatteetatens standard kontoplan for SAF-T) og purregebyret.
+  { rolle: "utgaende_mva_middels", navn: "Utgående merverdiavgift, middels sats", standard: "2701" },
+  { rolle: "utgaende_mva_rafisk", navn: "Utgående merverdiavgift, råfisk", standard: "2702" },
+  { rolle: "utgaende_mva_lav", navn: "Utgående merverdiavgift, lav sats", standard: "2703" },
+  { rolle: "salg", navn: "Salgsinntekt, avgiftspliktig, høy sats", standard: "3000" },
+  { rolle: "salg_middels", navn: "Salgsinntekt, avgiftspliktig, middels sats", standard: "3030" },
+  { rolle: "salg_rafisk", navn: "Salgsinntekt råfisk, avgiftspliktig, middels sats", standard: "3035" },
+  { rolle: "salg_lav", navn: "Salgsinntekt, avgiftspliktig, lav sats", standard: "3050" },
+  { rolle: "salg_fritatt", navn: "Salgsinntekt, fritatt for merverdiavgift", standard: "3100" },
+  { rolle: "salg_unntatt", navn: "Salgsinntekt, utenfor merverdiavgiftsloven", standard: "3200" },
+  { rolle: "purregebyr", navn: "Purregebyr", standard: "3900" },
   // Periodiseringene (periodisering.ts): balansekontoene som foreslås.
   { rolle: "forskuddsbetalt_kostnad", navn: "Forskuddsbetalt kostnad", standard: "1700" },
   { rolle: "paalopt_kostnad", navn: "Påløpt kostnad", standard: "2960" },
@@ -88,10 +110,24 @@ export type Regnskapsoppsett = {
   kontoer: Partial<Record<Regnskapsrolle, string>>;
   saldo_fra_aar: number | null;
   saldo_inngaende: Partial<Record<"a" | "c" | "d" | "gevinst_tap", number>>;
+  // Fakturaene og innbetalingene bokføres fra og med datoen (null: alle), og salg uten avgift for den
+  // som er mva-registrert, er unntatt eller fritatt (0089_regnskap_salg.sql).
+  salg_fra: string | null;
+  uten_mva: "unntatt" | "fritatt";
 };
 export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnskapsoppsett> {
-  const o = await en<Regnskapsoppsett>(db, "select kontoer, saldo_fra_aar, saldo_inngaende from faktura.regnskap_oppsett where org_id = $1", [org]);
-  return { kontoer: o?.kontoer ?? {}, saldo_fra_aar: o?.saldo_fra_aar ?? null, saldo_inngaende: o?.saldo_inngaende ?? {} };
+  const o = await en<Regnskapsoppsett>(
+    db,
+    "select kontoer, saldo_fra_aar, saldo_inngaende, to_char(salg_fra, 'YYYY-MM-DD') as salg_fra, uten_mva from faktura.regnskap_oppsett where org_id = $1",
+    [org],
+  );
+  return {
+    kontoer: o?.kontoer ?? {},
+    saldo_fra_aar: o?.saldo_fra_aar ?? null,
+    saldo_inngaende: o?.saldo_inngaende ?? {},
+    salg_fra: o?.salg_fra ?? null,
+    uten_mva: o?.uten_mva ?? "unntatt",
+  };
 }
 // Kontoene som brukes: standarden, med det organisasjonen har endret.
 export function regnskapskontoer(o: Pick<Regnskapsoppsett, "kontoer">): Record<Regnskapsrolle, string> {

@@ -1,10 +1,11 @@
-# Regnskap: bilag, hovedbok, anleggsmidler, periodiseringer og saldoavskrivninger
+# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, anleggsmidler, periodiseringer og saldoavskrivninger
 
 Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
-hovedboken, anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
-avskrivninger, nedskrivning, salg og utrangering, periodiseringene over flere måneder og år,
-månedsavslutningen og de skattemessige saldoavskrivningene.
+hovedboken, fakturaene og innbetalingene som bokføres av seg selv, anleggsmidlene med
+avskrivningsplanen over flere år (også goodwill), bokføringen av avskrivninger, nedskrivning, salg
+og utrangering, periodiseringene over flere måneder og år, månedsavslutningen og de skattemessige
+saldoavskrivningene.
 
 Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap» med fanene
 Bilag, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
@@ -13,11 +14,14 @@ administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer o
 ## Bilagene og hovedboken
 
 - Et bilag har et nummer i en serie per år, en dato, en tekst og posteringer (konto og beløp,
-  positivt i debet og negativt i kredit) som går i null. Seriene: **L** lønn og refusjoner fra
+  positivt i debet og negativt i kredit, og mva-koden der det er avgift) som går i null. Seriene:
+  **F** fakturaer og kreditnotaer, **B** innbetalinger og refusjoner, **L** lønn og refusjoner fra
   NAV, **A** anleggsmidler, **P** periodiseringer og **M** manuelle bilag.
-- Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp.
-  Anleggsmidlene og periodiseringene reverseres det siste først. Et lønnsbilag reverseres ved å
-  åpne lønnskjøringen igjen, og en refusjon fra NAV ved å slette den (Lønn → Sykepenger).
+- Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp (og de
+  samme mva-kodene). Anleggsmidlene og periodiseringene reverseres det siste først. En faktura
+  rettes med en kreditnota, og en innbetaling ved å ta bort betalingen på fakturaen. Et lønnsbilag
+  reverseres ved å åpne lønnskjøringen igjen, og en refusjon fra NAV ved å slette den
+  (Lønn → Sykepenger).
 - **Manuelle bilag** (Regnskap → Bilag → «Nytt bilag»): linjer med konto (norsk standard
   kontoplan, NS 4102), tekst og beløp i debet eller kredit, som må gå i null. Den inngående
   balansen fra et tidligere regnskapssystem føres som et manuelt bilag på den første dagen:
@@ -28,6 +32,47 @@ administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer o
   ført mot egenkapitalen (årsoppgjøret), står på en egen linje, så saldobalansen går i null.
   Resultatet i perioden er inntektene minus kostnadene.
 - **Hovedboken** for en konto: inngående saldo, posteringene med bilaget og saldoen etter hver.
+
+## Fakturaene og innbetalingene (bilagserie F og B)
+
+Fakturaene, kreditnotaene og innbetalingene bokføres av seg selv (`server/src/salgBokforing.ts`,
+`0089_regnskap_salg.sql`): workeren fører det som mangler hvert minutt, og regnskapet gjør det når
+bilagene eller saldobalansen vises. Ingen trenger å gjøre noe.
+
+- **Fakturaen** (og kreditnotaen, med motsatte beløp) får et bilag på fakturadatoen:
+  kundefordringen (1500) med fakturaens sum, mot salget og den utgående avgiften per sats, med
+  mva-koden fra Skatteetatens standard mva-koder for SAF-T:
+
+  | Sats | Salget | Avgiften | Kode |
+  | --- | --- | --- | --- |
+  | 25 % (høy) | 3000 | 2700 | 3 |
+  | 15 % (middels, næringsmidler) | 3030 | 2701 | 31 |
+  | 11,11 % (råfisk) | 3035 | 2702 | 32 |
+  | 12 % (lav) | 3050 | 2703 | 33 |
+  | 0 %, utenfor merverdiavgiftsloven (f.eks. helsetjenester) | 3200 | – | 6 |
+  | 0 %, fritatt (f.eks. bøker og aviser) | 3100 | – | 5 |
+
+  Om salg uten avgift er utenfor loven (standarden) eller fritatt, velges under
+  Regnskap → Kontoer. Den som ikke er mva-registrert, fører alt salget på 3200 uten mva-kode.
+  Kontoene kan endres under Regnskap → Kontoer.
+- **Innbetalingen** får et bilag på betalingsdatoen: banken (1920) mot kundefordringen. Er det
+  betalt mer enn fakturaen (minus kreditnotaene til og med betalingsdatoen), er det overskytende
+  purregebyr (3900, uten avgift) så langt fakturaen er purret med gebyr, og resten står som
+  kundens tilgode på kundefordringen til det betales tilbake. Gebyret regnes likt hver gang, i den
+  rekkefølgen betalingene kom, uansett når de bokføres. En **refusjon** er banken mot
+  kundefordringen.
+- En faktura eller betaling som **slettes**, får bilaget reversert («Reversert, fakturaen er
+  slettet: …»); ellers reverseres bilagene ikke i regnskapet (fakturaen rettes med en kreditnota,
+  og den bokføres av seg selv).
+- **Startdatoen** (Regnskap → Kontoer → «Bokfør fra og med»): fakturaene (fakturadatoen) og
+  innbetalingene (betalingsdatoen) fra og med datoen bokføres. Det som er fra før, hører til den
+  inngående balansen: siden viser kundefordringene ved datoen (fakturaene før den minus det som er
+  betalt før den, uten purregebyrene), som føres i den inngående balansen på 1500. Det som betales
+  etter datoen for en eldre faktura, bokføres mot kundefordringen. Flyttes datoen fram, reverseres
+  bilagene før den («Reversert, fra før startdatoen for salget: …»); flyttes den tilbake, bokføres
+  de på nytt. Organisasjonene som hadde fakturaer da dette kom, fikk 1. januar i år som startdato;
+  nye organisasjoner bokfører alt.
+- Bilaget har en lenke til fakturaen (Regnskap → Bilag → «Åpne fakturaen»).
 
 ## Anleggsregisteret og avskrivningsplanen
 
@@ -138,12 +183,18 @@ Avskrivninger og avganger (kan sendes hver måned), Saldoskjema og Periodisering
   lagt inn etter skatteloven slik den var kjent da modulen ble laget; kontroller dem mot
   Skatteetatens veiledning og skattemeldingen hvert år. Mva-justering for kapitalvarer
   (merverdiavgiftsloven kapittel 9) regnes ikke ut.
-- Fakturaene og innbetalingene fra fakturadelen føres ikke i regnskapet ennå; salg og betalinger
-  føres med manuelle bilag til det kommer.
+- Purregebyret føres på 3900 (annen driftsrelatert inntekt) uten avgift, når det er betalt; kontoen
+  kan endres. Salg til utlandet (utførsel, kode 52) og omvendt avgiftsplikt (kode 51) skilles ikke
+  ut: salg uten avgift er enten utenfor loven eller fritatt for hele organisasjonen. Tap på
+  fordringer føres med et manuelt bilag (7830 mot 1500, og den utgående avgiften tilbake).
 - Perioder låses ikke: et bilag kan føres med en dato i en periode som er rapportert. Årsoppgjøret
   (resultatet mot egenkapitalen, skatt) føres med et manuelt bilag.
 
 ## Kilder
+
+- Skatteetaten, standard mva-koder for SAF-T (Standard Tax Codes) og standard kontoplan (General
+  Ledger Standard Accounts, 4 siffer): <https://github.com/Skatteetaten/saf-t> (mappene «Standard
+  Tax Codes» og «General Ledger Standard Accounts»)
 
 - Regnskapsloven § 4-1 (grunnleggende regnskapsprinsipper: opptjening og sammenstilling, grunnlaget
   for periodiseringene): <https://lovdata.no/lov/1998-07-17-56/§4-1>

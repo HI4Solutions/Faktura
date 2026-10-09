@@ -99,7 +99,8 @@ export const regnskapRapporter: Rapportdef[] = [
     id: "regnskap.bilagsjournal",
     modul: "regnskap",
     navn: "Bilagsjournal",
-    beskrivelse: "Alle bilagene i perioden med posteringene, i rekkefølgen dato og bilagsnummer: lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og manuelle bilag.",
+    beskrivelse:
+      "Alle bilagene i perioden med posteringene og mva-kodene, i rekkefølgen dato og bilagsnummer: fakturaer og innbetalinger, lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og manuelle bilag.",
     funksjon: "regnskap",
     tilgang: "regnskap",
     parameter: "periode",
@@ -114,13 +115,14 @@ export const regnskapRapporter: Rapportdef[] = [
           konto: p.konto,
           navn: p.navn,
           tekst: p.tekst || b.tekst,
+          mva_kode: p.mva_kode ?? null,
           debet: p.belop > 0 ? p.belop : null,
           kredit: p.belop < 0 ? -p.belop : null,
         })),
       );
       const reversert = bilag.filter((b) => b.reverserer || b.reversert_av).length;
       return {
-        merknad: `${bilag.length} bilag. Serie L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, M: manuelle bilag.${reversert ? ` ${reversert} av bilagene er reversert eller reverseringer (de går mot hverandre).` : ""}`,
+        merknad: `${bilag.length} bilag. Serie F: fakturaer og kreditnotaer, B: innbetalinger og refusjoner, L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, M: manuelle bilag.${reversert ? ` ${reversert} av bilagene er reversert eller reverseringer (de går mot hverandre).` : ""}`,
         kolonner: [
           { nokkel: "dato", navn: "Dato", type: "dato" },
           { nokkel: "bilag", navn: "Bilag" },
@@ -128,6 +130,7 @@ export const regnskapRapporter: Rapportdef[] = [
           { nokkel: "konto", navn: "Konto", type: "tekst" },
           { nokkel: "navn", navn: "Kontonavn" },
           { nokkel: "tekst", navn: "Tekst" },
+          { nokkel: "mva_kode", navn: "Mva-kode", type: "tekst" },
           { nokkel: "debet", navn: "Debet", type: "kr", sum: true },
           { nokkel: "kredit", navn: "Kredit", type: "kr", sum: true },
         ],

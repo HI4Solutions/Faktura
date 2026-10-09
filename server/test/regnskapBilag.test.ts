@@ -410,9 +410,21 @@ describe.skipIf(!process.env.DATABASE_URL)("regnskapet i appen: periodiseringer,
 
     const j = await rapport("regnskap.bilagsjournal", "fra=2026-01-01&til=2026-01-31");
     expect([...new Set(j.rader.map((r: any) => r.bilag))]).toEqual(["M-2026-1", "M-2026-2", "P-2026-1", "P-2026-3"]);
-    expect(j.rader[0]).toEqual({ dato: "2026-01-01", bilag: "M-2026-1", kilde: "Manuelt bilag", konto: "1920", navn: "Bank", tekst: "Inngående balanse", debet: 100000, kredit: null });
+    expect(j.rader[0]).toEqual({
+      dato: "2026-01-01",
+      bilag: "M-2026-1",
+      kilde: "Manuelt bilag",
+      konto: "1920",
+      navn: "Bank",
+      tekst: "Inngående balanse",
+      mva_kode: null,
+      debet: 100000,
+      kredit: null,
+    });
     expect(j.sum).toMatchObject({ debet: 125000, kredit: 125000 });
-    expect(j.merknad).toBe("4 bilag. Serie L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, M: manuelle bilag.");
+    expect(j.merknad).toBe(
+      "4 bilag. Serie F: fakturaer og kreditnotaer, B: innbetalinger og refusjoner, L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, M: manuelle bilag.",
+    );
 
     const p = await rapport("regnskap.periodiseringer", "fra=2026-07-01&til=2026-09-30");
     expect(p.rader.map((r: any) => [r.nummer, r.maaneder, r.i_perioden, r.fordelt, r.igjen, r.status])).toEqual([
