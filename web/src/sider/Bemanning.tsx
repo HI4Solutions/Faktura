@@ -29,7 +29,7 @@ import {
 } from "./Fravaer";
 import { visLangDag } from "./Tavle";
 import { ArbeidsplanDialog, fastTid, fastTider } from "./Arbeidsplan";
-import type { Fast, Vakt, VaktSvar, VikarVakt } from "./Vakter";
+import { fortAvvik, fortTider, type Fast, type Fort, type Vakt, type VaktSvar, type VikarVakt } from "./Vakter";
 import { helligdag } from "../helligdager";
 
 type Ansatt = Grunnansatt & {
@@ -45,7 +45,7 @@ type Seksjon = { id: string | null; navn: string; kort: string; behov: number | 
 type Rute =
   | { art: "utenfor" }
   | { art: "borte"; fravaer: Fravaer; vakter: Vakt[]; utenVikar: Vakt[]; fast: Fast | null }
-  | { art: "jobb"; vakter: Vakt[]; fast: Fast | null; ekstra: number; plan: boolean; utkast: boolean }
+  | { art: "jobb"; vakter: Vakt[]; fast: Fast | null; forte: Fort[]; ekstra: number; plan: boolean; utkast: boolean }
   | { art: "fri" };
 
 const maanedFormat = new Intl.DateTimeFormat("nb-NO", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -182,12 +182,14 @@ export function Bemanning({
   // De faste arbeidsdagene (dager i arbeidsplanen uten vakt) og ekstratimene, fra serveren.
   const fastePer = new Map((data.faste ?? []).map((f) => [nokkel(f.ansatt_id, f.dato), f]));
   const ekstraPer = new Map((data.ekstra ?? []).map((e) => [nokkel(e.ansatt_id, e.dato), e]));
+  const fortePer = new Set((data.forte ?? []).map((f) => nokkel(f.ansatt_id, f.dato)));
 
   // Alle dagene; med stengt helg (0064_helg.sql) hverdagene, og helgedager med vakter eller faste dager.
   const helg = org?.helg !== false;
   const dager: string[] = [];
   for (let d = forste; d <= siste; d = leggTilDager(d, 1)) {
-    if (helg || !erHelg(d) || data.vakter.some((v) => v.dato === d) || (data.faste ?? []).some((f) => f.dato === d)) dager.push(d);
+    if (helg || !erHelg(d) || data.vakter.some((v) => v.dato === d) || (data.faste ?? []).some((f) => f.dato === d) || (data.forte ?? []).some((f) => f.dato === d))
+      dager.push(d);
   }
 
   // Kolonnene: de som er ansatt i måneden, og alle med vakter eller fravær i den.
@@ -223,9 +225,13 @@ export function Bemanning({
     const fast = fastePer.get(nokkel(a.id, d)) ?? null;
     const f = data.fravaer.find((x) => x.ansatt_id === a.id && x.fra <= d && x.til >= d);
     if (f) return { art: "borte", fravaer: f, vakter, utenVikar: vakter.filter((v) => !v.har_vikar), fast };
-    if (vakter.length || fast) {
+    // Timene den ansatte har ført den dagen: på jobb (også uten vakt eller fast dag), og vist når de
+    // ikke er som planlagt. Ekstratimene er regnet etter dem.
+    const fort = fortePer.has(nokkel(a.id, d));
+    const avvik = fort ? fortAvvik(data, a.id, d) : [];
+    if (vakter.length || fast || fort) {
       const e = ekstraPer.get(nokkel(a.id, d));
-      return { art: "jobb", vakter, fast, ekstra: Number(e?.timer ?? 0), plan: !!e?.plan, utkast: vakter.length > 0 && vakter.every((v) => !v.publisert) };
+      return { art: "jobb", vakter, fast, forte: avvik, ekstra: Number(e?.timer ?? 0), plan: !!e?.plan, utkast: vakter.length > 0 && vakter.every((v) => !v.publisert) };
     }
     return { art: "fri" };
   };
@@ -256,6 +262,7 @@ export function Bemanning({
         : [
             r.fast ? `Fast arbeidsdag ${fastTid(r.fast)}`.trim() : "",
             ...r.vakter.map((v) => `${v.fra}–${v.til}${v.oppgave ? ` ${v.oppgave}` : ""}${v.publisert ? "" : " (ikke publisert)"}`),
+            r.forte.length ? `Ført ${fortTider(r.forte)}${r.forte.some((x) => x.status === "levert") ? " (ikke godkjent)" : ""}` : "",
             r.ekstra ? `${timer(rund(r.ekstra))} ekstra` : "",
           ];
     return deler.filter(Boolean).map(punktum).join(" ");
@@ -591,6 +598,17 @@ export function Bemanning({
                         Sett inn vikar
                       </button>
                     )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {valgt.r.art === "jobb" && valgt.r.forte.length > 0 && (
+              <ul className="liste-enkel">
+                {valgt.r.forte.map((f) => (
+                  <li key={f.id}>
+                    <span>
+                      <span className="tittel">{fortTider([f])}</span> <span className="dempet">Ført · {f.status === "godkjent" ? "godkjent" : "venter på godkjenning"}</span>
+                    </span>
                   </li>
                 ))}
               </ul>

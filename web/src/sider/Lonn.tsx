@@ -101,6 +101,12 @@ interface Kjoring {
   betalingsfil_lastet: string | null;
   betalingsfil_antall: number;
   betalingsfil_av: string | null;
+  // Laget av seg selv den første i måneden (0088_lonn_automatikk.sql), når den sist ble regnet ut,
+  // om noe er endret siden (for den som ikke kan endre lønnen), og timene som ikke er godkjent.
+  automatisk: boolean;
+  beregnet: string | null;
+  utdatert: boolean;
+  timer: { levert: number; utkast: number };
   sum: Summer;
   slipper: Slipp[];
 }
@@ -111,6 +117,7 @@ interface KjoringRad {
   utbetalingsdato: string;
   status: "utkast" | "godkjent";
   feriepenger: boolean;
+  automatisk: boolean;
   antall: number;
   brutto: number;
   skattetrekk: number;
@@ -242,8 +249,9 @@ function Kjoringer({ apne }: { apne: (id: string) => void }) {
         )}
       </div>
       <p className="undertittel">
-        En lønnskjøring per måned: lønnen regnes ut fra de ansatte, de godkjente timene, de faste tilleggene, sykefraværet og skattekortene. Se over og godkjenn, så får de
-        ansatte lønnsslippen.
+        En lønnskjøring per måned: lønnen regnes ut fra de ansatte, de godkjente timene, de faste tilleggene, sykefraværet og skattekortene, og regnes ut på nytt av seg selv
+        når noe av det endres. Kjøringen for måneden lages den første i måneden når dere har kjørt lønn her de siste tre månedene. Se over og godkjenn, så får de ansatte
+        lønnsslippen.
       </p>
       {liste.feil ? (
         <Feil melding={liste.feil} />
@@ -273,6 +281,7 @@ function Kjoringer({ apne }: { apne: (id: string) => void }) {
               <span className="linje">
                 <span className="under">
                   Utbetales {dato(k.utbetalingsdato)} · {k.antall} {k.antall === 1 ? "ansatt" : "ansatte"}
+                  {k.automatisk && k.status === "utkast" ? " · automatisk" : ""}
                 </span>
                 {status(k)}
               </span>
@@ -300,6 +309,7 @@ function Kjoringer({ apne }: { apne: (id: string) => void }) {
                   <td>
                     <strong>{kjoringNavn(k)}</strong>
                     {k.feriepenger && <span className="liten dempet"> · feriepenger</span>}
+                    {k.automatisk && k.status === "utkast" && <span className="liten dempet"> · laget automatisk</span>}
                   </td>
                   <td>{dato(k.utbetalingsdato)}</td>
                   <td className="tall">{k.antall}</td>
@@ -483,6 +493,30 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
         {!utkast && d.godkjent_at && ` Godkjent ${dato(d.godkjent_at)}${d.godkjent_av ? ` av ${d.godkjent_av}` : ""}.`}
         {!utkast && d.betalingsfil_lastet && ` Betalingsfila ble lastet ned ${tidspunkt(d.betalingsfil_lastet)}${d.betalingsfil_av ? ` av ${d.betalingsfil_av}` : ""}.`}
       </p>
+      {utkast && (
+        <p className="liten dempet lonn-automatikk">
+          {d.automatisk && <span className="merke merke-noytral">Laget automatisk</span>} Regnes ut på nytt av seg selv når timer, fravær, vakter, tillegg, trekk eller de
+          ansatte endres{d.beregnet ? ` (sist ${tidspunkt(d.beregnet)})` : ""}.
+          {d.utdatert && " Noe er endret siden; tallene oppdateres om litt."}
+        </p>
+      )}
+      {utkast && d.timer.levert + d.timer.utkast > 0 && (
+        <div className="melding info lonn-timer">
+          <span>
+            {d.timer.levert > 0 &&
+              (d.timer.levert === 1
+                ? "1 timeføring venter på godkjenning, og er ikke med før den er godkjent."
+                : `${d.timer.levert} timeføringer venter på godkjenning, og er ikke med før de er godkjent.`)}
+            {d.timer.levert > 0 && d.timer.utkast > 0 && " "}
+            {d.timer.utkast > 0 && `${d.timer.utkast} ${d.timer.utkast === 1 ? "timeføring er" : "timeføringer er"} ført, men ikke levert.`}
+          </span>
+          {d.timer.levert > 0 && (
+            <Link className="knapp" to="/timer?fane=godkjenning">
+              Godkjenn timer
+            </Link>
+          )}
+        </div>
+      )}
       {d.notat && <p className="lonn-notat">{d.notat}</p>}
       {melding && (
         <div className="melding ok" role="status">

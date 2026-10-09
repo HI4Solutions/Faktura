@@ -443,7 +443,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   Ekstratimer (`server/src/arbeidsplan.ts`): med plan timene utover planen den dagen (en dag
   med fri har ingen timer i planen, og timene fra en fast dag som er byttet, er flyttet til
   dagen den ansatte fikk igjen); uten plan timene utover avtalt arbeidstid i uka (alle timene
-  for tilkallingsvikarer); vakter den ansatte er borte fra, teller ikke. Rapporten over
+  for tilkallingsvikarer); vakter den ansatte er borte fra, teller ikke. En dag med førte timer
+  (levert eller godkjent) regnes etter dem i stedet for vaktene (`beregnBemanning` med `forte`,
+  det som faktisk er jobbet), i vaktplanen, kalenderen og rapporten. Rapporten over
   ekstratimer per ansatt i en periode tas ut som PDF eller CSV (`/ekstratimer.pdf|.csv`)
 - Bemanningsdataene registreres ett sted og brukes overalt: stillingsprosenten, arbeidstiden og
   de faste dagene ligger på den ansatte (`ansatte`, `arbeidsplaner`), og fraværet og ferien i
@@ -498,6 +500,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   annet; for andre bare F) eller ekstratimer, nederst ekstratimene i måneden per ansatt,
   og til høyre hvor mange med hver rolle som er på jobb mot behovet, vakter uten vikar og
   ledige vakter. Så kan f.eks. legene ses opp mot sekretærene, også leger som ikke er ansatt.
+  Timene de ansatte har ført (`/vakter` gir `forte`: levert og godkjent, og radtilgangen gir en
+  ansatt bare sine egne), står i uka, dagen og måneden når de ikke er som planlagt (`fortAvvik` i
+  `web/src/sider/Vakter.tsx`: andre tider, flere eller færre timer, eller en dag uten vakt eller
+  fast dag), og den som har ført timer en dag, er på jobb.
   Roller kan lages fra stillingene, og kunder hentes inn som rollehavere (se over).
   AI-assistenten svarer med det samme når man spør hvem som jobber («Lege 6 av 7 (mangler 1),
   Sekretær 4 av 4»)
@@ -867,6 +873,24 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   1. januar, og resultatet fra tidligere år på egen linje); `/regnskap/maanedsavslutning` bokfører
   avskrivningene og periodiseringene som mangler, samlet. Bilagene for anleggsmidlene,
   periodiseringene og de manuelle bilagene ser de som ser regnskapet (`bilag_les`)
+- Lønnen går av seg selv (`0088_lonn_automatikk.sql`, `server/src/lonnAutomatikk.ts`,
+  `server/src/lonn.ts`): triggere på det lønnen regnes ut fra (`ansatte`, `ansatt_tillegg`,
+  `lonnstrekk`, `naturalytelser`, `reiseregninger`, `timeforinger`, `fravaer`, `timebank_poster`,
+  `vakter`, `arbeidsplaner`, `arbeidsplan_dager`, `arbeidsplan_fri`, `lonnsendringer`,
+  `lonn_inngaende`, `lonn_oppsett`, statusen på `lonnskjoringer` og `trekktabeller`) skriver én rad
+  per organisasjon og transaksjon i `lonn_endringer` (transaksjons-id-en, så samtidige endringer
+  aldri venter på hverandre). Utregningen (`beregnKjoring`) lagrer først øyeblikksbildet
+  (`lonn_beregnes`, `pg_current_snapshot()`) i `lonnskjoring_beregning`, i samme transaksjon som
+  slippene; et utkast er utdatert (`lonn_utdatert`) når det finnes en endring som ikke var synlig i
+  det. Utkastene som er utdatert, regnes ut på nytt når de vises (for den som kan endre lønnen; ellers
+  vises det som sist ble regnet ut) og av workeren hvert minutt (`oppdaterLonnsutkast`). Hver
+  morgen lager workeren den ordinære kjøringen for måneden (`lonnskjoringer.automatisk`) når
+  organisasjonen har kjørt lønn de siste tre månedene, har ansatte i arbeid og ikke har slått det av
+  (`lonn_oppsett.auto_kjoring`), med varsel til eier og administrator; regner ut utkastene som ikke
+  er regnet ut det siste døgnet; minner på kjøringen som ikke er godkjent tre dager før lønnsdagen
+  (én gang, `paaminnet`); og rydder endringene alle utkastene har sett (`rydd_lonn_endringer`).
+  Kjøringen viser når den sist ble regnet ut, og timene i måneden som er levert og ikke godkjent
+  (eller ført og ikke levert). En kjøring regnes alltid ut på nytt når den godkjennes
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med

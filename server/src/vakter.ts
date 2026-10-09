@@ -144,9 +144,11 @@ export function vaktRuter() {
           [orgId(c), fra, til, q.ansatt ?? null, q.ledige === "1"],
         );
         const iPerioden = vakter.filter((v) => v.dato >= q.fra && v.dato <= q.til);
-        // Faste dager fra arbeidsplanene (dager i planen uten vakt) og ekstratimene.
-        const bemanning = await beregnBemanning(db, orgId(c), fra, til, q.ansatt ?? null);
+        // Faste dager fra arbeidsplanene (dager i planen uten vakt) og ekstratimene, med de førte
+        // timene (levert og godkjent; de ansatte ser bare sine egne): det som faktisk er jobbet.
+        const bemanning = await beregnBemanning(db, orgId(c), fra, til, q.ansatt ?? null, { forte: true });
         const faste = bemanning.faste.filter((f) => f.dato >= q.fra && f.dato <= q.til);
+        const forte = bemanning.forte.filter((f) => f.dato >= q.fra && f.dato <= q.til);
         // Fraværet i perioden (de ansatte ser typen og notatet bare for seg selv).
         const fravaer = await alle(
           db,
@@ -156,7 +158,7 @@ export function vaktRuter() {
             order by f.fra`,
           [orgId(c), q.fra, q.til, q.ansatt ?? null],
         );
-        if (!helPlan) return { regler: regel, vakter: iPerioden.map((v) => ({ ...v, advarsler: [] })), uker: [], upubliserte: 0, fravaer, faste, ekstra: [] };
+        if (!helPlan) return { regler: regel, vakter: iPerioden.map((v) => ({ ...v, advarsler: [] })), uker: [], upubliserte: 0, fravaer, faste, forte, ekstra: [] };
 
         const ansatte = await alle<Ansettelse & { id: string; avtalt: number }>(
           db,
@@ -193,6 +195,7 @@ export function vaktRuter() {
           upubliserte: iPerioden.filter((v) => !v.publisert).length,
           fravaer,
           faste,
+          forte,
           // plan: ekstratimene er regnet mot den faste planen den dagen (ellers mot avtalt
           // arbeidstid i uka).
           ekstra: [...bemanning.ekstra.entries()]

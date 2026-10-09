@@ -141,6 +141,8 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
       skatt_kontonr: null,
       // Reiser: statens satser, med det som er over de trekkfrie som trekkpliktig (0083).
       reise_satser: "staten",
+      // Lønnskjøringen for måneden lages av seg selv (0088_lonn_automatikk.sql).
+      auto_kjoring: true,
     });
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { overtid_prosent: 30 })).data.error).toBe("Overtidstillegget er minst 40 % (arbeidsmiljøloven § 10-6)");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).data).toMatchObject({ aktiv: true, daglig_grense: 9 });

@@ -18,6 +18,7 @@ import { endreTilgang, hentSkattekort, hentSkattekortSvar, lagTilgang, planleggD
 import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingInnsending.js";
 import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepenger.js";
 import { aktiverLonnsendringer } from "./lonnsendringer.js";
+import { lonnHverMorgen, oppdaterLonnsutkast } from "./lonnAutomatikk.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
@@ -606,17 +607,19 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
 
-  // Hver morgen: gjentakende fakturaer, og lønns- og stillingsendringer som gjelder fra i dag.
+  // Hver morgen: gjentakende fakturaer, lønns- og stillingsendringer som gjelder fra i dag, og
+  // lønnen (kjøringen for måneden, utkastene og påminnelsen før lønnsdagen, lonnAutomatikk.ts).
   app.post("/jobber/gjenta", async (c) => {
     const r = await gjenta();
     await aktiverLonnsendringer().catch((e) => logg("ERROR", "Lønnsendringene ble ikke tatt i bruk", { feil: (e as Error).message }));
+    await lonnHverMorgen().catch((e) => logg("ERROR", "Lønnen hver morgen feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag henter fra banken på de faste
   // hentetidene (planleggingen tar hver hentetid én gang per bank), sjekker nye kunder for
   // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker
   // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
-  // a-meldingene som venter på tilbakemelding.
+  // a-meldingene som venter på tilbakemelding. Lønnsutkastene der noe er endret, regnes ut på nytt.
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
@@ -626,6 +629,7 @@ export function lagWorker() {
     await planleggTilgangssjekk().catch((e) => logg("ERROR", "Sjekk av tilgangene i Altinn feilet", { feil: (e as Error).message }));
     await planleggAmeldingssjekk().catch((e) => logg("ERROR", "Sjekk av a-meldingene feilet", { feil: (e as Error).message }));
     await planleggNavHenting().catch((e) => logg("ERROR", "Planlegging av hentingen fra NAV feilet", { feil: (e as Error).message }));
+    await oppdaterLonnsutkast().catch((e) => logg("ERROR", "Omregningen av lønnsutkastene feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));

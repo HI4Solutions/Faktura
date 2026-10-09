@@ -217,6 +217,7 @@ function PersonalOppsett() {
     pensjonsinnretning_orgnr: string;
     sykepenger_refusjon: boolean;
     reise_satser: "staten" | "trekkfri";
+    auto_kjoring: boolean;
     egenmelding: Egenmeldingsordning;
     egenmelding_dager: string;
     egenmelding_ganger: string;
@@ -253,6 +254,7 @@ function PersonalOppsett() {
         pensjonsinnretning_orgnr: data.pensjonsinnretning_orgnr ?? "",
         sykepenger_refusjon: data.sykepenger_refusjon ?? true,
         reise_satser: data.reise_satser ?? "staten",
+        auto_kjoring: data.auto_kjoring ?? true,
         egenmelding: ordning(data.egenmelding_dager ?? 3, data.egenmelding_ganger === undefined ? 4 : data.egenmelding_ganger, data.egenmelding_dager_aar ?? null),
         egenmelding_dager: String(data.egenmelding_dager ?? 3),
         egenmelding_ganger: data.egenmelding_ganger == null ? "" : String(data.egenmelding_ganger),
@@ -294,6 +296,7 @@ function PersonalOppsett() {
               pensjonsinnretning_orgnr: o!.pensjonsinnretning_orgnr.replace(/\s/g, "") || null,
               sykepenger_refusjon: o!.sykepenger_refusjon,
               reise_satser: o!.reise_satser,
+              auto_kjoring: o!.auto_kjoring,
             }
           : {}),
       }),
@@ -439,6 +442,15 @@ function PersonalOppsett() {
           <h3 id="lonn" className="innstilling-sted">
             Lønn
           </h3>
+          <label>
+            <input type="checkbox" checked={o.auto_kjoring} onChange={(e) => settO({ ...o, auto_kjoring: e.target.checked })} />
+            Lag lønnskjøringen for måneden automatisk
+          </label>
+          <p className="liten dempet">
+            Den første i måneden lages lønnskjøringen for måneden (når dere har kjørt lønn her de siste tre månedene), og eier og administrator får beskjed. Alle utkast regnes ut på nytt av seg
+            selv når timer, fravær, vakter, tillegg, trekk eller de ansatte endres, og dere får en påminnelse tre dager før lønnsdagen om den ikke er godkjent. Lønnen godkjennes
+            alltid av dere.
+          </p>
           <label>
             Sone for arbeidsgiveravgift
             <select value={o.aga_sone} onChange={(e) => settO({ ...o, aga_sone: e.target.value })}>

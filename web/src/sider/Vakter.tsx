@@ -49,15 +49,50 @@ export type Vakt = {
 // En hel dag har ikke klokkeslett.
 export type Fast = { ansatt_id: string; dato: string; fra: string | null; til: string | null; pause_min: number; timer: number; fravaer: FravaerType | null };
 type Ukesum = { ansatt_id: string; fra: string; planlagt: number; avtalt: number | null; advarsler: string[] };
+// Timer den ansatte har ført (levert eller godkjent): det de faktisk jobbet den dagen (vakt_id:
+// vakten de er ført fra). De ansatte ser bare sine egne.
+export type Fort = {
+  id: string;
+  ansatt_id: string;
+  dato: string;
+  fra: string | null;
+  til: string | null;
+  pause_min: number;
+  timer: number;
+  status: "levert" | "godkjent";
+  vakt_id: string | null;
+};
 export type VaktSvar = {
   vakter: Vakt[];
   uker: Ukesum[];
   upubliserte: number;
   fravaer: Fravaer[];
   faste: Fast[];
-  // Timene utover den faste planen den dagen (plan), eller utover avtalt arbeidstid i uka.
+  forte?: Fort[];
+  // Timene utover den faste planen den dagen (plan), eller utover avtalt arbeidstid i uka. En dag
+  // med førte timer regnes etter dem (det som faktisk er jobbet).
   ekstra: { ansatt_id: string; dato: string; timer: number; plan: boolean }[];
 };
+
+// De førte timene til en ansatt en dag når de ikke er som planlagt (andre tider eller flere eller
+// færre timer enn vaktene og den faste dagen, eller en dag uten noe planlagt); tom når de er som
+// planlagt (eller ingenting er ført).
+export function fortAvvik(data: VaktSvar, ansatt: string, dato: string): Fort[] {
+  const forte = (data.forte ?? []).filter((f) => f.ansatt_id === ansatt && f.dato === dato);
+  if (!forte.length) return [];
+  const plan: { fra: string | null; til: string | null; timer: number }[] = [
+    ...data.vakter.filter((v) => v.ansatt_id === ansatt && v.dato === dato && !v.fravaer),
+    ...(data.faste ?? []).filter((f) => f.ansatt_id === ansatt && f.dato === dato && !f.fravaer),
+  ];
+  const sum = (l: { timer: number }[]) => Math.round(l.reduce((s, x) => s + Number(x.timer), 0) * 100);
+  const tider = (l: { fra: string | null; til: string | null }[]) => l.map((x) => `${x.fra}–${x.til}`).sort().join(",");
+  const somPlanlagt = plan.length > 0 && sum(plan) === sum(forte) && (plan.some((p) => !p.fra) || tider(plan) === tider(forte));
+  return somPlanlagt ? [] : forte;
+}
+// «08:00–18:00» eller «3 t» for timer uten klokkeslett.
+export function fortTider(l: Fort[]) {
+  return l.map((f) => (f.fra ? `${f.fra}–${f.til}` : timer(Number(f.timer)))).join(", ");
+}
 // Vakten vikaren settes inn for (id-en er tom for en fast dag uten vakt).
 export type VikarVakt = Pick<Vakt, "id" | "dato" | "fra" | "til" | "oppgave" | "ansatt_id" | "ansatt_navn">;
 type MinPlass = { dato: string; fase: string; fra: string | null; til: string | null; oppgave: string };
@@ -371,7 +406,9 @@ function Vaktplan({
   const mobil = useSmal();
   const [ukedag, settUkedag] = useState<number | null>(null);
   // Med stengt helg: mandag–fredag, og lørdag og søndag bare når noen har vakt eller fast dag da.
-  const dager = ukedager(uke).filter((d) => helg || !erHelg(d) || !!data?.vakter.some((v) => v.dato === d) || !!data?.faste?.some((f) => f.dato === d));
+  const dager = ukedager(uke).filter(
+    (d) => helg || !erHelg(d) || !!data?.vakter.some((v) => v.dato === d) || !!data?.faste?.some((f) => f.dato === d) || !!data?.forte?.some((f) => f.dato === d),
+  );
   const nr = ukenr(uke).uke;
   const valgtDag = dager[Math.min(ukedag ?? Math.max(0, dager.indexOf(iDag())), dager.length - 1)]!;
   // Ny periode: ikke vis meldingen eller feilen fra den forrige.
@@ -463,6 +500,7 @@ function Vaktplan({
   const medRoller = grupper.data.length > 0;
   const navn = new Map(ansatte.data.map((a) => [a.id, `${a.fornavn} ${a.etternavn}`]));
   const alleFaste = data.faste ?? [];
+  const alleForte = data.forte ?? [];
   const ledige = data.vakter.filter((v) => !v.ansatt_id);
   const sum = (a: string) => data.uker.find((u) => u.ansatt_id === a);
   const advarsler = [
@@ -481,6 +519,8 @@ function Vaktplan({
     new Set([
       ...data.vakter.filter((v) => v.dato === d && v.ansatt_id && !v.fravaer && vises(v.ansatt_id)).map((v) => v.ansatt_id),
       ...alleFaste.filter((f) => f.dato === d && !f.fravaer && vises(f.ansatt_id)).map((f) => f.ansatt_id),
+      // De som har ført timer den dagen, har vært på jobb.
+      ...alleForte.filter((f) => f.dato === d && vises(f.ansatt_id)).map((f) => f.ansatt_id),
     ]).size;
   const manglerVikar = (d: string) => data.vakter.filter((v) => v.dato === d && v.ansatt_id && v.fravaer && !v.har_vikar && vises(v.ansatt_id)).length;
 
@@ -564,10 +604,39 @@ function Vaktplan({
     );
   };
 
-  // En dag i lista (nettbrett og mobil): hvem som er borte, og vaktene og de faste dagene.
+  // Timene den ansatte har ført en dag, når de ikke er som planlagt: tidene, og ekstratimene. Trykk
+  // for å se timene (Timer).
+  const fortChip = (a: string, d: string, liste: Fort[], medNavn = false) => {
+    const ekstra = data.ekstra.find((e) => e.ansatt_id === a && e.dato === d)?.timer ?? 0;
+    const levert = liste.some((f) => f.status === "levert");
+    const sum = liste.reduce((s, f) => s + Number(f.timer), 0);
+    const tittel = [`Ført ${fortTider(liste)} (${timer(sum)})`, ekstra ? `${timer(ekstra)} ekstra` : "", levert ? "Venter på godkjenning" : "Godkjent"].filter(Boolean).join("\n");
+    return (
+      <Link
+        key={`fort-${a}-${d}`}
+        className={`vakt-chip fort${levert ? " levert" : ""}`}
+        to={seAlle ? `/timer?fane=alle&ansatt=${a}&uke=${mandag(d)}` : `/timer?uke=${mandag(d)}`}
+        title={tittel}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className="vakt-tid">{fortTider(liste)}</span>
+        {medNavn && <span className="vakt-navn">{navn.get(a) ?? ""}</span>}
+        <span className="vakt-fort">
+          Ført{ekstra ? ` · ${timer(ekstra)} ekstra` : ""}
+          {levert ? " · ikke godkjent" : ""}
+        </span>
+      </Link>
+    );
+  };
+
+  // En dag i lista (nettbrett og mobil): hvem som er borte, og vaktene, de faste dagene og timene
+  // som er ført (når de ikke er som planlagt).
   const dagen = (d: string) => {
     const dagens = data.vakter.filter((v) => v.dato === d && vises(v.ansatt_id));
     const faste = alleFaste.filter((f) => f.dato === d && vises(f.ansatt_id));
+    const forte = [...new Set(alleForte.filter((f) => f.dato === d && vises(f.ansatt_id)).map((f) => f.ansatt_id))]
+      .map((a) => ({ a, liste: fortAvvik(data, a, d) }))
+      .filter((x) => x.liste.length > 0);
     const borte = data.fravaer.filter((f) => f.fra <= d && f.til >= d && vises(f.ansatt_id));
     const mangler = manglerVikar(d);
     // Etter når de begynner (en hel dag fra kl. 08) og navnet: ledige vakter over, og så rolle for
@@ -575,6 +644,7 @@ function Vaktplan({
     const alle = [
       ...dagens.map((v) => ({ id: v.ansatt_id, fra: v.fra, navn: v.ansatt_navn ?? "", borte: !!v.fravaer, el: chip(v, true) })),
       ...faste.map((f) => ({ id: f.ansatt_id as string | null, fra: f.fra ?? "08:00", navn: navn.get(f.ansatt_id) ?? "", borte: !!f.fravaer, el: fastChip(f, true) })),
+      ...forte.map(({ a, liste }) => ({ id: a as string | null, fra: liste[0]!.fra ?? "08:00", navn: navn.get(a) ?? "", borte: false, el: fortChip(a, d, liste, true) })),
     ].sort((a, b) => a.fra.localeCompare(b.fra) || a.navn.localeCompare(b.navn, "nb"));
     const ledigeIDag = alle.filter((x) => !x.id);
     const kolonner = r.seksjoner.map((s) => ({ s, liste: alle.filter((x) => x.id && r.rolle(x.id) === s.id) })).filter((k) => k.liste.length > 0);
@@ -585,7 +655,7 @@ function Vaktplan({
             {visDag(d)}
             {helligdag(d) && <span className="helligdag-navn">{helligdag(d)}</span>}
           </span>
-          {dagens.length + faste.length > 0 && <span className="dag-sum">{paJobb(d)} på jobb</span>}
+          {dagens.length + faste.length + forte.length > 0 && <span className="dag-sum">{paJobb(d)} på jobb</span>}
           {kanPlanlegge && (
             <button type="button" className="kopier" aria-label={`Ny vakt ${visDag(d)}`} title="Ny vakt" onClick={() => nyVakt(d, null)}>
               <IkonPluss storrelse={18} />
@@ -764,10 +834,12 @@ function Vaktplan({
                         const vakter = data.vakter.filter((v) => v.ansatt_id === a.id && v.dato === d);
                         const fast = vakter.length ? undefined : fastDag(a.id, d);
                         const f = vakter.length || fast ? undefined : borteDag(a.id, d);
+                        const fort = fortAvvik(data, a.id, d);
                         return (
                           <td key={d} className={kanPlanlegge ? "ny-vakt" : undefined} onClick={() => nyVakt(d, a.id)}>
                             {vakter.map((v) => chip(v))}
                             {fast && fastChip(fast)}
+                            {fort.length > 0 && fortChip(a.id, d, fort)}
                             {f && (
                               <span className={`fravaer-dag fravaer-${f.type}`} title={`${fravaerTekst[f.type]} ${f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)}–${visDag(f.til)}`}`}>
                                 {fravaerTekst[f.type]}
@@ -817,6 +889,7 @@ function Vaktplan({
       {visning === "uke" && data.vakter.length + alleFaste.length > 0 && (
         <p className="liten dempet">
           {alleFaste.length > 0 && `«Fast» er en fast arbeidsdag etter arbeidsplanen til den ansatte${seAlle ? " (under Ansatte)" : ""}; en vakt samme dag gjelder i stedet. `}
+          {alleForte.length > 0 && "«Ført» er timene den ansatte har ført, når de ikke er som planlagt (de teller i ekstratimene og lønnen når de er godkjent). "}
           {!smal && seAlle && "Timer: planlagt / avtalt arbeidstid i uka. "}
           {kanPlanlegge ? "Trykk i en rute for å legge inn en vakt." : ""}
         </p>
@@ -1013,7 +1086,12 @@ const sluttMin = (fra: string, til: string) => minutter(til) + (minutter(til) <=
 const kortKl = (s: string) => (s.endsWith(":00") ? String(Number(s.slice(0, 2))) : `${Number(s.slice(0, 2))}:${s.slice(3)}`);
 
 // En vakt eller fast arbeidsdag i dagsvisningen (en hel dag uten klokkeslett: fra kl. 08).
-type Linje = { ansatt_id: string | null; vakt?: Vakt; fast?: Fast; fra: string; til: string; hel: boolean; borte: FravaerType | null; mangler: boolean };
+type Linje = { ansatt_id: string | null; vakt?: Vakt; fast?: Fast; fort?: Fort; fra: string; til: string; hel: boolean; borte: FravaerType | null; mangler: boolean };
+// Klokkeslettet et antall timer etter et annet («08:00» + 3,5 → «11:30»).
+const etter = (fra: string, timer: number) => {
+  const m = (minutter(fra) + Math.round(timer * 60)) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+};
 
 // Dagen: de som er på jobb, rolle for rolle (de valgte rollene), på en tidslinje. Trykk på en vakt
 // for å endre den, på en fast dag for å lage en vakt med andre tider (eller sette inn vikar), og i en
@@ -1050,6 +1128,18 @@ function DagVisning({
     ...(data.faste ?? [])
       .filter((f) => f.dato === dato)
       .map((f) => ({ ansatt_id: f.ansatt_id, fast: f, ...fastTider(f), hel: !f.fra, borte: f.fravaer, mangler: !!f.fravaer })),
+    // Timene som er ført, når de ikke er som planlagt (timer uten klokkeslett fra kl. 08).
+    ...[...new Set((data.forte ?? []).filter((f) => f.dato === dato).map((f) => f.ansatt_id))].flatMap((a) =>
+      fortAvvik(data, a, dato).map((f) => ({
+        ansatt_id: a,
+        fort: f,
+        fra: f.fra ?? "08:00",
+        til: f.til ?? etter("08:00", Number(f.timer)),
+        hel: !f.fra,
+        borte: null,
+        mangler: false,
+      })),
+    ),
   ];
   const linjer = alle.filter((l) => vises(l.ansatt_id));
   // Tidsaksen: fra den første starten til den siste slutten (hele timer), minst seks timer.
@@ -1078,8 +1168,8 @@ function DagVisning({
 
   const rad = (id: string | null, liste: Linje[]) => {
     const tider = liste
-      .filter((l) => !l.hel)
-      .map((l) => `${l.fra}–${l.til}`)
+      .filter((l) => !l.hel || l.fort)
+      .map((l) => (l.fort ? `ført ${fortTider([l.fort])}` : `${l.fra}–${l.til}`))
       .join(", ");
     const borte = liste.find((l) => l.borte)?.borte ?? null;
     const oppgaver = [...new Set(liste.map((l) => l.vakt?.oppgave).filter(Boolean))].join(", ");
@@ -1092,16 +1182,32 @@ function DagVisning({
             {[borte ? `${fravaerTekst[borte]}${liste.some((l) => l.mangler) ? " · mangler vikar" : " · vikar inne"}` : "", tider, oppgaver].filter(Boolean).join(" · ")}
           </span>
         </div>
-        <div className={`dl-spor${kanPlanlegge ? " klikkbar" : ""}`} onClick={() => kanPlanlegge && nyVakt(dato, id)}>
+        {/* Med førte timer og noe planlagt: planen øverst og det som er ført, under. */}
+        <div
+          className={`dl-spor${kanPlanlegge ? " klikkbar" : ""}${liste.some((l) => l.fort) && liste.some((l) => !l.fort) ? " med-fort" : ""}`}
+          onClick={() => kanPlanlegge && nyVakt(dato, id)}
+        >
           {naa && <span className="dl-naa" style={{ left: naa }} />}
           {liste.map((l, i) => {
             const v = l.vakt;
-            const klasse = ["dl-bar", v ? "" : "fast", l.borte ? "borte" : "", l.mangler ? "mangler" : "", v && !v.publisert ? "utkast" : "", v?.advarsler.length ? "advarsel" : "", v?.vikar_for ? "vikar" : ""]
+            const klasse = [
+              "dl-bar",
+              l.fort ? "fort" : v ? "" : "fast",
+              l.borte ? "borte" : "",
+              l.mangler ? "mangler" : "",
+              v && !v.publisert ? "utkast" : "",
+              v?.advarsler.length ? "advarsel" : "",
+              v?.vikar_for ? "vikar" : "",
+            ]
               .filter(Boolean)
               .join(" ");
             const tittel = [
               id ? r.navn(id) : "Ledig vakt",
-              l.hel ? "Fast arbeidsdag" : `${l.fra}–${l.til}${v ? "" : " (fast arbeidsdag)"}`,
+              l.fort
+                ? `Ført ${fortTider([l.fort])}${l.fort.status === "levert" ? " (ikke godkjent)" : ""}`
+                : l.hel
+                  ? "Fast arbeidsdag"
+                  : `${l.fra}–${l.til}${v ? "" : " (fast arbeidsdag)"}`,
               v?.oppgave ?? "",
               l.borte ? `${fravaerTekst[l.borte]}: ${l.mangler ? "mangler vikar" : "vikar er satt inn"}` : "",
               v && !v.publisert ? "Ikke publisert" : "",
@@ -1117,7 +1223,7 @@ function DagVisning({
                 className={klasse}
                 style={plass(minutter(l.fra), sluttMin(l.fra, l.til))}
                 title={tittel}
-                disabled={!v && !kanPlanlegge}
+                disabled={(!v && !kanPlanlegge) || !!l.fort}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (v) apneVakt(v);
@@ -1125,7 +1231,15 @@ function DagVisning({
                 }}
               >
                 {v?.advarsler.length ? <IkonVarsel storrelse={12} /> : null}
-                <span>{l.borte ? fravaerTekst[l.borte] : l.hel ? "" : `${kortKl(l.fra)}–${kortKl(l.til)}${v?.oppgave ? ` ${v.oppgave}` : ""}`}</span>
+                <span>
+                  {l.fort
+                    ? `Ført ${l.fort.fra ? `${kortKl(l.fra)}–${kortKl(l.til)}` : timer(Number(l.fort.timer))}`
+                    : l.borte
+                      ? fravaerTekst[l.borte]
+                      : l.hel
+                        ? ""
+                        : `${kortKl(l.fra)}–${kortKl(l.til)}${v?.oppgave ? ` ${v.oppgave}` : ""}`}
+                </span>
               </button>
             );
           })}

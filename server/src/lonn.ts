@@ -132,6 +132,9 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
   if (!k) throw new ApiFeil(404, "Fant ikke lønnskjøringen");
   if (k.status !== "utkast") throw new ApiFeil(409, "Lønnskjøringen er godkjent. Åpne den igjen for å endre den.");
   await db.query("select faktura.krev($1, 'personal')", [k.org_id]);
+  // Øyeblikksbildet før grunnlaget leses (0088_lonn_automatikk.sql): det som endres etterpå, gjør
+  // utkastet utdatert, så det regnes ut på nytt.
+  await db.query("select faktura.lonn_beregnes($1)", [k.id]);
   const org = k.org_id;
   const fra = k.periode;
   const til = periodeSlutt(fra);
@@ -719,12 +722,25 @@ export async function hentKjoring(db: Db, org: string, id: string) {
     `select k.id, to_char(k.periode, 'YYYY-MM-DD') as periode, k.type, to_char(k.utbetalingsdato, 'YYYY-MM-DD') as utbetalingsdato, k.status,
             k.feriepenger, k.halv_skatt, k.notat, k.godkjent_at, k.opprettet,
             (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = k.godkjent_av) as godkjent_av,
-            k.betalingsfil_lastet, k.betalingsfil_antall, k.forskuddstrekk_kid,
-            (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = k.betalingsfil_av) as betalingsfil_av
+            k.betalingsfil_lastet, k.betalingsfil_antall, k.forskuddstrekk_kid, k.automatisk,
+            (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = k.betalingsfil_av) as betalingsfil_av,
+            (select x.beregnet from faktura.lonnskjoring_beregning x where x.kjoring_id = k.id) as beregnet,
+            coalesce(faktura.lonn_utdatert(k.id), false) as utdatert
        from faktura.lonnskjoringer k where k.org_id = $1 and k.id = $2`,
     [org, id],
   );
   if (!k) throw new ApiFeil(404, "Fant ikke lønnskjøringen");
+  // Timene i måneden (og før) som ikke er lønnet: levert og venter på godkjenning, eller ført og
+  // ikke levert. De kommer med i den ordinære kjøringen når de er godkjent.
+  const timer =
+    k.type === "ordinar" && k.status === "utkast"
+      ? await en<{ levert: number; utkast: number }>(
+          db,
+          `select count(*) filter (where status = 'levert')::int as levert, count(*) filter (where status = 'utkast')::int as utkast
+             from faktura.timeforinger where org_id = $1 and lonnskjoring_id is null and status in ('levert', 'utkast') and dato between $2 and $3`,
+          [org, pluss(k.periode, -400), periodeSlutt(k.periode)],
+        )
+      : null;
   const slipper = await alle<any>(db, `${SLIPP} where s.kjoring_id = $1 order by s.ansattnummer`, [id]);
   const linjer = await alle<any>(db, `${LINJE} join faktura.lonnsslipper s on s.id = l.slipp_id where s.kjoring_id = $1 order by l.rekkefolge, l.opprettet`, [id]);
   // Kontonummeret nå (før godkjenning), og om den ansatte har skattekort.
@@ -743,6 +759,7 @@ export async function hentKjoring(db: Db, org: string, id: string) {
   const sum = (felt: string) => rund(ut.reduce((x, s) => x + Number(s[felt] ?? 0), 0));
   return {
     ...k,
+    timer: timer ?? { levert: 0, utkast: 0 },
     aga_sone: o.aga_sone,
     otp_prosent: o.otp_prosent,
     feriepenger_prosent: o.feriepenger_prosent,
@@ -839,6 +856,54 @@ function belopFor(art: string, b: { antall?: number | null; sats?: number | null
   return lonnsart(art).fortegn < 0 ? -Math.abs(verdi) : verdi;
 }
 
+// Ny kjøring for en måned (ÅÅÅÅ-MM): utbetalingsdatoen fra lønnsdagen, feriepengene i juni og halv
+// skatt i måneden valgt i oppsettet (kan endres etterpå), og slippene regnet ut med en gang. Brukes
+// av ruten og av workeren (automatisk: den ordinære kjøringen for måneden, lonnAutomatikk.ts).
+export async function lagKjoring(
+  db: Db,
+  org: string,
+  b: { periode: string; type?: "ordinar" | "ekstra"; utbetalingsdato?: string; feriepenger?: boolean; notat?: string | null; automatisk?: boolean },
+): Promise<string> {
+  await db.query("select faktura.krev($1, 'personal')", [org]);
+  const o = await hentOppsett(db, org);
+  const periode = `${b.periode}-01`;
+  const dato = b.utbetalingsdato ?? utbetalingsdato(periode, o.lonnsdag);
+  const mnd = Number(dato.slice(5, 7));
+  const type = b.type ?? "ordinar";
+  if (type === "ordinar" && (await en(db, "select 1 from faktura.lonnskjoringer where org_id = $1 and periode = $2 and type = 'ordinar'", [org, periode])))
+    throw new ApiFeil(409, `Det finnes alt en lønnskjøring for ${maanedNavn(periode)}. Lag en ekstra kjøring i stedet.`);
+  const k = await en<{ id: string }>(
+    db,
+    `insert into faktura.lonnskjoringer (org_id, periode, type, utbetalingsdato, feriepenger, halv_skatt, notat${b.automatisk ? ", automatisk" : ""})
+     values ($1, $2, $3, $4, $5, $6, $7${b.automatisk ? ", true" : ""}) returning id`,
+    [org, periode, type, dato, b.feriepenger ?? (type === "ordinar" && Number(periode.slice(5, 7)) === 6), type === "ordinar" && mnd === (o.halv_skatt === "november" ? 11 : 12), b.notat ?? null],
+  );
+  await beregnKjoring(db, k!.id);
+  return k!.id;
+}
+
+// Utkastene som er utdatert (noe i grunnlaget er endret etter at de ble regnet ut, 0088), regnes ut
+// på nytt når den som ser dem, kan endre lønnen; ellers vises det som sist ble regnet ut (workeren
+// tar dem hvert minutt). En feil i utregningen stopper ikke visningen.
+async function oppdaterUtkast(db: Db, org: string, kjoring: string | null = null) {
+  if (!(await en<{ k: boolean }>(db, "select faktura.kan($1, 'personal') as k", [org]))?.k) return;
+  const ider = await alle<{ id: string }>(
+    db,
+    "select id from faktura.lonnskjoringer where org_id = $1 and ($2::uuid is null or id = $2) and status = 'utkast' and faktura.lonn_utdatert(id) order by periode",
+    [org, kjoring],
+  );
+  for (const { id } of ider) {
+    await db.query("savepoint omregning");
+    try {
+      await beregnKjoring(db, id);
+      await db.query("release savepoint omregning");
+    } catch (e) {
+      await db.query("rollback to savepoint omregning");
+      console.log(JSON.stringify({ severity: "WARNING", message: "Lønnskjøringen ble ikke regnet ut på nytt", kjoring: id, feil: (e as Error).message }));
+    }
+  }
+}
+
 export function lonnRuter() {
   const r = new Hono();
   const id = (c: Context, navn = "id") => uuid.parse(c.req.param(navn));
@@ -855,10 +920,11 @@ export function lonnRuter() {
     c.json(
       await bruk(c, async (db) => {
         await db.query("select faktura.krev($1, 'personal_les')", [orgId(c)]);
+        await oppdaterUtkast(db, orgId(c));
         return alle(
           db,
           `select k.id, to_char(k.periode, 'YYYY-MM-DD') as periode, k.type, to_char(k.utbetalingsdato, 'YYYY-MM-DD') as utbetalingsdato, k.status,
-                  k.feriepenger, k.godkjent_at, count(s.id)::int as antall, coalesce(sum(s.brutto), 0)::float8 as brutto,
+                  k.feriepenger, k.godkjent_at, k.automatisk, count(s.id)::int as antall, coalesce(sum(s.brutto), 0)::float8 as brutto,
                   coalesce(sum(s.skattetrekk), 0)::float8 as skattetrekk, coalesce(sum(s.netto), 0)::float8 as netto, coalesce(sum(s.aga), 0)::float8 as aga,
                   coalesce(sum(cardinality(s.merknader)), 0)::int as merknader
              from faktura.lonnskjoringer k left join faktura.lonnsslipper s on s.kjoring_id = k.id
@@ -869,32 +935,21 @@ export function lonnRuter() {
     ),
   );
 
-  // Ny kjøring for en måned: utbetalingsdatoen fra lønnsdagen, feriepengene i juni og halv skatt i
-  // måneden valgt i oppsettet (kan endres etterpå), og slippene regnet ut med en gang.
+  // Ny kjøring for en måned (lagKjoring).
   r.post("/lonn/kjoringer", async (c) => {
     const b = nyKjoring.parse(await c.req.json().catch(() => ({})));
-    const svar = await bruk(c, async (db) => {
-      await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
-      const o = await hentOppsett(db, orgId(c));
-      const periode = `${b.periode}-01`;
-      const dato = b.utbetalingsdato ?? utbetalingsdato(periode, o.lonnsdag);
-      const mnd = Number(dato.slice(5, 7));
-      const type = b.type ?? "ordinar";
-      if (type === "ordinar" && (await en(db, "select 1 from faktura.lonnskjoringer where org_id = $1 and periode = $2 and type = 'ordinar'", [orgId(c), periode])))
-        throw new ApiFeil(409, `Det finnes alt en lønnskjøring for ${maanedNavn(periode)}. Lag en ekstra kjøring i stedet.`);
-      const k = await en<{ id: string }>(
-        db,
-        `insert into faktura.lonnskjoringer (org_id, periode, type, utbetalingsdato, feriepenger, halv_skatt, notat)
-         values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-        [orgId(c), periode, type, dato, b.feriepenger ?? (type === "ordinar" && Number(periode.slice(5, 7)) === 6), type === "ordinar" && mnd === (o.halv_skatt === "november" ? 11 : 12), b.notat ?? null],
-      );
-      await beregnKjoring(db, k!.id);
-      return hentKjoring(db, orgId(c), k!.id);
-    });
+    const svar = await bruk(c, async (db) => hentKjoring(db, orgId(c), await lagKjoring(db, orgId(c), b)));
     return c.json(svar, 201);
   });
 
-  r.get("/lonn/kjoringer/:id", async (c) => c.json(await bruk(c, (db) => hentKjoring(db, orgId(c), id(c)))));
+  r.get("/lonn/kjoringer/:id", async (c) =>
+    c.json(
+      await bruk(c, async (db) => {
+        await oppdaterUtkast(db, orgId(c), id(c));
+        return hentKjoring(db, orgId(c), id(c));
+      }),
+    ),
+  );
 
   r.patch("/lonn/kjoringer/:id", async (c) => {
     const b = endreKjoring.parse(await c.req.json().catch(() => ({})));

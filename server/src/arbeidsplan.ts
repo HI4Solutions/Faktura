@@ -50,6 +50,19 @@ type Vakt = { ansatt_id: string; dato: string; fra: string; til: string; timer: 
 export type Fast = { ansatt_id: string; dato: string; fra: string | null; til: string | null; pause_min: number; timer: number; fravaer: string | null };
 // En fast dag den ansatte har fri (gitt bort i et vaktbytte), og dagen timene er flyttet til.
 export type Fri = { ansatt_id: string; dato: string; byttet_til: string | null };
+// Timer den ansatte har ført (levert eller godkjent): det de faktisk har jobbet den dagen. vakt_id:
+// vakten de er ført fra.
+export type Fort = {
+  id: string;
+  ansatt_id: string;
+  dato: string;
+  fra: string | null;
+  til: string | null;
+  pause_min: number;
+  timer: number;
+  status: "levert" | "godkjent";
+  vakt_id: string | null;
+};
 
 const DAG = 86_400_000;
 const leggTil = (iso: string, n: number) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * DAG).toISOString().slice(0, 10);
@@ -148,7 +161,10 @@ export function beregnEkstra(
 }
 
 // Faste dager og ekstratimer i perioden (hele uker lastes, så ukeregelen blir riktig i kantene).
-export async function beregnBemanning(db: Db, org: string, fra: string, til: string, ansatt?: string | null) {
+// forte: med de førte timene (levert og godkjent; radtilgangen gir en ansatt bare sine egne). En dag
+// med førte timer regnes da etter dem i stedet for vaktene (det den ansatte faktisk jobbet), så en
+// ekstratime som er ført, er med i ekstratimene i vaktplanen, kalenderen og rapporten.
+export async function beregnBemanning(db: Db, org: string, fra: string, til: string, ansatt?: string | null, valg: { forte?: boolean } = {}) {
   const ufra = uke(fra).fra;
   const util = uke(til).til;
   // Personene og fraværet fra planen (0063): de ansatte ser kollegaene, men ikke stillingen eller
@@ -196,7 +212,24 @@ export async function beregnBemanning(db: Db, org: string, fra: string, til: str
       if (dag) faste.push({ ansatt_id: a.id, dato: d, fra: dag.fra, til: dag.til, pause_min: dag.pause_min, timer: dagTimer(dag, a.ukentlig_arbeidstid), fravaer: borte(a.id, d) });
     }
   }
-  return { ansatte, planer, vakter, faste, fri, ekstra: beregnEkstra(ansatte, planer, vakter, fri), ufra, util };
+  const forte = valg.forte
+    ? await alle<Fort>(
+        db,
+        `select t.id, t.ansatt_id, t.dato, to_char(t.fra, 'HH24:MI') as fra, to_char(t.til, 'HH24:MI') as til, t.pause_min, t.timer, t.status, t.vakt_id
+           from faktura.timeforinger t
+          where t.org_id = $1 and t.dato between $2 and $3 and t.status in ('levert', 'godkjent') and ($4::uuid is null or t.ansatt_id = $4)
+          order by t.dato, t.fra nulls last`,
+        [org, ufra, util, ansatt ?? null],
+      )
+    : [];
+  const fortDag = new Set(forte.map((f) => `${f.ansatt_id}|${f.dato}`));
+  const faktiske: Vakt[] = forte.length
+    ? [
+        ...vakter.filter((v) => !fortDag.has(`${v.ansatt_id}|${v.dato}`)),
+        ...forte.map((f) => ({ ansatt_id: f.ansatt_id, dato: f.dato, fra: f.fra ?? "", til: f.til ?? "", timer: Number(f.timer), borte: false })),
+      ]
+    : vakter;
+  return { ansatte, planer, vakter, faste, fri, forte, ekstra: beregnEkstra(ansatte, planer, faktiske, fri), ufra, util };
 }
 
 // --- Rapporten over ekstratimer --------------------------------------------------------------
@@ -210,7 +243,7 @@ type Rapport = {
 
 export async function ekstratimer(db: Db, org: string, fra: string, til: string): Promise<Rapport> {
   await db.query("select faktura.krev($1, 'personal_les')", [org]);
-  const b = await beregnBemanning(db, org, fra, til);
+  const b = await beregnBemanning(db, org, fra, til, null, { forte: true });
   const ansatte = b.ansatte
     .map((a) => {
       const dager = [...b.ekstra.entries()]
@@ -218,13 +251,19 @@ export async function ekstratimer(db: Db, org: string, fra: string, til: string)
         .map(([k, timer]) => ({ dato: k.split("|")[1]!, timer }))
         .filter((d) => d.dato >= fra && d.dato <= til)
         .sort((x, y) => x.dato.localeCompare(y.dato))
-        .map((d) => ({
-          ...d,
-          vakter: b.vakter
-            .filter((v) => v.ansatt_id === a.id && v.dato === d.dato && !v.borte)
-            .map((v) => `${v.fra}–${v.til}`)
-            .join(", "),
-        }));
+        .map((d) => {
+          // De førte timene den dagen (det som faktisk er jobbet), ellers vaktene.
+          const forte = b.forte.filter((f) => f.ansatt_id === a.id && f.dato === d.dato);
+          return {
+            ...d,
+            vakter: forte.length
+              ? `Ført ${forte.map((f) => (f.fra ? `${f.fra}–${f.til}` : `${rund(Number(f.timer))} t`)).join(", ")}`
+              : b.vakter
+                  .filter((v) => v.ansatt_id === a.id && v.dato === d.dato && !v.borte)
+                  .map((v) => `${v.fra}–${v.til}`)
+                  .join(", "),
+          };
+        });
       return { ansatt_id: a.id, ansattnummer: a.ansattnummer, navn: a.navn, gruppe: a.gruppe, stilling: a.stilling, stillingsprosent: Number(a.stillingsprosent), timer: rund(dager.reduce((s, d) => s + d.timer, 0)), dager };
     })
     .filter((a) => a.timer > 0)
