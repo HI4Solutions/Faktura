@@ -47,13 +47,13 @@ const A4: [number, number] = [595.28, 841.89];
 const MARG = 50;
 const BUNN = 90;
 
-function farge(hex: string | null | undefined) {
+export function farge(hex: string | null | undefined) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex ?? "");
   if (!m) return rgb(0.12, 0.23, 0.45);
   return rgb(parseInt(m[1]!, 16) / 255, parseInt(m[2]!, 16) / 255, parseInt(m[3]!, 16) / 255);
 }
 // Tall uten unødvendige desimaler («37,5», «1»), med vanlig mellomrom og bindestrek som minus.
-const tall = (n: number, maks = 2) =>
+export const tall = (n: number, maks = 2) =>
   new Intl.NumberFormat("nb-NO", { maximumFractionDigits: maks }).format(n).replace(/[\u00a0\u202f]/g, " ").replace(/\u2212/g, "-");
 const antallTekst = (n: number) => tall(n, Math.abs(n) < 1 ? 4 : 2);
 

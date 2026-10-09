@@ -602,6 +602,21 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   godkjente kjøringer (`min_lonnsslipp`). En ansatt med lønnsslipper i godkjente kjøringer kan
   ikke slettes, og en organisasjon med godkjente kjøringer stenges i stedet for å slettes
   (oppbevares fem år etter siste utbetaling)
+- Årsoversikten (`0075_lonn_aarsoversikt.sql`, `server/src/lonnAarsoversikt.ts`,
+  `server/src/aarsoversiktPdf.ts`, `web/src/sider/LonnAar.tsx`): sammenstillingsoppgaven
+  arbeidsgiveren skal gi hver ansatt innen 31. januar. Tallene er de godkjente kjøringene med
+  utbetaling i året: lønnen gruppert etter beskrivelsen i a-meldingen (`AMELDING_NAVN` i
+  `lonnsarter.ts`), forskuddstrekket, utgiftene og trekkene etter skatt, det som er utbetalt,
+  feriepengegrunnlaget og opptjente feriepenger, OTP, tallene fra et tidligere lønnssystem og
+  hver utbetaling. Den ansatte ser sin egen under «Lønnsslipper» (radtilgangen gir bare egne
+  slipper fra godkjente kjøringer), også som PDF; eier, administrator og regnskap ser de ansatte i
+  året under fanen «Årsoversikt» og laster ned én eller alle i én PDF. Den daglige jobben varsler
+  de ansatte med innlogging fra 10. januar, når ingen kjøring for året står som utkast (senest
+  25. januar), én gang (`lonn_aarsoversikt_varslet`, `aarsoversikt_klar`); eier og administrator
+  kan varsle dem igjen. Trekktabellene: den daglige jobben sender plattformadministratorene
+  (`ADMIN_EPOSTER`) e-post på mandager fra 10. desember om tabellene for neste år og i januar
+  om årets, så lenge de mangler og en organisasjon med lønn har en ansatt med tabelltrekk
+  (`trekktabeller_mangler`, `server/src/trekktabeller.ts`); Administrasjon → Drift viser det også
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -666,7 +681,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Slette andres beskjeder | ✓ | ✓ | | | | |
 | Se lønnskjøringene og alle lønnsslippene | ✓ | ✓ | | ✓ | | |
 | Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
-| Se egne lønnsslipper (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+| Se egne lønnsslipper og egen årsoversikt (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
+| Se årsoversiktene til alle, og laste dem ned | ✓ | ✓ | | ✓ | | |
+| Varsle de ansatte om årsoversikten | ✓ | ✓ | | | | |
 | Se timebanken til alle, med verdien | ✓ | ✓ | | ✓ | | |
 | Godkjenne og registrere avspasering, justere timebanken og betale ut timer fra den | ✓ | ✓ | | | | |
 | Se egen timebank og søke om avspasering | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
@@ -792,7 +809,7 @@ og hastighetsgrenser i API-et.
       arbeidsgiveravgift per sone, sykepenger i arbeidsgiverperioden, sluttoppgjør,
       godkjenning med låsing og lønnsslipp som PDF
    4. Rapportering: a-melding som fil til Altinn, oversikt over skattetrekk og
-      arbeidsgiveravgift, feriepengeliste og årsoversikt for den ansatte. ~~Skattekort fra
+      arbeidsgiveravgift, feriepengeliste og ~~årsoversikt for den ansatte~~ (ferdig). ~~Skattekort fra
       Skatteetaten~~ Ferdig (systembruker i Altinn; slås på når Maskinporten er satt opp).
       OTP rapporteres i a-meldingen med pensjonsinnretningens organisasjonsnummer
    5. Utbetaling: betalingsfil (pain.001) til nettbanken først, direkte bankintegrasjon senere

@@ -1238,6 +1238,16 @@ function Trekktabeller() {
           )}
         </div>
       )}
+      {liste.data && (() => {
+        // Årets tabeller mangler, eller neste års fra desember (da de kommer fra Skatteetaten).
+        const mangler = [iAar, ...(new Date().getMonth() === 11 ? [iAar + 1] : [])].filter((a) => !liste.data!.some((t) => t.aar === a));
+        return mangler.length > 0 && liste.data.length > 0 ? (
+          <p className="advarsel-tekst liten">
+            Trekktabellene for {mangler.join(" og ")} er ikke lastet inn. Plattformadministratorene får e-post om det på mandager fra 10. desember og i januar, til de er
+            lastet inn.
+          </p>
+        ) : null;
+      })()}
       <div className="ehf-test-rad">
         <label>
           År

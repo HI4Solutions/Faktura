@@ -65,6 +65,19 @@ export const LONNSARTER: Lonnsart[] = [
   { kode: "trekk_etter_skatt", navn: "Trekk etter skatt", type: "trekk", trekk: false, aga: false, ferie: false, otp: false, fortegn: -1, manuell: true, amelding: null },
 ];
 
+// Beskrivelsene i a-meldingen som lønnsartene rapporteres som, med navnet den ansatte ser
+// (årsoversikten og a-meldingen).
+export const AMELDING_NAVN: Record<string, string> = {
+  fastloenn: "Fastlønn",
+  timeloenn: "Timelønn",
+  overtidsgodtgjoerelse: "Overtidsgodtgjørelse",
+  fastTillegg: "Faste tillegg",
+  uregelmessigeTilleggKnyttetTilArbeidetTid: "Uregelmessige tillegg knyttet til arbeidet tid",
+  bonus: "Bonus",
+  feriepenger: "Feriepenger",
+  trekkILoennForFerie: "Trekk i lønn for ferie",
+};
+
 const PER_KODE = new Map(LONNSARTER.map((l) => [l.kode, l]));
 export const lonnsart = (kode: string): Lonnsart => PER_KODE.get(kode) ?? lonn(kode, kode);
 export const LONNSART_KODER = LONNSARTER.map((l) => l.kode) as [string, ...string[]];

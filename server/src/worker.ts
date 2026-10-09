@@ -16,6 +16,8 @@ import { sendPaaminnelser } from "./paaminnelser.js";
 import { sendBursdager } from "./bursdager.js";
 import { hentSkattekort, hentSkattekortSvar, lagTilgang, planleggDagligSkattekort, planleggTilgangssjekk, registrerAltinnSystem, sjekkTilgang } from "./skattekort.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
+import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
+import { varsleTrekktabeller } from "./trekktabeller.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -276,6 +278,20 @@ export async function gjenta() {
     await planleggDagligSkattekort();
   } catch (e) {
     logg("ERROR", "Planlegging av skattekort feilet", { feil: (e as Error).message });
+  }
+
+  // Fra desember: påminnelse til plattformadministratorene om trekktabellene som mangler.
+  try {
+    await varsleTrekktabeller();
+  } catch (e) {
+    logg("ERROR", "Påminnelse om trekktabellene feilet", { feil: (e as Error).message });
+  }
+
+  // I januar: årsoversikten for året før til de ansatte (én gang per organisasjon).
+  try {
+    await varsleAarsoversikter();
+  } catch (e) {
+    logg("ERROR", "Varsel om årsoversikten feilet", { feil: (e as Error).message });
   }
 
   // Den 1. i måneden: månedsrapportene til regnskapsførerne som har bedt om dem.

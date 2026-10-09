@@ -5,7 +5,8 @@
 // lønnsslippen. Regnskap ser kjøringene. De ansatte ser sine egne lønnsslipper («Mine
 // lønnsslipper»).
 //
-// Fanen står i adressen (?fane=kjoringer|mine), og kjøringen som er åpen, med ?kjoring=.
+// Fanen står i adressen (?fane=kjoringer|aar|mine), kjøringen som er åpen med ?kjoring=, og året
+// for årsoversikten med ?aar= (LonnAar.tsx).
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent, lastNed } from "../api";
@@ -13,6 +14,8 @@ import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres
 import { erAdmin, erAnsatt, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
 import { IkonLonn, IkonPluss, IkonVarsel, IkonVenstre } from "../ikoner";
+import { apnePdf, maaned } from "../lonn";
+import { Aarsoversikter, MineAarsoversikter } from "./LonnAar";
 
 export interface Linje {
   id: string;
@@ -117,8 +120,6 @@ type SlippDetaljer = Slipp & {
   hittil: { brutto: number; trekkpliktig: number; skattetrekk: number; feriepengegrunnlag: number; otp: number };
 };
 
-const MND = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
-export const maaned = (periode: string) => `${MND[Number(periode.slice(5, 7)) - 1]} ${periode.slice(0, 4)}`;
 const kjoringNavn = (k: { periode: string; type: string }) => `${maaned(k.periode)}${k.type === "ekstra" ? " (ekstra)" : ""}`;
 const tallTekst = (n: number, maks = 2) => new Intl.NumberFormat("nb-NO", { maximumFractionDigits: maks }).format(n);
 const prosentArt = (art: string) => art === "feriepenger" || art === "feriepenger_60";
@@ -126,18 +127,7 @@ const AGA_SONER: Record<string, string> = { "1": "sone 1, 14,1 %", "1a": "sone 1
 const synlig = (l: Linje) => l.nokkel !== "lagt_til";
 
 // Lønnsslippen som PDF i en ny fane.
-async function apneSlipp(orgId: string, slippId: string) {
-  const vindu = window.open("", "_blank");
-  try {
-    const blob = await api<Blob>("GET", `/org/${orgId}/lonn/slipper/${slippId}/pdf`);
-    const url = URL.createObjectURL(blob);
-    if (vindu) vindu.location.href = url;
-    else window.location.href = url;
-  } catch (e) {
-    vindu?.close();
-    throw e;
-  }
-}
+const apneSlipp = (orgId: string, slippId: string) => apnePdf(`/org/${orgId}/lonn/slipper/${slippId}/pdf`);
 
 export function Lonn() {
   const { org } = useKonto();
@@ -145,7 +135,7 @@ export function Lonn() {
   const leder = !erAnsatt(org?.rolle) && kanSePersonal(org?.rolle);
   const egen = !!org?.ansatt_id;
   const faner: [string, string][] = [];
-  if (leder) faner.push(["kjoringer", "Lønnskjøringer"]);
+  if (leder) faner.push(["kjoringer", "Lønnskjøringer"], ["aar", "Årsoversikt"]);
   if (egen) faner.push(["mine", "Mine lønnsslipper"]);
   const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? faner[0]?.[0] ?? null;
   const kjoring = sok.get("kjoring");
@@ -186,7 +176,7 @@ export function Lonn() {
           {faner.length > 1 && (
             <div className="faner tett" role="tablist">
               {faner.map(([v, t]) => (
-                <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga({ fane: v, kjoring: null })}>
+                <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga({ fane: v, kjoring: null, aar: null })}>
                   {t}
                 </button>
               ))}
@@ -195,6 +185,7 @@ export function Lonn() {
         </>
       )}
       {fane === "kjoringer" && (kjoring ? <KjoringSide id={kjoring} tilbake={() => ga({ kjoring: null })} /> : <Kjoringer apne={(id) => ga({ kjoring: id })} />)}
+      {fane === "aar" && <Aarsoversikter />}
       {fane === "mine" && <MineSlipper />}
     </>
   );
@@ -1101,6 +1092,7 @@ function MineSlipper() {
     );
   return (
     <>
+      <MineAarsoversikter />
       <Feil melding={h.feil} />
       <div className="kort liste">
         {liste.data.map((s) => (

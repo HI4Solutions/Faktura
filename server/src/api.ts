@@ -36,6 +36,7 @@ import { ferieRuter } from "./ferie.js";
 import { bemanningRuter } from "./bemanning.js";
 import { arbeidsplanRuter } from "./arbeidsplan.js";
 import { lonnRuter } from "./lonn.js";
+import { aarsoversiktRuter } from "./lonnAarsoversikt.js";
 import { skattekortRuter } from "./skattekortRuter.js";
 import { rapportmodulRuter } from "./rapportmodul.js";
 import { krevFunksjoner } from "./funksjoner.js";
@@ -423,6 +424,7 @@ export function lagApi() {
   org.route("/", bemanningRuter());
   org.route("/", arbeidsplanRuter());
   org.route("/", lonnRuter());
+  org.route("/", aarsoversiktRuter());
   org.route("/", skattekortRuter());
   // Rapportmodulen: hver rapport krever sin funksjon og tilgang (rapportmodul.ts).
   org.route("/", rapportmodulRuter());

@@ -2458,3 +2458,14 @@ fieldset.egenmelding .melding { margin-bottom: 8px; }
 .mitt-fravaer-knapper { display: flex; flex: none; gap: 14px; }
 .mitt-fravaer > .knapper { margin-top: 2px; }
 .egenmelding-saldo { margin: 0 0 10px; }
+
+/* Årsoversikten (LonnAar.tsx) */
+.kort.lonn-aar { display: flex; align-items: center; justify-content: space-between; gap: 12px 18px; flex-wrap: wrap; }
+.lonn-aar-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lonn-aar-knapper { display: flex; gap: 8px; flex-wrap: wrap; }
+.lonn-aar-knapper button { min-width: 64px; }
+.lonn-aar-valg { align-items: center; flex-wrap: wrap; }
+.lonn-aar-valg label { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.lonn-aar-valg select { width: auto; }
+.lonn-aar-status { margin: 0 0 10px; }
+.lonn-visning .summer.lonn-summer + p, .lonn-visning .tabell + p { margin-top: 10px; }
