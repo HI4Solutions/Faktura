@@ -368,7 +368,7 @@ export async function lonnsrapportOppgave(db: Db, org: string, kjoring: string):
   if (!o?.lonn_ved_godkjenning || !o.mottakere.length) return null;
   return { type: "rapport-send", org_id: org, rapporter: LONN_VED_GODKJENNING.map((id) => ({ id, valg: { kjoring } })), til: o.mottakere, automatisk: "lonn" };
 }
-export const LONN_VED_GODKJENNING = ["lonn.journal", "lonn.lonnsarter"];
+export const LONN_VED_GODKJENNING = ["lonn.journal", "lonn.lonnsarter", "lonn.bokforing"];
 
 // Den 1. i måneden: de valgte månedsrapportene for forrige måned (terminrapporter når terminen
 // er slutt, og årsrapporter i januar). Måneden tas i databasen før utsendingen legges i kø, så

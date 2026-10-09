@@ -2485,3 +2485,14 @@ h4.lonn-under { margin: 18px 0 6px; font-size: 0.92rem; }
 .amelding-rad .knapper { margin: 2px 0 0; }
 .amelding-tilbakemelding { margin: 0; padding-left: 18px; color: var(--tekst-2); }
 .melding > .knapper { margin-top: 10px; }
+
+/* Bokføringen av lønnen (LonnBokforing.tsx) */
+.bokforing-kontoer { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 14px; }
+.bokforing-kontoer label { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.bokforing-kontoer input { width: 100%; max-width: 160px; }
+.kort.lonn-bokforing { margin-top: 16px; }
+.lonn-bokforing-topp { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.lonn-bokforing-topp h3 { margin: 0; }
+.lonn-bokforing p { margin: 6px 0; }
+.lonn-bilag { margin-top: 12px; }
+table.lonn-linjer tfoot td { font-weight: 650; border-top: 1px solid var(--kant); padding-top: 8px; }

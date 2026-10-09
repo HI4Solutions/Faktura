@@ -629,6 +629,24 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (`ADMIN_EPOSTER`) e-post på mandager fra 10. desember om tabellene for neste år og i januar
   om årets, så lenge de mangler og en organisasjon med lønn har en ansatt med tabelltrekk
   (`trekktabeller_mangler`, `server/src/trekktabeller.ts`); Administrasjon → Drift viser det også
+- Eget regnskap: `bilag`, `posteringer` og `bilagserier` (`0078_lonn_bokforing.sql`,
+  `server/src/lonnBokforing.ts`, `server/src/lonnBokforingRuter.ts`, `web/src/sider/LonnBokforing.tsx`).
+  Grunnlaget for regnskapsmodulen (plattformen kobles ikke til andre regnskapssystemer): bilag i
+  nummerserier per år (serie L for lønn, med `neste_bilagsnummer`), med posteringer på
+  kontonumre (positivt i debet, negativt i kredit) som må gå i null (utsatt kontroll ved commit).
+  Ingen skriver, endrer eller sletter bilag direkte; de føres med funksjonene, og en feil rettes
+  med et nytt bilag som reverserer det gamle (`reverser_bilag`: samme dato, motsatte beløp,
+  `reverserer` og `reversert_av`), som bokføringsloven krever. Bilagene blir stående om kilden
+  slettes. Lønnen er første kilde: når en kjøring godkjennes, regner API-et ut lønnsbilaget
+  (`lagLonnsbilag`, i øre så det går i null) og fører det i samme transaksjon (`bokfor_lonn`, eier
+  og administrator, ett gjeldende bilag per kjøring); `lonn_gjenapne` reverserer det. Bilaget har
+  lønnen (5000), utgiftsgodtgjørelsen (7790), forskuddstrekket (2600), andre trekk (2690),
+  nettolønnen til skyldig lønn (2930) eller bank (1920), arbeidsgiveravgiften (5400/2770),
+  feriepengene (avsatt hver måned med avgiften, 5020/2940 og 5405/2785, og utbetalingen tatt fra
+  avsetningen; eller kostnadsført når de utbetales) og eventuelt OTP (5945/2990); kontoene kan
+  endres (`lonn_oppsett.bokforing_*`). Kjøringer godkjent før bokføringen kom, bokføres fra
+  kjøringen. Rapporten «Lønnsbilag» viser bilagene (også til regnskapsføreren når kjøringen
+  godkjennes). Lønnsbilagene ser de som ser lønnen
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen
@@ -714,6 +732,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Slette andres beskjeder | ✓ | ✓ | | | | |
 | Se lønnskjøringene og alle lønnsslippene, og laste ned betalingsfila | ✓ | ✓ | | ✓ | | |
 | Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
+| Se lønnsbilagene | ✓ | ✓ | | ✓ | | |
+| Endre kontoene for lønnsbilaget, og bokføre en kjøring som ble godkjent før bokføringen kom | ✓ | ✓ | | | | |
 | Se a-meldingene (månedene, grunnlaget og avvikene) | ✓ | ✓ | | ✓ | | |
 | Lage og sende a-meldingen, laste ned fila og merke den som lastet opp | ✓ | ✓ | | | | |
 | Se egne lønnsslipper og egen årsoversikt (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
@@ -823,8 +843,11 @@ og hastighetsgrenser i API-et.
 4. **Regnskapsfører og Google Disk**: byrå-dashboard, invitasjoner, Drive (`drive.file`)
    med kopi av PDF-er i `Fakturaer/ÅÅÅÅ/`
 5. **Gjentakende fakturaer og kundeportal**
-6. **Penger inn og regnskap**: bank via aggregator (KID-matching), OCR-fil, purring,
-   adaptere for Fiken, Tripletex, PowerOffice Go og Visma, åpent API, webhooks, SAF-T
+6. **Penger inn og eget regnskap**: bank via aggregator (KID-matching), OCR-fil, purring,
+   og vår egen regnskapsmodul (ingen kobling til andre regnskapssystemer): kontoplan per
+   organisasjon, hovedbok med bilagene fra fakturaene, innbetalingene og lønnen (grunnlaget,
+   `bilag` og `posteringer`, er på plass med lønnsbilagene), saldobalanse, resultat og
+   balanse, mva-melding, årsoppgjør, åpent API, webhooks og SAF-T
 7. **EHF/Peppol** via aksesspunkt, betalingslenker (Vipps/Stripe Connect) og
    abonnementer for plattformens egne kunder
 8. ~~**Passkeys**~~ Ferdig: WebAuthn i API-et, nøkler i Postgres, innlogging via Firebase custom token med kravet `passkey` (teller som totrinn)
@@ -843,7 +866,8 @@ og hastighetsgrenser i API-et.
       Skatteetatens trekktabeller, prosent eller frikort), feriepenger og ferietrekk, OTP,
       arbeidsgiveravgift per sone, sykepenger i arbeidsgiverperioden, sluttoppgjør,
       godkjenning med låsing og lønnsslipp som PDF
-   4. Rapportering: ~~a-melding~~ (ferdig: fil til opplasting på skatteetaten.no, og innsending
+   4. Rapportering: ~~lønnsbilag i eget regnskap~~ (ferdig: serie L, reverseres når kjøringen åpnes
+      igjen), ~~a-melding~~ (ferdig: fil til opplasting på skatteetaten.no, og innsending
       til Skatteetatens API med systembruker når tilgangen er gitt), ~~oversikt over skattetrekk og
       arbeidsgiveravgift, feriepengeliste og årsoversikt for den ansatte~~ (ferdig). ~~Skattekort fra
       Skatteetaten~~ Ferdig (systembruker i Altinn; slås på når Maskinporten er satt opp).

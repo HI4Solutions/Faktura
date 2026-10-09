@@ -396,7 +396,7 @@ function UtsendingOppsett({ moduler }: { moduler: Modul[] }) {
         {lonn && (
           <label>
             <input type="checkbox" checked={o.lonn_ved_godkjenning} onChange={(e) => settO({ ...o, lonn_ved_godkjenning: e.target.checked })} />
-            Send lønnsjournalen og summen per lønnsart når en lønnskjøring godkjennes
+            Send lønnsjournalen, summen per lønnsart og lønnsbilaget når en lønnskjøring godkjennes
           </label>
         )}
         <h3>Hver måned</h3>

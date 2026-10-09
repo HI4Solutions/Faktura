@@ -158,7 +158,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "personal.ekstratimer",
         "personal.ansatte",
       ],
-      lonn: ["lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.amelding", "lonn.feriepenger", "lonn.aarsoversikt", "lonn.otp"],
+      lonn: ["lonn.journal", "lonn.lonnsarter", "lonn.bokforing", "lonn.skatt_aga", "lonn.amelding", "lonn.feriepenger", "lonn.aarsoversikt", "lonn.otp"],
     });
     const liste = (await kall("GET", `/api/org/${org}/rapportmodul`)).data;
     expect(liste.moduler.map((m: any) => m.navn)).toEqual(["Faktura", "Personal", "Lønn"]);
@@ -166,7 +166,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     // Regnskap ser lønn og timer, men ikke fraværet og feriebanken (som i personalmodulen).
     const r = await moduler(regnskap);
     expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte"]);
-    expect(r.lonn).toHaveLength(7);
+    expect(r.lonn).toHaveLength(8);
     expect(await moduler(fakturerer)).toEqual({ faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"] });
     expect(await moduler(ola)).toEqual({});
     expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.journal`, undefined, fakturerer)).status).toBe(403);
@@ -371,7 +371,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     tom();
   });
 
-  it("en godkjent lønnskjøring sender lønnsjournalen og summen per lønnsart", async () => {
+  it("en godkjent lønnskjøring sender lønnsjournalen, summen per lønnsart og lønnsbilaget", async () => {
     const k = await kall("POST", `/api/org/${org}/lonn/kjoringer`, { periode: "2026-10" });
     expect(k.status, JSON.stringify(k.data)).toBe(201);
     kjoring = k.data.id;
@@ -385,14 +385,15 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
       rapporter: [
         { id: "lonn.journal", valg: { kjoring } },
         { id: "lonn.lonnsarter", valg: { kjoring } },
+        { id: "lonn.bokforing", valg: { kjoring } },
       ],
     });
     await kjorOppgave(o!);
     const e = sendt.find((m) => m.emne.includes("Lønnsjournal"))!;
-    expect(e.emne).toBe("Rapport Test AS: Lønnsjournal, Sum per lønnsart (lønnskjøring oktober 2026, utbetalt 20.10.2026)");
+    expect(e.emne).toBe("Rapport Test AS: Lønnsjournal, Sum per lønnsart, Lønnsbilag (lønnskjøring oktober 2026, utbetalt 20.10.2026)");
     expect(e.tekst).toContain("(lønnskjøringen er godkjent)");
     expect(e.tekst).toContain("Sendt fra HI4 Faktura av seg selv.");
-    expect(e.vedlegg).toHaveLength(4);
+    expect(e.vedlegg).toHaveLength(6);
 
     const j = (await kall("GET", `/api/org/${org}/rapportmodul/lonn.journal?kjoring=${kjoring}`)).data;
     expect(j.periode).toBe("lønnskjøring oktober 2026, utbetalt 20.10.2026");

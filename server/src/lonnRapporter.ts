@@ -1,11 +1,12 @@
 // Rapportene for Lønn i rapportmodulen (rapportmodul.ts), fra de godkjente lønnskjøringene:
-// lønnsjournalen, summene per lønnsart (grunnlaget for bokføringen), skattetrekk og
-// arbeidsgiveravgift per termin med fristene, feriepengelisten, årsoversikten og OTP.
-// Journalen og lønnsartene kan gjelde én kjøring (valget kjoring); de sendes til
+// lønnsjournalen, summene per lønnsart, lønnsbilaget (konteringen, lonnBokforing.ts), skattetrekk
+// og arbeidsgiveravgift per termin med fristene, feriepengelisten, årsoversikten og OTP.
+// Journalen, lønnsartene og bilaget kan gjelde én kjøring (valget kjoring); de sendes til
 // regnskapsføreren når kjøringen godkjennes, om det er slått på.
 import { alle, en, type Db } from "./db.js";
 import { AMELDING_NAVN, lonnsart } from "./lonnsarter.js";
 import { frister, maanedNavn } from "./lonnsberegning.js";
+import { hentBilag } from "./lonnBokforing.js";
 import type { Rapportdef, Valg } from "./rapportmodul.js";
 
 const rund = (n: number) => Math.round(n * 100) / 100;
@@ -118,6 +119,50 @@ export const lonnRapporter: Rapportdef[] = [
           { nokkel: "belop", navn: "Beløp", type: "kr" },
         ],
         rader,
+      };
+    },
+  },
+  {
+    id: "lonn.bokforing",
+    modul: "lonn",
+    navn: "Lønnsbilag",
+    beskrivelse:
+      "Lønnsbilagene i HI4 Fakturas regnskap (serie L) med dato i perioden: lønn, feriepenger, trekk, nettolønn og arbeidsgiveravgift på kontoene, og bilagene som er reversert fordi kjøringen ble åpnet igjen.",
+    funksjon: "lonn",
+    tilgang: "personal_les",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      // For én kjøring: det gjeldende bilaget; for perioden: alle bilagene (også reverseringene).
+      const bilag = (await hentBilag(db, org, v.kjoring ? { kjoring: v.kjoring } : { fra: v.fra, til: v.til })).filter(
+        (b) => !v.kjoring || (!b.reverserer && !b.reversert_av),
+      );
+      const rader = bilag.flatMap((b) =>
+        b.posteringer.map((p) => ({
+          bilag: b.bilagsnummer,
+          dato: b.dato,
+          bilagstekst: b.tekst,
+          konto: p.konto,
+          kontonavn: p.navn,
+          tekst: p.tekst,
+          debet: p.belop > 0 ? p.belop : null,
+          kredit: p.belop < 0 ? -p.belop : null,
+        })),
+      );
+      return {
+        periode: await kjoringTekst(db, org, v),
+        kolonner: [
+          { nokkel: "bilag", navn: "Bilag", type: "tekst" },
+          { nokkel: "dato", navn: "Dato", type: "dato" },
+          { nokkel: "bilagstekst", navn: "Bilagstekst" },
+          { nokkel: "konto", navn: "Konto", type: "tekst" },
+          { nokkel: "kontonavn", navn: "Kontonavn" },
+          { nokkel: "tekst", navn: "Tekst" },
+          { nokkel: "debet", navn: "Debet", type: "kr", sum: true },
+          { nokkel: "kredit", navn: "Kredit", type: "kr", sum: true },
+        ],
+        rader,
+        merknad: v.kjoring && !bilag.length ? "Kjøringen er ikke bokført." : undefined,
       };
     },
   },

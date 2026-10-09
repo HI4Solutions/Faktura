@@ -13,6 +13,7 @@ import { ApiFeil } from "./feil.js";
 import { uke } from "./arbeidstid.js";
 import { beregnBemanning } from "./arbeidsplan.js";
 import { lonnsart, LONNSARTER } from "./lonnsarter.js";
+import { bokforKjoring } from "./lonnBokforing.js";
 import {
   andelAnsatt,
   arbeidsgiverperiode,
@@ -707,7 +708,8 @@ export function lonnRuter() {
   });
 
   // Godkjenner kjøringen (regnet ut på nytt først): slipper uten linjer tas ut, timene merkes som
-  // lønnet, og de ansatte med innlogging får varsel om lønnsslippen.
+  // lønnet, lønnsbilaget bokføres (lonnBokforing.ts), og de ansatte med innlogging får varsel om
+  // lønnsslippen.
   r.post("/lonn/kjoringer/:id/godkjenn", async (c) => {
     const svar = await bruk(c, async (db) => {
       await utkast(db, orgId(c), id(c));
@@ -717,6 +719,7 @@ export function lonnRuter() {
         [id(c)],
       );
       await db.query("select faktura.lonn_godkjenn($1)", [id(c)]);
+      await bokforKjoring(db, orgId(c), id(c));
       const k = await hentKjoring(db, orgId(c), id(c));
       const brukere = await alle<{ bruker_id: string }>(
         db,

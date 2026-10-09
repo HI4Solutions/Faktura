@@ -9,6 +9,7 @@ import { AppOgVarsler } from "./Varsler";
 import { EhfSending } from "./Ehf";
 import { BankKobling, kontoerEndret } from "./Bank";
 import { SkattekortKobling } from "./Skattekort";
+import { BokforingOppsett } from "./LonnBokforing";
 import { oppdaterLegitimasjon } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
@@ -90,6 +91,7 @@ export function Innstillinger() {
         <>
           <PersonalOppsett />
           {harFunksjon(org, "lonn") && <SkattekortKobling />}
+          {harFunksjon(org, "lonn") && <BokforingOppsett />}
         </>
       )}
       {fane === "konto" && <MinKonto />}

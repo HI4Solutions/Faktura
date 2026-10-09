@@ -18,6 +18,7 @@ import { IkonLonn, IkonPluss, IkonVarsel, IkonVenstre } from "../ikoner";
 import { apnePdf, maaned } from "../lonn";
 import { Aarsoversikter, MineAarsoversikter } from "./LonnAar";
 import { Ameldinger } from "./LonnAmelding";
+import { KjoringBokforing } from "./LonnBokforing";
 
 export interface Linje {
   id: string;
@@ -594,6 +595,7 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
           ))}
         </div>
       )}
+      <KjoringBokforing kjoringId={d.id} godkjent={!utkast} godkjentAt={d.godkjent_at} />
       <p className="liten dempet">
         Fastlønn for arbeidsdagene den ansatte er ansatt, timelønn og overtid fra de godkjente timene som ikke er lønnet, faste tillegg, sykepenger i arbeidsgiverperioden og
         omsorgsdager for dem med timelønn, og feriepenger i juni. Skattetrekket etter skattekortet (50 % uten skattekort), OTP med {tallTekst(d.otp_prosent)} %, feriepenger med{" "}
