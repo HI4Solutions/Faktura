@@ -183,7 +183,13 @@ describe("a-meldingen (uten database)", () => {
       pensjonsinnretning: null,
       arbeidsforhold: [fast("kari", 1, "Kari Hansen", { har_fnr: false, yrkeskode: null }), fast("per", 2, "Per Time", { ansatt_til: "2026-11-15" })],
       utkast: [{ periode: "2026-11-01", type: "ekstra" }],
-      permisjoner: [{ ansatt_id: "per", fra: "2026-11-01", til: "2026-11-20" }],
+      // Permisjon (0084): uten art (må velges), kort (rapporteres ikke) og permittering som slutter
+      // i måneden uten bekreftet sluttdato.
+      permisjoner: [
+        { id: "p1", ansatt_id: "per", fra: "2026-11-01", til: "2026-11-20", art: null, prosent: 100, slutt_ukjent: false, betalt: false },
+        { id: "p2", ansatt_id: "kari", fra: "2026-11-02", til: "2026-11-06", art: null, prosent: 100, slutt_ukjent: false, betalt: true },
+        { id: "p3", ansatt_id: "kari", fra: "2026-11-09", til: "2026-11-27", art: "permittering", prosent: 50, slutt_ukjent: true, betalt: false },
+      ],
     });
     expect(a.map((x) => [x.niva, x.tekst])).toEqual([
       ["feil", "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Ansatte og timer → A-melding."],
@@ -192,7 +198,11 @@ describe("a-meldingen (uten database)", () => {
       ["feil", "Kari Hansen mangler yrkeskode (7 siffer, SSBs yrkeskoder)."],
       ["advarsel", "Per Time slutter 15.11.2026: velg årsaken til sluttdatoen."],
       ["advarsel", "Lønnskjøringen for 2026-11 (ekstra) med utbetaling i måneden står som utkast og er ikke med."],
-      ["advarsel", "Per Time har permisjon over 14 dager. Permisjonen er ikke med i a-meldingen fra appen ennå; meld den i Altinn om den skal rapporteres."],
+      ["feil", "Velg hva slags permisjon Per Time har (01.11.2026–20.11.2026, under Fravær): permisjon over 14 dager skal med i a-meldingen."],
+      [
+        "advarsel",
+        "Permittering for Kari Hansen står til og med 27.11.2026 uten bekreftet sluttdato, og den datoen rapporteres som sluttdato. Forleng den om den varer lenger.",
+      ],
     ]);
     expect(kontroller(GRUNNLAG)).toEqual([]);
     expect(oppsummer(GRUNNLAG)).toMatchObject({ antall_arbeidsforhold: 2, antall_med_lonn: 2, inntekt: 57300, sum_forskuddstrekk: 18100, arbeidsgiveravgift: 8220 });

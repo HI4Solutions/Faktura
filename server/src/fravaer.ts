@@ -14,6 +14,12 @@
 // Permisjon med lønn (0074_vaktbytte_fridag.sql, betalt): med fastlønn går lønnen som vanlig, med
 // timelønn lønnes timene. Den registreres også når den som gir bort en fast arbeidsdag, tar
 // fridagen som betalt fravær (server/src/vaktbytte.ts).
+//
+// Permisjon og permittering (0084_permisjon_permittering.sql, server/src/permisjoner.ts): arten
+// (som i a-meldingen; permittering er en egen), prosenten av stillingen, om sluttdatoen er ukjent,
+// og for permitteringen datoen varselet ble gitt og lønnsplikten (standard: de 15 første
+// arbeidsdagene). Delvis permisjon gjør ikke den ansatte borte i planen. Eier og administrator
+// lager varselet om permittering som PDF.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
@@ -21,6 +27,9 @@ import { ApiFeil } from "./feil.js";
 import { datoS, tekst, valgfri, varslePersonal } from "./ansatte.js";
 import { leggIKo } from "./tjenester.js";
 import { virkedag } from "./lonnsberegning.js";
+import { ARTER, lonnspliktSlutt, permisjonNavn } from "./permisjoner.js";
+import { lagPermitteringsvarselPdf } from "./permitteringsvarselPdf.js";
+import { hentLogo } from "./dokument.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -37,8 +46,8 @@ export const FRAVAERTYPER = {
   annet: "Annet fravær",
 } as const;
 type Type = keyof typeof FRAVAERTYPER;
-// «Permisjon med lønn» for betalt permisjon, ellers typen.
-export const fravaerNavn = (type: Type, betalt?: boolean | null) => (type === "permisjon" && betalt ? "Permisjon med lønn" : FRAVAERTYPER[type]);
+// Permisjon: arten («Foreldrepermisjon», «Permittering», «Permisjon med lønn» …), ellers typen.
+export const fravaerNavn = (type: Type, betalt?: boolean | null, art?: string | null) => (type === "permisjon" ? permisjonNavn(art, betalt) : FRAVAERTYPER[type]);
 
 const dagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 const dag = (iso: string) => dagFormat.format(new Date(`${iso}T12:00:00Z`));
@@ -60,7 +69,20 @@ const skjema = z.object({
   erklaering: z.boolean().optional(),
   // Gradert sykmelding: graden (1–99 %; null er 100 %).
   sykmeldingsgrad: z.number({ error: "Skriv sykmeldingsgraden" }).int("Sykmeldingsgraden er et helt tall").min(1, "Graden er minst 1 %").max(100, "Graden er høyst 100 %").nullable().optional(),
+  // Permisjon (0084): arten, prosenten av stillingen (null er 100 %), om sluttdatoen er ukjent, og
+  // for permitteringen datoen varselet ble gitt og den siste dagen med lønnsplikt (null: ingen).
+  permisjon_art: z.enum(ARTER, { error: "Velg hva slags permisjon" }).nullable().optional(),
+  prosent: z.number({ error: "Skriv prosenten" }).int("Prosenten er et helt tall").min(1, "Prosenten er minst 1").max(100, "Prosenten er høyst 100").nullable().optional(),
+  slutt_ukjent: z.boolean().optional(),
+  varslet: datoS.nullable().optional(),
+  lonnsplikt_til: datoS.nullable().optional(),
 });
+
+// Datoene på en permittering: varselet er gitt før den begynner, og lønnsplikten slutter ikke før.
+function sjekkPermittering(fra: string, varslet: string | null | undefined, lonnspliktTil: string | null | undefined) {
+  if (varslet && varslet > fra) throw new ApiFeil(400, "Varselet må være gitt før permitteringen begynner");
+  if (lonnspliktTil && lonnspliktTil < fra) throw new ApiFeil(400, "Lønnsplikten kan ikke slutte før permitteringen begynner");
+}
 
 // Typen og notatet ser bare eier, administrator og den ansatte selv (0047_fravaer_skjult.sql);
 // andre får typen «fravaer» og ikke notatet.
@@ -75,6 +97,12 @@ const FRAVAER = `
          case when s.ser then f.betalt end as betalt,
          case when s.ser then f.sykmeldingsgrad end as sykmeldingsgrad,
          case when s.ser then f.nav_sykmelding is not null end as fra_nav,
+         case when s.ser then f.permisjon_art end as permisjon_art,
+         case when s.ser then f.prosent end as prosent,
+         case when s.ser then f.slutt_ukjent end as slutt_ukjent,
+         case when s.ser then f.varslet end as varslet,
+         case when s.ser then f.lonnsplikt_til end as lonnsplikt_til,
+         f.prosent is not null as delvis,
          case when s.ser and f.egenmeldt is not null then f.egenmeldt_av is not distinct from a.bruker_id end as egenmeldt_selv,
          f.opprettet, f.opprettet_av = faktura.bruker_id() as min
     from faktura.fravaer f
@@ -90,6 +118,7 @@ type Fravaer = {
   til: string;
   dokumentasjon: "egenmelding" | "sykmelding" | null;
   betalt: boolean | null;
+  permisjon_art: string | null;
 };
 const ERKLAERING = "Bekreft erklæringen for å sende egenmeldingen";
 
@@ -116,6 +145,8 @@ export function fravaerRuter() {
   r.post("/fravaer", async (c) => {
     const b = skjema.parse(await c.req.json().catch(() => ({})));
     if (b.til < b.fra) throw new ApiFeil(400, "Sluttdatoen er før startdatoen");
+    const permittering = b.type === "permisjon" && b.permisjon_art === "permittering";
+    if (permittering) sjekkPermittering(b.fra, b.varslet, b.lonnsplikt_til);
     const meg = c.get("bruker").id;
     const svar = await bruk(c, async (db) => {
       const selv = (await en<{ id: string | null }>(db, "select faktura.min_ansatt($1) as id", [orgId(c)]))!.id;
@@ -125,7 +156,9 @@ export function fravaerRuter() {
       if (b.dokumentasjon === "egenmelding" && ansatt === selv && !b.erklaering) throw new ApiFeil(400, ERKLAERING);
       const ny = await en<{ id: string }>(
         db,
-        "insert into faktura.fravaer (org_id, ansatt_id, type, fra, til, notat, dokumentasjon, arbeidsrelatert, timer, betalt, sykmeldingsgrad) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id",
+        `insert into faktura.fravaer (org_id, ansatt_id, type, fra, til, notat, dokumentasjon, arbeidsrelatert, timer, betalt, sykmeldingsgrad,
+                                      permisjon_art, prosent, slutt_ukjent, varslet, lonnsplikt_til)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) returning id`,
         [
           orgId(c),
           ansatt,
@@ -136,8 +169,14 @@ export function fravaerRuter() {
           b.dokumentasjon ?? null,
           b.arbeidsrelatert ?? null,
           b.type === "avspasering" || (b.type === "permisjon" && b.betalt) ? (b.timer ?? null) : null,
-          b.type === "permisjon" && !!b.betalt,
+          b.type === "permisjon" && !!b.betalt && !permittering,
           b.type === "syk" && b.sykmeldingsgrad != null && b.sykmeldingsgrad < 100 ? b.sykmeldingsgrad : null,
+          b.type === "permisjon" ? (b.permisjon_art ?? null) : null,
+          b.type === "permisjon" && b.prosent != null && b.prosent < 100 ? b.prosent : null,
+          b.type === "permisjon" && !!b.slutt_ukjent,
+          permittering ? (b.varslet ?? null) : null,
+          // Lønnsplikten: standard de 15 første arbeidsdagene.
+          permittering ? (b.lonnsplikt_til === undefined ? lonnspliktSlutt(b.fra) : b.lonnsplikt_til) : null,
         ],
       );
       const f = (await en<Fravaer>(db, `${FRAVAER} where f.id = $1`, [ny!.id]))!;
@@ -175,7 +214,7 @@ export function fravaerRuter() {
           hendelse: "fravaer",
           org_id: orgId(c),
           bruker_ider: [svar.bruker],
-          tittel: `${fravaerNavn(f.type, f.betalt)} registrert`,
+          tittel: `${fravaerNavn(f.type, f.betalt, f.permisjon_art)} registrert`,
           tekst: `${periode(f.fra, f.til)}.`,
           url: "/vakter?fane=mine",
           tag: `fravaer-${f.id}`,
@@ -191,16 +230,28 @@ export function fravaerRuter() {
     const { erklaering, ...b } = skjema.omit({ ansatt_id: true }).partial().parse(await c.req.json().catch(() => ({})));
     // 100 % er det samme som ingen grad.
     if (b.sykmeldingsgrad === 100) b.sykmeldingsgrad = null;
-    const felt = Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined));
-    const navn = Object.keys(felt);
-    if (!navn.length) throw new ApiFeil(400, "Ingen felt å endre");
+    if (b.prosent === 100) b.prosent = null;
     const svar = await bruk(c, async (db) => {
-      const naa = await en<{ dokumentasjon: string | null; selv: boolean }>(
+      const naa = await en<{ dokumentasjon: string | null; selv: boolean; fra: string; permisjon_art: string | null; varslet: string | null; lonnsplikt_til: string | null }>(
         db,
-        "select dokumentasjon, faktura.er_meg(org_id, ansatt_id) as selv from faktura.fravaer where org_id = $1 and id = $2",
+        `select dokumentasjon, faktura.er_meg(org_id, ansatt_id) as selv, fra, permisjon_art, varslet, lonnsplikt_til
+           from faktura.fravaer where org_id = $1 and id = $2`,
         [orgId(c), id(c)],
       );
       if (!naa) throw new ApiFeil(404, "Fant ikke fraværet");
+      // Blir fraværet en permittering, er lønnsplikten standard de 15 første arbeidsdagene.
+      const art = b.permisjon_art !== undefined ? b.permisjon_art : naa.permisjon_art;
+      if (art === "permittering" && (b.type ?? "permisjon") === "permisjon") {
+        if (b.lonnsplikt_til === undefined && naa.permisjon_art !== "permittering") b.lonnsplikt_til = lonnspliktSlutt(b.fra ?? naa.fra);
+        sjekkPermittering(
+          b.fra ?? naa.fra,
+          b.varslet !== undefined ? b.varslet : naa.varslet,
+          b.lonnsplikt_til !== undefined ? b.lonnsplikt_til : naa.lonnsplikt_til,
+        );
+      }
+      const felt = Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined));
+      const navn = Object.keys(felt);
+      if (!navn.length) throw new ApiFeil(400, "Ingen felt å endre");
       const egenmelding = b.dokumentasjon === "egenmelding" && naa.dokumentasjon !== "egenmelding";
       if (egenmelding && naa.selv && !erklaering) throw new ApiFeil(400, ERKLAERING);
       const res = await db.query(`update faktura.fravaer set ${navn.map((k, i) => `${k} = $${i + 3}`).join(", ")} where org_id = $1 and id = $2`, [
@@ -217,7 +268,7 @@ export function fravaerRuter() {
         c.get("bruker").id,
         "fravaer",
         `Egenmelding fra ${svar.f.ansatt_navn}`,
-        `${FRAVAERTYPER[svar.f.type]}, ${periode(svar.f.fra, svar.f.til)}.`,
+        `${fravaerNavn(svar.f.type, svar.f.betalt, svar.f.permisjon_art)}, ${periode(svar.f.fra, svar.f.til)}.`,
         `/ansatte/${svar.f.ansatt_id}`,
         `egenmelding-${svar.f.id}`,
       );
@@ -230,6 +281,64 @@ export function fravaerRuter() {
       if (!res.rowCount) throw new ApiFeil(404, "Fant ikke fraværet");
     });
     return c.body(null, 204);
+  });
+
+  // Varselet om permittering som PDF (eier og administrator).
+  r.get("/fravaer/:id/permitteringsvarsel", async (c) => {
+    const x = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      const f = await en<{
+        permisjon_art: string | null;
+        fra: string;
+        til: string;
+        prosent: number | null;
+        slutt_ukjent: boolean;
+        varslet: string | null;
+        lonnsplikt_til: string | null;
+        notat: string | null;
+        navn: string;
+        ansattnummer: number;
+        adresse: string | null;
+        postnr: string | null;
+        poststed: string | null;
+        i_dag: string;
+      }>(
+        db,
+        `select f.permisjon_art, f.fra, f.til, f.prosent, f.slutt_ukjent, f.varslet, f.lonnsplikt_til, f.notat,
+                a.fornavn || ' ' || a.etternavn as navn, a.ansattnummer, a.adresse, a.postnr, a.poststed, faktura.i_dag()::text as i_dag
+           from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
+          where f.org_id = $1 and f.id = $2`,
+        [orgId(c), id(c)],
+      );
+      if (!f) throw new ApiFeil(404, "Fant ikke fraværet");
+      if (f.permisjon_art !== "permittering") throw new ApiFeil(400, "Fraværet er ikke en permittering");
+      if (!f.notat) throw new ApiFeil(400, "Skriv grunnen til permitteringen først (i notatet)");
+      const o = (await en<any>(db, "select navn, orgnr, adresse, postnr, poststed, epost, telefon, farge, logo_sti from faktura.organisasjoner where id = $1", [orgId(c)]))!;
+      return { f, o };
+    });
+    const { f, o } = x;
+    const pdf = await lagPermitteringsvarselPdf(
+      {
+        navn: f.navn,
+        ansattnummer: f.ansattnummer,
+        adresse: f.adresse,
+        postnr: f.postnr,
+        poststed: f.poststed,
+        fra: f.fra,
+        til: f.til,
+        slutt_ukjent: f.slutt_ukjent,
+        prosent: f.prosent ?? 100,
+        varslet: f.varslet ?? f.i_dag,
+        lonnsplikt_til: f.lonnsplikt_til,
+        grunn: f.notat!,
+      },
+      o,
+      await hentLogo(o.logo_sti),
+    );
+    return c.body(Buffer.from(pdf), 200, {
+      "content-type": "application/pdf",
+      "content-disposition": `inline; filename="permitteringsvarsel-${f.ansattnummer}-${f.fra}.pdf"`,
+    });
   });
 
   // Egenmeldingene til en ansatt (standard: den innloggede selv): reglene, når retten begynner

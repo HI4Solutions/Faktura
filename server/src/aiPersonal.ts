@@ -336,7 +336,7 @@ const VAKTER = `
          v.pause_min, v.timer, v.oppgave, v.publisert_at is not null as publisert, v.vikar_for,
          exists (select 1 from faktura.vakter x where x.org_id = v.org_id and x.vikar_for = v.id) as har_vikar,
          (select faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) from faktura.fravaer f
-           where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer
+           where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til and f.prosent is null limit 1) as fravaer
     from faktura.vakter v left join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id`;
 const vaktTekst = (v: Pick<VaktRad, "dato" | "fra" | "til" | "oppgave">, iDag?: string) => `${iDag ? naar(v.dato, iDag) : dag(v.dato)} ${v.fra}–${v.til}${v.oppgave ? ` (${v.oppgave})` : ""}`;
 
@@ -458,7 +458,7 @@ async function nyVakt(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSva
   const borte = a.a
     ? await alle<{ fra: string; til: string; type: string }>(
         k.db,
-        "select fra, til, faktura.fravaer_type(org_id, ansatt_id, type) as type from faktura.fravaer where org_id = $1 and ansatt_id = $2 and til >= $3 and fra <= $4",
+        "select fra, til, faktura.fravaer_type(org_id, ansatt_id, type) as type from faktura.fravaer where org_id = $1 and ansatt_id = $2 and til >= $3 and fra <= $4 and prosent is null",
         [k.orgId, a.a.id, dager[0], dager.at(-1)],
       )
     : [];
@@ -836,7 +836,7 @@ async function hvemJobber(k: PKontekst, ai: Partial<PersonalKommando>): Promise<
     k.db,
     `select a.fornavn || ' ' || a.etternavn as navn, faktura.fravaer_type(f.org_id, f.ansatt_id, f.type) as type, f.fra, f.til
        from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
-      where f.org_id = $1 and f.til >= $2 and f.fra <= $3 order by a.fornavn`,
+      where f.org_id = $1 and f.til >= $2 and f.fra <= $3 and f.prosent is null order by a.fornavn`,
     [k.orgId, fra, til],
   );
   // Rollene i bemanningskalenderen (f.eks. leger og sekretærer, også de som ikke er ansatt):

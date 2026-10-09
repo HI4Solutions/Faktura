@@ -12,12 +12,18 @@
 // Avspasering (0073_timebank.sql): fri fra timebanken i hele dager, med timene den tar fra banken
 // (foreslått av de planlagte timene). Lederen registrerer den her; den ansatte søker under Timer →
 // Timebank.
+//
+// Permisjon og permittering (0084_permisjon_permittering.sql): arten (som i a-meldingen), prosenten
+// av stillingen (delvis permisjon gjør ikke den ansatte borte i planen), om sluttdatoen er ukjent,
+// og for permitteringen datoen varselet ble gitt og lønnsplikten (standard de 15 første
+// arbeidsdagene). Permitteringen har sin egen knapp; varselet lastes ned som PDF.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, hent } from "../api";
+import { api, hent, lastNed } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
 import { kanPersonal, useKonto } from "../konto";
 import { iDag, leggTilDager } from "../format";
+import { helligdag } from "../helligdager";
 import { IkonKalender } from "../ikoner";
 import { visDag } from "../uke";
 
@@ -42,7 +48,37 @@ export type Fravaer = {
   betalt?: boolean | null; // permisjon med lønn (0074_vaktbytte_fridag.sql)
   sykmeldingsgrad?: number | null; // gradert sykmelding (1–99 %; null er 100 %) (0079_nav_sykepenger.sql)
   fra_nav?: boolean | null; // registrert fra en sykmelding hos NAV
+  // Permisjon (0084): arten, prosenten av stillingen (1–99 %; null er 100 %), om sluttdatoen er
+  // ukjent, og for permitteringen varselet og den siste dagen med lønnsplikt. delvis: under 100 %
+  // (den ansatte er ikke borte; alle ser det).
+  permisjon_art?: PermisjonsArt | null;
+  prosent?: number | null;
+  slutt_ukjent?: boolean | null;
+  varslet?: string | null;
+  lonnsplikt_til?: string | null;
+  delvis?: boolean;
 };
+export type PermisjonsArt = "annen" | "lovfestet" | "foreldre" | "utdanning_lovfestet" | "utdanning" | "militaer" | "permittering";
+// Artene som i a-meldingen (server/src/permisjoner.ts): navnet på fraværet og teksten i valget.
+export const PERMISJONSARTER: Record<PermisjonsArt, { navn: string; valg: string }> = {
+  annen: { navn: "Permisjon", valg: "Annen permisjon (ikke lovfestet, f.eks. velferdspermisjon)" },
+  foreldre: { navn: "Foreldrepermisjon", valg: "Foreldrepermisjon (med foreldrepenger)" },
+  lovfestet: { navn: "Lovfestet permisjon", valg: "Annen lovfestet permisjon (omsorgspermisjon, pleiepenger, utvidet foreldrepermisjon)" },
+  utdanning_lovfestet: { navn: "Utdanningspermisjon", valg: "Utdanningspermisjon (lovfestet)" },
+  utdanning: { navn: "Utdanningspermisjon", valg: "Utdanningspermisjon (ikke lovfestet)" },
+  militaer: { navn: "Militærtjeneste", valg: "Militærtjeneste, sivilforsvar eller heimevern" },
+  permittering: { navn: "Permittering", valg: "Permittering" },
+};
+// Lønnsplikten ved permittering: normalt de 15 første arbeidsdagene (virkedagene); den siste dagen.
+export function lonnspliktSlutt(fra: string, dager = 15): string {
+  let n = 0;
+  let d = fra;
+  for (let i = 0; i < 400; i++, d = leggTilDager(d, 1)) {
+    const u = new Date(`${d}T12:00:00Z`).getUTCDay();
+    if (u !== 0 && u !== 6 && !helligdag(d) && ++n === dager) return d;
+  }
+  return d;
+}
 // Egenmeldingene til en ansatt (GET /egenmelding): reglene, retten etter to måneder, det som er
 // brukt i løpet av 12 måneder (egen sykdom) og dagene med sykt barn i år.
 type EgenmeldingStatus = {
@@ -94,11 +130,23 @@ export const borteTekst: Record<FravaerType, string> = {
   fravaer: "har fravær",
 };
 
-// «Permisjon med lønn» for betalt permisjon, ellers typen.
-export const fravaerNavn = (f: Pick<Fravaer, "type" | "betalt">) => (f.type === "permisjon" && f.betalt ? "Permisjon med lønn" : fravaerTekst[f.type]);
+// Permisjon: arten («Foreldrepermisjon», «Permittering», «Permisjon med lønn» …), ellers typen.
+export const fravaerNavn = (f: Pick<Fravaer, "type" | "betalt" | "permisjon_art">) =>
+  f.type !== "permisjon"
+    ? fravaerTekst[f.type]
+    : f.permisjon_art && f.permisjon_art !== "annen"
+      ? PERMISJONSARTER[f.permisjon_art].navn
+      : f.betalt
+        ? "Permisjon med lønn"
+        : "Permisjon";
+// «Delvis 50 %» for delvis permisjon og permittering.
+export const prosentTekst = (f: Pick<Fravaer, "type" | "prosent">) => (f.type === "permisjon" && f.prosent ? `Delvis ${f.prosent} %` : null);
 export const fravaerPeriode = (f: Pick<Fravaer, "fra" | "til">) => (f.fra === f.til ? visDag(f.fra) : `${visDag(f.fra)} – ${visDag(f.til)}`);
 const dager = (f: Pick<Fravaer, "fra" | "til">) => Math.round((Date.parse(`${f.til}T12:00:00Z`) - Date.parse(`${f.fra}T12:00:00Z`)) / 86_400_000) + 1;
-const erSykdom = (t?: FravaerType) => t === "syk" || t === "sykt_barn";
+const erSykdom = (t?: string) => t === "syk" || t === "sykt_barn";
+// Valget i skjemaet: typene, og permittering (en permisjon med arten permittering).
+type Valg = FravaerType | "permittering";
+const dagerMellom = (fra: string, til: string) => Math.round((Date.parse(`${til}T12:00:00Z`) - Date.parse(`${fra}T12:00:00Z`)) / 86_400_000);
 // «Egenmelding», «Sykmelding» eller «Legeerklæring» (sykt barn).
 export const dokumentasjonTekst = (f: Pick<Fravaer, "type" | "dokumentasjon">) =>
   f.dokumentasjon === "egenmelding" ? "Egenmelding" : f.dokumentasjon === "sykmelding" ? (f.type === "sykt_barn" ? "Legeerklæring" : "Sykmelding") : null;
@@ -107,8 +155,9 @@ export const gradTekst = (f: Pick<Fravaer, "type" | "sykmeldingsgrad">) => (f.ty
 const tidspunkt = (t: string) => new Date(t).toLocaleString("nb-NO", { timeZone: "Europe/Oslo", dateStyle: "short", timeStyle: "short" });
 const flertall = (n: number, en: string, flere: string) => `${n} ${n === 1 ? en : flere}`;
 export const iArbeid = (a: Ansatt, dato: string) => a.aktiv && a.ansatt_fra <= dato && (!a.ansatt_til || a.ansatt_til >= dato);
-export const borte = (fravaer: Pick<Fravaer, "ansatt_id" | "fra" | "til" | "type">[], ansatt: string | null, dato: string) =>
-  (ansatt && fravaer.find((f) => f.ansatt_id === ansatt && f.fra <= dato && f.til >= dato)?.type) || null;
+// Delvis permisjon (0084) er ikke borte: den ansatte jobber resten.
+export const borte = (fravaer: Pick<Fravaer, "ansatt_id" | "fra" | "til" | "type" | "delvis">[], ansatt: string | null, dato: string) =>
+  (ansatt && fravaer.find((f) => f.ansatt_id === ansatt && f.fra <= dato && f.til >= dato && !f.delvis)?.type) || null;
 
 // Registrer eller endre fravær. Den ansatte selv (selv) kan bare melde sykdom og deretter
 // endre sluttdatoen, og sende egenmelding (egenmelding: avkrysset fra start); eier og
@@ -131,7 +180,7 @@ export function FravaerSkjema({
   const { org } = useKonto();
   const [f, settF] = useState(() => ({
     ansatt_id: fravaer.ansatt_id ?? "",
-    type: (fravaer.type ?? (selv ? "syk" : "ferie")) as FravaerType,
+    type: (fravaer.type === "permisjon" && fravaer.permisjon_art === "permittering" ? "permittering" : (fravaer.type ?? (selv ? "syk" : "ferie"))) as Valg,
     fra: fravaer.fra ?? iDag(),
     til: fravaer.til ?? fravaer.fra ?? iDag(),
     notat: fravaer.notat ?? "",
@@ -140,16 +189,33 @@ export function FravaerSkjema({
     betalt: !!fravaer.betalt,
     gradert: !!fravaer.sykmeldingsgrad,
     grad: fravaer.sykmeldingsgrad ? String(fravaer.sykmeldingsgrad) : "",
+    // Permisjon og permittering (0084).
+    art: (fravaer.permisjon_art && fravaer.permisjon_art !== "permittering" ? fravaer.permisjon_art : "annen") as PermisjonsArt,
+    delvis: !!fravaer.prosent,
+    prosent: fravaer.prosent ? String(fravaer.prosent) : "",
+    sluttUkjent: !!fravaer.slutt_ukjent,
+    varslet: fravaer.varslet ?? iDag(),
+    lonnsplikt: !fravaer.id || fravaer.permisjon_art !== "permittering" || !!fravaer.lonnsplikt_til,
+    lonnspliktTil: fravaer.lonnsplikt_til ?? lonnspliktSlutt(fravaer.fra ?? iDag()),
   }));
+  // Lønnsplikten foreslås av startdatoen, til den endres for hånd.
+  const lonnspliktEndret = useRef(!!fravaer.lonnsplikt_til);
   // Avspasering og permisjon med lønn: timene foreslås av de planlagte timene, til de endres for hånd.
   const timerEndret = useRef(fravaer.timer != null);
   // Egenmeldingen den ansatte sender (med erklæringen) og svaret om arbeidet.
   const [egen, settEgen] = useState({ send: !!egenmelding && !fravaer.dokumentasjon, arbeidsrelatert: "nei" as "nei" | "ja" | "vet_ikke" });
   const h = useHandling();
   const sett = (e: Partial<typeof f>) => settF({ ...f, ...e });
-  // Avspasering bare når timebanken er på (eller fraværet alt er avspasering).
-  const typer: FravaerType[] = selv ? ["syk", "sykt_barn"] : FRAVAERTYPER.filter((t) => t !== "avspasering" || org?.timebank || fravaer.type === "avspasering");
+  // Avspasering bare når timebanken er på (eller fraværet alt er avspasering); permittering etter
+  // permisjon.
+  const typer: Valg[] = selv
+    ? ["syk", "sykt_barn"]
+    : FRAVAERTYPER.filter((t) => t !== "avspasering" || org?.timebank || fravaer.type === "avspasering").flatMap((t): Valg[] => (t === "permisjon" ? [t, "permittering"] : [t]));
   const avspasering = f.type === "avspasering";
+  const permisjon = f.type === "permisjon" || f.type === "permittering";
+  const permittering = f.type === "permittering";
+  // Varselet skal normalt gis minst 14 dager før (2 dager ved uforutsette hendelser).
+  const kortVarsel = permittering && !!f.varslet && /^\d{4}-\d{2}-\d{2}$/.test(f.fra) && f.varslet <= f.fra && dagerMellom(f.varslet, f.fra) < 14;
   const medLonn = f.type === "permisjon" && f.betalt;
   const medTimer = avspasering || medLonn;
   useEffect(() => {
@@ -176,7 +242,7 @@ export function FravaerSkjema({
     const kropp = bareSlutt
       ? { til: f.til, ...egenmeldingen }
       : {
-          type: f.type,
+          type: permittering ? "permisjon" : f.type,
           fra: f.fra,
           til: f.til,
           notat: f.notat.trim() || null,
@@ -184,6 +250,14 @@ export function FravaerSkjema({
           ...(medTimer ? { timer: Number(f.timer.replace(",", ".")) } : {}),
           ...(f.type === "permisjon" ? { betalt: f.betalt } : {}),
           ...(!selv && f.type === "syk" ? { sykmeldingsgrad: f.gradert && f.grad.trim() ? Number(f.grad) : null } : {}),
+          ...(!selv && permisjon
+            ? {
+                permisjon_art: permittering ? "permittering" : f.art,
+                prosent: f.delvis && f.prosent.trim() ? Number(f.prosent) : null,
+                slutt_ukjent: f.sluttUkjent,
+              }
+            : {}),
+          ...(!selv && permittering ? { varslet: f.varslet || null, lonnsplikt_til: f.lonnsplikt ? f.lonnspliktTil || null : null } : {}),
         };
     const r = await h.kjor(() =>
       fravaer.id
@@ -228,7 +302,7 @@ export function FravaerSkjema({
       <div className={`faner valg${selv ? "" : " fravaertyper"}${typer.length % 3 === 1 ? " siste-hel" : ""}`} role="radiogroup" aria-label="Type fravær">
         {typer.map((t) => (
           <button key={t} type="button" role="radio" aria-checked={f.type === t} className={f.type === t ? "valgt" : undefined} disabled={bareSlutt} onClick={() => sett({ type: t })}>
-            {t === "annet" ? "Annet" : fravaerTekst[t]}
+            {t === "annet" ? "Annet" : t === "permittering" ? "Permittering" : fravaerTekst[t]}
           </button>
         ))}
       </div>
@@ -241,7 +315,13 @@ export function FravaerSkjema({
             disabled={bareSlutt}
             min={selv && !fravaer.id ? leggTilDager(iDag(), sendEgen ? -16 : -1) : undefined}
             value={f.fra}
-            onChange={(e) => sett({ fra: e.target.value, til: f.til < e.target.value ? e.target.value : f.til })}
+            onChange={(e) =>
+              sett({
+                fra: e.target.value,
+                til: f.til < e.target.value ? e.target.value : f.til,
+                ...(!lonnspliktEndret.current && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) ? { lonnspliktTil: lonnspliktSlutt(e.target.value) } : {}),
+              })
+            }
           />
         </label>
         <label>
@@ -267,10 +347,89 @@ export function FravaerSkjema({
         </label>
       )}
       {!selv && f.type === "permisjon" && (
-        <label>
-          <input type="checkbox" checked={f.betalt} onChange={(e) => sett({ betalt: e.target.checked })} />
-          Med lønn (betalt permisjon, f.eks. velferdspermisjon)
-        </label>
+        <>
+          <label>
+            Hva slags permisjon
+            <select value={f.art} onChange={(e) => sett({ art: e.target.value as PermisjonsArt })}>
+              {(Object.keys(PERMISJONSARTER) as PermisjonsArt[])
+                .filter((a) => a !== "permittering")
+                .map((a) => (
+                  <option key={a} value={a}>
+                    {PERMISJONSARTER[a].valg}
+                  </option>
+                ))}
+            </select>
+            <span className="felt-hjelp">Som i a-meldingen: permisjon over 14 dager rapporteres der hver måned den varer.</span>
+          </label>
+          <label>
+            <input type="checkbox" checked={f.betalt} onChange={(e) => sett({ betalt: e.target.checked })} />
+            Med lønn (betalt permisjon, f.eks. velferdspermisjon)
+            {!f.betalt && <span className="felt-hjelp">Uten lønn trekkes fastlønnen for arbeidsdagene i permisjonen (med prosenten) i lønnskjøringen.</span>}
+          </label>
+        </>
+      )}
+      {!selv && permittering && (
+        <>
+          <div className="rad">
+            <label>
+              Varselet ble gitt
+              <input type="date" required max={f.fra} value={f.varslet} onChange={(e) => sett({ varslet: e.target.value })} />
+            </label>
+            <label>
+              Siste dag med lønnsplikt
+              <input
+                type="date"
+                required={f.lonnsplikt}
+                disabled={!f.lonnsplikt}
+                min={f.fra}
+                value={f.lonnsplikt ? f.lonnspliktTil : ""}
+                onChange={(e) => {
+                  lonnspliktEndret.current = true;
+                  sett({ lonnspliktTil: e.target.value });
+                }}
+              />
+            </label>
+          </div>
+          {kortVarsel && (
+            <p className="melding advarsel">Varselet er gitt mindre enn 14 dager før permitteringen begynner. Fristen er normalt 14 dager (2 dager ved uforutsette hendelser).</p>
+          )}
+          <label>
+            <input type="checkbox" checked={f.lonnsplikt} onChange={(e) => sett({ lonnsplikt: e.target.checked })} />
+            Lønnsplikt: arbeidsgiveren betaler lønnen de første dagene
+            <span className="felt-hjelp">
+              Foreslått: de 15 første arbeidsdagene av permitteringen. Med fastlønn går lønnen som vanlig så lenge, og deretter trekkes den permitterte delen; med
+              timelønn lønnes de planlagte timene. Sjekk reglene på nav.no.
+            </span>
+          </label>
+        </>
+      )}
+      {!selv && permisjon && (
+        <>
+          <label>
+            <input type="checkbox" checked={f.delvis} onChange={(e) => sett({ delvis: e.target.checked })} />
+            {permittering ? "Delvis permittering (jobber resten)" : "Delvis permisjon (jobber resten)"}
+          </label>
+          {f.delvis && (
+            <label>
+              Prosent av stillingen
+              <input type="number" inputMode="numeric" required min={1} max={99} placeholder="50" value={f.prosent} onChange={(e) => sett({ prosent: e.target.value })} />
+              <span className="felt-hjelp">
+                Andelen av stillingen {permittering ? "som er permittert" : "permisjonen gjelder"}, f.eks. 40 når den ansatte jobber 60 % av den. Den ansatte er på jobb i
+                vaktplanen og på tavla, og kan ha ferie og annet fravær i perioden.
+              </span>
+            </label>
+          )}
+          <label>
+            <input type="checkbox" checked={f.sluttUkjent} onChange={(e) => sett({ sluttUkjent: e.target.checked })} />
+            Sluttdatoen er ikke bestemt (inntil videre)
+            {f.sluttUkjent && (
+              <span className="felt-hjelp">
+                Til-datoen er foreløpig: den rapporteres i a-meldingen først den måneden {permittering ? "permitteringen" : "permisjonen"} står til å slutte. Forleng den om
+                den varer lenger.
+              </span>
+            )}
+          </label>
+        </>
       )}
       {medLonn && (
         <label>
@@ -294,7 +453,7 @@ export function FravaerSkjema({
       {selv && (
         <EgenmeldingValg
           fravaer={fravaer}
-          type={f.type}
+          type={f.type as FravaerType}
           periode={{ fra: f.fra, til: f.til }}
           send={sendEgen}
           arbeidsrelatert={egen.arbeidsrelatert}
@@ -338,13 +497,20 @@ export function FravaerSkjema({
           )}
         </>
       )}
-      {!bareSlutt && (
-        <label>
-          Notat
-          <input maxLength={500} placeholder={selv ? "Valgfritt, f.eks. når du regner med å være tilbake" : "Valgfritt"} value={f.notat} onChange={(e) => sett({ notat: e.target.value })} />
-          {erSykdom(f.type) && <span className="felt-hjelp">Ikke skriv hva sykdommen gjelder.</span>}
-        </label>
-      )}
+      {!bareSlutt &&
+        (permittering ? (
+          <label>
+            Grunnen til permitteringen
+            <input maxLength={500} required placeholder="F.eks. ordremangel" value={f.notat} onChange={(e) => sett({ notat: e.target.value })} />
+            <span className="felt-hjelp">Står i varselet om permittering (PDF) den ansatte får.</span>
+          </label>
+        ) : (
+          <label>
+            Notat
+            <input maxLength={500} placeholder={selv ? "Valgfritt, f.eks. når du regner med å være tilbake" : "Valgfritt"} value={f.notat} onChange={(e) => sett({ notat: e.target.value })} />
+            {erSykdom(f.type) && <span className="felt-hjelp">Ikke skriv hva sykdommen gjelder.</span>}
+          </label>
+        ))}
       <Feil melding={h.feil} />
       <div className="knapper">
         <button className="primar" disabled={h.opptatt}>
@@ -353,6 +519,16 @@ export function FravaerSkjema({
         <button type="button" onClick={avbryt}>
           Avbryt
         </button>
+        {fravaer.id && fravaer.permisjon_art === "permittering" && (
+          <button
+            type="button"
+            disabled={h.opptatt || !fravaer.notat}
+            title={fravaer.notat ? "Varselet med det som er lagret" : "Skriv grunnen til permitteringen og lagre først"}
+            onClick={() => void h.kjor(() => lastNed(`/org/${org!.id}/fravaer/${fravaer.id}/permitteringsvarsel`, `permitteringsvarsel-${fravaer.fra}.pdf`))}
+          >
+            Varsel (PDF)
+          </button>
+        )}
         {fravaer.id && (
           <button type="button" className="fare" style={{ marginLeft: "auto" }} disabled={h.opptatt} onClick={slett}>
             Slett
@@ -669,11 +845,13 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
                 <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerNavn(f)}</span>
                 {dokumentasjonTekst(f) && <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>}
                 {gradTekst(f) && <span className="merke merke-dok">{gradTekst(f)}</span>}
+                {prosentTekst(f) && <span className="merke merke-dok">{prosentTekst(f)}</span>}
                 {f.fra_nav && <span className="merke merke-noytral">Fra NAV</span>}
               </span>
               <span className="linje">
                 <span className="under">
                   {fravaerPeriode(f)} · {dager(f) === 1 ? "1 dag" : `${dager(f)} dager`}
+                  {f.slutt_ukjent ? " · inntil videre" : ""}
                   {f.notat ? ` · ${f.notat}` : ""}
                 </span>
                 {f.fra <= iDag() && f.til >= iDag() && <span className="merke merke-advarsel">Nå</span>}
@@ -735,6 +913,7 @@ export function MittFravaer({ ansattId, versjon: utenfra, endret }: { ansattId: 
               <strong>{fravaerNavn(f)}</strong> {fravaerPeriode(f)}
               {dokumentasjonTekst(f) && <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>}
               {gradTekst(f) && <span className="merke merke-dok">{gradTekst(f)}</span>}
+              {prosentTekst(f) && <span className="merke merke-dok">{prosentTekst(f)}</span>}
             </span>
             {erSykdom(f.type) && (
               <span className="mitt-fravaer-knapper">
@@ -873,6 +1052,8 @@ export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId:
                   {fravaerPeriode(f)} · {dager(f) === 1 ? "1 dag" : `${dager(f)} dager`}
                   {erSykdom(f.type) && <span className="dempet"> · {dokumentasjonTekst(f) ?? "ikke dokumentert"}</span>}
                   {gradTekst(f) && <span className="dempet"> · {gradTekst(f)!.toLowerCase()}</span>}
+                  {prosentTekst(f) && <span className="dempet"> · {prosentTekst(f)!.toLowerCase()}</span>}
+                  {f.slutt_ukjent && <span className="dempet"> · inntil videre</span>}
                 </span>
                 {f.fra <= iDag() && f.til >= iDag() && <span className="merke merke-advarsel">Nå</span>}
               </button>

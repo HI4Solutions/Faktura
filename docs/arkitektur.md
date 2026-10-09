@@ -780,6 +780,28 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   utgiftsgodtgjoerelse med beskrivelsene for dem. Lønnsbilaget: kilometergodtgjørelse (7100),
   diett og nattillegg (7150), utlegg (7140), og naturalytelsene (5280) mot motkontoen (5290).
   Rapportene «Reiser og godtgjørelser» (`lonn.reiser`) og «Naturalytelser» (`lonn.naturalytelser`)
+- Permisjon og permittering (`0084_permisjon_permittering.sql`, `server/src/permisjoner.ts`,
+  `server/src/permitteringsvarselPdf.ts`, fraværsskjemaet i `web/src/sider/Fravaer.tsx`): en
+  permisjon på fraværet har arten den rapporteres med i a-meldingen (`permisjon_art`: annen,
+  lovfestet, foreldre, utdanning lovfestet og ikke lovfestet, militær, og permittering), prosenten
+  av stillingen (`prosent`, 1–99; null er 100 %), om sluttdatoen er ukjent (`slutt_ukjent`: til-datoen
+  er foreløpig), og for permitteringen datoen varselet ble gitt (`varslet`) og den siste dagen med
+  lønnsplikt (`lonnsplikt_til`; standard de 15 første virkedagene, `lonnspliktSlutt`). En
+  permisjon kan vare i tre år. Delvis permisjon (`prosent` satt) gjør ikke den ansatte borte:
+  `fravaer_type`, `fravaer_plan` (vaktplanen, tavla og bemanningskalenderen) og oppslagene om
+  hvem som er borte, tar den ikke med, og den kan overlappe annet fravær (men ikke en annen
+  permisjon). Den ordinære kjøringen trekker fastlønnen for arbeidsdagene i permisjon uten lønn og
+  for permitteringen etter lønnsplikten (`trekk_permisjon` og `trekk_permittering`, nøkkelen
+  `permisjon:<id>`; månedslønnen den dagen ganger prosenten delt på arbeidsdagene i måneden), og
+  lønner de planlagte timene i lønnspliktperioden for den med timelønn (`lonnsplikt`); et trekk
+  for permisjon lagt inn for hånd erstatter det som regnes ut. A-meldingen: permisjon over 14
+  dager og all permittering som `<permisjon>` på arbeidsforholdet hver måned den varer
+  (startdato, sluttdato når den er kjent eller permisjonen slutter i måneden, prosent, id-en til
+  fraværet som `permisjonId` og beskrivelsen; elementet `<permittering>` i 2.3 er utsatt), og
+  kontrollen stopper meldingen når arten mangler. Inntektsmeldingen til NAV foreslår
+  endringsårsaken «Permittering». Eier og administrator lager varselet om permittering som PDF
+  (`GET /fravaer/:id/permitteringsvarsel`). Rapporten «Permisjoner og permitteringer»
+  (`lonn.permisjoner`, bare eier og administrator, som fraværet)
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -814,7 +836,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   ansatte (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
   per lønnsart (grunnlaget for bokføringen), skattetrekk og arbeidsgiveravgift per termin med
   fristene, feriepengeliste, årsoversikt, OTP, lønns- og stillingsendringer, trekk og betalinger, reiser og
-  godtgjørelser og naturalytelser (`server/src/lonnRapporter.ts`).
+  godtgjørelser, naturalytelser og permisjoner og permitteringer (`server/src/lonnRapporter.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
   lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
   for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og

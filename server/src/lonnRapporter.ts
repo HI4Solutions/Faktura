@@ -2,8 +2,9 @@
 // lønnsjournalen, summene per lønnsart, lønnsbilaget (konteringen, lonnBokforing.ts), skattetrekk
 // og arbeidsgiveravgift per termin med fristene, feriepengelisten, årsoversikten og OTP; og
 // lønns- og stillingsendringene som gjelder fra perioden (lonnsendringer.ts); trekkene og
-// betalingene til Skatteetaten og andre (lonnstrekk.ts, lonnBetalinger.ts); og reisene og
-// naturalytelsene som er utbetalt og innberettet (reise.ts, naturalytelser.ts).
+// betalingene til Skatteetaten og andre (lonnstrekk.ts, lonnBetalinger.ts); reisene og
+// naturalytelsene som er utbetalt og innberettet (reise.ts, naturalytelser.ts); og permisjonene og
+// permitteringene med trekket i lønnen og det som rapporteres i a-meldingen (permisjoner.ts).
 // Journalen, lønnsartene og bilaget kan gjelde én kjøring (valget kjoring); de sendes til
 // regnskapsføreren når kjøringen godkjennes, om det er slått på.
 import { alle, en, type Db } from "./db.js";
@@ -14,6 +15,7 @@ import { hentBilag } from "./lonnBokforing.js";
 import type { Rapportdef, Valg } from "./rapportmodul.js";
 import { gjeldende, kjent, type Lonnsendring } from "./lonnsendringer.js";
 import type { Ansatt } from "./lonnsberegning.js";
+import { permisjonNavn, rapporteres } from "./permisjoner.js";
 
 const rund = (n: number) => Math.round(n * 100) / 100;
 // Rekkefølgen på beskrivelsene i a-meldingsgrunnlaget (forskuddstrekket sist).
@@ -624,6 +626,73 @@ export const lonnRapporter: Rapportdef[] = [
           ytelse: ameldingNavn(lonnsart(r.lonnsart)),
           tekst: r.tekst,
           belop: rund(r.belop),
+        })),
+      };
+    },
+  },
+  {
+    id: "lonn.permisjoner",
+    modul: "lonn",
+    navn: "Permisjoner og permitteringer",
+    beskrivelse:
+      "Permisjonene og permitteringene i perioden per ansatt: arten, datoene, prosenten av stillingen, om de er med lønn, varselet og lønnsplikten ved permittering, om de rapporteres i a-meldingen (permisjon over 14 dager og all permittering), og trekket i lønnen i de godkjente kjøringene med utbetaling i perioden.",
+    funksjon: "lonn",
+    // Fravær: bare eier og administrator (som fraværsrapporten).
+    tilgang: "personal",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      const rader = await alle<{
+        ansattnummer: number;
+        navn: string;
+        art: string | null;
+        betalt: boolean;
+        fra: string;
+        til: string;
+        slutt_ukjent: boolean;
+        prosent: number;
+        varslet: string | null;
+        lonnsplikt_til: string | null;
+        trekk: number;
+      }>(
+        db,
+        `select a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, f.permisjon_art as art, f.betalt,
+                to_char(f.fra, 'YYYY-MM-DD') as fra, to_char(f.til, 'YYYY-MM-DD') as til, f.slutt_ukjent, coalesce(f.prosent, 100)::int as prosent,
+                to_char(f.varslet, 'YYYY-MM-DD') as varslet, to_char(f.lonnsplikt_til, 'YYYY-MM-DD') as lonnsplikt_til,
+                coalesce((select sum(l.belop) from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id
+                           join faktura.lonnskjoringer k on k.id = s.kjoring_id
+                          where ${KJORINGER} and not l.fjernet and l.nokkel = 'permisjon:' || f.id::text), 0)::float8 as trekk
+           from faktura.fravaer f join faktura.ansatte a on a.org_id = f.org_id and a.id = f.ansatt_id
+          where f.org_id = $1 and f.type = 'permisjon' and f.til >= $2 and f.fra <= $3
+          order by f.fra, a.ansattnummer`,
+        parametre(org, v),
+      );
+      return {
+        kolonner: [
+          { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "art", navn: "Permisjon" },
+          { nokkel: "fra", navn: "Fra", type: "dato" },
+          { nokkel: "til", navn: "Til", type: "dato" },
+          { nokkel: "prosent", navn: "Prosent", type: "prosent" },
+          { nokkel: "lonn", navn: "Lønn" },
+          { nokkel: "varslet", navn: "Varslet", type: "dato" },
+          { nokkel: "lonnsplikt_til", navn: "Lønnsplikt til", type: "dato" },
+          { nokkel: "amelding", navn: "A-meldingen" },
+          { nokkel: "trekk", navn: "Trekk i lønnen", type: "kr", sum: true },
+        ],
+        rader: rader.map((r) => ({
+          ansattnummer: String(r.ansattnummer),
+          navn: r.navn,
+          art: permisjonNavn(r.art, r.betalt),
+          fra: r.fra,
+          til: r.til,
+          prosent: r.prosent,
+          lonn: r.betalt ? "Med lønn" : r.art === "permittering" ? (r.lonnsplikt_til ? "Lønnsplikt" : "Uten") : "Uten",
+          varslet: r.varslet,
+          lonnsplikt_til: r.lonnsplikt_til,
+          amelding: rapporteres(r) ? (r.slutt_ukjent ? "Ja (sluttdato ukjent)" : "Ja") : "Nei (14 dager eller kortere)",
+          trekk: rund(r.trekk),
         })),
       };
     },

@@ -112,7 +112,7 @@ export async function registrerFravaer(org: string, ansattId: string, sykmelding
       alle<{ type: string; fra: string; til: string }>(
         db,
         `select type, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til from faktura.fravaer
-          where org_id = $1 and ansatt_id = $2 and til >= $3 and fra <= $4 order by fra`,
+          where org_id = $1 and ansatt_id = $2 and til >= $3 and fra <= $4 and prosent is null order by fra`,
         [org, ansattId, p.fom, p.tom],
       ),
     );

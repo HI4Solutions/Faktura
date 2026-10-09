@@ -115,6 +115,10 @@ export const LONNSARTER: Lonnsart[] = [
   lonn("feriepenger_60", "Feriepenger for den ekstra ferieuka (over 60 år)", { ferie: false, otp: false, amelding: "feriepenger" }),
   lonn("ferietrekk", "Trekk i lønn for ferie", { ferie: false, otp: false, fortegn: -1, amelding: "trekkILoennForFerie" }),
   lonn("trekk_permisjon", "Trekk for permisjon uten lønn", { fortegn: -1, amelding: "fastloenn" }),
+  // Permittering (0084, permisjoner.ts): fastlønnen trekkes etter lønnsplikten, og med timelønn
+  // lønnes de planlagte timene i lønnspliktperioden. Regnes av fraværet.
+  lonn("trekk_permittering", "Trekk for permittering", { fortegn: -1, manuell: false, amelding: "fastloenn" }),
+  lonn("lonnsplikt", "Lønn i lønnspliktperioden ved permittering", { manuell: false, amelding: "timeloenn" }),
   { kode: "utgift", navn: "Utgiftsgodtgjørelse (ikke skattepliktig)", type: "utgift", trekk: false, aga: false, ferie: false, otp: false, fortegn: 1, manuell: true, amelding: null },
   { kode: "trekk_etter_skatt", navn: "Trekk etter skatt", type: "trekk", trekk: false, aga: false, ferie: false, otp: false, fortegn: -1, manuell: true, amelding: null },
   // Faste trekk (0082, lonnstrekk.ts): etter pålegg (utleggstrekk og bidragstrekk, i a-meldingen

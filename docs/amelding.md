@@ -17,7 +17,8 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    fristen og hva som er levert. For en måned viser appen lønnen, forskuddstrekket per
    utbetalingsdato, arbeidsgiveravgiften og inntektsmottakerne, og det som mangler: fødselsnummer,
    yrkeskode, virksomheten (underenheten) og pensjonsleverandøren når det er OTP stopper meldingen;
-   lønnskjøringer som står som utkast, sluttdato uten årsak og permisjon over 14 dager er advarsler.
+   og en permisjon over 14 dager uten valgt art stopper meldingen; lønnskjøringer som står som utkast,
+   sluttdato uten årsak og en permisjon som slutter i måneden uten bekreftet sluttdato er advarsler.
 3. **Fila.** Eier eller administrator trykker «Lag fil (XML)» (med totrinnsbekreftelse, fila har
    fødselsnumrene). Workeren lager fila (bare workeren kan lese fødselsnumrene), og den lastes ned
    og lastes opp på skatteetaten.no. Merk den som lastet opp etterpå: da erstatter en ny melding for
@@ -27,9 +28,8 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    (første gang etter to minutter, så sjeldnere, og minst hver halvtime i en uke). Status og avvik
    vises på måneden, og eier og administrator får varsel når den er mottatt eller avvist.
 
-Det som ikke er med ennå: permisjoner (de over 14 dager meldes i Altinn), utleggstrekk,
-finansskatt på lønn, inntektsmottakere uten norsk fødselsnummer eller D-nummer, og mer enn én
-virksomhet per organisasjon.
+Det som ikke er med ennå: finansskatt på lønn, inntektsmottakere uten norsk fødselsnummer eller
+D-nummer, og mer enn én virksomhet per organisasjon.
 
 Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og XML),
 `server/src/ameldingInnsending.ts` (workeren: fila, innsendingen og tilbakemeldingen),
@@ -58,6 +58,13 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
    kost, nattillegg og kilometergodtgjørelse innenfor de trekkfrie satsene med antall døgn,
    dager, netter eller km (uten trekk og avgift), og det som er over (reiseKost, reiseAnnet,
    kilometergodtgjoerelseBil) med trekk og avgift. Utlegg etter regning rapporteres ikke.
+   Permisjon og permittering (på fraværet, med arten): permisjon over 14 dager (med eller uten
+   lønn, hel eller delvis) og all permittering rapporteres som permisjon på arbeidsforholdet hver
+   måned den varer, med startdatoen, prosenten, id-en (den samme hver måned), beskrivelsen etter
+   arten og sluttdatoen når den er kjent (ellers i måneden permisjonen står til å slutte).
+   Permitteringen har beskrivelsen «permittering»; de nye opplysningene om permittering i format
+   2.3 (varslingsdato, lønnsplikt og årsak) og `loennet` på permisjonen er utsatt av Skatteetaten
+   og sendes ikke.
 3. **Hver måned:** godkjenn lønnskjøringen, åpne måneden under Lønn → A-melding, rett det som
    mangler, og lag fila eller send den.
 4. **Tilgang for innsending fra appen** (når den er slått på): kunder som allerede har koblet til

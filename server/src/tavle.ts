@@ -408,7 +408,7 @@ export function tavleRuter() {
           where p.org_id = $1 and p.dato = $2
             and a.aktiv and $3 >= a.ansatt_fra and (a.ansatt_til is null or $3 <= a.ansatt_til)
             and (exists (select 1 from faktura.vakter v where v.org_id = p.org_id and v.ansatt_id = p.ansatt_id and v.dato = $3) or p.ansatt_id = any($4::uuid[]))
-            and not exists (select 1 from faktura.fravaer f where f.org_id = p.org_id and f.ansatt_id = p.ansatt_id and $3 between f.fra and f.til)
+            and not exists (select 1 from faktura.fravaer f where f.org_id = p.org_id and f.ansatt_id = p.ansatt_id and $3 between f.fra and f.til and f.prosent is null)
          on conflict (org_id, dato, fase_id, ansatt_id) do nothing
          returning id`,
         [orgId(c), b.fra, b.til, faste],
@@ -476,8 +476,9 @@ export async function kjorRullering(db: Db, org: string, b: RulleringValg) {
     "select dato, fase_id, oppgave_id, ansatt_id, rullert from faktura.tavle_plasseringer where org_id = $1 and dato between $2 and $3",
     [org, start, b.til],
   );
-  // Plassene før perioden er historikken, uten dem den ansatte var borte fra.
-  const borte = await alle<{ ansatt_id: string; fra: string; til: string }>(db, "select ansatt_id, fra, til from faktura.fravaer where org_id = $1 and til >= $2 and fra < $3", [
+  // Plassene før perioden er historikken, uten dem den ansatte var borte fra (delvis permisjon er
+  // ikke borte; 0084).
+  const borte = await alle<{ ansatt_id: string; fra: string; til: string }>(db, "select ansatt_id, fra, til from faktura.fravaer where org_id = $1 and til >= $2 and fra < $3 and prosent is null", [
     org,
     start,
     b.fra,

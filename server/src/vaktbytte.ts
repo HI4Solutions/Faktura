@@ -196,7 +196,7 @@ async function advarslerEtterBytte(db: Db, org: string, bytter: Bytte[], r: Regl
       `select v.id, v.ansatt_id, v.dato, to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.timer
          from faktura.vakter v
         where v.org_id = $1 and v.ansatt_id = any($2::uuid[]) and v.dato between $3 and $4
-          and not exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til)
+          and not exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til and f.prosent is null)
         order by v.dato, v.fra`,
       [org, [b.fra_ansatt, b.tatt_av], leggTilDager(uke(datoer[0]!).fra, -1), leggTilDager(uke(datoer.at(-1)!).til, 1)],
     );
@@ -229,7 +229,7 @@ async function advarselTekster(db: Db, org: string, ansatte: string[], fra: stri
     `select v.id, v.ansatt_id, v.dato, to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.timer
        from faktura.vakter v
       where v.org_id = $1 and v.ansatt_id = any($2::uuid[]) and v.dato between $3 and $4
-        and not exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til)
+        and not exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til and f.prosent is null)
       order by v.dato, v.fra`,
     [org, ansatte, fra, til],
   );

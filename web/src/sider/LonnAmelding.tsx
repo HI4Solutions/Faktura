@@ -41,6 +41,8 @@ type Grunnlag = {
     ansattnummer: number;
     inntekter: { beskrivelse: string; belop: number; antall: number | null; fordel?: string; trekk?: boolean }[];
     forskuddstrekk: number;
+    // Permisjonene og permitteringene som rapporteres (0084); til er null når sluttdatoen ikke er kjent.
+    permisjoner?: { navn: string; fra: string; til: string | null; prosent: number }[];
   }[];
 };
 type Maaned = { maaned: string; frist: string; med_lonn: number; arbeidsforhold: number; skattetrekk: number; brutto: number; siste: Melding | null };
@@ -104,6 +106,9 @@ const inntektTekst = (inntekter: Grunnlag["mottakere"][number]["inntekter"]) =>
         )
         .join(" · ")
     : null;
+// «Permittering 50 % fra 01.10.2026» eller «Foreldrepermisjon 01.03.2026–31.12.2026».
+const permisjonTekst = (p: NonNullable<Grunnlag["mottakere"][number]["permisjoner"]>) =>
+  p.length ? p.map((x) => `${x.navn}${x.prosent < 100 ? ` ${x.prosent} %` : ""} ${x.til ? `${dato(x.fra)}–${dato(x.til)}` : `fra ${dato(x.fra)}`}`).join(" · ") : null;
 const merke = (s: Status) => <span className={`merke ${STATUS[s][1]}`}>{STATUS[s][0]}</span>;
 const tid = (iso: string) => {
   const d = new Date(iso);
@@ -434,6 +439,7 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
                   <span className="tall">{kr(m.forskuddstrekk)}</span>
                 </div>
                 <div className="liten dempet">{inntektTekst(m.inntekter) ?? "Bare arbeidsforholdet"}</div>
+                {permisjonTekst(m.permisjoner ?? []) && <div className="liten dempet">{permisjonTekst(m.permisjoner ?? [])}</div>}
               </div>
             ))}
           </div>
@@ -457,7 +463,10 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
                     <td>
                       {m.navn} <span className="dempet liten">({m.ansattnummer})</span>
                     </td>
-                    <td>{inntektTekst(m.inntekter) ?? <span className="dempet">Bare arbeidsforholdet</span>}</td>
+                    <td>
+                      {inntektTekst(m.inntekter) ?? <span className="dempet">Bare arbeidsforholdet</span>}
+                      {permisjonTekst(m.permisjoner ?? []) && <div className="liten dempet">{permisjonTekst(m.permisjoner ?? [])}</div>}
+                    </td>
                     <td className="tall">{kr(m.forskuddstrekk)}</td>
                   </tr>
                 ))}

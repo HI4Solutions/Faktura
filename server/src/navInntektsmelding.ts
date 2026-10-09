@@ -256,6 +256,8 @@ export const INNTEKT_LONNSARTER = [
   "sykepenger_nav",
   "omsorgspenger",
   "trekk_permisjon",
+  "trekk_permittering",
+  "lonnsplikt",
   "trekk_sykdom",
 ];
 
@@ -404,9 +406,10 @@ export async function forslagTilInntektsmelding(db: Db, org: string, f: Forespor
       forslag: { aarsak: "NyStillingsprosent", gjelderFra: a.siste_stillingsendring },
     });
   if (a && a.ansatt_fra > fraMnd) endringsaarsaker.push({ aarsak: "Nyansatt", tekst: `Ansatt fra ${visDato(a.ansatt_fra)}, så ikke alle månedene har full lønn.`, forslag: { aarsak: "Nyansatt" } });
-  const iMnd = await alle<{ type: string; fom: string; tom: string; betalt: boolean }>(
+  const iMnd = await alle<{ type: string; fom: string; tom: string; betalt: boolean; permittering: boolean }>(
     db,
-    `select type, to_char(greatest(fra, $3::date), 'YYYY-MM-DD') as fom, to_char(least(til, $4::date), 'YYYY-MM-DD') as tom, betalt
+    `select type, to_char(greatest(fra, $3::date), 'YYYY-MM-DD') as fom, to_char(least(til, $4::date), 'YYYY-MM-DD') as tom, betalt,
+            permisjon_art is not distinct from 'permittering' as permittering
        from faktura.fravaer where org_id = $1 and ansatt_id = $2 and type in ('ferie', 'syk', 'permisjon') and til >= $3 and fra <= $4 order by fra`,
     [org, f.ansatt_id, fraMnd, pluss(inntektsdato, -1)],
   );
@@ -414,8 +417,11 @@ export async function forslagTilInntektsmelding(db: Db, org: string, f: Forespor
   if (ferier.length) endringsaarsaker.push({ aarsak: "Ferie", tekst: "Ferie i månedene (med ferietrekk kan lønnen ha vært lavere).", forslag: { aarsak: "Ferie", ferier } });
   const syke = iMnd.filter((x) => x.type === "syk" && x.tom < (agpPerioder[0]?.fom ?? inntektsdato)).map(({ fom, tom }) => ({ fom, tom }));
   if (syke.length) endringsaarsaker.push({ aarsak: "Sykefravaer", tekst: "Sykefravær i månedene.", forslag: { aarsak: "Sykefravaer", sykefravaer: syke } });
-  const permisjoner = iMnd.filter((x) => x.type === "permisjon" && !x.betalt).map(({ fom, tom }) => ({ fom, tom }));
+  const permisjoner = iMnd.filter((x) => x.type === "permisjon" && !x.betalt && !x.permittering).map(({ fom, tom }) => ({ fom, tom }));
   if (permisjoner.length) endringsaarsaker.push({ aarsak: "Permisjon", tekst: "Permisjon uten lønn i månedene.", forslag: { aarsak: "Permisjon", permisjoner } });
+  const permitteringer = iMnd.filter((x) => x.permittering).map(({ fom, tom }) => ({ fom, tom }));
+  if (permitteringer.length)
+    endringsaarsaker.push({ aarsak: "Permittering", tekst: "Permittering i månedene.", forslag: { aarsak: "Permittering", permitteringer } });
 
   // Refusjonen: når arbeidsgiveren betaler lønnen under sykdommen, hele månedsinntekten (NAV
   // dekker høyst 6 G); den stopper når den ansatte slutter.

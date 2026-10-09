@@ -48,6 +48,7 @@ import {
   type Trekkrad,
 } from "./lonnsberegning.js";
 import { lagLonnsslippPdf } from "./lonnsslippPdf.js";
+import { permisjonslinjer, type Permisjon } from "./permisjoner.js";
 import { hentLogo } from "./dokument.js";
 import { leggIKo } from "./tjenester.js";
 import { lonnsrapportOppgave } from "./rapportmodul.js";
@@ -260,8 +261,18 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         [org, `${fra.slice(0, 4)}-01-01` < pluss(fra, -90) ? `${fra.slice(0, 4)}-01-01` : pluss(fra, -90), til],
       )
     : [];
+  // Permisjon uten lønn og permittering (0084): trekket i fastlønnen, og lønnsplikten ved permittering.
+  const permisjoner = ordinar
+    ? await alle<Permisjon>(
+        db,
+        `select id, ansatt_id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, permisjon_art as art,
+                coalesce(prosent, 100)::int as prosent, to_char(lonnsplikt_til, 'YYYY-MM-DD') as lonnsplikt_til
+           from faktura.fravaer where org_id = $1 and type = 'permisjon' and not betalt and til >= $2 and fra <= $3`,
+        [org, fra, til],
+      )
+    : [];
   const planlagt = new Map<string, number>(); // «ansatt|dato» → timer
-  if (ordinar && fravaer.some((f) => f.til >= fra)) {
+  if (ordinar && (fravaer.some((f) => f.til >= fra) || permisjoner.some((p) => p.art === "permittering" && p.lonnsplikt_til && p.lonnsplikt_til >= fra))) {
     const vakter = await alle<{ ansatt_id: string; dato: string; timer: number }>(
       db,
       "select ansatt_id, to_char(dato, 'YYYY-MM-DD') as dato, sum(timer)::float8 as timer from faktura.vakter where org_id = $1 and dato between $2 and $3 and ansatt_id is not null group by 1, 2",
@@ -493,6 +504,17 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
           merknader.push(
             `Syk ${uten} ${uten === 1 ? "dag" : "dager"} før fire uker i arbeid: arbeidsgiveren har ikke plikt til å betale sykepenger da (NAV kan).${refusjon ? " Lønnen er betalt som om dere forskutterer." : ""}`,
           );
+      }
+      // Permisjon uten lønn og permittering: trekket i fastlønnen, og lønnen for de planlagte timene i
+      // lønnspliktperioden (timelønn). Et trekk for permisjon lagt inn for hånd erstatter det som
+      // regnes ut av permisjonen.
+      const egnePermisjoner = permisjoner.filter((x) => x.ansatt_id === a.id);
+      if (ansatt && egnePermisjoner.length) {
+        const forHand = manuelle.some((m) => !m.fjernet && m.lonnsart === "trekk_permisjon" && !m.nokkel);
+        const p = permisjonslinjer(a, historie, forHand ? egnePermisjoner.filter((x) => x.art === "permittering") : egnePermisjoner, fra, til, (d) => planlagt.get(`${a.id}|${d}`) ?? 0);
+        auto.push(...p.linjer);
+        merknader.push(...p.merknader);
+        if (forHand && egnePermisjoner.some((x) => x.art !== "permittering")) merknader.push("Trekket for permisjon er lagt inn for hånd, så det regnes ikke ut av permisjonen.");
       }
       if (aSlutt.lonnstype === "maaned" && !aSlutt.maanedslonn && ansatt) merknader.push("Mangler månedslønn på den ansatte.");
       if (aSlutt.lonnstype === "time" && !aSlutt.timelonn && uker.length) merknader.push("Mangler timelønn på den ansatte.");

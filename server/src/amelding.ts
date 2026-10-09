@@ -13,6 +13,7 @@
 import { alle, en, type Db } from "./db.js";
 import { lonnsart } from "./lonnsarter.js";
 import { rund } from "./lonnsberegning.js";
+import { PERMISJONSARTER, permisjonNavn, rapporteres, sluttdatoKjent, type PermisjonsArt } from "./permisjoner.js";
 
 export const NAVNEROM = "urn:ske:fastsetting:innsamling:a-meldingen:v2_3";
 export const KILDESYSTEM = "HI4 Faktura";
@@ -43,6 +44,8 @@ export type Slippdata = {
   otp: number;
   linjer: { lonnsart: string; belop: number; antall: number | null; opptjent_fra?: string | null; opptjent_til?: string | null; tillegg?: Record<string, unknown> | null }[];
 };
+// Permisjon og permittering som berører måneden (0084; prosent 1–100).
+export type Permisjonsrad = { id: string; ansatt_id: string; fra: string; til: string; art: string | null; prosent: number; slutt_ukjent: boolean; betalt: boolean };
 export type Grunnlag = {
   maaned: string; // ÅÅÅÅ-MM
   org: { navn: string; orgnr: string | null };
@@ -53,7 +56,7 @@ export type Grunnlag = {
   arbeidsforhold: Arbeidsforholdsrad[];
   slipper: Slippdata[];
   utkast: { periode: string; type: string }[]; // kjøringer med utbetaling i måneden som står som utkast
-  permisjoner: { ansatt_id: string; fra: string; til: string }[]; // permisjon over 14 dager i måneden
+  permisjoner: Permisjonsrad[];
 };
 export type Avvik = { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string };
 
@@ -63,6 +66,7 @@ function siste(maaned: string) {
   return new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10);
 }
 const desimal = (n: number) => String(rund(n));
+const visDato = (d: string) => d.split("-").reverse().join(".");
 const belop = (n: number) => rund(n).toFixed(2);
 const FORM: Record<string, string> = { fast: "fast", midlertidig: "midlertidig", tilkalling: "midlertidigAnsattSomTilkallingsvikar" };
 
@@ -123,11 +127,14 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
       where org_id = $1 and status = 'utkast' and utbetalingsdato between $2::date and $3::date order by periode`,
     [org, fra, til],
   );
-  // Permisjon (uten lønn) over 14 dager som berører måneden: skal rapporteres, men appen gjør det ikke ennå.
-  const permisjoner = await alle<{ ansatt_id: string; fra: string; til: string }>(
+  // Permisjonene og permitteringene som berører måneden (de som skal rapporteres, velges ved bruk).
+  const permisjoner = await alle<Permisjonsrad>(
     db,
-    `select f.ansatt_id, to_char(f.fra, 'YYYY-MM-DD') as fra, to_char(f.til, 'YYYY-MM-DD') as til from faktura.fravaer f
-      where f.org_id = $1 and f.type = 'permisjon' and not f.betalt and f.til - f.fra >= 14 and f.fra <= $3::date and f.til >= $2::date`,
+    `select f.id, f.ansatt_id, to_char(f.fra, 'YYYY-MM-DD') as fra, to_char(f.til, 'YYYY-MM-DD') as til, f.permisjon_art as art,
+            coalesce(f.prosent, 100)::int as prosent, f.slutt_ukjent, f.betalt
+       from faktura.fravaer f
+      where f.org_id = $1 and f.type = 'permisjon' and f.fra <= $3::date and f.til >= $2::date
+      order by f.fra`,
     [org, fra, til],
   );
   return {
@@ -310,9 +317,25 @@ export function kontroller(g: Grunnlag): Avvik[] {
   }
   for (const k of g.utkast)
     a.push({ niva: "advarsel", tekst: `Lønnskjøringen for ${k.periode.slice(0, 7)}${k.type === "ekstra" ? " (ekstra)" : ""} med utbetaling i måneden står som utkast og er ikke med.` });
+  // Permisjon over 14 dager og permittering: arten må være valgt, og en sluttdato som ikke er
+  // bekreftet, rapporteres når permisjonen står til å slutte i måneden.
   for (const p of g.permisjoner) {
     const f = g.arbeidsforhold.find((x) => x.id === p.ansatt_id);
-    if (f) a.push({ niva: "advarsel", tekst: `${f.navn} har permisjon over 14 dager. Permisjonen er ikke med i a-meldingen fra appen ennå; meld den i Altinn om den skal rapporteres.`, ansatt_id: f.id });
+    if (!f || !rapporteres(p)) continue;
+    if (f.arbeidsforhold_type === "frilanserOppdragstakerHonorarPersonerMm")
+      a.push({ niva: "advarsel", tekst: `${f.navn} er frilanser eller oppdragstaker: permisjon og permittering rapporteres ikke for dem.`, ansatt_id: f.id });
+    else if (!p.art)
+      a.push({
+        niva: "feil",
+        tekst: `Velg hva slags permisjon ${f.navn} har (${visDato(p.fra)}–${visDato(p.til)}, under Fravær): permisjon over 14 dager skal med i a-meldingen.`,
+        ansatt_id: f.id,
+      });
+    else if (p.slutt_ukjent && p.til <= siste(g.maaned))
+      a.push({
+        niva: "advarsel",
+        tekst: `${permisjonNavn(p.art, p.betalt)} for ${f.navn} står til og med ${visDato(p.til)} uten bekreftet sluttdato, og den datoen rapporteres som sluttdato. Forleng den om den varer lenger.`,
+        ansatt_id: f.id,
+      });
   }
   if (!g.arbeidsforhold.length && !g.slipper.length) a.push({ niva: "advarsel", tekst: "Ingen er ansatt eller har fått lønn i måneden, så det er ingenting å rapportere." });
   return a;
@@ -342,6 +365,12 @@ export function oppsummer(g: Grunnlag) {
         ansattnummer: f.ansattnummer,
         inntekter: inn.get(f.id) ?? [],
         forskuddstrekk: trekk.perAnsatt.get(f.id) ?? 0,
+        permisjoner: permisjonerI(g, f).map((p) => ({
+          navn: permisjonNavn(p.art, p.betalt),
+          fra: p.fra,
+          til: sluttdatoKjent(p, siste(g.maaned)) ? p.til : null,
+          prosent: p.prosent,
+        })),
       }))
       .filter((m) => m.inntekter.length || g.arbeidsforhold.some((f) => f.id === m.ansatt_id)),
   };
@@ -356,6 +385,13 @@ export type Byggevalg = {
   fnr: (ansattId: string) => string | null;
 };
 
+// Permisjonene og permitteringene som skal med for arbeidsforholdet i måneden: permisjon over 14
+// dager og all permittering, med arten valgt (frilansere har ikke permisjon).
+function permisjonerI(g: Grunnlag, f: Arbeidsforholdsrad) {
+  if (f.arbeidsforhold_type === "frilanserOppdragstakerHonorarPersonerMm") return [];
+  return g.permisjoner.filter((p) => p.ansatt_id === f.id && p.art && p.art in PERMISJONSARTER && rapporteres(p));
+}
+
 function arbeidsforhold(f: Arbeidsforholdsrad, g: Grunnlag) {
   const frilanser = f.arbeidsforhold_type === "frilanserOppdragstakerHonorarPersonerMm";
   const x: Record<string, unknown> = { arbeidsforholdId: String(f.ansattnummer), typeArbeidsforhold: f.arbeidsforhold_type, startdato: f.ansatt_fra };
@@ -366,6 +402,17 @@ function arbeidsforhold(f: Arbeidsforholdsrad, g: Grunnlag) {
     x.arbeidstidsordning = f.arbeidstidsordning;
     x.stillingsprosent = desimal(f.stillingsprosent);
     x.sisteLoennsendringsdato = f.siste_lonnsendring ?? f.ansatt_fra;
+    // Permisjonene (permittering som permisjon med beskrivelsen «permittering»), med den samme id-en
+    // hver måned og sluttdatoen når den er kjent.
+    const p = permisjonerI(g, f);
+    if (p.length)
+      x.permisjon = p.map((y) => ({
+        startdato: y.fra,
+        ...(sluttdatoKjent(y, siste(g.maaned)) ? { sluttdato: y.til } : {}),
+        permisjonsprosent: desimal(y.prosent),
+        permisjonId: y.id,
+        beskrivelse: PERMISJONSARTER[y.art as PermisjonsArt].amelding,
+      }));
     x.sisteDatoForStillingsprosentendring = f.siste_stillingsendring ?? f.ansatt_fra;
   }
   if (f.ansatt_til && f.aarsak_sluttdato) x.aarsakTilSluttdato = f.aarsak_sluttdato;

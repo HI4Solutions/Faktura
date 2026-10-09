@@ -983,7 +983,7 @@ export function ansattRuter() {
           db,
           `select v.ansatt_id, v.dato, v.timer from faktura.vakter v
             where v.org_id = $1 and v.dato between $2 and $3 and v.publisert_at is not null and v.ansatt_id = any($4::uuid[])
-              and not exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til)`,
+              and not exists (select 1 from faktura.fravaer f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til and f.prosent is null)`,
           [orgId(c), fra, til, [...avtalt.keys()]],
         )) {
           const k = `${v.ansatt_id}:${uke(v.dato).fra}`;
