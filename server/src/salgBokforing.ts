@@ -294,8 +294,9 @@ export async function bokforSalgNaa(db: Db, org: string) {
   }
 }
 
-// Workeren hvert minutt: organisasjonene med noe som ikke er bokført (eller et bilag for noe som er
-// slettet eller fra før startdatoen), hver i sin transaksjon. org: bare én organisasjon (testene).
+// Workeren hvert minutt: organisasjonene med regnskapet slått på og noe som ikke er bokført (eller
+// et bilag for noe som er slettet eller fra før startdatoen), hver i sin transaksjon. Slås
+// regnskapet på senere, bokføres det som mangler da. org: bare én organisasjon (testene).
 export async function bokforSalgForAlle(maksOrg = 25, org: string | null = null) {
   const orgs = await somSystem((db) =>
     alle<{ org_id: string }>(
@@ -317,7 +318,7 @@ export async function bokforSalgForAlle(maksOrg = 25, org: string | null = null)
               or (b.kilde = 'faktura' and not exists (select 1 from faktura.fakturaer f where f.id = b.kilde_id))
               or (b.kilde = 'innbetaling' and not exists (select 1 from faktura.betalinger p where p.id = b.kilde_id)))
        ) x join faktura.organisasjoner o on o.id = x.org_id
-       where o.slettet_at is null and ($2::uuid is null or x.org_id = $2)
+       where o.slettet_at is null and ($2::uuid is null or x.org_id = $2) and faktura.har_funksjon(x.org_id, 'regnskap')
        -- Tilfeldig rekkefølge: en organisasjon med noe som ikke går å bokføre, stenger ikke for de andre.
        order by random()
        limit $1`,

@@ -6,6 +6,7 @@
 // ubetalt.
 import { beforeAll, describe, expect, it } from "vitest";
 import { lagApi } from "../src/api.js";
+import { config } from "../src/config.js";
 import { regnskapskontoer } from "../src/anlegg.js";
 import { en, somSystem } from "../src/db.js";
 import { betalingsbilag, bokforSalgForAlle, fakturabilag, gebyrAvBetaling, gebyrPerBetaling, satsFor } from "../src/salgBokforing.js";
@@ -325,5 +326,23 @@ describe.skipIf(!process.env.DATABASE_URL)("fakturaene og innbetalingene i regns
     );
     expect(n!.n).toBeGreaterThan(0);
     expect(sett!.n).toBe(0);
+  });
+
+  it("workeren hopper over organisasjonene uten regnskapet, og bokfører når det slås på", async () => {
+    const admin = "Bearer test:uid-salg-admin:salg-admin@server.test:mfa";
+    if (!config.adminEposter.includes("salg-admin@server.test")) config.adminEposter.push("salg-admin@server.test");
+    const funksjon = async (paa: boolean) => {
+      const r = await app.request(`/api/admin/organisasjoner/${org}/funksjoner`, {
+        method: "PUT",
+        headers: { authorization: admin, "content-type": "application/json" },
+        body: JSON.stringify({ regnskap: paa }),
+      });
+      expect(r.status).toBe(200);
+    };
+    await funksjon(false);
+    await faktura([{ beskrivelse: "Time", antall: 1, enhetspris: 300, mva_sats: 0 }], { fakturadato: "2026-10-06", forfallsdato: "2026-10-20" });
+    expect(await bokforSalgForAlle(25, org)).toEqual({ fakturaer: 0, betalinger: 0, reversert: 0 });
+    await funksjon(true);
+    expect(await bokforSalgForAlle(25, org)).toEqual({ fakturaer: 1, betalinger: 0, reversert: 0 });
   });
 });
