@@ -1,6 +1,7 @@
 // Rapportene for Lønn i rapportmodulen (rapportmodul.ts), fra de godkjente lønnskjøringene:
 // lønnsjournalen, summene per lønnsart, lønnsbilaget (konteringen, lonnBokforing.ts), skattetrekk
-// og arbeidsgiveravgift per termin med fristene, feriepengelisten, årsoversikten og OTP.
+// og arbeidsgiveravgift per termin med fristene, feriepengelisten, årsoversikten og OTP; og
+// lønns- og stillingsendringene som gjelder fra perioden (lonnsendringer.ts).
 // Journalen, lønnsartene og bilaget kan gjelde én kjøring (valget kjoring); de sendes til
 // regnskapsføreren når kjøringen godkjennes, om det er slått på.
 import { alle, en, type Db } from "./db.js";
@@ -8,6 +9,8 @@ import { AMELDING_NAVN, lonnsart } from "./lonnsarter.js";
 import { frister, maanedNavn } from "./lonnsberegning.js";
 import { hentBilag } from "./lonnBokforing.js";
 import type { Rapportdef, Valg } from "./rapportmodul.js";
+import { gjeldende, kjent, type Lonnsendring } from "./lonnsendringer.js";
+import type { Ansatt } from "./lonnsberegning.js";
 
 const rund = (n: number) => Math.round(n * 100) / 100;
 // Rekkefølgen på beskrivelsene i a-meldingsgrunnlaget (forskuddstrekket sist).
@@ -16,6 +19,13 @@ const rekke = (navn: string) => {
   return navn === "Forskuddstrekk" ? 1000 : i < 0 ? 999 : i;
 };
 const visDato = (d: string) => d.split("-").reverse().join(".");
+const krTekst = (n: number) => `${n.toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/[\u00a0\u202f]/g, " ")} kr`;
+// «Fastlønn, 45 000,00 kr i måneden, 80 % stilling».
+const lonnTekst = (x: Pick<Ansatt, "lonnstype" | "maanedslonn" | "timelonn" | "stillingsprosent">) =>
+  [
+    x.lonnstype === "maaned" ? `fastlønn ${krTekst(Number(x.maanedslonn ?? 0))} i måneden` : `timelønn ${krTekst(Number(x.timelonn ?? 0))} i timen`,
+    `${String(Number(x.stillingsprosent)).replace(".", ",")} % stilling`,
+  ].join(", ");
 
 // De godkjente kjøringene rapporten gjelder: én kjøring, eller de med utbetaling i perioden.
 const KJORINGER = `k.org_id = $1 and k.status = 'godkjent' and (case when $4::uuid is not null then k.id = $4::uuid else k.utbetalingsdato between $2 and $3 end)`;
@@ -375,5 +385,61 @@ export const lonnRapporter: Rapportdef[] = [
         parametre(org, v),
       ),
     }),
+  },
+  {
+    id: "lonn.endringer",
+    modul: "lonn",
+    navn: "Lønns- og stillingsendringer",
+    beskrivelse: "Endringene i lønn og stillingsprosent som gjelder fra perioden (også nyansatte), med lønnen før og etter, grunnen og når de ble registrert.",
+    funksjon: "lonn",
+    tilgang: "personal_les",
+    parameter: "periode",
+    maanedlig: true,
+    hent: async (db, org, v) => {
+      const rader = await alle<Lonnsendring & { grunn: string | null; registrert: string }>(
+        db,
+        `select id, ansatt_id, to_char(gjelder_fra, 'YYYY-MM-DD') as gjelder_fra, lonnstype, maanedslonn::float8 as maanedslonn, timelonn::float8 as timelonn,
+                stillingsprosent::float8 as stillingsprosent, grunn, to_char(opprettet at time zone 'Europe/Oslo', 'YYYY-MM-DD') as registrert,
+                (extract(epoch from opprettet) * 1000)::float8 as opprettet, null::float8 as slettet
+           from faktura.lonnsendringer where org_id = $1 and slettet is null order by gjelder_fra`,
+        [org],
+      );
+      const ansatte = await alle<Ansatt>(
+        db,
+        `select id, ansattnummer, fornavn || ' ' || etternavn as navn, lonnstype, maanedslonn::float8 as maanedslonn, timelonn::float8 as timelonn,
+                stillingsprosent::float8 as stillingsprosent from faktura.ansatte where org_id = $1`,
+        [org],
+      );
+      const ut: Record<string, unknown>[] = [];
+      for (const a of ansatte.sort((x, y) => x.ansattnummer - y.ansattnummer)) {
+        const egne = kjent(rader.filter((r) => r.ansatt_id === a.id));
+        egne.forEach((r, i) => {
+          if (r.gjelder_fra < v.fra || r.gjelder_fra > v.til) return;
+          const etter = gjeldende(a, egne, r.gjelder_fra);
+          const foer = i > 0 ? gjeldende(a, egne.slice(0, i), r.gjelder_fra) : null;
+          ut.push({
+            gjelder_fra: r.gjelder_fra,
+            ansattnummer: a.ansattnummer,
+            navn: a.navn,
+            foer: foer ? lonnTekst(foer) : "Ny ansatt",
+            etter: lonnTekst(etter),
+            grunn: (rader.find((x) => x.id === r.id)?.grunn ?? "") as string,
+            registrert: rader.find((x) => x.id === r.id)?.registrert ?? null,
+          });
+        });
+      }
+      return {
+        kolonner: [
+          { nokkel: "gjelder_fra", navn: "Gjelder fra", type: "dato" },
+          { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "foer", navn: "Før" },
+          { nokkel: "etter", navn: "Etter" },
+          { nokkel: "grunn", navn: "Grunn" },
+          { nokkel: "registrert", navn: "Registrert", type: "dato", pdf: false },
+        ],
+        rader: ut.sort((x, y) => String(x.gjelder_fra).localeCompare(String(y.gjelder_fra)) || Number(x.ansattnummer) - Number(y.ansattnummer)),
+      };
+    },
   },
 ];

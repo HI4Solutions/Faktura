@@ -41,7 +41,7 @@ export type Slippdata = {
   aga_grunnlag: number;
   aga_sats: number;
   otp: number;
-  linjer: { lonnsart: string; belop: number; antall: number | null }[];
+  linjer: { lonnsart: string; belop: number; antall: number | null; opptjent_fra?: string | null; opptjent_til?: string | null }[];
 };
 export type Grunnlag = {
   maaned: string; // ÅÅÅÅ-MM
@@ -87,19 +87,23 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
       order by s.utbetalingsdato, s.ansattnummer`,
     [org, fra, til],
   );
-  const linjer = await alle<{ slipp_id: string; lonnsart: string; belop: number; antall: number | null }>(
+  const linjer = await alle<{ slipp_id: string; lonnsart: string; belop: number; antall: number | null; opptjent_fra: string | null; opptjent_til: string | null }>(
     db,
-    `select l.slipp_id, l.lonnsart, l.belop::float8 as belop, l.antall::float8 as antall
+    `select l.slipp_id, l.lonnsart, l.belop::float8 as belop, l.antall::float8 as antall,
+            to_char(l.opptjent_fra, 'YYYY-MM-DD') as opptjent_fra, to_char(l.opptjent_til, 'YYYY-MM-DD') as opptjent_til
        from faktura.lonnslinjer l where l.slipp_id = any($1::uuid[]) and not l.fjernet`,
     [slipper.map((s) => s.id)],
   );
   const arbeidsforhold = await alle<Arbeidsforholdsrad>(
     db,
     `select a.id, a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, a.har_fnr, to_char(a.ansatt_fra, 'YYYY-MM-DD') as ansatt_fra,
-            to_char(a.ansatt_til, 'YYYY-MM-DD') as ansatt_til, a.stillingsprosent::float8 as stillingsprosent, a.ansettelsestype, a.yrkeskode,
-            a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato, to_char(a.siste_lonnsendring, 'YYYY-MM-DD') as siste_lonnsendring,
-            to_char(a.siste_stillingsendring, 'YYYY-MM-DD') as siste_stillingsendring
+            to_char(a.ansatt_til, 'YYYY-MM-DD') as ansatt_til, coalesce(g.stillingsprosent, a.stillingsprosent)::float8 as stillingsprosent,
+            a.ansettelsestype, a.yrkeskode, a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato,
+            to_char(coalesce(e.lonn, case when a.siste_lonnsendring <= $3::date then a.siste_lonnsendring end), 'YYYY-MM-DD') as siste_lonnsendring,
+            to_char(coalesce(e.stilling, case when a.siste_stillingsendring <= $3::date then a.siste_stillingsendring end), 'YYYY-MM-DD') as siste_stillingsendring
        from faktura.ansatte a
+       left join lateral faktura.lonn_gjeldende(a.org_id, a.id, $3::date) g on true
+       left join lateral faktura.lonn_endringsdatoer(a.org_id, a.id, $3::date) e on true
       where a.org_id = $1 and a.arbeidstaker
         and ((a.ansatt_fra <= $3::date and (a.ansatt_til is null or a.ansatt_til >= $2::date)) or a.id = any($4::uuid[]))
       order by a.ansattnummer`,
@@ -134,7 +138,9 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
       aga_grunnlag: s.aga_grunnlag,
       aga_sats: s.aga_sats,
       otp: s.otp,
-      linjer: linjer.filter((l) => l.slipp_id === s.id).map(({ lonnsart: art, belop: b, antall }) => ({ lonnsart: art, belop: b, antall })),
+      linjer: linjer
+        .filter((l) => l.slipp_id === s.id)
+        .map(({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til }) => ({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til })),
     })),
     utkast,
     permisjoner,
@@ -143,10 +149,11 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
 
 // --- Inntektene, trekket og avgiften ----------------------------------------------------------
 
-type Inntekt = { beskrivelse: string; aga: boolean; trekk: boolean; belop: number; antall: number | null };
+// opptjent: opptjeningsperioden når lønnen gjelder en annen måned (etterbetaling).
+type Inntekt = { beskrivelse: string; aga: boolean; trekk: boolean; belop: number; antall: number | null; opptjent: { fra: string; til: string } | null };
 
-// Lønnen per ansatt etter beskrivelsen i a-meldingen (og om den gir avgift og trekk); antall
-// timer for timelønnen.
+// Lønnen per ansatt etter beskrivelsen i a-meldingen (og om den gir avgift og trekk, og
+// opptjeningsperioden for etterbetaling); antall timer for timelønnen.
 export function inntekter(slipper: Slippdata[]): Map<string, Inntekt[]> {
   const ut = new Map<string, Map<string, Inntekt>>();
   for (const s of slipper) {
@@ -155,8 +162,9 @@ export function inntekter(slipper: Slippdata[]): Map<string, Inntekt[]> {
     for (const l of s.linjer) {
       const art = lonnsart(l.lonnsart);
       if (art.type !== "lonn" || !art.amelding || !l.belop) continue;
-      const nokkel = `${art.amelding}|${art.aga}|${art.trekk}`;
-      const x = per.get(nokkel) ?? { beskrivelse: art.amelding, aga: art.aga, trekk: art.trekk, belop: 0, antall: null };
+      const opptjent = l.opptjent_fra && l.opptjent_til ? { fra: l.opptjent_fra, til: l.opptjent_til } : null;
+      const nokkel = `${art.amelding}|${art.aga}|${art.trekk}|${opptjent?.fra ?? ""}|${opptjent?.til ?? ""}`;
+      const x = per.get(nokkel) ?? { beskrivelse: art.amelding, aga: art.aga, trekk: art.trekk, belop: 0, antall: null, opptjent };
       x.belop += l.belop;
       if (art.amelding === "timeloenn" && l.antall != null) x.antall = (x.antall ?? 0) + Number(l.antall);
       per.set(nokkel, x);
@@ -318,6 +326,7 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
       const i = inn.get(f.id) ?? [];
       if (i.length)
         x.inntekt = i.map((y) => ({
+          ...(y.opptjent ? { startdatoOpptjeningsperiode: y.opptjent.fra, sluttdatoOpptjeningsperiode: y.opptjent.til } : {}),
           fordel: "kontantytelse",
           utloeserArbeidsgiveravgift: y.aga,
           inngaarIGrunnlagForTrekk: y.trekk,

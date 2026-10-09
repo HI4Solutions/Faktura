@@ -31,11 +31,19 @@ deretter i produksjon.
 
 1. **Tilgang hos Digdir.** Medinnova må ha tilgang til Samarbeidsportalen (selvbetjening for
    Maskinporten). Test: <https://sjolvbetjening.test.samarbeid.digdir.no>.
-2. **Scopene.** Be om disse (begge gjelder Medinnovas organisasjonsnummer):
-   - fra Digdir (Altinn): `altinn:authentication/systemregister.write`,
+2. **Scopene.** Ingen av dem er åpne for alle; de bestilles for Medinnovas organisasjonsnummer
+   (test og produksjon). Før de er godkjent, står de ikke i lista over scopes i portalen, eller
+   de er merket «Tilgang mangler».
+   - Fra Digdir (Altinn): godta bruksvilkårene for sluttbrukersystemleverandører i Altinn, og
+     fyll ut registreringsskjemaet for sluttbrukersystemleverandør med «Systembruker» krysset av
+     (begge lenket fra <https://docs.altinn.studio/nb/authorization/getting-started/systemuser/>).
+     Det gir `altinn:authentication/systemregister.write`,
      `altinn:authentication/systemuser.request.read` og
-     `altinn:authentication/systemuser.request.write`;
-   - fra Skatteetaten: `skatteetaten:skattekorttilarbeidsgiver`.
+     `altinn:authentication/systemuser.request.write`. Klientdelegering og samtykke trengs ikke.
+   - Fra Skatteetaten: `skatteetaten:skattekorttilarbeidsgiver` (og senere A-meldingen), med
+     Skatteetatens skjema for tilgang til API-ene:
+     <https://www.skatteetaten.no/en/our-partners/end-user-systems/sbs-nyheter/her-kan-du-soke-om-tilgang-til-tjenester-for-innrapportering-til-skatteetaten/>.
+   - `nav:helseytelser/sykepenger` (NAV, `docs/nav.md`) er åpent for alle og trenger ingen søknad.
 3. **Nøkkelen.** Lag nøkkelparet i Cloud Shell, i prosjektet `hi4-faktura-prod`. Den private
    nøkkelen legges rett i Secret Manager og slettes etterpå; den skal aldri sendes på e-post, i
    chat eller som skjermbilde.
@@ -49,9 +57,11 @@ deretter i produksjon.
    ```
 
    Den offentlige nøkkelen (JWK-en som skrives ut) er ikke hemmelig.
-4. **Maskinporten-klienten.** Lag en integrasjon av typen Maskinporten i Samarbeidsportalen, med
-   scopene over, og legg inn den offentlige nøkkelen. Noter klient-ID-en (integrasjons-ID-en) og
-   nøkkel-ID-en.
+4. **Maskinporten-klienten.** I Samarbeidsportalen: **Klienter → Opprett klient**, velg
+   Maskinporten, visningsnavn «HI4 Faktura» og en beskrivelse, og legg til scopene over (de som er
+   godkjent; resten legges på den samme klienten senere). Legg inn den offentlige nøkkelen (JWK-en
+   fra punkt 3) under nøklene på klienten. Noter klient-ID-en og nøkkel-ID-en (`kid`). «Scopes» i
+   menyen er for dem som lager egne API-er, og «Tilganger» viser tilgangene Medinnova har fått.
 5. **GitHub-variablene** (Settings → Secrets and variables → Actions → Variables):
    - `MASKINPORTEN_KLIENT_ID`: klient-ID-en;
    - `MASKINPORTEN_NOKKEL_ID`: nøkkel-ID-en (kid);

@@ -131,6 +131,9 @@ export type Linje = {
   belop: number;
   nokkel: string | null;
   opptjeningsaar?: number | null;
+  // Perioden linjen gjelder når den ikke er kjøringens (etterbetaling for en tidligere måned).
+  opptjent_fra?: string | null;
+  opptjent_til?: string | null;
   kilde?: "auto" | "manuell";
   fjernet?: boolean;
 };

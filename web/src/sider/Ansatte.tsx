@@ -17,6 +17,7 @@ import { slippBlob, SLIPP_ACCEPT, type Lonnsslipper } from "../importer";
 import { tallformat } from "../uke";
 import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
 import { AnsattFravaer, FravaerDialog, type Fravaer } from "./Fravaer";
+import { Lonnsendringer, type GjeldendeLonn } from "./Lonnsendringer";
 import { IKKE_ANSATT_HJELP, RollerOppsett, type Rolle } from "./Roller";
 import { SkattekortFraSkatteetaten, type Trekk } from "./Skattekort";
 
@@ -383,6 +384,16 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     arbeidsforhold_type: ansatt.arbeidsforhold_type ?? "ordinaertArbeidsforhold",
     arbeidstidsordning: ansatt.arbeidstidsordning ?? "ikkeSkift",
     aarsak_sluttdato: ansatt.aarsak_sluttdato ?? "",
+    // Lønns- og stillingsendringer (Lonnsendringer.tsx): datoen endringen gjelder fra, og grunnen.
+    lonn_gjelder_fra: "",
+    lonn_grunn: "",
+  }));
+  // Lønnen og stillingen som er lagret (det som gjelder i dag); en endring får en dato.
+  const [lagretLonn, settLagretLonn] = useState<GjeldendeLonn>(() => ({
+    lonnstype: ansatt.lonnstype ?? "maaned",
+    maanedslonn: ansatt.maanedslonn ?? null,
+    timelonn: ansatt.timelonn ?? null,
+    stillingsprosent: ansatt.stillingsprosent ?? 100,
   }));
   // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
   const oppsett = useData(() => hent<{ bursdag_varsel: string; full_stilling: number; ferie_dager: number }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
@@ -513,6 +524,43 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   const kontonr = a.kontonr.replace(/[\s.]/g, "");
   const kontonrFeil = kontonr && forlatt.kontonr && !kontonrGyldig(kontonr) ? "Kontonummeret er ikke gyldig (sjekk sifrene)" : null;
   const maaned = a.lonnstype === "maaned" && a.maanedslonn ? tall(a.maanedslonn) : null;
+  // Er lønnen eller stillingen endret på en ansatt som finnes: datoen endringen gjelder fra (som
+  // standard i dag, eller fra datoen en ny arbeidsplan gjelder fra).
+  const tallEllerNull = (x: string) => (x.trim() ? tall(x) : null);
+  const lonnEndret =
+    !!ansatt.id &&
+    (a.lonnstype !== lagretLonn.lonnstype ||
+      (a.lonnstype === "maaned" && tallEllerNull(a.maanedslonn) !== lagretLonn.maanedslonn) ||
+      (a.lonnstype === "time" && tallEllerNull(a.timelonn) !== lagretLonn.timelonn) ||
+      (!!a.stillingsprosent.trim() && tall(a.stillingsprosent) !== Number(lagretLonn.stillingsprosent)));
+  const lonnDato = a.lonn_gjelder_fra || (plan && endret(plan) ? plan.gjelder_fra : iDag());
+  // Lønnshistorikken endret: feltene i skjemaet følger det som gjelder i dag.
+  const fraHistorikken = (x: GjeldendeLonn) => {
+    settLagretLonn(x);
+    settA((f) => ({ ...f, lonnstype: x.lonnstype, maanedslonn: tekstTall(x.maanedslonn), timelonn: tekstTall(x.timelonn), stillingsprosent: tekstTall(x.stillingsprosent) }));
+    oppdatert({ ...ansatt, ...x } as Ansatt);
+  };
+  const endringsdato = lonnEndret && (
+    <div className="lonn-endringsdato">
+      <div className="rad">
+        <label>
+          Endringen gjelder fra
+          <input type="date" required min={a.ansatt_fra} value={lonnDato} onChange={(e) => sett({ lonn_gjelder_fra: e.target.value })} />
+        </label>
+        <label>
+          Grunn
+          <input maxLength={300} placeholder="F.eks. lønnsoppgjør" {...felt("lonn_grunn")} />
+        </label>
+      </div>
+      <span className="felt-hjelp">
+        {lonnDato < iDag()
+          ? "Tilbake i tid: neste lønnskjøring etterbetaler (eller trekker) for månedene som er godkjent."
+          : lonnDato > iDag()
+            ? "Fram i tid: lønnen og stillingen endres den dagen, og lønnskjøringen deler måneden."
+            : "Lønnshistorikken får endringen fra i dag."}
+      </span>
+    </div>
+  );
   // De med en rolle for dem som ikke er ansatt, har ikke lønn, feriebank eller fødselsnummer til
   // a-meldingen her. Før rollene er hentet: det som er lagret.
   const valgtRolle = roller.data?.find((g) => g.id === a.gruppe_id);
@@ -532,7 +580,6 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   async function lagre(e: FormEvent) {
     e.preventDefault();
     settMelding(null);
-    const tallEllerNull = (s: string) => (s.trim() ? tall(s) : null);
     const kropp: Record<string, unknown> = {
       fornavn: a.fornavn,
       etternavn: a.etternavn,
@@ -561,6 +608,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     const nyttNavn = nyRolle?.navn.trim() ?? "";
     if (nyRolle && !nyttNavn) return h.settFeil("Skriv navnet på den nye rollen, eller velg en annen.");
     if (a.stillingsprosent.trim()) kropp.stillingsprosent = tall(a.stillingsprosent);
+    if (lonnEndret) {
+      kropp.lonn_gjelder_fra = lonnDato;
+      if (a.lonn_grunn.trim()) kropp.lonn_grunn = a.lonn_grunn.trim();
+    }
     if (a.ukentlig_arbeidstid.trim()) kropp.ukentlig_arbeidstid = tall(a.ukentlig_arbeidstid);
     if (vaktplan) kropp.ferie_dager = a.ferie_dager.trim() ? tall(a.ferie_dager) : null;
     // Skattekortet (med lønn): bare feltene som hører til typen.
@@ -869,6 +920,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             <span className="felt-hjelp">Timer per uke. Standarden ({tallformat.format(fullStilling)}) står under Innstillinger → Ansatte og timer.</span>
           </label>
         </div>
+        {!arbeidstaker && endringsdato}
       </fieldset>
       {!vaktplan ? null : plan ? (
         <ArbeidsplanFelt
@@ -929,6 +981,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
               </label>
             )}
           </div>
+          {endringsdato}
           <h3>Faste tillegg</h3>
           <p className="felt-hjelp tillegg-hjelp">
             Betales fast i tillegg til lønnen, f.eks. funksjonstillegg per måned eller fagbrevtillegg per time. Uten datoer gjelder tillegget til det fjernes.
@@ -1093,6 +1146,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
         )}
       </fieldset>
       {ansatt.id && vaktplan && <AnsattFravaer ansattId={ansatt.id} versjon={fravaerVersjon} kanEndre={kanEndre} apne={settFravaer} />}
+      {ansatt.id && arbeidstaker && <Lonnsendringer ansattId={ansatt.id} ansattFra={ansatt.ansatt_fra ?? a.ansatt_fra} kanEndre={kanEndre} endret={fraHistorikken} />}
       {ansatt.id && medLonn && arbeidstaker && <TidligereLonn ansattId={ansatt.id} kanEndre={kanEndre} />}
       {ansatt.id && <Tilgang ansatt={ansatt as Ansatt} kanEndre={kanEndre} epostEndret={(a.epost.trim().toLowerCase() || null) !== (ansatt.epost ?? null)} oppdatert={oppdatert} />}
       <Feil melding={h.feil} />

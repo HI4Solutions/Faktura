@@ -17,6 +17,7 @@ import { sendBursdager } from "./bursdager.js";
 import { endreTilgang, hentSkattekort, hentSkattekortSvar, lagTilgang, planleggDagligSkattekort, planleggTilgangssjekk, registrerAltinnSystem, sjekkTilgang } from "./skattekort.js";
 import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingInnsending.js";
 import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepenger.js";
+import { aktiverLonnsendringer } from "./lonnsendringer.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
@@ -605,7 +606,12 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
 
-  app.post("/jobber/gjenta", async (c) => c.json(await gjenta()));
+  // Hver morgen: gjentakende fakturaer, og lønns- og stillingsendringer som gjelder fra i dag.
+  app.post("/jobber/gjenta", async (c) => {
+    const r = await gjenta();
+    await aktiverLonnsendringer().catch((e) => logg("ERROR", "Lønnsendringene ble ikke tatt i bruk", { feil: (e as Error).message }));
+    return c.json(r);
+  });
   // Hvert minutt: utboksen og påminnelsene. Samme hjerteslag henter fra banken på de faste
   // hentetidene (planleggingen tar hver hentetid én gang per bank), sjekker nye kunder for
   // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker

@@ -599,7 +599,12 @@ export function ansattRuter() {
   }
 
   r.patch("/ansatte/:id", async (c) => {
-    const b = ansattSkjema.partial().parse(await c.req.json().catch(() => ({})));
+    const kropp = await c.req.json().catch(() => ({}));
+    const b = ansattSkjema.partial().parse(kropp);
+    // Lønns- og stillingsendringer (0080): datoen de gjelder fra (standard i dag), og grunnen.
+    const endring = z
+      .object({ lonn_gjelder_fra: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato").optional(), lonn_grunn: z.string().trim().max(300).optional() })
+      .parse(kropp);
     const f = await felter(b);
     if (!Object.keys(f).length && !b.tillegg && !b.rolle) throw new ApiFeil(400, "Ingen felt å endre");
     const a = await bruk(c, async (db) => {
@@ -607,6 +612,11 @@ export function ansattRuter() {
       await sjekkGruppe(db, orgId(c), f);
       await regnOmSkattekort(db, orgId(c), id(c), b, f);
       const navn = Object.keys(f);
+      if (endring.lonn_gjelder_fra || endring.lonn_grunn)
+        await db.query("select set_config('faktura.lonn_gjelder_fra', $1, true), set_config('faktura.lonn_grunn', $2, true)", [
+          endring.lonn_gjelder_fra ?? "",
+          endring.lonn_grunn ?? "",
+        ]);
       if (navn.length) {
         const res = await db.query(`update faktura.ansatte set ${navn.map((k, i) => `${k} = $${i + 3}`).join(", ")} where org_id = $1 and id = $2`, [
           orgId(c),
@@ -623,6 +633,61 @@ export function ansattRuter() {
     });
     if (b.fnr) await hentSkattekortFor(c, [id(c)]);
     return c.json(a);
+  });
+
+  // --- Lønns- og stillingsendringer (0080_lonnsendringer.sql) ------------------
+  // Historikken (nyeste først, også de som gjelder fram i tid), en ny endring fra en dato, og
+  // sletting av en endring. Feltene på den ansatte er det som gjelder i dag.
+  const LONNSENDRING = `
+    select r.id, to_char(r.gjelder_fra, 'YYYY-MM-DD') as gjelder_fra, r.lonnstype, r.maanedslonn::float8 as maanedslonn, r.timelonn::float8 as timelonn,
+           r.stillingsprosent::float8 as stillingsprosent, r.grunn, r.opprettet,
+           (select coalesce(u.navn, u.epost) from faktura.brukere u where u.id = r.opprettet_av) as opprettet_av,
+           r.gjelder_fra = (select min(x.gjelder_fra) from faktura.lonnsendringer x where x.org_id = r.org_id and x.ansatt_id = r.ansatt_id and x.slettet is null) as forste
+      from faktura.lonnsendringer r`;
+  const endringer = (db: Db, org: string, ansatt: string) =>
+    alle(db, `${LONNSENDRING} where r.org_id = $1 and r.ansatt_id = $2 and r.slettet is null order by r.gjelder_fra desc`, [org, ansatt]);
+
+  r.get("/ansatte/:id/lonnsendringer", async (c) => c.json(await bruk(c, (db) => endringer(db, orgId(c), id(c)))));
+
+  r.post("/ansatte/:id/lonnsendringer", async (c) => {
+    const b = z
+      .object({
+        gjelder_fra: z.string({ error: "Velg datoen endringen gjelder fra" }).regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato"),
+        lonnstype: z.enum(["maaned", "time"]).nullish(),
+        maanedslonn: z.number().min(0, "Lønnen kan ikke være negativ").max(10_000_000).nullish(),
+        timelonn: z.number().min(0, "Lønnen kan ikke være negativ").max(100_000).nullish(),
+        stillingsprosent: z.number().gt(0, "Stillingsprosenten må være over 0").max(100, "Stillingsprosenten kan være høyst 100").nullish(),
+        grunn: z.string().trim().max(300).nullish(),
+      })
+      .parse(await c.req.json().catch(() => ({})));
+    if (b.lonnstype == null && b.maanedslonn == null && b.timelonn == null && b.stillingsprosent == null) throw new ApiFeil(400, "Skriv hva som endres");
+    return c.json(
+      await bruk(c, async (db) => {
+        await db.query("select faktura.ny_lonnsendring($1, $2, $3, $4, $5, $6, $7)", [
+          id(c),
+          b.gjelder_fra,
+          b.lonnstype ?? null,
+          b.maanedslonn ?? null,
+          b.timelonn ?? null,
+          b.stillingsprosent ?? null,
+          b.grunn || null,
+        ]);
+        return { endringer: await endringer(db, orgId(c), id(c)), ansatt: await en(db, `${ANSATT} where a.org_id = $1 and a.id = $2`, [orgId(c), id(c)]) };
+      }),
+      201,
+    );
+  });
+
+  r.delete("/ansatte/:id/lonnsendringer/:endring", async (c) => {
+    const endring = uuid.parse(c.req.param("endring"));
+    return c.json(
+      await bruk(c, async (db) => {
+        const e = await en(db, "select 1 from faktura.lonnsendringer where org_id = $1 and ansatt_id = $2 and id = $3", [orgId(c), id(c), endring]);
+        if (!e) throw new ApiFeil(404, "Fant ikke endringen");
+        await db.query("select faktura.slett_lonnsendring($1)", [endring]);
+        return { endringer: await endringer(db, orgId(c), id(c)), ansatt: await en(db, `${ANSATT} where a.org_id = $1 and a.id = $2`, [orgId(c), id(c)]) };
+      }),
+    );
   });
 
   // --- Import fra andre systemer ------------------------------------------------

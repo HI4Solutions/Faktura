@@ -2392,6 +2392,14 @@ button.lenke.lonn-pdf { padding: 0 16px; flex: none; }
 .tidligere-lonn table { margin: 8px 0; font-size: 0.88rem; }
 .tidligere-lonn td.hoyre { white-space: nowrap; }
 .tidligere-skjema { margin-top: 10px; }
+/* Lønnshistorikken (Lonnsendringer.tsx) og datoen en endring i skjemaet gjelder fra. */
+.lonnsendring-liste { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; font-size: 0.9rem; }
+.lonnsendring-liste li { display: grid; grid-template-columns: 6.2em 1fr auto; gap: 10px; align-items: baseline; }
+.lonnsendring-dato { font-variant-numeric: tabular-nums; color: var(--tekst-2); }
+.lonnsendring-grunn { display: block; }
+.lonnsendring-liste .merke { margin-left: 6px; }
+.lonn-endringsdato { margin: 4px 0 12px; padding: 10px 12px; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate-2); }
+.lonn-endringsdato .rad { margin-bottom: 4px; }
 
 /* Skattekort fra Skatteetaten (Innstillinger → Ansatte og timer, og på den ansatte) */
 .skattekort-kobling h2 .merke { margin-left: 6px; vertical-align: middle; font-size: 0.7em; }

@@ -55,6 +55,10 @@ export const LONNSARTER: Lonnsart[] = [
   lonn("uregelmessig_tillegg", "Tillegg for kveld, natt eller helg", { amelding: "uregelmessigeTilleggKnyttetTilArbeidetTid" }),
   lonn("bonus", "Bonus", { otp: false, amelding: "bonus" }),
   lonn("etterbetaling", "Etterbetaling", { amelding: "fastloenn" }),
+  // Etterbetaling (eller trekk) når lønnen er endret tilbake i tid (0080): timelønn og merarbeid, og
+  // overtid. Regnes av lønnshistorikken.
+  lonn("etterbetaling_time", "Etterbetaling timelønn", { manuell: false, amelding: "timeloenn" }),
+  lonn("etterbetaling_overtid", "Etterbetaling overtid", { otp: false, manuell: false, amelding: "overtidsgodtgjoerelse" }),
   lonn("sykepenger", "Sykepenger i arbeidsgiverperioden", { amelding: "timeloenn" }),
   // Etter arbeidsgiverperioden (0079): arbeidsgiveren betaler (forskutterer) og krever refusjon fra
   // NAV, eller NAV betaler, og da trekkes fastlønnen for de dagene. Regnes av fraværet.

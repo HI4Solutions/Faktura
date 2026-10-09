@@ -700,6 +700,33 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `NAV_SYKEPENGER` er satt; da ber systemet i Altinn også om tilgangspakken «Lønn med
   personopplysninger av særlig kategori», og kunder som er koblet til, utvider tilgangen som for
   a-meldingen
+- Lønns- og stillingsendringer (`0080_lonnsendringer.sql`, `server/src/lonnsendringer.ts`,
+  `web/src/sider/Lonnsendringer.tsx`): lønnen og stillingsprosenten har en historikk
+  (`lonnsendringer`). Hver endring gjelder fra en dato og har bare feltene som endres (lønnstypen,
+  månedslønnen, timelønnen og stillingsprosenten); det som gjelder en dag, er det siste som er satt
+  for hvert felt, og før den første raden gjelder den første (`lonn_gjeldende`). Endringer slettes
+  ikke, men merkes som slettet, så lønnskjøringen ser hva som var kjent da en kjøring ble
+  godkjent. Den første raden kommer når den ansatte legges inn (og fra før for dem som fantes).
+  Feltene på `ansatte` er det som gjelder i dag: en endring på den ansatte (skjemaet, importen,
+  AI-assistenten) blir en endring fra i dag eller fra datoen API-et setter (`lonn_gjelder_fra` og
+  `lonn_grunn` i PATCH, som `faktura.lonn_gjelder_fra` og `faktura.lonn_grunn`); fram i tid endres
+  feltene når dagen kommer (workeren hver morgen, `aktiver_lonnsendringer`), og tilbake i tid
+  gjelder en senere endring av samme felt fortsatt. Før den ansatte har begynt, rettes lønnen den
+  ansatte begynner med. Eier og administrator legger inn og fjerner endringer (`ny_lonnsendring`,
+  `slett_lonnsendring`; den første kan ikke fjernes); de som ser lønnen og den ansatte selv leser
+  historikken. Lønnskjøringen: fastlønnen deles når lønnen endres i måneden (andelen av
+  arbeidsdagene, én linje per del), timene får lønnen og stillingen som gjelder fra uka begynner,
+  og resten (timebank, tillegg, sykdom, ferietrekk) det som gjelder ved månedsslutt. Etterbetalingen
+  for en måned med en godkjent ordinær kjøring (de siste 24 månedene) er forskjellen mellom lønnen
+  med endringene som gjelder nå og med dem som var kjent da kjøringen ble godkjent, minus det som
+  alt er etterbetalt for måneden i andre kjøringer: fastlønnen regnes på nytt, timelønnen for timene
+  som ble lønnet (satsen hver dag), og overtid og merarbeid med satsen ved månedsslutt
+  (`etterbetaling`, `etterbetaling_time` og `etterbetaling_overtid`; negativ som trekk). Linjene har
+  opptjeningsperioden (`lonnslinjer.opptjent_fra` og `opptjent_til`), som a-meldingen tar med
+  (`startdatoOpptjeningsperiode`); kjøringer godkjent før historikken kom, får en merknad i stedet.
+  A-meldingen tar stillingsprosenten og datoene for siste lønns- og stillingsendring fra
+  historikken ved månedsslutt (`lonn_endringsdatoer`). Rapporten «Lønns- og stillingsendringer»
+  (`lonn.endringer`) viser endringene som gjelder fra perioden, med lønnen før og etter
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -733,7 +760,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   for uke, merarbeid og uten overtid), timeliste, fravær, feriebank, timebank, ekstratimer og
   ansatte (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
   per lønnsart (grunnlaget for bokføringen), skattetrekk og arbeidsgiveravgift per termin med
-  fristene, feriepengeliste, årsoversikt og OTP (`server/src/lonnRapporter.ts`).
+  fristene, feriepengeliste, årsoversikt, OTP og lønns- og stillingsendringer (`server/src/lonnRapporter.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
   lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
   for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og
@@ -764,6 +791,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Slette andres beskjeder | ✓ | ✓ | | | | |
 | Se lønnskjøringene og alle lønnsslippene, og laste ned betalingsfila | ✓ | ✓ | | ✓ | | |
 | Lage, endre, godkjenne og åpne lønnskjøringer, skattekort og tall fra tidligere lønnssystem | ✓ | ✓ | | | | |
+| Se lønnshistorikken (lønns- og stillingsendringene) til de ansatte | ✓ | ✓ | | ✓ | | |
+| Legge inn og fjerne lønns- og stillingsendringer med datoen de gjelder fra | ✓ | ✓ | | | | |
 | Se lønnsbilagene | ✓ | ✓ | | ✓ | | |
 | Endre kontoene for lønnsbilaget, og bokføre en kjøring som ble godkjent før bokføringen kom | ✓ | ✓ | | | | |
 | Se a-meldingene (månedene, grunnlaget og avvikene) | ✓ | ✓ | | ✓ | | |

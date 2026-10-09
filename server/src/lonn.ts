@@ -14,12 +14,12 @@ import { uke } from "./arbeidstid.js";
 import { beregnBemanning } from "./arbeidsplan.js";
 import { lonnsart, LONNSARTER } from "./lonnsarter.js";
 import { bokforKjoring } from "./lonnBokforing.js";
+import { endringstekster, etterbetaling, fastlonnLinjer, gjeldende, kjent, ukeDato, type Etterbetalt, type GodkjentKjoring, type Lonnsendring } from "./lonnsendringer.js";
 import {
   andelAnsatt,
   arbeidsgiverperiode,
   arbeidsgiveravgift,
   AGA_FULL,
-  fastlonn,
   feriepengelinjer,
   ferietrekk,
   frister,
@@ -278,6 +278,73 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         )
       : 0;
 
+  // Lønnshistorikken (0080): lønnen og stillingen per dag, og det som var kjent da tidligere
+  // kjøringer ble godkjent (etterbetaling når en endring gjelder tilbake i tid).
+  const historikk = await alle<Lonnsendring>(
+    db,
+    `select id, ansatt_id, to_char(gjelder_fra, 'YYYY-MM-DD') as gjelder_fra, lonnstype, maanedslonn::float8 as maanedslonn, timelonn::float8 as timelonn,
+            stillingsprosent::float8 as stillingsprosent, (extract(epoch from opprettet) * 1000)::float8 as opprettet,
+            (extract(epoch from slettet) * 1000)::float8 as slettet
+       from faktura.lonnsendringer where org_id = $1 order by gjelder_fra, opprettet`,
+    [org],
+  );
+  const godkjente = ordinar
+    ? await alle<{ id: string; periode: string; godkjent: number }>(
+        db,
+        `select id, to_char(periode, 'YYYY-MM-DD') as periode, (extract(epoch from godkjent_at) * 1000)::float8 as godkjent
+           from faktura.lonnskjoringer
+          where org_id = $1 and status = 'godkjent' and type = 'ordinar' and periode < $2::date and periode >= $2::date - interval '24 months'`,
+        [org, fra],
+      )
+    : [];
+  const sistEndret = Math.max(0, ...historikk.map((r) => Math.max(r.opprettet, r.slettet ?? 0)));
+  const tilEtterbetaling = godkjente.filter((g) => g.godkjent < sistEndret);
+  const kjIder = tilEtterbetaling.map((g) => g.id);
+  const lonnetTimer = kjIder.length
+    ? await alle<{ kjoring_id: string; ansatt_id: string; dato: string; timer: number }>(
+        db,
+        `select lonnskjoring_id as kjoring_id, ansatt_id, to_char(dato, 'YYYY-MM-DD') as dato, timer::float8 as timer
+           from faktura.timeforinger where org_id = $1 and lonnskjoring_id = any($2::uuid[]) and not timebank`,
+        [org, kjIder],
+      )
+    : [];
+  const timelinjerFor = kjIder.length
+    ? await alle<{ kjoring_id: string; ansatt_id: string; lonnsart: string; nokkel: string | null; antall: number }>(
+        db,
+        `select s.kjoring_id, s.ansatt_id, l.lonnsart, l.nokkel, coalesce(l.antall, 0)::float8 as antall
+           from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id
+          where s.org_id = $1 and s.kjoring_id = any($2::uuid[]) and l.kilde = 'auto' and not l.fjernet and l.lonnsart in ('overtid', 'merarbeid', 'ekstratimer')`,
+        [org, kjIder],
+      )
+    : [];
+  const etterbetalt = kjIder.length
+    ? await alle<Etterbetalt & { ansatt_id: string }>(
+        db,
+        `select s.kjoring_id, s.ansatt_id, l.lonnsart, to_char(l.opptjent_fra, 'YYYY-MM-DD') as opptjent_fra, l.belop::float8 as belop
+           from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id join faktura.lonnskjoringer k on k.id = s.kjoring_id
+          where l.org_id = $1 and k.status = 'godkjent' and k.id <> $2 and not l.fjernet and l.opptjent_fra is not null
+            and l.lonnsart in ('etterbetaling', 'etterbetaling_time', 'etterbetaling_overtid')`,
+        [org, k.id],
+      )
+    : [];
+  const godkjentFor = (ansattId: string, lonnstype: string): GodkjentKjoring[] =>
+    tilEtterbetaling.map((g) => ({
+      id: g.id,
+      periode: g.periode,
+      godkjent: g.godkjent,
+      timer: lonnetTimer.filter((t) => t.kjoring_id === g.id && t.ansatt_id === ansattId).map(({ dato, timer }) => ({ dato, timer: Number(timer) })),
+      overtid: timelinjerFor
+        .filter((l) => l.kjoring_id === g.id && l.ansatt_id === ansattId && l.lonnsart === "overtid" && l.nokkel)
+        .map((l) => ({
+          prosent: Number(l.nokkel!.split(":")[1] ?? 0),
+          antall: Number(l.antall),
+          tillegg: lonnstype === "time" || l.nokkel!.startsWith("overtid_timebank"),
+        })),
+      merarbeid: timelinjerFor
+        .filter((l) => l.kjoring_id === g.id && l.ansatt_id === ansattId && (l.lonnsart === "merarbeid" || l.lonnsart === "ekstratimer"))
+        .reduce((x, l) => x + Number(l.antall), 0),
+    }));
+
   // Slippene og linjene som finnes.
   const slipper = await alle<Slipp>(
     db,
@@ -300,15 +367,35 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     // Ansatt i perioden (og aktiv): fastlønn og faste tillegg per måned. Timene som er godkjent,
     // lønnes uansett.
     const ansatt = a.aktiv && andelAnsatt(a, fra, til).andel > 0;
-    const uker = [...(ukerPer.get(a.id)?.values() ?? [])].filter((u) => u.ider.length > 0);
+    const ukeliste = [...(ukerPer.get(a.id)?.entries() ?? [])].filter(([, u]) => u.ider.length > 0).sort((x, y) => x[0].localeCompare(y[0]));
+    const uker = ukeliste.map(([, u]) => u);
     const merknader: string[] = [];
+    // Lønnen og stillingen etter historikken: ved månedsslutt (eller sluttdatoen) for det som ikke deles.
+    const historie = kjent(historikk.filter((r) => r.ansatt_id === a.id));
+    const aSlutt = gjeldende(a, historie, a.ansatt_til && a.ansatt_til < til ? a.ansatt_til : til);
     const auto: Linje[] = [];
     let timeforinger: string[] = [];
     let timebankPoster: string[] = [];
     if (ordinar) {
-      const f = ansatt ? fastlonn(a, fra, til) : null;
-      if (f) auto.push(f);
-      const t = timelinjer(a, o, uker);
+      if (ansatt) auto.push(...fastlonnLinjer(a, historie, fra, til));
+      // Timene: med lønnen og stillingen som gjelder for hver uke (endres de i perioden, får hver del sin linje).
+      const grupper = new Map<string, { a: Ansatt; uker: Ferieuke[] }>();
+      for (const [mandag, u] of ukeliste) {
+        const x = gjeldende(a, historie, ukeDato(mandag, fra));
+        const nokkel = `${x.lonnstype}|${x.timelonn}|${x.maanedslonn}|${x.stillingsprosent}`;
+        const g = grupper.get(nokkel) ?? { a: x, uker: [] };
+        grupper.set(nokkel, g);
+        g.uker.push(u);
+      }
+      const t = { linjer: [] as Linje[], timer: 0, ekstraTimer: 0 };
+      [...grupper.values()].forEach((g, i, alle) => {
+        const r = timelinjer(g.a, o, g.uker);
+        const fraDato = i > 0 ? ukeDato(uke(g.uker[0]!.alle[0]!.dato).fra, fra) : null;
+        for (const l of r.linjer)
+          t.linjer.push(alle.length > 1 && fraDato ? { ...l, tekst: `${l.tekst} (fra ${fraDato.split("-").reverse().join(".")})`, nokkel: l.nokkel ? `${l.nokkel}:${fraDato}` : null } : l);
+        t.timer += r.timer;
+        t.ekstraTimer += r.ekstraTimer;
+      });
       auto.push(...t.linjer);
       timeforinger = uker.flatMap((u) => u.ider);
       // Timebanken: avspasering og permisjon med lønn (timelønn), og utbetaling; timene teller også
@@ -321,10 +408,10 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       const permisjon = iPerioden(true);
       const egneUtbetalinger = utbetalinger.filter((x) => x.ansatt_id === a.id);
       const utbetalt = egneUtbetalinger.reduce((sum, x) => sum + Number(x.timer), 0);
-      auto.push(...timebanklinjer(a, avspasert, utbetalt, permisjon));
+      auto.push(...timebanklinjer(aSlutt, avspasert, utbetalt, permisjon));
       timebankPoster = egneUtbetalinger.map((x) => x.id);
       const egneTillegg = tillegg.filter((x) => x.ansatt_id === a.id && (ansatt || (x.per === "time" && a.lonnstype === "time")));
-      auto.push(...tilleggslinjer(a, egneTillegg, fra, til, t.timer + avspasert + permisjon + utbetalt, t.ekstraTimer + utbetalt));
+      auto.push(...tilleggslinjer(aSlutt, egneTillegg, fra, til, t.timer + avspasert + permisjon + utbetalt, t.ekstraTimer + utbetalt));
       // Sykdom: arbeidsgiverperioden, og sykt barn (omsorgsdagene i året).
       const egne = fravaer.filter((x) => x.ansatt_id === a.id);
       if (egne.length) {
@@ -340,7 +427,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         }
         const refusjon = o.sykepenger_refusjon !== false;
         const navDager = new Set([...p.etter, ...p.utenOpptjening]);
-        const s = sykelinjer(a, dager, p.agp, omsorgBrukt, { dager: navDager, refusjon, fra, til });
+        const s = sykelinjer(aSlutt, dager, p.agp, omsorgBrukt, { dager: navDager, refusjon, fra, til });
         auto.push(...s.linjer);
         merknader.push(...s.merknader);
         const etter = dager.filter((d) => d.type === "syk" && p.etter.has(d.dato)).length;
@@ -356,8 +443,20 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
             `Syk ${uten} ${uten === 1 ? "dag" : "dager"} før fire uker i arbeid: arbeidsgiveren har ikke plikt til å betale sykepenger da (NAV kan).${refusjon ? " Lønnen er betalt som om dere forskutterer." : ""}`,
           );
       }
-      if (a.lonnstype === "maaned" && !a.maanedslonn && ansatt) merknader.push("Mangler månedslønn på den ansatte.");
-      if (a.lonnstype === "time" && !a.timelonn && uker.length) merknader.push("Mangler timelønn på den ansatte.");
+      if (aSlutt.lonnstype === "maaned" && !aSlutt.maanedslonn && ansatt) merknader.push("Mangler månedslønn på den ansatte.");
+      if (aSlutt.lonnstype === "time" && !aSlutt.timelonn && uker.length) merknader.push("Mangler timelønn på den ansatte.");
+      // Endringer i perioden, og etterbetaling (eller trekk) for tidligere måneder.
+      merknader.push(...endringstekster(a, historie, fra, til));
+      if (tilEtterbetaling.length) {
+        const e = etterbetaling(
+          a,
+          historikk.filter((r) => r.ansatt_id === a.id),
+          godkjentFor(a.id, aSlutt.lonnstype),
+          etterbetalt.filter((x) => x.ansatt_id === a.id),
+        );
+        auto.push(...e.linjer);
+        merknader.push(...e.merknader);
+      }
     }
     // Feriepenger for i fjor (vanligvis i juni), med ferietrekket for dem med fastlønn.
     if (k.feriepenger) {
@@ -367,7 +466,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       const fp = feriepengelinjer(a, o, y, grunnlag, utbetalt, ferieUtbetalt(a.id, y, "feriepenger_60"), k.utbetalingsdato);
       auto.push(...fp);
       if (fp.length && ordinar && ansatt) {
-        const t = ferietrekk(a, o);
+        const t = ferietrekk(aSlutt, o);
         if (t) {
           auto.push(t);
           const sum = fp.reduce((s, l) => s + l.belop, 0);
@@ -472,9 +571,9 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     behold.add(slippId);
     for (const [n, l] of auto.entries())
       await db.query(
-        `insert into faktura.lonnslinjer (org_id, slipp_id, lonnsart, tekst, antall, sats, belop, kilde, nokkel, opptjeningsaar, rekkefolge)
-         values ($1, $2, $3, $4, $5, $6, $7, 'auto', $8, $9, $10)`,
-        [org, slippId, l.lonnsart, l.tekst, l.antall, l.sats, l.belop, l.nokkel, l.opptjeningsaar ?? null, n],
+        `insert into faktura.lonnslinjer (org_id, slipp_id, lonnsart, tekst, antall, sats, belop, kilde, nokkel, opptjeningsaar, rekkefolge, opptjent_fra, opptjent_til)
+         values ($1, $2, $3, $4, $5, $6, $7, 'auto', $8, $9, $10, $11, $12)`,
+        [org, slippId, l.lonnsart, l.tekst, l.antall, l.sats, l.belop, l.nokkel, l.opptjeningsaar ?? null, n, l.opptjent_fra ?? null, l.opptjent_til ?? null],
       );
   }
   // Slipper uten grunnlag lenger (og uten noe lagt til for hånd) fjernes.
@@ -496,7 +595,7 @@ const SLIPP = `
     from faktura.lonnsslipper s`;
 const LINJE = `
   select l.id, l.slipp_id, l.lonnsart, l.tekst, l.antall::float8 as antall, l.sats::float8 as sats, l.belop::float8 as belop, l.kilde, l.nokkel,
-         l.fjernet, l.opptjeningsaar
+         l.fjernet, l.opptjeningsaar, to_char(l.opptjent_fra, 'YYYY-MM-DD') as opptjent_fra, to_char(l.opptjent_til, 'YYYY-MM-DD') as opptjent_til
     from faktura.lonnslinjer l`;
 
 export async function hentKjoring(db: Db, org: string, id: string) {
