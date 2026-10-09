@@ -226,7 +226,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   ut per uke (`arbeidstid.ts`): timene over grensen per dag, så timene over grensen per uke av
   resten, med tillegg (arbeidsmiljøloven: 9 og 40 timer, minst 40 %; grensene kan endres for
   tariffavtaler). Føringer merket som overtid teller i sin helhet med sitt tillegg, og
-  ordinære timer over avtalt arbeidstid er merarbeid
+  ordinære timer over avtalt arbeidstid er merarbeid. Føringer uten overtid
+  (`timeforinger.uten_overtid`, `0069_ekstratimer_uten_overtid.sql`: ekstra timer etter
+  avtale, f.eks. fleksitid) er aldri overtid og regnes ikke med i grensene; de lønnes med
+  timelønnen, eller med timesatsen som «Ekstratimer (uten overtid)» for dem med fastlønn
 - `vakter`: vaktplanen. Eier og administrator planlegger vakter per dag og ansatt (fra–til,
   pause, oppgave og notat); vaktene er utkast til de publiseres (`publiser_vakter`), og da
   får hver ansatt én push-melding om sine nye vakter. Endringer i og fjerning av publiserte

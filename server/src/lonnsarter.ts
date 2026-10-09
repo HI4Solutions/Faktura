@@ -41,6 +41,8 @@ export const LONNSARTER: Lonnsart[] = [
   lonn("fastlonn", "Fastlønn", { amelding: "fastloenn" }),
   lonn("timelonn", "Timelønn", { amelding: "timeloenn" }),
   lonn("merarbeid", "Merarbeid", { amelding: "timeloenn" }),
+  // Timer uten overtidstillegg etter avtale (fastlønn: timesatsen; timelønn: med i timelønnen).
+  lonn("ekstratimer", "Ekstratimer (uten overtid)", { amelding: "timeloenn" }),
   lonn("overtid", "Overtid", { otp: false, amelding: "overtidsgodtgjoerelse" }),
   lonn("fast_tillegg", "Fast tillegg", { amelding: "fastTillegg" }),
   lonn("uregelmessig_tillegg", "Tillegg for kveld, natt eller helg", { amelding: "uregelmessigeTilleggKnyttetTilArbeidetTid" }),

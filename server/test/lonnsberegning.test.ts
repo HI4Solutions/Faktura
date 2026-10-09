@@ -110,6 +110,20 @@ describe("linjene", () => {
     expect(t.ekstraTimer).toBe(4.5);
   });
 
+  it("ekstratimer uten overtid: timesatsen for fastlønn, timelønnen for timelønn", () => {
+    const lordag = { dato: "2026-10-10", timer: 5, overtid_prosent: null, uten_overtid: true };
+    // Fastlønn: 40 vanlige timer (2,5 merarbeid) og 5 ekstra timer lørdag uten overtid.
+    const f = timelinjer(kari, AML, [{ alle: [...dager("2026-10-05", [8, 8, 8, 8, 8]), lordag], betalt: [] }]);
+    expect(f.linjer).toEqual([
+      { lonnsart: "merarbeid", tekst: "Merarbeid", antall: 2.5, sats: 307.6923, belop: 769.23, nokkel: "merarbeid" },
+      { lonnsart: "ekstratimer", tekst: "Ekstratimer (uten overtid)", antall: 5, sats: 307.6923, belop: 1538.46, nokkel: "ekstratimer" },
+    ]);
+    expect(f.ekstraTimer).toBe(7.5);
+    // Timelønn: alle timene med timelønnen, uten overtidstillegg.
+    const t = timelinjer(per, AML, [{ alle: [...dager("2026-10-05", [8, 8, 8, 8, 8]), lordag], betalt: [] }]);
+    expect(t.linjer).toEqual([{ lonnsart: "timelonn", tekst: "Timelønn", antall: 45, sats: 250, belop: 11250, nokkel: "timelonn" }]);
+  });
+
   it("faste tillegg per måned (for dagene) og per time", () => {
     const l = tilleggslinjer(
       { ...per, ansatt_fra: "2026-10-17" },

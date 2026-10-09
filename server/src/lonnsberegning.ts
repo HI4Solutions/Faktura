@@ -175,12 +175,14 @@ export function timelinjer(a: Ansatt, r: Regler, uker: Ferieuke[]) {
   const avtalt = (Number(a.ukentlig_arbeidstid) * Number(a.stillingsprosent)) / 100;
   let timer = 0;
   let merarbeid = 0;
+  let uten = 0; // ekstratimer uten overtid
   const overtid = new Map<number, number>();
   for (const u of uker) {
     const alle: Ukesum = beregnUke(u.alle, r, avtalt);
     const betalt: Ukesum = beregnUke(u.betalt, r, avtalt);
     timer += alle.sum - betalt.sum;
     merarbeid += alle.merarbeid - betalt.merarbeid;
+    uten += alle.uten_overtid - betalt.uten_overtid;
     for (const o of alle.overtid) overtid.set(o.prosent, (overtid.get(o.prosent) ?? 0) + o.timer);
     for (const o of betalt.overtid) overtid.set(o.prosent, (overtid.get(o.prosent) ?? 0) - o.timer);
   }
@@ -194,10 +196,12 @@ export function timelinjer(a: Ansatt, r: Regler, uker: Ferieuke[]) {
   } else {
     const sats = timesats(a);
     if (rund(merarbeid) > 0) linjer.push({ lonnsart: "merarbeid", tekst: "Merarbeid", antall: rund(merarbeid), sats, belop: rund(rund(merarbeid) * sats), nokkel: "merarbeid" });
+    if (rund(uten) > 0)
+      linjer.push({ lonnsart: "ekstratimer", tekst: "Ekstratimer (uten overtid)", antall: rund(uten), sats, belop: rund(rund(uten) * sats), nokkel: "ekstratimer" });
     for (const [p, t] of overtidsliste)
       linjer.push({ lonnsart: "overtid", tekst: `Overtid ${p} %`, antall: rund(t), sats: rund4(sats * (1 + p / 100)), belop: rund(rund(t) * sats * (1 + p / 100)), nokkel: `overtid:${p}` });
   }
-  return { linjer, timer: rund(timer), ekstraTimer: rund(merarbeid + overtidsliste.reduce((s, [, t]) => s + t, 0)) };
+  return { linjer, timer: rund(timer), ekstraTimer: rund(merarbeid + uten + overtidsliste.reduce((s, [, t]) => s + t, 0)) };
 }
 
 // De faste tilleggene: per måned for dagene de gjelder (og den ansatte er ansatt), per time for

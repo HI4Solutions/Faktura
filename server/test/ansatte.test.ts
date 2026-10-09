@@ -42,9 +42,9 @@ describe("uker og overtid", () => {
   const dager = (timer: number[], start = 5) => timer.map((t, i) => ({ dato: `2026-10-${String(start + i).padStart(2, "0")}`, timer: t, overtid_prosent: null }));
 
   it("arbeidsmiljøloven: over 9 timer per dag og 40 per uke", () => {
-    expect(beregnUke(dager([8, 8, 8, 8, 8]), AML)).toEqual({ ordinare: 40, overtid: [], merarbeid: 0, sum: 40 });
+    expect(beregnUke(dager([8, 8, 8, 8, 8]), AML)).toEqual({ ordinare: 40, overtid: [], merarbeid: 0, uten_overtid: 0, sum: 40 });
     // 10 timer i fem dager: én time overtid hver dag, og 45 ordinære blir 40.
-    expect(beregnUke(dager([10, 10, 10, 10, 10]), AML)).toEqual({ ordinare: 40, overtid: [{ prosent: 40, timer: 10 }], merarbeid: 0, sum: 50 });
+    expect(beregnUke(dager([10, 10, 10, 10, 10]), AML)).toEqual({ ordinare: 40, overtid: [{ prosent: 40, timer: 10 }], merarbeid: 0, uten_overtid: 0, sum: 50 });
     // Fire lange dager: bare døgngrensen.
     expect(beregnUke(dager([10, 10, 10, 10]), AML)).toMatchObject({ ordinare: 36, overtid: [{ prosent: 40, timer: 4 }] });
     // Flere føringer samme dag legges sammen.
@@ -53,13 +53,24 @@ describe("uker og overtid", () => {
 
   it("egne grenser og satser, føringer merket som overtid, og merarbeid for deltid", () => {
     const tariff = { daglig_grense: 7.5, ukentlig_grense: 37.5, overtid_prosent: 50 };
-    expect(beregnUke(dager([8, 8, 8, 8, 8]), tariff)).toEqual({ ordinare: 37.5, overtid: [{ prosent: 50, timer: 2.5 }], merarbeid: 0, sum: 40 });
+    expect(beregnUke(dager([8, 8, 8, 8, 8]), tariff)).toEqual({ ordinare: 37.5, overtid: [{ prosent: 50, timer: 2.5 }], merarbeid: 0, uten_overtid: 0, sum: 40 });
     const medFast = [...dager([7.5, 7.5]), { dato: "2026-10-11", timer: 4, overtid_prosent: 100 }];
-    expect(beregnUke(medFast, tariff)).toEqual({ ordinare: 15, overtid: [{ prosent: 100, timer: 4 }], merarbeid: 0, sum: 19 });
+    expect(beregnUke(medFast, tariff)).toEqual({ ordinare: 15, overtid: [{ prosent: 100, timer: 4 }], merarbeid: 0, uten_overtid: 0, sum: 19 });
     // 60 % stilling (22,5 av 37,5 timer) som jobber 30 timer: 7,5 timer merarbeid, ikke overtid.
-    expect(beregnUke(dager([6, 6, 6, 6, 6]), AML, 22.5)).toEqual({ ordinare: 30, overtid: [], merarbeid: 7.5, sum: 30 });
+    expect(beregnUke(dager([6, 6, 6, 6, 6]), AML, 22.5)).toEqual({ ordinare: 30, overtid: [], merarbeid: 7.5, uten_overtid: 0, sum: 30 });
     // Kvarter og minutter blir eksakte.
     expect(beregnUke(dager([7.25, 7.75, 0.5]), AML).sum).toBe(15.5);
+  });
+
+  it("ekstratimer uten overtid: aldri overtid, og ikke med i grensene", () => {
+    // Fem vanlige dager på 8 timer og 4 ekstra timer lørdag uten overtid: ingen overtid.
+    const lordag = { dato: "2026-10-10", timer: 4, overtid_prosent: null, uten_overtid: true };
+    expect(beregnUke([...dager([8, 8, 8, 8, 8]), lordag], AML)).toEqual({ ordinare: 40, overtid: [], merarbeid: 0, uten_overtid: 4, sum: 44 });
+    // Samme dag som en lang dag: bare de vanlige timene teller mot grensen på 9 timer.
+    const kveld = { dato: "2026-10-05", timer: 3, overtid_prosent: null, uten_overtid: true };
+    expect(beregnUke([...dager([9]), kveld], AML)).toEqual({ ordinare: 9, overtid: [], merarbeid: 0, uten_overtid: 3, sum: 12 });
+    // Deltid: timene uten overtid er ikke merarbeid (de står for seg).
+    expect(beregnUke([...dager([6, 6, 6]), lordag], AML, 22.5)).toMatchObject({ ordinare: 18, merarbeid: 0, uten_overtid: 4, sum: 22 });
   });
 });
 
@@ -197,6 +208,18 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
     expect(u.uker).toEqual([
       expect.objectContaining({ ansatt_id: olaId, uke: 41, ordinare: 17, overtid: [{ prosent: 40, timer: 1 }, { prosent: 100, timer: 3 }], sum: 21, status: "utkast" }),
     ]);
+
+    // Uten overtid: en lang kveld er ekstra timer etter avtale, og blir ikke overtid.
+    const kveld = await kall("POST", `/api/org/${org}/timer`, { dato: "2026-10-05", timer: 2, uten_overtid: true }, ola);
+    expect(kveld.data).toMatchObject({ timer: 2, uten_overtid: true, overtid_prosent: null });
+    expect((await kall("POST", `/api/org/${org}/timer`, { dato: "2026-10-05", timer: 1, uten_overtid: true, overtid_prosent: 50 }, ola)).data.error).toBe(
+      "Timene kan ikke være både overtid og uten overtid",
+    );
+    expect((await kall("GET", `/api/org/${org}/timer?fra=2026-10-05&til=2026-10-11`, undefined, ola)).data.uker[0]).toMatchObject({ ordinare: 17, uten_overtid: 2, sum: 23 });
+    // Gjøres den om til overtid, er den ikke lenger uten overtid (og omvendt).
+    expect((await kall("PATCH", `/api/org/${org}/timer/${kveld.data.id}`, { overtid_prosent: 50 }, ola)).data).toMatchObject({ overtid_prosent: 50, uten_overtid: false });
+    expect((await kall("PATCH", `/api/org/${org}/timer/${kveld.data.id}`, { uten_overtid: true }, ola)).data).toMatchObject({ overtid_prosent: null, uten_overtid: true });
+    expect((await kall("DELETE", `/api/org/${org}/timer/${kveld.data.id}`, undefined, ola)).status).toBeLessThan(300);
 
     // Endre: til bare timer og tilbake.
     expect((await kall("PATCH", `/api/org/${org}/timer/${nye[1].data.id}`, { timer: 7.5 }, ola)).data).toMatchObject({ timer: 7.5, fra: null, til: null });

@@ -943,9 +943,9 @@ async function timerSporsmal(k: PKontekst, ai: Partial<PersonalKommando>): Promi
   const p = periodeFra(ai, k.iDag, [u.fra, u.til], 93);
   if (typeof p === "string") return { tekst: p };
   const [fra, til] = p;
-  const foringer = await alle<{ dato: string; timer: number; overtid_prosent: number | null; status: string }>(
+  const foringer = await alle<{ dato: string; timer: number; overtid_prosent: number | null; uten_overtid: boolean; status: string }>(
     k.db,
-    "select dato, timer, overtid_prosent, status from faktura.timeforinger where org_id = $1 and ansatt_id = $2 and dato between $3 and $4",
+    "select dato, timer, overtid_prosent, uten_overtid, status from faktura.timeforinger where org_id = $1 and ansatt_id = $2 and dato between $3 and $4",
     [k.orgId, a.id, uke(fra).fra, uke(til).til],
   );
   const iPerioden = foringer.filter((f) => f.dato >= fra && f.dato <= til);

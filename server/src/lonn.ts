@@ -131,13 +131,13 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
   // De godkjente timene i ukene som har timer som ikke er lønnet (uker som begynner i perioden
   // eller før), i ordinære kjøringer: hele uka, også det som er lønnet før (overtiden regnes på uka).
   const foringer = ordinar
-    ? await alle<{ id: string; ansatt_id: string; dato: string; timer: number; overtid_prosent: number | null; lonnskjoring_id: string | null }>(
+    ? await alle<{ id: string; ansatt_id: string; dato: string; timer: number; overtid_prosent: number | null; uten_overtid: boolean; lonnskjoring_id: string | null }>(
         db,
         `with uker as (
            select distinct ansatt_id, date_trunc('week', dato)::date as uke from faktura.timeforinger
             where org_id = $1 and status = 'godkjent' and lonnskjoring_id is null and dato <= $2 and dato >= $3
          )
-         select t.id, t.ansatt_id, to_char(t.dato, 'YYYY-MM-DD') as dato, t.timer::float8 as timer, t.overtid_prosent, t.lonnskjoring_id
+         select t.id, t.ansatt_id, to_char(t.dato, 'YYYY-MM-DD') as dato, t.timer::float8 as timer, t.overtid_prosent, t.uten_overtid, t.lonnskjoring_id
            from faktura.timeforinger t join uker u on u.ansatt_id = t.ansatt_id and date_trunc('week', t.dato)::date = u.uke
           where t.org_id = $1 and t.status = 'godkjent'`,
         [org, pluss(til, 6), pluss(fra, -400)],
@@ -151,8 +151,8 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     ukerPer.set(f.ansatt_id, per);
     const x = per.get(u) ?? { alle: [], betalt: [], ider: [] };
     per.set(u, x);
-    x.alle.push({ id: f.id, dato: f.dato, timer: Number(f.timer), overtid_prosent: f.overtid_prosent });
-    if (f.lonnskjoring_id) x.betalt.push({ dato: f.dato, timer: Number(f.timer), overtid_prosent: f.overtid_prosent });
+    x.alle.push({ id: f.id, dato: f.dato, timer: Number(f.timer), overtid_prosent: f.overtid_prosent, uten_overtid: f.uten_overtid });
+    if (f.lonnskjoring_id) x.betalt.push({ dato: f.dato, timer: Number(f.timer), overtid_prosent: f.overtid_prosent, uten_overtid: f.uten_overtid });
     else x.ider.push(f.id);
   }
   // Sykefravær og sykt barn (for arbeidsgiverperioden og omsorgsdagene), og de planlagte timene.

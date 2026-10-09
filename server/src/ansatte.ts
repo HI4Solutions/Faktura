@@ -149,6 +149,8 @@ const foringSkjema = z.object({
   pause_min: z.number().int().min(0, "Pausen kan ikke være negativ").max(600, "Pausen kan være høyst 10 timer").optional(),
   timer: valgfri(z.number().gt(0, "Skriv antall timer").max(24, "Høyst 24 timer i én føring")),
   overtid_prosent: valgfri(z.number().int().min(40, "Overtidstillegget er minst 40 %").max(200)),
+  // Ekstratimer uten overtid (0069): aldri overtid, og ikke med i grensene.
+  uten_overtid: z.boolean().optional(),
   beskrivelse: valgfri(tekst(500, "Beskrivelsen")),
   vakt_id: uuid.optional(), // timene føres fra en vakt (bare når føringen lages)
 });
@@ -187,12 +189,12 @@ const ANSATT = `
 
 const FORING = `
   select t.id, t.ansatt_id, a.fornavn || ' ' || a.etternavn as ansatt_navn, t.dato,
-         to_char(t.fra, 'HH24:MI') as fra, to_char(t.til, 'HH24:MI') as til, t.pause_min, t.timer, t.overtid_prosent,
+         to_char(t.fra, 'HH24:MI') as fra, to_char(t.til, 'HH24:MI') as til, t.pause_min, t.timer, t.overtid_prosent, t.uten_overtid,
          t.beskrivelse, t.status, t.avvist_grunn, t.levert_at, t.godkjent_at, t.opprettet, t.vakt_id
     from faktura.timeforinger t
     join faktura.ansatte a on a.org_id = t.org_id and a.id = t.ansatt_id`;
 
-type Foringsrad = { id: string; ansatt_id: string; ansatt_navn: string; dato: string; timer: number; overtid_prosent: number | null; status: string };
+type Foringsrad = { id: string; ansatt_id: string; ansatt_navn: string; dato: string; timer: number; overtid_prosent: number | null; uten_overtid: boolean; status: string };
 
 export type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
 export type Vaktbytte = "av" | "godkjenning" | "fritt";
@@ -819,13 +821,14 @@ export function ansattRuter() {
     const b = foringSkjema.parse(await c.req.json().catch(() => ({})));
     if (!b.fra !== !b.til) throw new ApiFeil(400, "Skriv både fra og til, eller bare antall timer");
     if (!b.fra && !b.timer) throw new ApiFeil(400, "Skriv fra og til, eller antall timer");
+    if (b.uten_overtid && b.overtid_prosent) throw new ApiFeil(400, "Timene kan ikke være både overtid og uten overtid");
     const f = await bruk(c, async (db) => {
       const ansatt = b.ansatt_id ?? (await meg(db, orgId(c)))?.id;
       if (!ansatt) throw new ApiFeil(400, "Du er ikke registrert som ansatt her. Velg en ansatt.");
       const ny = await en<{ id: string }>(
         db,
-        `insert into faktura.timeforinger (org_id, ansatt_id, dato, fra, til, pause_min, timer, overtid_prosent, beskrivelse, vakt_id)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+        `insert into faktura.timeforinger (org_id, ansatt_id, dato, fra, til, pause_min, timer, overtid_prosent, beskrivelse, vakt_id, uten_overtid)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
         [
           orgId(c),
           ansatt,
@@ -837,6 +840,7 @@ export function ansattRuter() {
           b.overtid_prosent ?? null,
           b.beskrivelse ?? null,
           b.vakt_id ?? null,
+          b.uten_overtid ?? false,
         ],
       );
       return en(db, `${FORING} where t.id = $1`, [ny!.id]);
@@ -854,6 +858,10 @@ export function ansattRuter() {
       );
       if (!naa) throw new ApiFeil(404, "Fant ikke føringen");
       const felt: Record<string, unknown> = Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined));
+      // Overtid og uten overtid utelukker hverandre: det ene valget tar bort det andre.
+      if (felt.uten_overtid && felt.overtid_prosent) throw new ApiFeil(400, "Timene kan ikke være både overtid og uten overtid");
+      if (felt.uten_overtid === true) felt.overtid_prosent = null;
+      if (felt.overtid_prosent != null) felt.uten_overtid = false;
       // Bare timer: fra og til fjernes. Med fra og til regnes timene ut i databasen.
       if (felt.timer != null && felt.fra === undefined && felt.til === undefined) Object.assign(felt, { fra: null, til: null });
       const fra = felt.fra !== undefined ? felt.fra : naa.fra;

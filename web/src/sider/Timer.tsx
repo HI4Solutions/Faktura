@@ -29,6 +29,7 @@ type Foring = {
   pause_min: number;
   timer: number;
   overtid_prosent: number | null;
+  uten_overtid: boolean; // ekstratimer uten overtid (etter avtale)
   beskrivelse: string | null;
   status: Status;
   avvist_grunn: string | null;
@@ -47,6 +48,7 @@ type Uke = {
   ordinare: number;
   overtid: { prosent: number; timer: number }[];
   merarbeid: number;
+  uten_overtid: number;
   sum: number;
   status: Status;
   antall: number;
@@ -205,8 +207,8 @@ export function Timer() {
   );
 }
 
-// Delene av ukesummen: ordinære timer, overtid per tillegg og merarbeid.
-function Summer({ u }: { u?: Pick<Uke, "ordinare" | "overtid" | "merarbeid"> }) {
+// Delene av ukesummen: ordinære timer, overtid per tillegg, merarbeid og timer uten overtid.
+function Summer({ u }: { u?: Pick<Uke, "ordinare" | "overtid" | "merarbeid" | "uten_overtid"> }) {
   return (
     <div className="summer">
       <div>
@@ -223,6 +225,12 @@ function Summer({ u }: { u?: Pick<Uke, "ordinare" | "overtid" | "merarbeid"> }) 
         <div title="Timer ut over avtalt arbeidstid (deltid) som ikke er overtid">
           <span>Merarbeid</span>
           <span className="tall">{timer(u.merarbeid)}</span>
+        </div>
+      )}
+      {!!u?.uten_overtid && (
+        <div title="Ekstra timer etter avtale, uten overtidstillegg">
+          <span>Uten overtid</span>
+          <span className="tall">{timer(u.uten_overtid)}</span>
         </div>
       )}
     </div>
@@ -514,11 +522,12 @@ function Ukeside({
                       </span>
                       <span className="belop">{timer(f.timer)}</span>
                     </span>
-                    {(f.beskrivelse || f.overtid_prosent || f.status !== "utkast") && (
+                    {(f.beskrivelse || f.overtid_prosent || f.uten_overtid || f.status !== "utkast") && (
                       <span className="linje">
                         <span className="under">{f.beskrivelse}</span>
                         <span className="merker">
                           {f.overtid_prosent && <span className="merke merke-advarsel">Overtid {f.overtid_prosent} %</span>}
+                          {f.uten_overtid && <span className="merke merke-noytral">Uten overtid</span>}
                           {f.status !== "utkast" && <span className={`merke ${statusMerke[f.status].klasse}`}>{statusMerke[f.status].tekst}</span>}
                         </span>
                       </span>
@@ -593,7 +602,8 @@ function ForingSkjema({
       til: foring.til ?? sist?.til ?? "",
       pause: String(foring.pause_min ?? sist?.pause_min ?? 0),
       timer: !foring.fra && foring.timer != null ? tallformat.format(Number(foring.timer)) : "",
-      overtid: !!foring.overtid_prosent,
+      // vanlig: overtiden regnes ut; overtid: hele føringen er overtid; uten: ekstratimer uten overtid.
+      overtid: (foring.overtid_prosent ? "overtid" : foring.uten_overtid ? "uten" : "vanlig") as "vanlig" | "overtid" | "uten",
       prosent: String(foring.overtid_prosent ?? regler.overtid_prosent),
       beskrivelse: foring.beskrivelse ?? "",
     };
@@ -612,7 +622,8 @@ function ForingSkjema({
       ...(f.modus === "tid"
         ? { fra: f.fra, til: f.til, pause_min: Math.round(pause) }
         : { fra: null, til: null, pause_min: 0, timer: tall(f.timer) }),
-      overtid_prosent: f.overtid ? Number(f.prosent) : null,
+      overtid_prosent: f.overtid === "overtid" ? Number(f.prosent) : null,
+      uten_overtid: f.overtid === "uten",
       beskrivelse: f.beskrivelse.trim() || null,
     };
     const r = await h.kjor(() =>
@@ -697,11 +708,20 @@ function ForingSkjema({
             <input inputMode="decimal" required placeholder="7,5" value={f.timer} onChange={(e) => sett({ timer: e.target.value })} />
           </label>
         )}
-        <label>
-          <input type="checkbox" checked={f.overtid} onChange={(e) => sett({ overtid: e.target.checked })} />
-          Hele føringen er overtid
-        </label>
-        {f.overtid && (
+        <div className="faner valg overtid-valg" role="radiogroup" aria-label="Overtid">
+          {(
+            [
+              ["vanlig", "Vanlig"],
+              ["overtid", "Overtid"],
+              ["uten", "Uten overtid"],
+            ] as const
+          ).map(([v, t]) => (
+            <button key={v} type="button" role="radio" aria-checked={f.overtid === v} className={f.overtid === v ? "valgt" : undefined} onClick={() => sett({ overtid: v })}>
+              {t}
+            </button>
+          ))}
+        </div>
+        {f.overtid === "overtid" && (
           <label>
             Overtidstillegg
             <select value={f.prosent} onChange={(e) => sett({ prosent: e.target.value })}>
@@ -714,8 +734,11 @@ function ForingSkjema({
           </label>
         )}
         <span className="felt-hjelp overtid-hjelp">
-          Timer over {tallformat.format(regler.daglig_grense)} per dag eller {tallformat.format(regler.ukentlig_grense)} per uke blir overtid av seg selv. Kryss av
-          når hele føringen er pålagt overtid, for eksempel med 100 % tillegg.
+          {f.overtid === "uten"
+            ? "Ekstra timer etter avtale (f.eks. fleksitid eller timer den ansatte selv vil jobbe): de blir aldri overtid og regnes ikke med i grensene, og lønnes som vanlige timer."
+            : f.overtid === "overtid"
+              ? "Hele føringen er pålagt overtid, for eksempel med 100 % tillegg."
+              : `Timer over ${tallformat.format(regler.daglig_grense)} per dag eller ${tallformat.format(regler.ukentlig_grense)} per uke blir overtid av seg selv.`}
         </span>
         <label>
           Beskrivelse
@@ -1013,6 +1036,7 @@ function Godkjenning({ svar, feil, endret, apne }: { svar?: TimerSvar; feil: str
                     </span>
                   ))}
                   {u.merarbeid > 0 && <span>Merarbeid {timer(u.merarbeid)}</span>}
+                  {u.uten_overtid > 0 && <span>Uten overtid {timer(u.uten_overtid)}</span>}
                   {u.antall_status.utkast + u.antall_status.avvist > 0 && (
                     <span className="advarsel-tekst">
                       {antallForinger(u.antall_status.utkast + u.antall_status.avvist)} i uka er ikke levert
@@ -1030,7 +1054,10 @@ function Godkjenning({ svar, feil, endret, apne }: { svar?: TimerSvar; feil: str
                         </td>
                         <td className="tall">{timer(f.timer)}</td>
                         <td className="dempet">{f.beskrivelse}</td>
-                        <td className="hoyre">{f.overtid_prosent ? <span className="merke merke-advarsel">Overtid {f.overtid_prosent} %</span> : null}</td>
+                        <td className="hoyre">
+                          {f.overtid_prosent ? <span className="merke merke-advarsel">Overtid {f.overtid_prosent} %</span> : null}
+                          {f.uten_overtid ? <span className="merke merke-noytral">Uten overtid</span> : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
