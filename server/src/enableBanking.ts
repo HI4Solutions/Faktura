@@ -150,12 +150,14 @@ export async function opprettOkt(n: BankNokkel, kode: string): Promise<BankOkt> 
 
 export const slettOkt = (n: BankNokkel, id: string) => kall(n, "DELETE", `/sessions/${encodeURIComponent(id)}`);
 
-// Alle transaksjoner på kontoen fra og med datoen (side for side).
-export async function hentTransaksjoner(n: BankNokkel, kontoUid: string, fra: string, psu?: Psu): Promise<any[]> {
+// Alle transaksjoner på kontoen fra og med datoen (side for side). status: bare de med
+// statusen (PDNG: reservert, ikke bokført ennå).
+export async function hentTransaksjoner(n: BankNokkel, kontoUid: string, fra: string, psu?: Psu, status?: "PDNG"): Promise<any[]> {
   const alle: any[] = [];
   let fortsett: string | undefined;
   for (let side = 0; side < 50; side++) {
     const q = new URLSearchParams({ date_from: fra });
+    if (status) q.set("transaction_status", status);
     if (fortsett) q.set("continuation_key", fortsett);
     const d = await kall(n, "GET", `/accounts/${encodeURIComponent(kontoUid)}/transactions?${q}`, undefined, psu);
     alle.push(...(Array.isArray(d?.transactions) ? d.transactions : []));
@@ -186,19 +188,27 @@ export type Innbetaling = {
 
 const tekst = (x: unknown): string | null => (typeof x === "string" && x.trim() ? x.trim() : null);
 
+// Bokført (uten status regnes transaksjonen som bokført), eller reservert: ikke bokført ennå,
+// men heller ikke avvist eller kansellert (oftest PDNG).
+const erBokfort = (t: any) => !t?.status || t.status === "BOOK";
+const erReservert = (t: any) => typeof t?.status === "string" && !["BOOK", "CNCL", "RJCT"].includes(t.status);
+const erInn = (t: any) => {
+  const belop = Number(t?.transaction_amount?.amount);
+  const inn = t?.credit_debit_indicator ? t.credit_debit_indicator === "CRDT" : belop > 0;
+  return inn && Number.isFinite(belop) && belop !== 0;
+};
+
 // Hva banken sendte (til hentingsloggen): alle transaksjonene, innbetalingene som er bokført og
-// de som ikke er bokført ennå (reservert), og den nyeste bokføringsdatoen.
+// de som er reservert (ikke bokført ennå), og den nyeste bokføringsdatoen.
 export function oppsummer(transaksjoner: any[]): { transaksjoner: number; inn: number; ventende: number; nyeste: string | null } {
   let inn = 0;
   let ventende = 0;
   let nyeste: string | null = null;
   for (const t of transaksjoner) {
-    const belop = Number(t?.transaction_amount?.amount);
-    const erInn = t?.credit_debit_indicator ? t.credit_debit_indicator === "CRDT" : belop > 0;
-    const bokfort = !t?.status || t.status === "BOOK";
-    if (erInn && Number.isFinite(belop) && belop !== 0) {
+    const bokfort = erBokfort(t);
+    if (erInn(t)) {
       if (bokfort) inn++;
-      else ventende++;
+      else if (erReservert(t)) ventende++;
     }
     const dato = bokfort ? (tekst(t?.booking_date) ?? tekst(t?.value_date) ?? tekst(t?.transaction_date))?.slice(0, 10) : null;
     if (dato && (!nyeste || dato > nyeste)) nyeste = dato;
@@ -206,29 +216,25 @@ export function oppsummer(transaksjoner: any[]): { transaksjoner: number; inn: n
   return { transaksjoner: transaksjoner.length, inn, ventende, nyeste };
 }
 
-// Innbetalingene (bokførte penger inn) blant transaksjonene, i datoorden. Uten id fra
-// banken får transaksjonen et fingeravtrykk; like transaksjoner samme dag nummereres.
-export function tilInnbetalinger(transaksjoner: any[]): Innbetaling[] {
+// Innbetalingen i en transaksjon (uten id). Bokførte dateres med bokføringsdatoen, reserverte
+// med datoen betalingen ble gjort (de har sjelden en bokføringsdato).
+function lesInnbetaling(t: any, dato: string): Omit<Innbetaling, "ekstern_id"> {
+  const info = Array.isArray(t?.remittance_information) ? t.remittance_information : [t?.remittance_information];
+  return {
+    dato: dato.slice(0, 10),
+    belop: Math.round(Math.abs(Number(t?.transaction_amount?.amount)) * 100) / 100,
+    valuta: tekst(t?.transaction_amount?.currency)?.toUpperCase() ?? "NOK",
+    betaler: tekst(t?.debtor?.name),
+    betaler_konto: tekst(t?.debtor_account?.iban) ?? tekst(t?.debtor_account?.other?.identification) ?? tekst(t?.debtor_account?.bban),
+    melding: [...info, t?.note].map(tekst).filter(Boolean).join(" ") || null,
+    referanse: tekst(t?.reference_number),
+  };
+}
+
+// Bankens id, ellers et fingeravtrykk; like transaksjoner samme dag nummereres. I datoorden.
+function medId(rader: { t: any; i: Omit<Innbetaling, "ekstern_id"> }[]): Innbetaling[] {
   const sett = new Map<string, number>();
-  const ut: Innbetaling[] = [];
-  for (const t of transaksjoner) {
-    const belop = Math.abs(Number(t?.transaction_amount?.amount));
-    const inn = t?.credit_debit_indicator ? t.credit_debit_indicator === "CRDT" : Number(t?.transaction_amount?.amount) > 0;
-    if (!inn || !Number.isFinite(belop) || belop <= 0) continue;
-    if (t?.status && t.status !== "BOOK") continue; // reservert, ikke bokført ennå
-    const dato = tekst(t?.booking_date) ?? tekst(t?.value_date) ?? tekst(t?.transaction_date);
-    if (!dato) continue;
-    const info = Array.isArray(t?.remittance_information) ? t.remittance_information : [t?.remittance_information];
-    const melding = [...info, t?.note].map(tekst).filter(Boolean).join(" ") || null;
-    const i = {
-      dato: dato.slice(0, 10),
-      belop: Math.round(belop * 100) / 100,
-      valuta: tekst(t?.transaction_amount?.currency)?.toUpperCase() ?? "NOK",
-      betaler: tekst(t?.debtor?.name),
-      betaler_konto: tekst(t?.debtor_account?.iban) ?? tekst(t?.debtor_account?.other?.identification) ?? tekst(t?.debtor_account?.bban),
-      melding,
-      referanse: tekst(t?.reference_number),
-    };
+  const ut = rader.map(({ t, i }) => {
     let id = tekst(t?.entry_reference) ?? tekst(t?.transaction_id);
     if (!id) {
       const avtrykk = createHash("sha256").update(JSON.stringify(i)).digest("base64url").slice(0, 32);
@@ -236,7 +242,26 @@ export function tilInnbetalinger(transaksjoner: any[]): Innbetaling[] {
       sett.set(avtrykk, nr);
       id = `fp:${avtrykk}:${nr}`;
     }
-    ut.push({ ekstern_id: id, ...i });
-  }
+    return { ekstern_id: id, ...i };
+  });
   return ut.sort((a, b) => a.dato.localeCompare(b.dato));
+}
+
+// Innbetalingene (bokførte penger inn) blant transaksjonene.
+export function tilInnbetalinger(transaksjoner: any[]): Innbetaling[] {
+  return medId(
+    transaksjoner.flatMap((t) => {
+      const dato = erBokfort(t) && erInn(t) ? (tekst(t?.booking_date) ?? tekst(t?.value_date) ?? tekst(t?.transaction_date)) : null;
+      return dato ? [{ t, i: lesInnbetaling(t, dato) }] : [];
+    }),
+  );
+}
+
+// Innbetalingene som er reservert i banken (ikke bokført ennå). Uten dato fra banken: i dag.
+export function tilReserverte(transaksjoner: any[], iDag: string): Innbetaling[] {
+  return medId(
+    transaksjoner.flatMap((t) =>
+      erReservert(t) && erInn(t) ? [{ t, i: lesInnbetaling(t, tekst(t?.transaction_date) ?? tekst(t?.value_date) ?? tekst(t?.booking_date) ?? iDag) }] : [],
+    ),
+  );
 }

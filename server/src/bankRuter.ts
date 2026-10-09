@@ -80,6 +80,15 @@ async function status(db: Db, org: string) {
     hentetider: HENTETIDER, // når workeren henter av seg selv hver dag (norsk tid)
     tilbake_url: tilbakeUrl(),
     antall: await antall(db, org),
+    // Innbetalingene som er reservert i banken (ikke bokført ennå), med fakturaen de trolig gjelder.
+    reserverte: await alle(
+      db,
+      `select r.id, r.konto, to_char(r.dato, 'YYYY-MM-DD') as dato, r.belop, r.valuta, r.betaler, r.melding, r.referanse, r.grunn,
+              r.faktura_id, f.fakturanummer, r.sett
+         from faktura.reserverte_innbetalinger r left join faktura.fakturaer f on f.id = r.faktura_id
+        where r.org_id = $1 order by r.dato desc, r.sett desc limit 50`,
+      [org],
+    ),
     // De siste hentingene: hva banken sendte, og hva som ble nytt (eller feilen).
     hentinger: await alle(
       db,

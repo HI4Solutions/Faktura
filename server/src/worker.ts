@@ -151,6 +151,23 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   return sendEpost(o);
 }
 
+// Fakturaene som skal få automatisk betalingspåminnelse nå (organisasjoner som har slått det på).
+// Den venter mens en innbetaling som trolig gjelder fakturaen, er reservert i banken.
+export const fakturaerSomSkalPurres = () =>
+  somSystem((db) =>
+    alle<{ id: string }>(
+      db,
+      `select f.id from faktura.fakturaer f
+         join faktura.organisasjoner o on o.id = f.org_id
+        where o.purring_auto and o.verifisering <> 'sperret'
+          and f.type = 'faktura' and f.status = 'utstedt'
+          and f.forfallsdato + o.purring_dager <= faktura.i_dag()
+          and coalesce((select k.epost from faktura.kunder k where k.id = f.kunde_id), f.kunde ->> 'epost') is not null
+          and not exists (select 1 from faktura.purringer p where p.faktura_id = f.id)
+          and not exists (select 1 from faktura.reserverte_innbetalinger r where r.faktura_id = f.id)`,
+    ),
+  );
+
 // Daglig: planlagte utkast og gjentakende fakturaer. En feil på én stopper ikke de andre.
 export async function gjenta() {
   const resultat: { id: string; ok: boolean; feil?: string }[] = [];
@@ -205,18 +222,7 @@ export async function gjenta() {
   }
 
   // Automatisk betalingspåminnelse for organisasjoner som har slått det på.
-  const forfalte = await somSystem((db) =>
-    alle<{ id: string }>(
-      db,
-      `select f.id from faktura.fakturaer f
-         join faktura.organisasjoner o on o.id = f.org_id
-        where o.purring_auto and o.verifisering <> 'sperret'
-          and f.type = 'faktura' and f.status = 'utstedt'
-          and f.forfallsdato + o.purring_dager <= faktura.i_dag()
-          and coalesce((select k.epost from faktura.kunder k where k.id = f.kunde_id), f.kunde ->> 'epost') is not null
-          and not exists (select 1 from faktura.purringer p where p.faktura_id = f.id)`,
-    ),
-  );
+  const forfalte = await fakturaerSomSkalPurres();
   for (const { id } of forfalte) {
     try {
       const p = await somSystem((db) => en(db, "select id from faktura.lag_purring($1, 'paaminnelse', true)", [id]));

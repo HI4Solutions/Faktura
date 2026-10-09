@@ -111,7 +111,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `banktransaksjoner`: innbetalinger lest fra organisasjonens egne bankkontoer gjennom open
   banking (Enable Banking, type `bank` i `integrasjoner`: egen applikasjon per organisasjon,
   privat nøkkel KMS-kryptert, bare workeren bruker den). Workeren henter på faste tider hver
-  dag (`HENTETIDER` i `bank.ts`, kl. 06, 12 og 18 norsk tid, innenfor PSD2-grensen på fire
+  dag (`HENTETIDER` i `bank.ts`, kl. 07, 12 og 18 norsk tid, innenfor PSD2-grensen på fire
   hentinger i døgnet uten brukeren; «Hent nå» kommer i tillegg). Hver hentetid tas én gang per
   bank (atomisk, også med flere instanser), og en som ble gått glipp av, tas igjen før neste.
   Appen viser hentetidene, neste henting og når det sist ble hentet, med «Hent innbetalinger
@@ -119,8 +119,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   oversikten), henter den med brukeren til stede (`POST …/bank/hent` med `apnet`: høyst hvert
   kvarter, og bare for dem som kan registrere betalinger), og den første hentingen etter BankID
   skjer også med brukeren til stede. IP-adressen og nettleseren (PSU-headerne) sendes bare da
-  og ved «Hent nå», aldri fra de faste hentetidene. Innbetalinger som ikke er bokført i banken
-  ennå, lagres ikke (de telles i hentingen). Innbetalingene kobles
+  og ved «Hent nå», aldri fra de faste hentetidene. Innbetalinger som bare er reservert i banken
+  (ikke bokført ennå; DNB bokfører innbetalinger fra andre banker gjerne morgenen etter, derfor
+  er den første hentetiden kl. 07), registreres ikke, men lagres for seg (`reserverte_innbetalinger`,
+  se under). Innbetalingene kobles
   til fakturaer: KID eller fakturanummer i meldingen
   registreres med en gang (`koble_banktransaksjon`), samme beløp og betaler blir forslag,
   resten uavklart. Uten KID-avtale med banken. Innbetalinger fra før startdatoen
@@ -132,6 +134,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `kontoer`) vises og leses, hver fra sin egen dato. Appen legger til og fjerner banker;
   workeren lager BankID-adressen, fullfører økten og henter, og appen venter på svaret ved
   å spørre etter statusen
+- `reserverte_innbetalinger`: innbetalinger som er reservert i banken, men ikke bokført ennå,
+  med fakturaen de trolig gjelder (samme regler som over). Hver henting fra en konto erstatter
+  kontoens reserverte med det banken sender nå, så de som blir bokført (og da registreres som
+  vanlig) eller slettet i banken, forsvinner. Uten reserverte i svaret, og med brukeren til
+  stede, spør appen etter dem for seg (`transaction_status=PDNG`); aldri på de faste
+  hentetidene, der det ville brukt av grensen på fire hentinger i døgnet. Appen viser dem under
+  Innbetalinger («Reservert i banken»), på fakturaen («Betaling reservert») og i oversikten, og
+  den automatiske betalingspåminnelsen venter mens en reservert innbetaling trolig gjelder
+  fakturaen. De registreres aldri som betaling: en reservasjon kan ennå endres eller slettes
 - `bankhentinger`: hver henting fra en bank (`loggHenting` i `bank.ts`): hvorfor (de faste
   hentetidene, «Hent nå», appen åpnet eller etter BankID), hva banken sendte (transaksjonene,
   innbetalingene som er bokført og de som ikke er det ennå, den nyeste bokføringsdatoen), hva

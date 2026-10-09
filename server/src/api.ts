@@ -695,7 +695,8 @@ export function lagApi() {
                   (select count(*) from faktura.purringer p where p.faktura_id = f.id) as antall_purringer,
                   (select count(*)::int from faktura.vedlegg v where v.faktura_id = f.id) as antall_vedlegg,
                   (select s.status from faktura.ehf_sendinger s where s.faktura_id = f.id order by s.opprettet desc limit 1) as ehf_status,
-                  (select e.status from faktura.eposter e where e.faktura_id = f.id order by e.opprettet desc limit 1) as epost_status
+                  (select e.status from faktura.eposter e where e.faktura_id = f.id order by e.opprettet desc limit 1) as epost_status,
+                  (f.status = 'utstedt' and exists (select 1 from faktura.reserverte_innbetalinger r where r.faktura_id = f.id)) as reservert
              from faktura.fakturaer f join faktura.kunder k on k.id = f.kunde_id
             where ${vilkar.join(" and ")}
             order by f.fakturanummer desc nulls first, f.opprettet desc
@@ -715,13 +716,15 @@ export function lagApi() {
         const purringer = await alle(db, "select * from faktura.purringer where faktura_id = $1 order by nummer", [f.id]);
         const eposter = await alle(db, "select id, purring_id, til, kopi, emne, status, detaljer, siste_hendelse_at, opprettet from faktura.eposter where faktura_id = $1 order by opprettet", [f.id]);
         const ehf = await alle(db, "select id, mottaker, status, feil_kategori, detaljer, opprettet, oppdatert from faktura.ehf_sendinger where faktura_id = $1 order by opprettet", [f.id]);
+        // Innbetalinger som trolig gjelder fakturaen, men som banken ikke har bokført ennå.
+        const reservert = await alle(db, "select id, dato, belop, valuta, betaler, grunn from faktura.reserverte_innbetalinger where faktura_id = $1 order by dato, sett", [f.id]);
         // Et utkast får neste nummer i serien når det sendes, og fratrekket for makstaket da.
         const neste =
           f.status === "utkast"
             ? ((await en(db, "select neste_fakturanummer from faktura.nummerserier where org_id = $1", [orgId(c)]))?.neste_fakturanummer ?? null)
             : null;
         const makstak_linjer = f.status === "utkast" ? await makstakLinjer(db, f) : [];
-        return { ...f, betalinger, kreditnotaer, purringer, eposter, ehf, neste_fakturanummer: neste, makstak_linjer };
+        return { ...f, betalinger, kreditnotaer, purringer, eposter, ehf, reservert, neste_fakturanummer: neste, makstak_linjer };
       }),
     ),
   );

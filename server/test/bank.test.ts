@@ -8,9 +8,10 @@ import { config } from "../src/config.js";
 import { lagApi } from "../src/api.js";
 import { alle, en, somSystem } from "../src/db.js";
 import { settKryptering } from "../src/kryptering.js";
-import { lagJwt, nokkelFeil, normaliserPem, oppsummer, settBankFetch, tilInnbetalinger, velgBank, type Bank, type Innbetaling } from "../src/enableBanking.js";
+import { lagJwt, nokkelFeil, normaliserPem, oppsummer, settBankFetch, tilInnbetalinger, tilReserverte, velgBank, type Bank, type Innbetaling } from "../src/enableBanking.js";
 import { finnFaktura, fullforBankOkt, hentInnbetalinger, lagBankAdresse, planleggBankhenting, sammeNavn, sisteHentetid, slettBankOkter, type ApenFaktura } from "../src/bank.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
+import { fakturaerSomSkalPurres } from "../src/worker.js";
 
 const { privateKey: privat, publicKey: offentlig } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -60,6 +61,30 @@ describe("Enable Banking: signatur og transaksjoner", () => {
       ]),
     ).toEqual({ transaksjoner: 5, inn: 2, ventende: 1, nyeste: "2026-10-08" });
     expect(oppsummer([])).toEqual({ transaksjoner: 0, inn: 0, ventende: 0, nyeste: null });
+  });
+
+  it("tar med reserverte innbetalinger for seg, men ikke kansellerte, avviste og utbetalinger", () => {
+    const reservert = { transaction_amount: { amount: "2500.00", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG", transaction_date: "2026-10-08", debtor: { name: "FJORDLINE" }, remittance_information: ["Faktura 2"] };
+    const r = tilReserverte(
+      [
+        reservert,
+        { transaction_amount: { amount: "300", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "BOOK", booking_date: "2026-10-08" },
+        { transaction_amount: { amount: "300", currency: "NOK" }, credit_debit_indicator: "CRDT", booking_date: "2026-10-08" },
+        { transaction_amount: { amount: "400", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "CNCL", transaction_date: "2026-10-08" },
+        { transaction_amount: { amount: "400", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "RJCT", transaction_date: "2026-10-08" },
+        { transaction_amount: { amount: "500", currency: "NOK" }, credit_debit_indicator: "DBIT", status: "PDNG", transaction_date: "2026-10-08" },
+        { entry_reference: "h1", transaction_amount: { amount: "50", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "HOLD" },
+      ],
+      "2026-10-09",
+    );
+    expect(r.map((t) => [t.ekstern_id.startsWith("fp:") ? "fp" : t.ekstern_id, t.dato, t.belop, t.betaler, t.melding])).toEqual([
+      ["fp", "2026-10-08", 2500, "FJORDLINE", "Faktura 2"],
+      ["h1", "2026-10-09", 50, null, null], // uten dato fra banken: i dag
+    ]);
+    // Samme reservasjon får samme id ved neste henting.
+    expect(tilReserverte([reservert], "2026-10-10")[0].ekstern_id).toBe(r[0].ekstern_id);
+    // Og de bokførte tas ikke med blant de reserverte, eller omvendt.
+    expect(tilInnbetalinger([reservert])).toEqual([]);
   });
 
   it("gjør om en nøkkel limt inn på én linje til vanlig PEM", () => {
@@ -286,7 +311,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(kall.at(-1)!.kropp).toEqual({ code: "kode-1" });
     const s = await bankStatus();
     expect(s.tilkoblet).toBe(true);
-    expect(s.hentetider).toEqual(["06:00", "12:00", "18:00"]);
+    expect(s.hentetider).toEqual(["07:00", "12:00", "18:00"]);
     expect(s.koblinger[0]).toMatchObject({ id: dnbId, bank: "DNB", tilkoblet: true, status: "aktiv", gyldig_til: "2027-04-04T10:00:00.000Z", siste_feil: null, auth_url: null });
     expect(s.koblinger[0].fullfort).toBeTruthy();
     // Organisasjonens kontonummer er lagt inn; sparekontoen er ikke det, og vises ikke.
@@ -311,8 +336,16 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
                 inn("t2", 2500, "FJORDLINE LOGISTIKK AS", "Betaling"),
                 inn("t4", 99, "Ukjent"),
                 { entry_reference: "t5", transaction_amount: { amount: "500.00", currency: "NOK" }, credit_debit_indicator: "DBIT", status: "BOOK", booking_date: dag },
-                // Ikke bokført i banken ennå: lagres ikke, men telles i hentingen.
-                { entry_reference: "p1", transaction_amount: { amount: "700.00", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG", transaction_date: dag },
+                // Reservert, ikke bokført i banken ennå: lagres for seg, ikke som innbetaling.
+                {
+                  entry_reference: "p1",
+                  transaction_amount: { amount: "700.00", currency: "NOK" },
+                  credit_debit_indicator: "CRDT",
+                  status: "PDNG",
+                  transaction_date: dag,
+                  debtor: { name: "FJORDLINE LOGISTIKK AS" },
+                  remittance_information: ["Faktura 2"],
+                },
               ],
               continuation_key: "side-2",
             });
@@ -321,6 +354,10 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     // Hentingen er lagret: hva banken sendte (også det som ikke er bokført ennå), og hva som ble nytt.
     expect(await hentinger()).toEqual([
       expect.objectContaining({ kobling_id: dnbId, bank: "DNB", kilde: "automatisk", fra: dagerSiden(60), kontoer: 1, transaksjoner: 6, inn: 4, ventende: 1, nye: 4, koblet: 1, forslag: 2, nyeste: dag, feil: null }),
+    ]);
+    // Den reserverte vises for seg, med fakturaen den trolig gjelder.
+    expect(await somSystem((db) => alle(db, "select konto, ekstern_id, dato, belop, faktura_id, grunn from faktura.reserverte_innbetalinger where org_id = $1", [org]))).toEqual([
+      { konto: "86011117947", ekstern_id: "p1", dato: dag, belop: 700, faktura_id: fakturaer[2], grunn: "Fakturanummer 2 i meldingen (delbetaling)" },
     ]);
     // Bare driftskontoen leses, de siste 60 dagene første gang.
     expect(kall.filter((k) => k.sti.startsWith("/accounts/")).every((k) => k.sti.startsWith("/accounts/k-drift/") && k.psu === null)).toBe(true);
@@ -476,9 +513,12 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     );
     const for_ = kall.length;
     await hentInnbetalinger(org, { psu: o.psu, kilde: o.kilde });
+    // Uten reserverte i svaret spør appen etter dem for seg (brukeren er til stede).
     expect(kall.slice(for_).map((k) => [k.sti, k.psu])).toEqual([
       ["/accounts/k-drift/transactions?date_from=2026-09-20", "203.0.113.9"],
+      ["/accounts/k-drift/transactions?date_from=2026-09-20&transaction_status=PDNG", "203.0.113.9"],
       [`/accounts/k-husleie/transactions?date_from=${dagerSiden(5)}`, "203.0.113.9"],
+      [`/accounts/k-husleie/transactions?date_from=${dagerSiden(5)}&transaction_status=PDNG`, "203.0.113.9"],
     ]);
     expect((await kobling(dnbId))!.kontoer[0]).toMatchObject({ kontonr: "86011117947", hent_fra: dagerSiden(5) });
     expect((await hentinger()).slice(-2).map((h: any) => [h.bank, h.kilde, h.fra])).toEqual([
@@ -522,8 +562,10 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
   });
 
   it("hentetidene følger norsk tid, også vintertid", () => {
-    expect(sisteHentetid(new Date("2026-10-06T03:59:00Z"))).toBeNull(); // 05:59 (sommertid)
-    expect(sisteHentetid(new Date("2026-10-06T04:00:00Z"))!.toISOString()).toBe("2026-10-06T04:00:00.000Z"); // 06:00
+    expect(sisteHentetid(new Date("2026-10-06T04:30:00Z"))).toBeNull(); // 06:30 (sommertid)
+    expect(sisteHentetid(new Date("2026-10-06T04:59:00Z"))).toBeNull(); // 06:59
+    expect(sisteHentetid(new Date("2026-10-06T05:00:00Z"))!.toISOString()).toBe("2026-10-06T05:00:00.000Z"); // 07:00
+    expect(sisteHentetid(new Date("2026-12-01T06:00:00Z"))!.toISOString()).toBe("2026-12-01T06:00:00.000Z"); // 07:00 (vintertid)
     expect(sisteHentetid(new Date("2026-10-06T15:59:00Z"))!.toISOString()).toBe("2026-10-06T10:00:00.000Z"); // 17:59 → 12:00
     expect(sisteHentetid(new Date("2026-12-01T11:30:00Z"))!.toISOString()).toBe("2026-12-01T11:00:00.000Z"); // 12:30 (vintertid) → 12:00
     expect(sisteHentetid(new Date("2026-12-01T22:30:00Z"))!.toISOString()).toBe("2026-12-01T17:00:00.000Z"); // 23:30 → 18:00
@@ -680,6 +722,92 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(kall.slice(for2).map((k) => k.sti)).toEqual(["/accounts/k-drift-2/transactions?date_from=2026-09-01"]);
   });
 
+  it("reserverte innbetalinger: vises, påminnelsen venter, og de registreres når banken har bokført dem", async () => {
+    // Fakturaen forfaller i dag, og påminnelsen sendes av seg selv samme dag.
+    expect((await api("PATCH", `/api/org/${org}`, { purring_auto: true, purring_dager: 0 })).status).toBe(200);
+    const ola = (await api("POST", `/api/org/${org}/kunder`, { navn: "Ola Reservert", type: "person", epost: "ola@reservert.no" })).data.id;
+    const utkast = (
+      await api("POST", `/api/org/${org}/fakturaer`, { kunde_id: ola, forfallsdato: dag, linjer: [{ beskrivelse: "Husleie", antall: 1, enhet: "mnd", enhetspris: 1200, mva_sats: 25 }] })
+    ).data;
+    const u = await api("POST", `/api/org/${org}/fakturaer/${utkast.id}/utsted`, { send_epost: false });
+    expect(u.data.fakturanummer).toBe(5);
+    fakturaer[5] = utkast.id;
+    const purres = async () => (await fakturaerSomSkalPurres()).some((x) => x.id === fakturaer[5]);
+    const reserverte = () => somSystem((db) => alle(db, "select * from faktura.reserverte_innbetalinger where org_id = $1 order by sett", [org]));
+    expect(await purres()).toBe(true);
+
+    // Kunden har betalt, men banken har bare reservert innbetalingen (uten id fra banken).
+    const reservert = {
+      transaction_amount: { amount: "1500.00", currency: "NOK" },
+      credit_debit_indicator: "CRDT",
+      status: "PDNG",
+      transaction_date: dag,
+      debtor: { name: "OLA RESERVERT" },
+      remittance_information: ["Faktura 5"],
+    };
+    svar["GET /accounts/:uid/transactions"] = (k) => json(200, { transactions: k.sti.includes("transaction_status") ? [] : [reservert] });
+    const for_ = kall.length;
+    expect(await hentInnbetalinger(org)).toEqual({ nye: 0, koblet: 0, forslag: 0 });
+    // De faste hentetidene spør ikke etter de reserverte for seg.
+    expect(kall.slice(for_).map((k) => k.sti)).toEqual([`/accounts/k-drift-2/transactions?date_from=${dagerSiden(5)}`]);
+    const lagret = await reserverte();
+    expect(lagret).toEqual([
+      expect.objectContaining({ konto: "86011117947", dato: dag, belop: 1500, betaler: "OLA RESERVERT", melding: "Faktura 5", faktura_id: fakturaer[5], grunn: "Fakturanummer 5 i meldingen" }),
+    ]);
+    expect((await hentinger()).at(-1)).toMatchObject({ kilde: "automatisk", ventende: 1, nye: 0, feil: null });
+
+    // Appen viser den under Innbetalinger og på fakturaen, og påminnelsen venter.
+    expect((await bankStatus()).reserverte).toEqual([
+      expect.objectContaining({ dato: dag, belop: 1500, betaler: "OLA RESERVERT", fakturanummer: 5, faktura_id: fakturaer[5], grunn: "Fakturanummer 5 i meldingen" }),
+    ]);
+    expect((await api("GET", `/api/org/${org}/fakturaer/${fakturaer[5]}`)).data.reservert).toEqual([
+      expect.objectContaining({ dato: dag, belop: 1500, betaler: "OLA RESERVERT", grunn: "Fakturanummer 5 i meldingen" }),
+    ]);
+    const liste = (await api("GET", `/api/org/${org}/fakturaer`)).data;
+    expect(liste.filter((f: any) => f.reservert).map((f: any) => f.fakturanummer)).toEqual([5]);
+    expect(await purres()).toBe(false);
+    expect(await status(5)).toBe("utstedt");
+
+    // Neste henting: samme reservasjon (samme fingeravtrykk), ikke en ny.
+    await hentInnbetalinger(org);
+    expect((await reserverte()).map((r: any) => [r.id, r.ekstern_id, new Date(r.sett).getTime()])).toEqual([
+      [lagret[0].id, lagret[0].ekstern_id, new Date(lagret[0].sett).getTime()],
+    ]);
+
+    // Med brukeren til stede, og uten reserverte i svaret, spør appen etter dem for seg.
+    const psu = { ip: "203.0.113.9", agent: "Testleser/1.0" };
+    svar["GET /accounts/:uid/transactions"] = (k) => json(200, { transactions: k.sti.includes("transaction_status=PDNG") ? [reservert] : [] });
+    const for2 = kall.length;
+    await hentInnbetalinger(org, { psu, kilde: "manuell" });
+    expect(kall.slice(for2).map((k) => [k.sti, k.psu])).toEqual([
+      [`/accounts/k-drift-2/transactions?date_from=${dagerSiden(5)}`, "203.0.113.9"],
+      [`/accounts/k-drift-2/transactions?date_from=${dagerSiden(5)}&transaction_status=PDNG`, "203.0.113.9"],
+    ]);
+    expect((await reserverte()).map((r: any) => r.id)).toEqual([lagret[0].id]);
+    // Svarer banken med en feil på det, blir de som er lagret, stående.
+    svar["GET /accounts/:uid/transactions"] = (k) => (k.sti.includes("transaction_status") ? json(400, { message: "Ikke støttet" }) : json(200, { transactions: [] }));
+    await hentInnbetalinger(org, { psu, kilde: "manuell" });
+    expect((await reserverte()).map((r: any) => r.id)).toEqual([lagret[0].id]);
+    expect((await hentinger()).at(-1)).toMatchObject({ kilde: "manuell", feil: null });
+
+    // Reservasjonen forsvinner i banken uten å bli bokført: borte i appen, og påminnelsen kan sendes.
+    svar["GET /accounts/:uid/transactions"] = () => json(200, { transactions: [] });
+    await hentInnbetalinger(org);
+    expect(await reserverte()).toEqual([]);
+    expect(await purres()).toBe(true);
+
+    // Reservert igjen, og bokført morgenen etter: registreres på fakturaen, og den reserverte er borte.
+    svar["GET /accounts/:uid/transactions"] = () => json(200, { transactions: [reservert] });
+    await hentInnbetalinger(org);
+    expect(await reserverte()).toHaveLength(1);
+    svar["GET /accounts/:uid/transactions"] = () => json(200, { transactions: [{ ...reservert, status: "BOOK", booking_date: dag, entry_reference: "b5" }] });
+    expect(await hentInnbetalinger(org)).toEqual({ nye: 1, koblet: 1, forslag: 0 });
+    expect(await status(5)).toBe("betalt");
+    expect(await reserverte()).toEqual([]);
+    expect((await bankStatus()).reserverte).toEqual([]);
+    expect(await purres()).toBe(false);
+  });
+
   it("kobler fra alt: øktene avsluttes, og nøkkelen og bankene slettes", async () => {
     expect((await api("DELETE", `/api/org/${org}/bank`, undefined, fremmed)).status).toBe(403);
     expect((await api("DELETE", `/api/org/${org}/bank`)).status).toBe(204);
@@ -692,6 +820,6 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect((await api("DELETE", `/api/org/${org}/bank`)).status).toBe(404);
     expect((await api("POST", `/api/org/${org}/bank/koblinger`, { bank: "DNB", psu_type: "business" })).status).toBe(409);
     // Innbetalingene og betalingene står igjen.
-    expect((await api("GET", `/api/org/${org}/banktransaksjoner?status=alle`)).data.transaksjoner).toHaveLength(8);
+    expect((await api("GET", `/api/org/${org}/banktransaksjoner?status=alle`)).data.transaksjoner).toHaveLength(9);
   });
 });

@@ -27,6 +27,7 @@ import {
   slettOkt,
   startAutorisering,
   tilInnbetalinger,
+  tilReserverte,
   velgBank,
   type BankNokkel,
   type Innbetaling,
@@ -78,7 +79,8 @@ const somDato = (d: unknown) => (d instanceof Date ? d.toISOString() : d == null
 
 // Når workeren henter av seg selv hver dag (norsk tid). Bankene tillater høyst fire hentinger
 // i døgnet uten at brukeren er til stede (PSD2); «Hent nå» teller ikke med. Appen viser tidene.
-export const HENTETIDER = ["06:00", "12:00", "18:00"];
+// Den første er kl. 07: DNB bokfører innbetalingene som ble reservert dagen før, etter kl. 06.
+export const HENTETIDER = ["07:00", "12:00", "18:00"];
 
 // Dato (ÅÅÅÅ-MM-DD) og klokkeslett (TT:MM) i Oslo.
 const osloFormat = new Intl.DateTimeFormat("en-GB", {
@@ -427,6 +429,33 @@ async function loggHenting(orgId: string, k: Bankkobling, kilde: Hentekilde, h: 
   }
 }
 
+// Kontoens reserverte innbetalinger (ikke bokført i banken ennå) erstattes med dem banken sender
+// nå, så de som er bokført eller slettet i banken, forsvinner. Hver får fakturaen den trolig
+// gjelder (samme regler som for de bokførte), men registreres ikke før banken har bokført den.
+async function lagreReserverte(orgId: string, kontonummer: string, reserverte: Innbetaling[]) {
+  await somSystem(async (db) => {
+    await db.query("delete from faktura.reserverte_innbetalinger where org_id = $1 and konto = $2 and not (ekstern_id = any($3::text[]))", [
+      orgId,
+      kontonummer,
+      reserverte.map((t) => t.ekstern_id),
+    ]);
+    const apne = reserverte.length ? await apneFakturaer(db, orgId) : [];
+    for (const t of reserverte) {
+      const treff = t.valuta === "NOK" ? finnFaktura(t, apne) : null;
+      await db.query(
+        `insert into faktura.reserverte_innbetalinger (org_id, konto, ekstern_id, dato, belop, valuta, betaler, betaler_konto, melding, referanse, faktura_id, grunn)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         on conflict (org_id, konto, ekstern_id) do update
+            set dato = excluded.dato, belop = excluded.belop, valuta = excluded.valuta, betaler = excluded.betaler,
+                betaler_konto = excluded.betaler_konto, melding = excluded.melding, referanse = excluded.referanse,
+                faktura_id = excluded.faktura_id, grunn = excluded.grunn, sist_sett = now()`,
+        [orgId, kontonummer, t.ekstern_id, t.dato, t.belop, t.valuta, t.betaler, t.betaler_konto, t.melding, t.referanse,
+         treff?.faktura_id ?? null, treff?.faktura_id ? treff.grunn : null],
+      );
+    }
+  });
+}
+
 // Henter nye innbetalinger fra kontoene som er lagt inn i HI4 Faktura, i én eller alle
 // bankene, og kobler dem til fakturaene.
 export async function hentInnbetalinger(orgId: string, valg: { koblingId?: string; psu?: Psu; kilde?: Hentekilde } = {}): Promise<Resultat> {
@@ -455,7 +484,11 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
   // Faktura) hentes ikke, og de som er hentet fra før, ryddes bort.
   const startdato = start ?? iDag(-60);
   try {
-    await somSystem((db) => db.query("select faktura.rydd_banktransaksjoner($1)", [orgId]));
+    await somSystem(async (db) => {
+      await db.query("select faktura.rydd_banktransaksjoner($1)", [orgId]);
+      // Reserverte fra kontoer som ikke er hentet fra på flere dager (banken eller kontoen er fjernet).
+      await db.query("delete from faktura.reserverte_innbetalinger where org_id = $1 and sist_sett < now() - interval '3 days'", [orgId]);
+    });
   } catch (e) {
     logg("ERROR", "Kunne ikke rydde gamle innbetalinger", { org_id: orgId, feil: (e as Error).message });
   }
@@ -471,15 +504,34 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
         const fra = senest(hentesFra(k, konto) ?? iDag(-60), startdato);
         const rader = await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu);
         const o = oppsummer(rader);
+        let reserverte: Innbetaling[] | null = tilReserverte(rader, iDag());
+        // Med brukeren til stede, og uten reserverte i svaret: spør etter dem for seg (ikke alle
+        // banker sender dem uten at det bes om det). Aldri på de faste hentetidene, der det ville
+        // brukt av bankens grense for hentinger uten brukeren. Går det galt, blir de reserverte
+        // som er lagret fra før, stående.
+        if (valg.psu && !reserverte.length) {
+          try {
+            reserverte = tilReserverte(await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu, "PDNG"), iDag());
+          } catch (e) {
+            reserverte = null;
+            logg("WARNING", "Kunne ikke hente reserverte innbetalinger", { org_id: orgId, bank: k.bank, feil: (e as Error).message });
+          }
+        }
         Object.assign(h, {
           fra: !h.fra || fra < h.fra ? fra : h.fra,
           kontoer: h.kontoer + 1,
           transaksjoner: h.transaksjoner + o.transaksjoner,
           inn: h.inn + o.inn,
-          ventende: h.ventende + o.ventende,
+          ventende: h.ventende + (reserverte?.length ?? o.ventende),
           nyeste: o.nyeste && (!h.nyeste || o.nyeste > h.nyeste) ? o.nyeste : h.nyeste,
         });
         for (const t of tilInnbetalinger(rader)) if (t.dato >= startdato) await lagreOgKoble(orgId, konto.kontonr, t, resultat, ai);
+        if (reserverte)
+          await lagreReserverte(
+            orgId,
+            konto.kontonr,
+            reserverte.filter((t) => t.dato >= startdato),
+          ).catch((e) => logg("WARNING", "Kunne ikke lagre de reserverte innbetalingene", { org_id: orgId, bank: k.bank, feil: (e as Error).message }));
       }
       // Neste gang hentes de siste dagene på nytt: banker kan bokføre noen dager etter.
       await merkHentet(k.id, kontoer.map((x) => x.kontonr), iDag(-5));

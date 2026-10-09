@@ -135,7 +135,9 @@ export const statusTekst: Record<string, string> = {
   kreditert: "Kreditert",
 };
 
-export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: string; refusjon_belop?: number; betalt_belop?: number; kreditert_belop?: number; antall_purringer?: number; epost_status?: string | null; ehf_status?: string | null }) {
+export function fakturaMerke(f: { status: string; forfalt?: boolean; type?: string; refusjon_belop?: number; betalt_belop?: number; kreditert_belop?: number; antall_purringer?: number; epost_status?: string | null; ehf_status?: string | null; reservert?: boolean }) {
+  // En innbetaling som trolig gjelder fakturaen, er reservert i banken (ikke bokført ennå).
+  if (f.status === "utstedt" && f.reservert) return { tekst: "Betaling reservert", klasse: "merke-ok" };
   // EHF som ikke kom fram (uten e-post i stedet), eller der vi ikke vet om den ble sendt.
   if (f.status === "utstedt" && f.ehf_status === "sender") return { tekst: "EHF usikker", klasse: "merke-advarsel" };
   if (f.status === "utstedt" && f.ehf_status === "feilet" && !f.epost_status) return { tekst: "EHF feilet", klasse: "merke-fare" };

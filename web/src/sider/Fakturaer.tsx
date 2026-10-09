@@ -934,7 +934,13 @@ export function FakturaVisning() {
   const sisteEpost = f.eposter?.at(-1);
   const sisteEhf = f.ehf?.at(-1);
   const viaEhf = f.sendt_til?.startsWith("EHF");
-  const m = fakturaMerke({ ...f, forfalt: f.status === "utstedt" && f.forfallsdato < iDag(), antall_purringer: f.purringer?.length ?? 0, epost_status: sisteEpost?.status });
+  const m = fakturaMerke({
+    ...f,
+    forfalt: f.status === "utstedt" && f.forfallsdato < iDag(),
+    antall_purringer: f.purringer?.length ?? 0,
+    epost_status: sisteEpost?.status,
+    reservert: f.reservert?.length > 0,
+  });
   const forfalt = f.type === "faktura" && f.status === "utstedt" && f.forfallsdato < iDag();
   const sistePurring = f.purringer?.at(-1);
   const kanPurre = forfalt && (!sistePurring || sistePurring.ny_frist < iDag());
@@ -1200,6 +1206,18 @@ export function FakturaVisning() {
         )}
       </div>
 
+      {f.status === "utstedt" && f.reservert?.length > 0 && (
+        <div className="melding ok">
+          {f.reservert.map((r: any) => (
+            <div key={r.id}>
+              En innbetaling på {kr(r.belop)}
+              {r.betaler ? ` fra ${r.betaler}` : ""} ({dato(r.dato)}) er reservert i banken og gjelder trolig denne fakturaen
+              {r.grunn ? ` (${r.grunn})` : ""}.
+            </div>
+          ))}
+          <div className="liten">Den registreres når banken har bokført den. Den automatiske påminnelsen venter så lenge.</div>
+        </div>
+      )}
       {forfalt && sistePurring && sistePurring.ny_frist >= iDag() && (
         <div className="melding info">
           {sistePurring.type === "inkassovarsel" ? "Inkassovarsel" : "Påminnelse"} sendt {dato(sistePurring.sendt_at ?? sistePurring.opprettet)}. Ny frist{" "}

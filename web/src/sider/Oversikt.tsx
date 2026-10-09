@@ -315,6 +315,12 @@ function BankMelding({ s }: { s: BankStatus }) {
           <Link to="/innbetalinger">Se over</Link>
         </div>
       )}
+      {(s.reserverte?.length ?? 0) > 0 && (
+        <div className="melding info">
+          {s.reserverte!.length === 1 ? "En innbetaling er reservert" : `${s.reserverte!.length} innbetalinger er reservert`} i banken og registreres når
+          banken har bokført {s.reserverte!.length === 1 ? "den" : "dem"}. <Link to="/innbetalinger">Se</Link>
+        </div>
+      )}
     </>
   );
 }

@@ -47,6 +47,24 @@ export interface BankStatus {
   antall: { forslag: number; uavklart: number; koblet: number; ignorert: number };
   ai: boolean; // AI kan foreslå fakturaen for uavklarte innbetalinger
   hentinger?: Henting[]; // de siste hentingene fra bankene (nyeste først)
+  reserverte?: Reservert[]; // innbetalinger som er reservert i banken (ikke bokført ennå)
+}
+
+// En innbetaling som er reservert i banken, med fakturaen den trolig gjelder. Registreres når
+// banken har bokført den.
+export interface Reservert {
+  id: string;
+  konto: string;
+  dato: string;
+  belop: number;
+  valuta: string;
+  betaler: string | null;
+  melding: string | null;
+  referanse: string | null;
+  grunn: string | null;
+  faktura_id: string | null;
+  fakturanummer: number | null;
+  sett: string;
 }
 
 // Én henting fra en bank: hva banken sendte, og hva som ble nytt (eller feilen).
@@ -175,7 +193,7 @@ export function hentingTekst(h: Henting) {
     `${flertall(h.transaksjoner, "transaksjon", "transaksjoner")} fra banken`,
     h.nye ? `${flertall(h.nye, "ny innbetaling", "nye innbetalinger")}${utfall.length ? ` (${utfall.join(", ")})` : ""}` : "ingen nye innbetalinger",
   ];
-  if (h.ventende) deler.push(`${flertall(h.ventende, "innbetaling", "innbetalinger")} ikke bokført i banken ennå`);
+  if (h.ventende) deler.push(flertall(h.ventende, "reservert innbetaling (ikke bokført ennå)", "reserverte innbetalinger (ikke bokført ennå)"));
   if (h.nyeste) deler.push(`nyeste bokført ${dato(h.nyeste)}`);
   return deler.join(" · ");
 }
@@ -201,6 +219,49 @@ function Hentelogg({ hentinger }: { hentinger: Henting[] }) {
         innbetalinger nå», henter appen med deg til stede.
       </p>
     </details>
+  );
+}
+
+// Innbetalingene som er reservert i banken, men ikke bokført ennå, med fakturaen hver trolig gjelder.
+function Reserverte({ reserverte, kontoNavn }: { reserverte: Reservert[]; kontoNavn: Map<string, string> | null }) {
+  if (!reserverte.length) return null;
+  return (
+    <div className="kort liste innbetalinger reserverte">
+      <div className="reserverte-topp">
+        <strong>Reservert i banken</strong>
+        <span className="liten dempet">
+          Ikke bokført i banken ennå. De registreres når banken har bokført dem (DNB gjør det gjerne morgenen etter), og den automatiske påminnelsen for fakturaen
+          venter så lenge.
+        </span>
+      </div>
+      {reserverte.map((r) => (
+        <div key={r.id} className="innbetaling reservert">
+          <div className="linje">
+            <span className="tittel">{r.betaler ?? "Ukjent betaler"}</span>
+            <span className="belop">
+              {kr(r.belop)}
+              {r.valuta !== "NOK" ? ` ${r.valuta}` : ""}
+            </span>
+          </div>
+          <div className="linje under">
+            <span>
+              {dato(r.dato)}
+              {kontoNavn?.get(r.konto) ? ` · til ${kontoNavn.get(r.konto)}` : ""}
+              {r.melding ? ` · «${r.melding}»` : ""}
+              {r.referanse && r.referanse !== r.melding ? ` · ref. ${r.referanse}` : ""}
+            </span>
+          </div>
+          {r.faktura_id && (
+            <div className="forslag koblet">
+              <span>
+                Trolig <Link to={`/fakturaer/${r.faktura_id}`}>faktura {r.fakturanummer}</Link>
+                {r.grunn ? <span className="dempet"> – {r.grunn}</span> : null}
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -851,6 +912,7 @@ export function Innbetalinger() {
             )}
           </div>
         ))}
+      {bank.data?.reserverte && <Reserverte reserverte={bank.data.reserverte} kontoNavn={kontoNavn} />}
       <div className="faner" role="tablist">
         {faner.map(([v, t]) => (
           <button key={v} role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : ""} onClick={() => settSok(v === "se" ? {} : { vis: v }, { replace: true })}>

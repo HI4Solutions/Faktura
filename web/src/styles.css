@@ -612,6 +612,10 @@ button.oye:active:not(:disabled) { transform: none; }
 .innbetaling .forslag.uavklart { background: var(--flate-2); }
 .innbetaling .forslag.koblet, .innbetaling .forslag.ignorert { background: none; padding: 0; margin-top: 2px; }
 .innbetaling .forslag .knapper { gap: 6px; }
+/* Reservert i banken (ikke bokført ennå): over fanene på Innbetalinger */
+.innbetalinger.reserverte { margin-bottom: 1rem; }
+.reserverte-topp { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid var(--kant); background: var(--flate-2); }
+.innbetaling.reservert .belop { color: var(--tekst-2); }
 .advarsel-tekst { color: var(--advarsel); }
 ol.steg { padding-left: 20px; margin: 4px 0 16px; }
 ol.steg li { margin-bottom: 8px; line-height: 1.5; }
