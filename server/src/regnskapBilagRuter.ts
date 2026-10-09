@@ -313,6 +313,8 @@ export function regnskapBilagRuter() {
         if (bilag.kilde === "faktura") throw new ApiFeil(409, "En faktura rettes med en kreditnota (Fakturaer), og kreditnotaen bokføres av seg selv");
         if (bilag.kilde === "innbetaling")
           throw new ApiFeil(409, "En innbetaling reverseres ved å ta bort betalingen på fakturaen (eller koble innbetalingen fra fakturaen under Innbetalinger)");
+        if (bilag.kilde === "utgift" || bilag.kilde === "utgift_betaling")
+          throw new ApiFeil(409, "En utgift rettes under Regnskap → Utgifter (Angre bokføringen)");
         if (!fn[bilag.kilde]) throw new ApiFeil(409, "Bilaget kan ikke reverseres her");
         const ny = await en<{ id: string }>(db, `select faktura.${fn[bilag.kilde]}($1, $2, $3) as id`, [orgId(c), id, b.tekst ?? null]);
         return (await hentRegnskapsbilag(db, orgId(c), { id: ny!.id }))[0]!;

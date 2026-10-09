@@ -217,6 +217,12 @@ export const IkonMikrofon = (p: P) => (
     <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v4M8.5 21.5h7" />
   </Ikon>
 );
+export const IkonKamera = (p: P) => (
+  <Ikon {...p}>
+    <path d="M3.5 8.5a2 2 0 0 1 2-2h2.2l1.6-2.5h5.4l1.6 2.5h2.2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />
+    <circle cx="12" cy="13" r="3.5" />
+  </Ikon>
+);
 export const IkonTastatur = (p: P) => (
   <Ikon {...p}>
     <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" />

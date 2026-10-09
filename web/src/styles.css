@@ -2649,3 +2649,37 @@ form .valg.valg-kolonne input { margin-top: 3px; }
 .regnskap-maaneder summary { cursor: pointer; color: var(--aksent); font-weight: 550; margin-bottom: 8px; }
 form .valg { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 12px; }
 form .valg label { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+/* Regnskap → Utgifter */
+.utgift-knapper { flex-wrap: wrap; }
+.utgift-kamera { display: none; }
+@media (pointer: coarse) { .utgift-kamera { display: inline-flex; } }
+h2.utgift-gruppe { font-size: 1rem; margin: 22px 0 8px; }
+h2.utgift-gruppe .dempet { font-weight: 450; }
+.utgift-detalj { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr); gap: 20px; align-items: start; }
+.utgift-detalj > form:only-child { grid-column: 1 / -1; }
+.utgift-fil { position: sticky; top: 0; display: flex; flex-direction: column; gap: 6px; }
+.utgift-fil img { width: 100%; max-height: 70vh; object-fit: contain; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate-2); }
+.utgift-fil iframe { width: 100%; height: 70vh; border: 1px solid var(--kant); border-radius: var(--radius-s); background: #fff; }
+.utgift-skjema fieldset { border: 0; padding: 0; margin: 0; background: none; }
+.utgift-skjema fieldset:disabled input, .utgift-skjema fieldset:disabled select { color: var(--tekst); opacity: 1; }
+.utgift-skjema h3 { font-size: 0.95rem; margin: 14px 0 8px; }
+.utgift-linjer, .utgift-behandling { border-top: 1px solid var(--kant); margin-top: 6px; }
+/* Én linje er tre rader: beskrivelsen; hva slags kjøp, kontoen og beløpet; mva-en og fradraget. */
+.utgift-linje { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 10px; align-items: start;
+  padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px dashed var(--kant); }
+.utgift-linje label.bred { grid-column: 1 / -1; }
+.utgift-linje label.kategori { grid-column: span 2; }
+.utgift-linje button.fjern { grid-column: -2 / -1; justify-self: end; align-self: end; padding: 0 0 22px; font-size: 0.84rem; color: var(--dempet); }
+.utgift-linje .felt-hjelp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.utgift-behandling .valg-rad { padding: 0 0 6px; }
+.utgift-vurdering { background: var(--info-lys); color: var(--info); border-radius: var(--radius-s); padding: 10px 12px; margin: 6px 0 10px; font-size: 0.9rem; }
+.utgift-mangler { color: var(--advarsel); margin: 8px 0; padding-left: 18px; }
+.utgift-betal { display: inline-flex; gap: 8px; align-items: center; }
+.utgift-betal input { width: auto; }
+@media (max-width: 900px) {
+  .utgift-detalj { grid-template-columns: minmax(0, 1fr); }
+  .utgift-fil { position: static; }
+  .utgift-fil img { max-height: 40vh; }
+  .utgift-fil iframe { height: 50vh; }
+  .utgift-linje { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

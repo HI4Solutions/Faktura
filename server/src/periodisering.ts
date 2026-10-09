@@ -113,7 +113,7 @@ export function status(p: Periodisering, poster: Periodiseringspost[]) {
 
 // --- Bilagene --------------------------------------------------------------------------------------
 
-export type Postering = { konto: string; belop: number; tekst: string };
+export type Postering = { konto: string; belop: number; tekst: string; mva_kode?: string | null };
 export type Bilagsforslag = {
   dato: string;
   tekst: string;

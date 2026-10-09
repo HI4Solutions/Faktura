@@ -662,7 +662,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   eller er fra før startdatoen (`reverser_salg`; `regnskap_oppsett.salg_fra`). Posteringene
   regnes i API-et (kundefordringen, salget og avgiften per sats med mva-koden i
   `posteringer.mva_kode`, og purregebyret av det som er betalt utover), og databasen kontrollerer
-  dem. `reverser_bilag` tar med mva-kodene
+  dem. `reverser_bilag` tar med mva-kodene. Utgiftene (`0090_utgifter.sql`, `server/src/utgifter.ts`,
+  `server/src/aiUtgift.ts`, `server/src/utgiftVurdering.ts`, `web/src/sider/RegnskapUtgifter.tsx`):
+  leverandørfakturaer og kvitteringer i `utgifter` og `utgift_linjer`. Fila lagres i filer-bøtta og
+  kopieres til fakturabøtta når utgiften bokføres; AI (funksjonen «utgift» i kvoten) fyller ut
+  kladden, og reglene velger kontoen (lært per leverandør og kategori), fradraget og behandlingen.
+  Statusen, bilagene og arkivet settes bare av funksjonene `bokfor_utgift` (serie U, kilde utgift),
+  `koble_utgift` (anleggsmiddelet eller periodiseringen, ført med `bokfor_anlegg` eller
+  `bokfor_periodisering` i samme transaksjon), `betal_utgift` (kilde utgift_betaling),
+  `angre_utgift` og `arkiver_utgift`; en bokført utgift endres og slettes ikke (trigger).
+  `bokfor_anlegg`, `bokfor_periodisering` og `bokfor_manuelt` tar med mva-koden på posteringene
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen

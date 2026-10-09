@@ -12,6 +12,8 @@ import { bokforSalgNaa } from "./salgBokforing.js";
 export const KILDER: Record<string, string> = {
   faktura: "Faktura",
   innbetaling: "Innbetaling",
+  utgift: "Utgift",
+  utgift_betaling: "Betaling av utgift",
   lonn: "Lønn",
   nav_refusjon: "Refusjon fra NAV",
   anlegg: "Anleggsmidler",
@@ -56,6 +58,8 @@ export async function hentRegnskapsbilag(db: Db, org: string, v: { fra?: string;
             case b.kilde
               when 'faktura' then (select '/fakturaer/' || f.id from faktura.fakturaer f where f.id = b.kilde_id)
               when 'innbetaling' then (select '/fakturaer/' || p.faktura_id from faktura.betalinger p where p.id = b.kilde_id)
+              when 'utgift' then '/regnskap?fane=utgifter&utgift=' || b.kilde_id
+              when 'utgift_betaling' then '/regnskap?fane=utgifter&utgift=' || b.kilde_id
               when 'lonn' then '/lonn?kjoring=' || b.kilde_id
             end as lenke
        from faktura.bilag b

@@ -38,7 +38,7 @@ export type Skjema = {
 export type Del = { text: string } | { inlineData: { mimeType: string; data: string } };
 // skjemafeil: svaret fra Google da skjemaet ble avvist, når svaret kom uten skjemaet.
 export type AiSvar<T> = { data: T; tokens_inn: number; tokens_ut: number; skjemafeil?: string };
-export type Funksjon = "faktura" | "innbetaling" | "assistent" | "lonnsslipp";
+export type Funksjon = "faktura" | "innbetaling" | "assistent" | "lonnsslipp" | "utgift";
 
 const logg = (severity: string, message: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ severity, message, ...data }));
 

@@ -31,6 +31,8 @@ type Konto = { konto: string; navn: string };
 export const KILDER: Record<string, string> = {
   faktura: "Faktura",
   innbetaling: "Innbetaling",
+  utgift: "Utgift",
+  utgift_betaling: "Betaling av utgift",
   lonn: "Lønn",
   nav_refusjon: "Refusjon fra NAV",
   anlegg: "Anleggsmidler",
@@ -41,10 +43,18 @@ export const KILDER: Record<string, string> = {
 const ANDRE_STEDER: Record<string, string> = {
   faktura: "En faktura rettes med en kreditnota (Fakturaer), og kreditnotaen bokføres av seg selv.",
   innbetaling: "En innbetaling reverseres ved å ta bort betalingen på fakturaen (eller koble innbetalingen fra fakturaen under Innbetalinger).",
+  utgift: "En utgift rettes under Regnskap → Utgifter (Angre bokføringen).",
+  utgift_betaling: "En betaling av en utgift rettes under Regnskap → Utgifter (Angre bokføringen).",
   lonn: "Et lønnsbilag reverseres ved å åpne lønnskjøringen igjen (Lønn → Lønnskjøringer).",
   nav_refusjon: "En refusjon fra NAV reverseres ved å slette den (Lønn → Sykepenger).",
 };
-const LENKETEKST: Record<string, string> = { faktura: "Åpne fakturaen", innbetaling: "Åpne fakturaen", lonn: "Åpne lønnskjøringen" };
+const LENKETEKST: Record<string, string> = {
+  faktura: "Åpne fakturaen",
+  innbetaling: "Åpne fakturaen",
+  utgift: "Åpne utgiften",
+  utgift_betaling: "Åpne utgiften",
+  lonn: "Åpne lønnskjøringen",
+};
 const aarsstart = () => `${iDag().slice(0, 4)}-01-01`;
 const debetsum = (b: { posteringer: Postering[] }) => b.posteringer.reduce((s, p) => s + (p.belop > 0 ? p.belop : 0), 0);
 
@@ -112,7 +122,7 @@ export function Bilag() {
   return (
     <>
       <p className="dempet liten">
-        Alle bilagene i regnskapet: fakturaer og kreditnotaer (serie F) og innbetalinger (B), som bokføres av seg selv, lønn (L, også refusjoner fra NAV),
+        Alle bilagene i regnskapet: fakturaer og kreditnotaer (serie F) og innbetalinger (B), som bokføres av seg selv, utgifter (U), lønn (L, også refusjoner fra NAV),
         anleggsmidler (A), periodiseringer (P) og manuelle bilag (M), som den inngående balansen. Et bilag endres aldri; det reverseres med et nytt bilag med
         motsatte beløp. Bilagsjournalen, hovedboken og saldobalansen står også under{" "}
         <Link to="/rapporter?fane=regnskap">Rapporter → Regnskap</Link> (CSV og PDF).
@@ -150,7 +160,7 @@ export function Bilag() {
       ) : !bilag.length ? (
         <div className="kort">
           <Tom ikon={<IkonRegnskap storrelse={22} />} tittel="Ingen bilag i perioden">
-            <p>Bilagene kommer fra fakturaene og innbetalingene, lønnskjøringene, refusjonene fra NAV, anleggsmidlene og periodiseringene, og fra manuelle bilag.</p>
+            <p>Bilagene kommer fra fakturaene og innbetalingene, utgiftene, lønnskjøringene, refusjonene fra NAV, anleggsmidlene og periodiseringene, og fra manuelle bilag.</p>
           </Tom>
         </div>
       ) : (

@@ -65,11 +65,15 @@ export async function sendLyd<T = any>(sti: string, lyd: Blob): Promise<T> {
   return data;
 }
 
-// Sender en fil (f.eks. lønnsslipper til AI) rått i kroppen, med filtypen.
-export async function sendFil<T = any>(sti: string, fil: Blob, forStor = "Fila er for stor."): Promise<T> {
+// Sender en fil (f.eks. lønnsslipper til AI) rått i kroppen, med filtypen (og filnavnet).
+export async function sendFil<T = any>(sti: string, fil: Blob, forStor = "Fila er for stor.", filnavn?: string): Promise<T> {
   const r = await fetch(`/api${sti}`, {
     method: "POST",
-    headers: { authorization: `Bearer ${await token()}`, "content-type": fil.type || "application/octet-stream" },
+    headers: {
+      authorization: `Bearer ${await token()}`,
+      "content-type": fil.type || "application/octet-stream",
+      ...(filnavn ? { "x-filnavn": encodeURIComponent(filnavn) } : {}),
+    },
     body: fil,
   });
   const data = await r.json().catch(() => ({}));

@@ -100,7 +100,7 @@ export const regnskapRapporter: Rapportdef[] = [
     modul: "regnskap",
     navn: "Bilagsjournal",
     beskrivelse:
-      "Alle bilagene i perioden med posteringene og mva-kodene, i rekkefølgen dato og bilagsnummer: fakturaer og innbetalinger, lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og manuelle bilag.",
+      "Alle bilagene i perioden med posteringene og mva-kodene, i rekkefølgen dato og bilagsnummer: fakturaer og innbetalinger, utgifter, lønn, refusjoner fra NAV, anleggsmidler, periodiseringer og manuelle bilag.",
     funksjon: "regnskap",
     tilgang: "regnskap",
     parameter: "periode",
@@ -122,7 +122,7 @@ export const regnskapRapporter: Rapportdef[] = [
       );
       const reversert = bilag.filter((b) => b.reverserer || b.reversert_av).length;
       return {
-        merknad: `${bilag.length} bilag. Serie F: fakturaer og kreditnotaer, B: innbetalinger og refusjoner, L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, M: manuelle bilag.${reversert ? ` ${reversert} av bilagene er reversert eller reverseringer (de går mot hverandre).` : ""}`,
+        merknad: `${bilag.length} bilag. Serie F: fakturaer og kreditnotaer, B: innbetalinger og refusjoner, U: utgifter, L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, M: manuelle bilag.${reversert ? ` ${reversert} av bilagene er reversert eller reverseringer (de går mot hverandre).` : ""}`,
         kolonner: [
           { nokkel: "dato", navn: "Dato", type: "dato" },
           { nokkel: "bilag", navn: "Bilag" },

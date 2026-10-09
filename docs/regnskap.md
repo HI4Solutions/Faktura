@@ -1,22 +1,24 @@
-# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, anleggsmidler, periodiseringer og saldoavskrivninger
+# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, anleggsmidler, periodiseringer og saldoavskrivninger
 
 Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
-hovedboken, fakturaene og innbetalingene som bokføres av seg selv, anleggsmidlene med
+hovedboken, fakturaene og innbetalingene som bokføres av seg selv, utgiftene (leverandørfakturaer og
+kvitteringer, lest med AI og vurdert av reglene), anleggsmidlene med
 avskrivningsplanen over flere år (også goodwill), bokføringen av avskrivninger, nedskrivning, salg
 og utrangering, periodiseringene over flere måneder og år, månedsavslutningen og de skattemessige
 saldoavskrivningene.
 
 Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap» med fanene
-Bilag, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
+Bilag, Utgifter, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
 administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer og les ser den ikke.
 
 ## Bilagene og hovedboken
 
 - Et bilag har et nummer i en serie per år, en dato, en tekst og posteringer (konto og beløp,
   positivt i debet og negativt i kredit, og mva-koden der det er avgift) som går i null. Seriene:
-  **F** fakturaer og kreditnotaer, **B** innbetalinger og refusjoner, **L** lønn og refusjoner fra
-  NAV, **A** anleggsmidler, **P** periodiseringer og **M** manuelle bilag.
+  **F** fakturaer og kreditnotaer, **B** innbetalinger og refusjoner, **U** utgifter og betalingen
+  av dem, **L** lønn og refusjoner fra NAV, **A** anleggsmidler, **P** periodiseringer og **M**
+  manuelle bilag.
 - Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp (og de
   samme mva-kodene). Anleggsmidlene og periodiseringene reverseres det siste først. En faktura
   rettes med en kreditnota, og en innbetaling ved å ta bort betalingen på fakturaen. Et lønnsbilag
@@ -73,6 +75,44 @@ bilagene eller saldobalansen vises. Ingen trenger å gjøre noe.
   de på nytt. Organisasjonene som hadde fakturaer da dette kom, fikk 1. januar i år som startdato;
   nye organisasjoner bokfører alt.
 - Bilaget har en lenke til fakturaen (Regnskap → Bilag → «Åpne fakturaen»).
+
+## Utgiftene (bilagserie U)
+
+Leverandørfakturaer og kvitteringer (Regnskap → Utgifter; `server/src/utgifter.ts`,
+`server/src/aiUtgift.ts`, `server/src/utgiftVurdering.ts`, `0090_utgifter.sql`):
+
+- **Last opp eller ta bilde** (PDF eller bilde, høyst 12 MB; flere på en gang). Fila lagres med
+  utgiften, og når den bokføres, kopieres den til fakturabøtta, som oppbevarer den (bokføringsloven
+  § 13). En utgift kan også fylles ut for hånd.
+- **AI leser** (når funksjonen AI er slått på): leverandøren og organisasjonsnummeret,
+  fakturanummeret, datoene, KID og kontonummeret, beløpet, linjene per mva-sats med hva slags kjøp
+  det er, om det er et varig driftsmiddel, perioden kostnaden gjelder, og om det er tjenester kjøpt
+  fra utlandet uten norsk mva. Organisasjons- og kontonummer med feil kontrollsiffer og datoer fram i
+  tid tas ut og sies fra om. Kan fila ikke leses, blir den en kladd å fylle ut.
+- **Kontoen** for hver linje er den leverandøren fikk sist for samme slags kjøp (det som ble rettet,
+  læres), ellers kontoen for kategorien (Skatteetatens standard kontoplan: f.eks. 6800
+  kontorrekvisita, 6420 programvare, 6900 telefon, 7140 reise, 7350 representasjon, 7500
+  forsikring).
+- **Fradraget for inngående mva** er prosenten under Kontoer → Utgiftene (tomt: 100 % for den som er
+  mva-registrert, ellers 0; imellom: forholdsmessig fradrag for fellesanskaffelser). Representasjon
+  og gaver får ikke fradrag. Avgiften som trekkes fra, føres per sats med mva-koden (1, 11, 12 og 13
+  på 2710–2713); det som ikke trekkes fra, blir kostnad. Tjenester kjøpt fra utlandet: avgiften
+  beregnes (25 %, kode 86 med fradrag og 87 uten, på 2714 og 2704) for den som er mva-registrert.
+- **Vurderingen**: et varig driftsmiddel til minst 30 000 kr (uten mva som trekkes fra) aktiveres som
+  anleggsmiddel med kategorien og levetiden (anskaffelsen i serie A, avskrives med
+  månedsavslutningen); en utgift for flere måneder fra grensen under Kontoer (standard 5 000 kr)
+  periodiseres som forskuddsbetalt kostnad over månedene (starten i serie P); ellers kostnad i
+  serie U. Begrunnelsen står på utgiften, og behandlingen kan endres før den godkjennes.
+- **Godkjenn og bokfør**: kostnaden og avgiften mot leverandørgjelden (2400), eller banken (1920),
+  kontantene (1900) eller gjelden til en ansatt (2910) når den er betalt. Det som ikke stemmer
+  (linjene og beløpet, datoen, valutaen), bokføres ikke. Fra en leverandør som er godkjent før, med
+  kontoen lært for hver linje, bokføres en kostnad av seg selv når alt stemmer og AI ikke hadde
+  merknader (kan slås av under Kontoer).
+- **Betalt**: leverandørgjelden mot banken (serie U). **Angre bokføringen**: betalingen og
+  kostnaden reverseres (et anleggsmiddel eller en periodisering reverseres og slettes, så lenge
+  ingenting er bokført etter), og utgiften blir en kladd igjen.
+- Rapportene «Leverandørgjeld» (de ubetalte, med forfall, mot saldoen på 2400) og «Utgifter» (linje
+  for linje i perioden) under Rapporter → Regnskap.
 
 ## Anleggsregisteret og avskrivningsplanen
 
@@ -175,7 +215,8 @@ næringsspesifikasjonen (rapporten «Saldoskjema» under Rapporter → Regnskap)
 
 Under Rapporter → Regnskap, som tabell, CSV og PDF, og på e-post til regnskapsføreren:
 Saldobalanse og Bilagsjournal (kan sendes hver måned), Hovedbok, Anleggsregister, Avskrivningsplan,
-Avskrivninger og avganger (kan sendes hver måned), Saldoskjema og Periodiseringer.
+Avskrivninger og avganger (kan sendes hver måned), Saldoskjema, Periodiseringer, Leverandørgjeld
+og Utgifter (kan sendes hver måned).
 
 ## Kontroller og det som ikke er med ennå
 
@@ -187,6 +228,11 @@ Avskrivninger og avganger (kan sendes hver måned), Saldoskjema og Periodisering
   kan endres. Salg til utlandet (utførsel, kode 52) og omvendt avgiftsplikt (kode 51) skilles ikke
   ut: salg uten avgift er enten utenfor loven eller fritatt for hele organisasjonen. Tap på
   fordringer føres med et manuelt bilag (7830 mot 1500, og den utgående avgiften tilbake).
+- Utgiftene: mva på personbil (kjøp, leie og drift) gir ikke fradrag; appen minner om det, men
+  fradraget settes til 0 på linja. Fakturaer i annen valuta må skrives om til kroner (det som ble
+  betalt). Innførsel av varer (kode 14, 15 og 81–85), omvendt avgiftsplikt innenlands og den
+  særskilte meldingen for den som ikke er mva-registrert og kjøper tjenester fra utlandet, er ikke
+  med. Betalingen bokføres når den registreres; banktransaksjonene matcher den av seg selv senere.
 - Perioder låses ikke: et bilag kan føres med en dato i en periode som er rapportert. Årsoppgjøret
   (resultatet mot egenkapitalen, skatt) føres med et manuelt bilag.
 
@@ -195,6 +241,11 @@ Avskrivninger og avganger (kan sendes hver måned), Saldoskjema og Periodisering
 - Skatteetaten, standard mva-koder for SAF-T (Standard Tax Codes) og standard kontoplan (General
   Ledger Standard Accounts, 4 siffer): <https://github.com/Skatteetaten/saf-t> (mappene «Standard
   Tax Codes» og «General Ledger Standard Accounts»)
+- Skatteloven § 14-40 (aktivering av driftsmidler med kostpris fra 30 000 kr og brukstid på minst tre
+  år): <https://lovdata.no/lov/1999-03-26-14/§14-40>
+- Merverdiavgiftsloven § 3-30 (tjenester kjøpt fra utlandet), § 8-1 og § 8-2 (fradrag og
+  forholdsmessig fradrag), § 8-3 (representasjon) og § 8-4 (personkjøretøy):
+  <https://lovdata.no/lov/2009-06-19-58>
 
 - Regnskapsloven § 4-1 (grunnleggende regnskapsprinsipper: opptjening og sammenstilling, grunnlaget
   for periodiseringene): <https://lovdata.no/lov/1998-07-17-56/§4-1>

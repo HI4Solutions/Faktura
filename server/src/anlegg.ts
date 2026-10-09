@@ -56,7 +56,14 @@ export type Regnskapsrolle =
   | "utgaende_mva_middels"
   | "utgaende_mva_rafisk"
   | "utgaende_mva_lav"
-  | "purregebyr";
+  | "purregebyr"
+  | "inngaende_mva_middels"
+  | "inngaende_mva_rafisk"
+  | "inngaende_mva_lav"
+  | "inngaende_mva_utland"
+  | "utgaende_mva_utland"
+  | "kontanter"
+  | "gjeld_ansatte";
 export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: string }[] = [
   { rolle: "avskrivning_bygg", navn: "Avskrivning på bygninger og annen fast eiendom", standard: "6000" },
   { rolle: "avskrivning_driftsmidler", navn: "Avskrivning på transportmidler, maskiner og inventar", standard: "6010" },
@@ -67,7 +74,16 @@ export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: 
   { rolle: "bank", navn: "Bank", standard: "1920" },
   { rolle: "leverandorgjeld", navn: "Leverandørgjeld", standard: "2400" },
   { rolle: "kundefordringer", navn: "Kundefordringer", standard: "1500" },
-  { rolle: "inngaende_mva", navn: "Inngående merverdiavgift", standard: "2710" },
+  { rolle: "inngaende_mva", navn: "Inngående merverdiavgift (høy sats)", standard: "2710" },
+  // Utgiftene (utgiftVurdering.ts): den inngående avgiften per sats, avgiften for tjenester kjøpt fra
+  // utlandet (snudd avregning), kontantene og gjelden til de ansatte for utlegg.
+  { rolle: "inngaende_mva_middels", navn: "Inngående merverdiavgift, middels sats", standard: "2711" },
+  { rolle: "inngaende_mva_rafisk", navn: "Inngående merverdiavgift, råfisk", standard: "2712" },
+  { rolle: "inngaende_mva_lav", navn: "Inngående merverdiavgift, lav sats", standard: "2713" },
+  { rolle: "inngaende_mva_utland", navn: "Inngående merverdiavgift, tjenester fra utlandet", standard: "2714" },
+  { rolle: "utgaende_mva_utland", navn: "Utgående merverdiavgift, tjenester fra utlandet", standard: "2704" },
+  { rolle: "kontanter", navn: "Kontanter", standard: "1900" },
+  { rolle: "gjeld_ansatte", navn: "Gjeld til ansatte (utlegg)", standard: "2910" },
   { rolle: "utgaende_mva", navn: "Utgående merverdiavgift (høy sats)", standard: "2700" },
   // Fakturaene og innbetalingene (salgBokforing.ts): avgiften og salgsinntekten per sats (kontoene i
   // Skatteetatens standard kontoplan for SAF-T) og purregebyret.
@@ -114,11 +130,19 @@ export type Regnskapsoppsett = {
   // som er mva-registrert, er unntatt eller fritatt (0089_regnskap_salg.sql).
   salg_fra: string | null;
   uten_mva: "unntatt" | "fritatt";
+  // Utgiftene (0090_utgifter.sql): prosenten av den inngående avgiften som trekkes fra (null: 100 for
+  // den som er mva-registrert, ellers 0), beløpet en utgift over flere måneder periodiseres fra, og
+  // om utgiftene fra kjente leverandører bokføres av seg selv.
+  mva_fradrag: number | null;
+  periodiser_fra: number;
+  utgifter_auto: boolean;
 };
 export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnskapsoppsett> {
   const o = await en<Regnskapsoppsett>(
     db,
-    "select kontoer, saldo_fra_aar, saldo_inngaende, to_char(salg_fra, 'YYYY-MM-DD') as salg_fra, uten_mva from faktura.regnskap_oppsett where org_id = $1",
+    `select kontoer, saldo_fra_aar, saldo_inngaende, to_char(salg_fra, 'YYYY-MM-DD') as salg_fra, uten_mva, mva_fradrag::float8 as mva_fradrag,
+            periodiser_fra::float8 as periodiser_fra, utgifter_auto
+       from faktura.regnskap_oppsett where org_id = $1`,
     [org],
   );
   return {
@@ -127,6 +151,9 @@ export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnska
     saldo_inngaende: o?.saldo_inngaende ?? {},
     salg_fra: o?.salg_fra ?? null,
     uten_mva: o?.uten_mva ?? "unntatt",
+    mva_fradrag: o?.mva_fradrag ?? null,
+    periodiser_fra: o?.periodiser_fra ?? 5000,
+    utgifter_auto: o?.utgifter_auto ?? true,
   };
 }
 // Kontoene som brukes: standarden, med det organisasjonen har endret.
@@ -343,7 +370,7 @@ export function aarsplan(a: Anleggsmiddel, hendelser: Hendelse[]): Planaar[] {
 
 // --- Bilagene ----------------------------------------------------------------------------------
 
-export type Postering = { konto: string; belop: number; tekst: string };
+export type Postering = { konto: string; belop: number; tekst: string; mva_kode?: string | null };
 export type Bilagsforslag = {
   dato: string;
   tekst: string;

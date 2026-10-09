@@ -6,7 +6,7 @@
 // (skattemessig, med goodwill i gruppe b) og kontoene. Eier, administrator og regnskap, med
 // funksjonen «Regnskap».
 //
-// Fanen står i adressen (?fane=bilag|saldobalanse|anlegg|periodiseringer|saldo|kontoer), og det som
+// Fanen står i adressen (?fane=bilag|utgifter|saldobalanse|anlegg|periodiseringer|saldo|kontoer), og det som
 // er åpent, med ?anlegg= eller ?periodisering=.
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -18,6 +18,7 @@ import { IkonPluss, IkonRegnskap, IkonVenstre } from "../ikoner";
 import { Bilag, Saldobalansen } from "./RegnskapBilag";
 import { Maanedsavslutning, mndNavn, type Bilagsvar } from "./RegnskapAvslutning";
 import { PeriodiseringDetalj, Periodiseringer } from "./RegnskapPeriodiseringer";
+import { Utgifter } from "./RegnskapUtgifter";
 
 type Kategori = { kode: string; navn: string; konto: string; avskrivningskonto: string | null; skatt: string; levetid_mnd: number | null };
 type Kontorad = { rolle: string; navn: string; standard: string; konto: string; endret: boolean };
@@ -28,6 +29,9 @@ type Oppsett = {
   salg_fra: string | null;
   uten_mva: "unntatt" | "fritatt";
   kundefordringer_ved_start: number | null;
+  mva_fradrag: number | null;
+  periodiser_fra: number;
+  utgifter_auto: boolean;
   kategorier: Kategori[];
   saldogrupper: { gruppe: string; navn: string; sats: number; samlet: boolean }[];
 };
@@ -101,6 +105,7 @@ export function Regnskap() {
   const [sok, settSok] = useSearchParams();
   const faner: [string, string][] = [
     ["bilag", "Bilag"],
+    ["utgifter", "Utgifter"],
     ["saldobalanse", "Saldobalanse"],
     ["anlegg", "Anleggsmidler"],
     ["periodiseringer", "Periodiseringer"],
@@ -134,13 +139,14 @@ export function Regnskap() {
             role="tab"
             aria-selected={fane === v}
             className={fane === v ? "valgt" : undefined}
-            onClick={() => ga({ fane: v, anlegg: null, periodisering: null })}
+            onClick={() => ga({ fane: v, anlegg: null, periodisering: null, utgift: null })}
           >
             {t}
           </button>
         ))}
       </div>
       {fane === "bilag" && <Bilag />}
+      {fane === "utgifter" && <Utgifter apen={sok.get("utgift")} apne={(id) => ga({ utgift: id })} />}
       {fane === "saldobalanse" && <Saldobalansen />}
       {fane === "anlegg" && <Anleggsmidler apne={(id) => ga({ anlegg: id })} />}
       {fane === "periodiseringer" && <Periodiseringer apne={(id) => ga({ periodisering: id })} />}
@@ -1216,6 +1222,68 @@ function Salget({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => void }) {
   );
 }
 
+// Utgiftene (server/src/utgifter.ts): fradraget for inngående mva, grensen for å periodisere, og om
+// utgiftene fra kjente leverandører bokføres av seg selv.
+function Utgiftsoppsett({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => void }) {
+  const { org } = useKonto();
+  const sti = `/org/${org!.id}/regnskap/oppsett`;
+  const [skjema, settSkjema] = useState<{ fradrag: string; grense: string; auto: boolean } | null>(null);
+  const [ok, settOk] = useState(false);
+  const h = useHandling();
+  const v = skjema ?? { fradrag: o.mva_fradrag == null ? "" : String(o.mva_fradrag).replace(".", ","), grense: String(o.periodiser_fra).replace(".", ","), auto: o.utgifter_auto };
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    settOk(false);
+    const r = await h.kjor(() =>
+      api<Oppsett>("PUT", sti, { mva_fradrag: v.fradrag.trim() ? tall(v.fradrag) : null, periodiser_fra: v.grense.trim() ? tall(v.grense) : 0, utgifter_auto: v.auto }),
+    );
+    if (r) {
+      lagret(r);
+      settSkjema(null);
+      settOk(true);
+    }
+  }
+
+  return (
+    <form className="kort" onSubmit={lagre}>
+      <h3 style={{ marginTop: 0 }}>Utgiftene</h3>
+      <p className="liten dempet">
+        Leverandørfakturaer og kvitteringer under Regnskap → Utgifter. Fradraget for inngående mva gjelder det meste; representasjon og gaver får ikke fradrag. Den som
+        bare har salg utenfor merverdiavgiftsloven (f.eks. helsetjenester), har ikke fradrag; med salg både innenfor og utenfor er fradraget for fellesanskaffelser
+        forholdsmessig.
+      </p>
+      <div className="rad">
+        <label>
+          Fradrag for inngående mva (%)
+          <input inputMode="decimal" placeholder="Fullt når mva-registrert" value={v.fradrag} onChange={(e) => settSkjema({ ...v, fradrag: e.target.value })} />
+          <span className="felt-hjelp">Tomt felt: 100 % for den som er mva-registrert, ellers 0.</span>
+        </label>
+        <label>
+          Periodiser fra (kr uten mva)
+          <input inputMode="decimal" value={v.grense} onChange={(e) => settSkjema({ ...v, grense: e.target.value })} />
+          <span className="felt-hjelp">En utgift for flere måneder fordeles på månedene når den er på minst så mye.</span>
+        </label>
+      </div>
+      <label className="avkrysning">
+        <input type="checkbox" checked={v.auto} onChange={(e) => settSkjema({ ...v, auto: e.target.checked })} /> Bokfør av seg selv fra leverandører som er godkjent før,
+        når alt stemmer
+      </label>
+      <Feil melding={h.feil} />
+      {ok && (
+        <div className="melding ok" role="status">
+          Lagret.
+        </div>
+      )}
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt || !skjema}>
+          Lagre
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function Kontoer() {
   const { org } = useKonto();
   const sti = `/org/${org!.id}/regnskap/oppsett`;
@@ -1247,8 +1315,9 @@ function Kontoer() {
   return (
     <>
       <Salget o={o.data} lagret={(r) => o.settData(r)} />
+      <Utgiftsoppsett o={o.data} lagret={(r) => o.settData(r)} />
       <form className="kort" onSubmit={lagre}>
-        <h3 style={{ marginTop: 0 }}>Kontoene for salget, anleggsmidlene og periodiseringene</h3>
+        <h3 style={{ marginTop: 0 }}>Kontoene for salget, utgiftene, anleggsmidlene og periodiseringene</h3>
         <p className="liten dempet">
           Standarden er norsk standard kontoplan (NS 4102). Tomt felt: standardkontoen. Endringer gjelder bilagene som føres etterpå. Balansekontoene for
           periodiseringene er forslag; hver periodisering har sine kontoer. Lønnskontoene står under Innstillinger → Ansatte og timer.

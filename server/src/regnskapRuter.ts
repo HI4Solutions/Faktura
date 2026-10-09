@@ -64,6 +64,9 @@ async function oppsett(db: Db, org: string) {
     salg_fra: o.salg_fra,
     uten_mva: o.uten_mva,
     kundefordringer_ved_start: ved_start,
+    mva_fradrag: o.mva_fradrag,
+    periodiser_fra: o.periodiser_fra,
+    utgifter_auto: o.utgifter_auto,
     kategorier: KATEGORIKODER.map((kode) => ({
       kode,
       navn: KATEGORIER[kode].navn,
@@ -82,6 +85,11 @@ const oppsettSkjema = z.object({
   // unntatt eller fritatt (salgBokforing.ts).
   salg_fra: datoS.nullable().optional(),
   uten_mva: z.enum(["unntatt", "fritatt"]).optional(),
+  // Utgiftene (utgifter.ts): fradraget for inngående mva i prosent (null: fullt for den som er
+  // mva-registrert), grensen for å periodisere, og om kjente leverandører bokføres av seg selv.
+  mva_fradrag: z.number().finite().min(0, "Fradraget er i prosent").max(100, "Fradraget er i prosent").nullable().optional(),
+  periodiser_fra: z.number().finite().min(0, "Grensen kan ikke være negativ").lt(1e9, "Grensen er for høy").optional(),
+  utgifter_auto: z.boolean().optional(),
   saldo_fra_aar: z.number().int().min(2000, "Ugyldig år").max(2100, "Ugyldig år").nullable().optional(),
   saldo_inngaende: z.partialRecord(z.enum(["a", "c", "d", "gevinst_tap"]), z.number().finite().gt(-1e12).lt(1e12).nullable()).optional(),
 });
@@ -154,6 +162,20 @@ function rad(b: Partial<z.infer<typeof nyttSkjema>>, naa?: Anleggsmiddel): Rad {
     tidligere_avskrevet: tidligere,
     skatt_inngaende: b.skatt_inngaende !== undefined ? b.skatt_inngaende : (naa?.skatt_inngaende ?? null),
   };
+}
+
+// Et nytt anleggsmiddel, uten anskaffelsen: feltene med standardverdiene for kategorien. Utgiftene
+// (utgifter.ts) bruker det og fører anskaffelsen selv.
+export async function lagAnleggsmiddel(db: Db, org: string, b: Partial<z.infer<typeof nyttSkjema>>) {
+  const ny = rad(b);
+  if (ny.anskaffet > osloIDag()) throw new ApiFeil(400, "Anskaffelsesdatoen kan ikke være fram i tid");
+  const kol = Object.keys(ny) as (keyof Rad)[];
+  const r = await en<{ id: string }>(
+    db,
+    `insert into faktura.anleggsmidler (org_id, ${kol.join(", ")}) values ($1, ${kol.map((_, i) => `$${i + 2}`).join(", ")}) returning id`,
+    [org, ...kol.map((k) => ny[k])],
+  );
+  return r!.id;
 }
 
 // Verdien etter måneden (etter avskrivningen for måneden og hendelsene i den), etter planen.
@@ -237,11 +259,13 @@ export function regnskapRuter() {
           else inngaende[g] = Math.round(v * 100) / 100;
         }
         await db.query(
-          `insert into faktura.regnskap_oppsett (org_id, kontoer, saldo_fra_aar, saldo_inngaende, salg_fra, uten_mva, oppdatert)
-           values ($1, $2, $3, $4, $5, $6, now())
+          `insert into faktura.regnskap_oppsett (org_id, kontoer, saldo_fra_aar, saldo_inngaende, salg_fra, uten_mva, mva_fradrag, periodiser_fra,
+                                                 utgifter_auto, oppdatert)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
            on conflict (org_id) do update set kontoer = excluded.kontoer, saldo_fra_aar = excluded.saldo_fra_aar,
                                               saldo_inngaende = excluded.saldo_inngaende, salg_fra = excluded.salg_fra,
-                                              uten_mva = excluded.uten_mva, oppdatert = now()`,
+                                              uten_mva = excluded.uten_mva, mva_fradrag = excluded.mva_fradrag,
+                                              periodiser_fra = excluded.periodiser_fra, utgifter_auto = excluded.utgifter_auto, oppdatert = now()`,
           [
             orgId(c),
             JSON.stringify(kontoer),
@@ -249,6 +273,9 @@ export function regnskapRuter() {
             JSON.stringify(inngaende),
             b.salg_fra !== undefined ? b.salg_fra : naa.salg_fra,
             b.uten_mva ?? naa.uten_mva,
+            b.mva_fradrag !== undefined ? b.mva_fradrag : naa.mva_fradrag,
+            b.periodiser_fra ?? naa.periodiser_fra,
+            b.utgifter_auto ?? naa.utgifter_auto,
           ],
         );
         return oppsett(db, orgId(c));
@@ -285,18 +312,13 @@ export function regnskapRuter() {
     return c.json(
       await bruk(c, async (db) => {
         await krev(db, orgId(c));
-        const kol = Object.keys(ny) as (keyof Rad)[];
-        const r_ = await en<{ id: string }>(
-          db,
-          `insert into faktura.anleggsmidler (org_id, ${kol.join(", ")}) values ($1, ${kol.map((_, i) => `$${i + 2}`).join(", ")}) returning id`,
-          [orgId(c), ...kol.map((k) => ny[k])],
-        );
+        const id = await lagAnleggsmiddel(db, orgId(c), b);
         if (b.anskaffelse) {
-          const { anlegg } = await hentAnlegg(db, orgId(c), r_!.id);
+          const { anlegg } = await hentAnlegg(db, orgId(c), id);
           const k = regnskapskontoer(await hentRegnskapsoppsett(db, orgId(c)));
           await bokfor(db, orgId(c), anskaffelsesbilag(anlegg[0]!, b.anskaffelse.motkonto, b.anskaffelse.mva ?? 0, k));
         }
-        return detalj(db, orgId(c), r_!.id);
+        return detalj(db, orgId(c), id);
       }),
       201,
     );
