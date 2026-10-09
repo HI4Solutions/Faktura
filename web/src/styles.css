@@ -2496,3 +2496,32 @@ h4.lonn-under { margin: 18px 0 6px; font-size: 0.92rem; }
 .lonn-bokforing p { margin: 6px 0; }
 .lonn-bilag { margin-top: 12px; }
 table.lonn-linjer tfoot td { font-weight: 650; border-top: 1px solid var(--kant); padding-top: 8px; }
+
+/* Sykepenger og NAV (LonnSykepenger.tsx) */
+.nav-sykmelding { cursor: default; }
+.nav-sykmelding:hover { background: none !important; }
+.nav-sykmelding-topp {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; min-height: 0; margin: 0; padding: 0;
+  border: 0; background: none; box-shadow: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.nav-sykmelding-topp:hover, .nav-sykmelding-topp:active { background: none; transform: none; }
+.nav-sykmelding-detalj { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.nav-sykmelding-detalj p { margin: 0; }
+dl.nav-forespoersel { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 8px 0; }
+dl.nav-forespoersel dt { color: var(--dempet); }
+dl.nav-forespoersel dd { margin: 0; }
+.nav-im-rad { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--kant); }
+.nav-im-rad:last-child { border-bottom: 0; }
+.nav-im-rad .linje { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kort.nav-im .melding { margin: 8px 0; }
+.nav-periode { align-items: flex-end; }
+.nav-periode > .lenke { flex: none; margin-bottom: 14px; }
+.nav-knapper { flex-wrap: wrap; gap: 4px 16px; margin-top: 0; }
+h5.nav-under { margin: 14px 0 6px; font-size: 0.92rem; }
+.nav-aarsak { border: 1px solid var(--kant); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.nav-aarsak .linje { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nav-forslag { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 700px) {
+  dl.nav-forespoersel { grid-template-columns: 1fr; gap: 2px; }
+  dl.nav-forespoersel dd { margin-bottom: 6px; }
+}

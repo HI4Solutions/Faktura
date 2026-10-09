@@ -40,6 +40,8 @@ export type Fravaer = {
   egenmeldt_selv?: boolean | null;
   timer?: number | null; // avspasering: timene den tar fra timebanken; permisjon med lønn: timene som lønnes
   betalt?: boolean | null; // permisjon med lønn (0074_vaktbytte_fridag.sql)
+  sykmeldingsgrad?: number | null; // gradert sykmelding (1–99 %; null er 100 %) (0079_nav_sykepenger.sql)
+  fra_nav?: boolean | null; // registrert fra en sykmelding hos NAV
 };
 // Egenmeldingene til en ansatt (GET /egenmelding): reglene, retten etter to måneder, det som er
 // brukt i løpet av 12 måneder (egen sykdom) og dagene med sykt barn i år.
@@ -100,6 +102,8 @@ const erSykdom = (t?: FravaerType) => t === "syk" || t === "sykt_barn";
 // «Egenmelding», «Sykmelding» eller «Legeerklæring» (sykt barn).
 export const dokumentasjonTekst = (f: Pick<Fravaer, "type" | "dokumentasjon">) =>
   f.dokumentasjon === "egenmelding" ? "Egenmelding" : f.dokumentasjon === "sykmelding" ? (f.type === "sykt_barn" ? "Legeerklæring" : "Sykmelding") : null;
+// «Gradert 50 %» for gradert sykmelding.
+export const gradTekst = (f: Pick<Fravaer, "type" | "sykmeldingsgrad">) => (f.type === "syk" && f.sykmeldingsgrad ? `Gradert ${f.sykmeldingsgrad} %` : null);
 const tidspunkt = (t: string) => new Date(t).toLocaleString("nb-NO", { timeZone: "Europe/Oslo", dateStyle: "short", timeStyle: "short" });
 const flertall = (n: number, en: string, flere: string) => `${n} ${n === 1 ? en : flere}`;
 export const iArbeid = (a: Ansatt, dato: string) => a.aktiv && a.ansatt_fra <= dato && (!a.ansatt_til || a.ansatt_til >= dato);
@@ -134,6 +138,8 @@ export function FravaerSkjema({
     dokumentasjon: (fravaer.dokumentasjon ?? "") as Dokumentasjon | "",
     timer: fravaer.timer != null ? String(fravaer.timer).replace(".", ",") : "",
     betalt: !!fravaer.betalt,
+    gradert: !!fravaer.sykmeldingsgrad,
+    grad: fravaer.sykmeldingsgrad ? String(fravaer.sykmeldingsgrad) : "",
   }));
   // Avspasering og permisjon med lønn: timene foreslås av de planlagte timene, til de endres for hånd.
   const timerEndret = useRef(fravaer.timer != null);
@@ -177,6 +183,7 @@ export function FravaerSkjema({
           ...(selv ? egenmeldingen : { dokumentasjon: erSykdom(f.type) ? f.dokumentasjon || null : null }),
           ...(medTimer ? { timer: Number(f.timer.replace(",", ".")) } : {}),
           ...(f.type === "permisjon" ? { betalt: f.betalt } : {}),
+          ...(!selv && f.type === "syk" ? { sykmeldingsgrad: f.gradert && f.grad.trim() ? Number(f.grad) : null } : {}),
         };
     const r = await h.kjor(() =>
       fravaer.id
@@ -307,10 +314,29 @@ export function FravaerSkjema({
               Egenmelding {fravaer.egenmeldt_selv ? "sendt av den ansatte" : "registrert"} {tidspunkt(fravaer.egenmeldt)}.
               {fravaer.type === "syk" && fravaer.arbeidsrelatert != null && (fravaer.arbeidsrelatert ? " Har sammenheng med arbeidet." : " Har ikke sammenheng med arbeidet.")}
             </span>
+          ) : fravaer.fra_nav ? (
+            <span className="felt-hjelp">Fra sykmeldingen hos NAV (Lønn → Sykepenger).</span>
           ) : (
             <span className="felt-hjelp">Egenmelding på papir eller sykmelding fra lege. Den ansatte kan også sende egenmeldingen selv i appen.</span>
           )}
         </label>
+      )}
+      {!selv && f.type === "syk" && (
+        <>
+          <label>
+            <input type="checkbox" checked={f.gradert} onChange={(e) => sett({ gradert: e.target.checked })} />
+            Gradert sykmelding (jobber delvis)
+          </label>
+          {f.gradert && (
+            <label>
+              Sykmeldingsgrad (%)
+              <input type="number" inputMode="numeric" required min={1} max={99} placeholder="50" value={f.grad} onChange={(e) => sett({ grad: e.target.value })} />
+              <span className="felt-hjelp">
+                Andelen den ansatte er sykmeldt. I arbeidsgiverperioden får den ansatte sykepenger for den delen av timene; resten er arbeid som vanlig.
+              </span>
+            </label>
+          )}
+        </>
       )}
       {!bareSlutt && (
         <label>
@@ -642,6 +668,8 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
                 <span className="tittel">{f.ansatt_navn}</span>
                 <span className={`merke ${fravaerKlasse[f.type]}`}>{fravaerNavn(f)}</span>
                 {dokumentasjonTekst(f) && <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>}
+                {gradTekst(f) && <span className="merke merke-dok">{gradTekst(f)}</span>}
+                {f.fra_nav && <span className="merke merke-noytral">Fra NAV</span>}
               </span>
               <span className="linje">
                 <span className="under">
@@ -706,6 +734,7 @@ export function MittFravaer({ ansattId, versjon: utenfra, endret }: { ansattId: 
             <span>
               <strong>{fravaerNavn(f)}</strong> {fravaerPeriode(f)}
               {dokumentasjonTekst(f) && <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>}
+              {gradTekst(f) && <span className="merke merke-dok">{gradTekst(f)}</span>}
             </span>
             {erSykdom(f.type) && (
               <span className="mitt-fravaer-knapper">
@@ -843,6 +872,7 @@ export function AnsattFravaer({ ansattId, versjon, kanEndre, apne }: { ansattId:
                 <span>
                   {fravaerPeriode(f)} · {dager(f) === 1 ? "1 dag" : `${dager(f)} dager`}
                   {erSykdom(f.type) && <span className="dempet"> · {dokumentasjonTekst(f) ?? "ikke dokumentert"}</span>}
+                  {gradTekst(f) && <span className="dempet"> · {gradTekst(f)!.toLowerCase()}</span>}
                 </span>
                 {f.fra <= iDag() && f.til >= iDag() && <span className="merke merke-advarsel">Nå</span>}
               </button>

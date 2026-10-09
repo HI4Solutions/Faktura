@@ -44,6 +44,7 @@ locals {
     ALTINN_SYSTEMNAVN      = var.altinn_systemnavn
     ALTINN_SYSTEM_ID       = var.altinn_system_id
     AMELDING_INNSENDING    = var.amelding_innsending ? "1" : ""
+    NAV_SYKEPENGER         = var.nav_sykepenger ? "1" : ""
   } : k => v if v != "" }
 }
 

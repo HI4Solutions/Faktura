@@ -87,6 +87,9 @@ export type Oppsett = Regler & {
   otp_prosent: number;
   feriepenger_prosent: number;
   ferie_dager: number;
+  // Lønn under sykdom etter arbeidsgiverperioden (0079): arbeidsgiveren betaler og krever refusjon
+  // (standard), eller NAV betaler.
+  sykepenger_refusjon?: boolean;
 };
 
 export type Ansatt = {
@@ -134,7 +137,8 @@ export type Linje = {
 
 export type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"; fra: string | null; til: string | null };
 export type Ferieuke = { alle: (Foring & { id: string })[]; betalt: Foring[] }; // godkjente timer i uka, og de som er lønnet
-export type Sykedag = { dato: string; timer: number; type: "syk" | "sykt_barn" };
+// grad: sykmeldingsgraden (100 når den ikke er gradert); den gir andelen av timene som er syk.
+export type Sykedag = { dato: string; timer: number; type: "syk" | "sykt_barn"; grad?: number };
 export type Fravaersperiode = { fra: string; til: string; type: string };
 
 // --- Linjene ----------------------------------------------------------------------------------
@@ -304,17 +308,65 @@ export function arbeidsgiverperiode(perioder: Fravaersperiode[], ansattFra: stri
   return { agp, etter, utenOpptjening };
 }
 
+// Etter arbeidsgiverperioden (og før fire uker i jobben): dagene NAV betaler sykepenger for, om
+// arbeidsgiveren betaler lønnen likevel (og krever refusjon), og perioden for kjøringen.
+export type EtterAgp = { dager: Set<string>; refusjon: boolean; fra: string; til: string };
+
 // Sykepenger og omsorgspenger for den med timelønn: de planlagte timene (vakter og faste dager)
 // i arbeidsgiverperioden og de ti omsorgsdagene i året. Med fastlønn går lønnen som vanlig.
-export function sykelinjer(a: Ansatt, dager: Sykedag[], agp: Set<string>, omsorgBrukt: number): { linjer: Linje[]; merknader: string[] } {
+//
+// Etter arbeidsgiverperioden: betaler arbeidsgiveren lønnen og krever refusjon, får den med
+// timelønn de planlagte timene (den sykmeldte delen); med fastlønn går lønnen som vanlig. Betaler
+// NAV, trekkes fastlønnen for virkedagene (den sykmeldte delen), og timelønn betales ikke.
+export function sykelinjer(a: Ansatt, dager: Sykedag[], agp: Set<string>, omsorgBrukt: number, etter: EtterAgp | null = null): { linjer: Linje[]; merknader: string[] } {
   const merknader: string[] = [];
-  if (a.lonnstype !== "time") return { linjer: [], merknader };
+  const andelSyk = (d: Sykedag) => (d.grad ?? 100) / 100;
+  if (a.lonnstype !== "time") {
+    const linjer: Linje[] = [];
+    if (etter && !etter.refusjon && a.maanedslonn) {
+      const syk = dager.filter((d) => d.type === "syk" && etter.dager.has(d.dato) && d.dato >= etter.fra && d.dato <= etter.til && virkedag(d.dato));
+      const alle = arbeidsdager(etter.fra, etter.til);
+      const andel = alle ? syk.reduce((s, d) => s + andelSyk(d), 0) / alle : 0;
+      if (andel > 0)
+        linjer.push({
+          lonnsart: "trekk_sykdom",
+          tekst: `Trekk for sykdom etter arbeidsgiverperioden (${syk.length} ${syk.length === 1 ? "virkedag" : "virkedager"}${syk.some((d) => andelSyk(d) < 1) ? ", gradert" : ""}; NAV betaler sykepengene)`,
+          antall: rund4(andel),
+          sats: Number(a.maanedslonn),
+          belop: -rund(Number(a.maanedslonn) * andel),
+          nokkel: "trekk_sykdom",
+        });
+    }
+    return { linjer, merknader };
+  }
   const sats = Number(a.timelonn ?? 0);
   const linjer: Linje[] = [];
   const syk = dager.filter((d) => d.type === "syk" && agp.has(d.dato) && d.timer > 0);
-  const sykTimer = rund(syk.reduce((s, d) => s + d.timer, 0));
+  // Gradert sykmelding: bare den sykmeldte delen av timene (resten føres som arbeidet).
+  const sykTimer = rund(syk.reduce((s, d) => s + (d.timer * (d.grad ?? 100)) / 100, 0));
+  const gradert = syk.some((d) => (d.grad ?? 100) < 100);
   if (sykTimer > 0)
-    linjer.push({ lonnsart: "sykepenger", tekst: `Sykepenger i arbeidsgiverperioden (${syk.length} ${syk.length === 1 ? "dag" : "dager"})`, antall: sykTimer, sats, belop: rund(sykTimer * sats), nokkel: "sykepenger" });
+    linjer.push({
+      lonnsart: "sykepenger",
+      tekst: `Sykepenger i arbeidsgiverperioden (${syk.length} ${syk.length === 1 ? "dag" : "dager"}${gradert ? ", gradert" : ""})`,
+      antall: sykTimer,
+      sats,
+      belop: rund(sykTimer * sats),
+      nokkel: "sykepenger",
+    });
+  if (etter?.refusjon) {
+    const nav = dager.filter((d) => d.type === "syk" && etter.dager.has(d.dato) && d.timer > 0);
+    const navTimer = rund(nav.reduce((s, d) => s + d.timer * andelSyk(d), 0));
+    if (navTimer > 0)
+      linjer.push({
+        lonnsart: "sykepenger_nav",
+        tekst: `Sykepenger etter arbeidsgiverperioden (${nav.length} ${nav.length === 1 ? "dag" : "dager"}${nav.some((d) => andelSyk(d) < 1) ? ", gradert" : ""}; refusjon fra NAV)`,
+        antall: navTimer,
+        sats,
+        belop: rund(navTimer * sats),
+        nokkel: "sykepenger_nav",
+      });
+  }
   const barn = dager.filter((d) => d.type === "sykt_barn" && d.timer > 0).sort((x, y) => x.dato.localeCompare(y.dato));
   const igjen = Math.max(0, OMSORG_DAGER - omsorgBrukt);
   const betalt = barn.slice(0, igjen);

@@ -158,7 +158,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "personal.ekstratimer",
         "personal.ansatte",
       ],
-      lonn: ["lonn.journal", "lonn.lonnsarter", "lonn.bokforing", "lonn.skatt_aga", "lonn.amelding", "lonn.feriepenger", "lonn.aarsoversikt", "lonn.otp"],
+      lonn: ["lonn.journal", "lonn.lonnsarter", "lonn.bokforing", "lonn.skatt_aga", "lonn.amelding", "lonn.feriepenger", "lonn.aarsoversikt", "lonn.otp", "lonn.sykepenger"],
     });
     const liste = (await kall("GET", `/api/org/${org}/rapportmodul`)).data;
     expect(liste.moduler.map((m: any) => m.navn)).toEqual(["Faktura", "Personal", "Lønn"]);
@@ -166,7 +166,10 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     // Regnskap ser lønn og timer, men ikke fraværet og feriebanken (som i personalmodulen).
     const r = await moduler(regnskap);
     expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte"]);
+    // Sykepengene (helseopplysninger) ser bare eier og administrator.
     expect(r.lonn).toHaveLength(8);
+    expect(r.lonn).not.toContain("lonn.sykepenger");
+    expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.sykepenger`, undefined, regnskap)).status).toBe(403);
     expect(await moduler(fakturerer)).toEqual({ faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"] });
     expect(await moduler(ola)).toEqual({});
     expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.journal`, undefined, fakturerer)).status).toBe(403);

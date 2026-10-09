@@ -16,6 +16,7 @@ import { sendPaaminnelser } from "./paaminnelser.js";
 import { sendBursdager } from "./bursdager.js";
 import { endreTilgang, hentSkattekort, hentSkattekortSvar, lagTilgang, planleggDagligSkattekort, planleggTilgangssjekk, registrerAltinnSystem, sjekkTilgang } from "./skattekort.js";
 import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingInnsending.js";
+import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepenger.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
@@ -162,6 +163,8 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "altinn-endring") return endreTilgang(o.org_id);
   if (o.type === "amelding-lag") return lagAmelding(o.org_id, o.amelding_id);
   if (o.type === "amelding-status") return sjekkAmelding(o.org_id, o.amelding_id, o.forsok);
+  if (o.type === "nav-hent") return hentFraNav(o.org_id);
+  if (o.type === "nav-inntektsmelding") return sendInntektsmelding(o.org_id, o.inntektsmelding_id);
   if (o.type === "rapport-send") return sendRapporter(o);
   return sendEpost(o);
 }
@@ -616,6 +619,7 @@ export function lagWorker() {
     await oppdaterEhf(10, { nye: true }).catch((e) => logg("ERROR", "EHF-oppslag for nye kunder feilet", { feil: (e as Error).message }));
     await planleggTilgangssjekk().catch((e) => logg("ERROR", "Sjekk av tilgangene i Altinn feilet", { feil: (e as Error).message }));
     await planleggAmeldingssjekk().catch((e) => logg("ERROR", "Sjekk av a-meldingene feilet", { feil: (e as Error).message }));
+    await planleggNavHenting().catch((e) => logg("ERROR", "Planlegging av hentingen fra NAV feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));

@@ -135,6 +135,12 @@ variable "amelding_innsending" {
   default     = false
 }
 
+variable "nav_sykepenger" {
+  description = "Sykmeldingene og forespørslene om inntektsmelding hentes fra NAV, og inntektsmeldingen sendes (Medinnova AS har lagt scopet nav:helseytelser/sykepenger på Maskinporten-klienten), og systemet i Altinn ber om tilgangspakken «Lønn med personopplysninger av særlig kategori». Settes med GitHub-variabelen NAV_SYKEPENGER (true)."
+  type        = bool
+  default     = false
+}
+
 variable "maskinporten_nokkel_id" {
   description = "Nøkkel-ID-en (kid) til nøkkelen på Maskinporten-klienten. Settes med GitHub-variabelen MASKINPORTEN_NOKKEL_ID."
   type        = string

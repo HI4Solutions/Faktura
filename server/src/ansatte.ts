@@ -182,6 +182,9 @@ const oppsettSkjema = z.object({
   // under, og pensjonsinnretningen (OTP-leverandøren).
   virksomhet_orgnr: valgfri(siffer("Organisasjonsnummeret til virksomheten", 9, orgnrGyldig, "Organisasjonsnummeret til virksomheten er ikke gyldig")),
   pensjonsinnretning_orgnr: valgfri(siffer("Organisasjonsnummeret til pensjonsleverandøren", 9, orgnrGyldig, "Organisasjonsnummeret til pensjonsleverandøren er ikke gyldig")),
+  // Lønn under sykdom etter arbeidsgiverperioden (0079_nav_sykepenger.sql): arbeidsgiveren betaler
+  // og krever refusjon fra NAV, eller NAV betaler sykepengene til den ansatte.
+  sykepenger_refusjon: z.boolean().optional(),
 });
 
 const foringSkjema = z.object({
@@ -280,13 +283,14 @@ type Oppsett = Regler & {
   betalingsfil_format: "pain.001.001.03" | "pain.001.001.09";
   virksomhet_orgnr: string | null;
   pensjonsinnretning_orgnr: string | null;
+  sykepenger_refusjon: boolean;
 };
 export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
     `select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
             aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt, egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager,
-            timebank, vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr
+            timebank, vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr, sykepenger_refusjon
        from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
@@ -315,6 +319,7 @@ export async function regler(db: Db, org: string): Promise<Oppsett> {
       betalingsfil_format: "pain.001.001.03",
       virksomhet_orgnr: null,
       pensjonsinnretning_orgnr: null,
+      sykepenger_refusjon: true,
     }
   );
 }
@@ -385,8 +390,8 @@ export function ansattRuter() {
           `insert into faktura.lonn_oppsett (org_id, aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
                                              aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt,
                                              egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager, timebank,
-                                             vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+                                             vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr, sykepenger_refusjon)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
              full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg,
@@ -396,7 +401,7 @@ export function ansattRuter() {
              egenmelding_barn_dager = excluded.egenmelding_barn_dager, timebank = excluded.timebank,
              vaktbytte_fridag = excluded.vaktbytte_fridag, lonnskonto = excluded.lonnskonto, bank_bic = excluded.bank_bic,
              betalingsfil_format = excluded.betalingsfil_format, virksomhet_orgnr = excluded.virksomhet_orgnr,
-             pensjonsinnretning_orgnr = excluded.pensjonsinnretning_orgnr`,
+             pensjonsinnretning_orgnr = excluded.pensjonsinnretning_orgnr, sykepenger_refusjon = excluded.sykepenger_refusjon`,
           [
             orgId(c),
             ny.aktiv,
@@ -424,6 +429,7 @@ export function ansattRuter() {
             ny.betalingsfil_format,
             ny.virksomhet_orgnr ?? null,
             ny.pensjonsinnretning_orgnr ?? null,
+            ny.sykepenger_refusjon,
           ],
         );
         return regler(db, orgId(c));

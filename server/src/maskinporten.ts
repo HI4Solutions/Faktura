@@ -33,12 +33,14 @@ const ADRESSER = {
     altinn: "https://platform.tt02.altinn.no",
     skattekort: "https://api-test.sits.no/api/forskudd",
     amelding: "https://innrapporteringamelding.api.skatteetaten-test.no/v1",
+    nav: "https://sykepenger-api.ekstern.dev.nav.no",
   },
   prod: {
     maskinporten: "https://maskinporten.no",
     altinn: "https://platform.altinn.no",
     skattekort: "https://api.skatteetaten.no/api/forskudd",
     amelding: "https://innrapporteringamelding.api.skatteetaten.no/v1",
+    nav: "https://sykepenger-api.nav.no",
   },
 };
 
@@ -49,6 +51,7 @@ export function adresser() {
     altinn: config.altinnUrl ?? a.altinn,
     skattekort: config.skattekortUrl ?? a.skattekort,
     amelding: config.ameldingUrl ?? a.amelding,
+    nav: config.navUrl ?? a.nav,
   };
 }
 
@@ -67,6 +70,9 @@ export const SCOPE = {
   // tilbakemeldingen ligger).
   amelding: "skatteetaten:innrapporteringamelding",
   dialogporten: "digdir:dialogporten",
+  // Sykepenger fra NAV: sykmeldinger, forespørsler og inntektsmeldinger (eget token, nøyaktig dette
+  // scopet).
+  nav: "nav:helseytelser/sykepenger",
 };
 
 const b64 = (x: string | Buffer) => Buffer.from(x).toString("base64url");

@@ -58,6 +58,8 @@ const skjema = z.object({
   dokumentasjon: z.enum(["egenmelding", "sykmelding"]).nullable().optional(),
   arbeidsrelatert: z.boolean().nullable().optional(),
   erklaering: z.boolean().optional(),
+  // Gradert sykmelding: graden (1–99 %; null er 100 %).
+  sykmeldingsgrad: z.number({ error: "Skriv sykmeldingsgraden" }).int("Sykmeldingsgraden er et helt tall").min(1, "Graden er minst 1 %").max(100, "Graden er høyst 100 %").nullable().optional(),
 });
 
 // Typen og notatet ser bare eier, administrator og den ansatte selv (0047_fravaer_skjult.sql);
@@ -71,6 +73,8 @@ const FRAVAER = `
          case when s.ser then f.egenmeldt end as egenmeldt,
          case when s.ser then f.timer end as timer,
          case when s.ser then f.betalt end as betalt,
+         case when s.ser then f.sykmeldingsgrad end as sykmeldingsgrad,
+         case when s.ser then f.nav_sykmelding is not null end as fra_nav,
          case when s.ser and f.egenmeldt is not null then f.egenmeldt_av is not distinct from a.bruker_id end as egenmeldt_selv,
          f.opprettet, f.opprettet_av = faktura.bruker_id() as min
     from faktura.fravaer f
@@ -121,7 +125,7 @@ export function fravaerRuter() {
       if (b.dokumentasjon === "egenmelding" && ansatt === selv && !b.erklaering) throw new ApiFeil(400, ERKLAERING);
       const ny = await en<{ id: string }>(
         db,
-        "insert into faktura.fravaer (org_id, ansatt_id, type, fra, til, notat, dokumentasjon, arbeidsrelatert, timer, betalt) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id",
+        "insert into faktura.fravaer (org_id, ansatt_id, type, fra, til, notat, dokumentasjon, arbeidsrelatert, timer, betalt, sykmeldingsgrad) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id",
         [
           orgId(c),
           ansatt,
@@ -133,6 +137,7 @@ export function fravaerRuter() {
           b.arbeidsrelatert ?? null,
           b.type === "avspasering" || (b.type === "permisjon" && b.betalt) ? (b.timer ?? null) : null,
           b.type === "permisjon" && !!b.betalt,
+          b.type === "syk" && b.sykmeldingsgrad != null && b.sykmeldingsgrad < 100 ? b.sykmeldingsgrad : null,
         ],
       );
       const f = (await en<Fravaer>(db, `${FRAVAER} where f.id = $1`, [ny!.id]))!;
@@ -184,6 +189,8 @@ export function fravaerRuter() {
   // sykdom som er meldt; lederen får beskjed om egenmeldingen.
   r.patch("/fravaer/:id", async (c) => {
     const { erklaering, ...b } = skjema.omit({ ansatt_id: true }).partial().parse(await c.req.json().catch(() => ({})));
+    // 100 % er det samme som ingen grad.
+    if (b.sykmeldingsgrad === 100) b.sykmeldingsgrad = null;
     const felt = Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined));
     const navn = Object.keys(felt);
     if (!navn.length) throw new ApiFeil(400, "Ingen felt å endre");

@@ -46,6 +46,8 @@ jobs:
       TF_VAR_altinn_system_id: ${{ vars.ALTINN_SYSTEM_ID }}
       # A-meldingen til Skatteetatens API (docs/amelding.md): av til scopet er godkjent.
       TF_VAR_amelding_innsending: ${{ vars.AMELDING_INNSENDING || 'false' }}
+      # Sykepenger fra NAV (docs/nav.md): av til scopet nav:helseytelser/sykepenger er på klienten.
+      TF_VAR_nav_sykepenger: ${{ vars.NAV_SYKEPENGER || 'false' }}
     steps:
       - uses: actions/checkout@v4
 

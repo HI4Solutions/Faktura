@@ -26,6 +26,8 @@ export type SkattekortStatus = {
     // Tilgangspakkene systembrukeren har, de som mangler, og endringsforespørselen (0077).
     pakkenavn: string[];
     mangler: string[];
+    // Hva pakkene som mangler, brukes til (f.eks. «a-meldingen»).
+    mangler_bruk?: string[];
     endring_status: Tilgangsstatus | null;
     endring_url: string | null;
     endring_feil: string | null;
@@ -260,7 +262,8 @@ export function SkattekortKobling() {
                 </>
               ) : (
                 <>
-                  {d.systemnavn} trenger også tilgangspakken {t.mangler.map((m) => `«${m}»`).join(" og ")} (for a-meldingen). Daglig leder godkjenner det i Altinn.
+                  {d.systemnavn} trenger også {t.mangler.length > 1 ? "tilgangspakkene" : "tilgangspakken"} {t.mangler.map((m) => `«${m}»`).join(" og ")}
+                  {t.mangler_bruk?.length ? ` (for ${t.mangler_bruk.join(" og ")})` : ""}. Daglig leder godkjenner det i Altinn.
                   {t.endring_feil && <span className="fare-tekst"> {t.endring_feil}</span>}
                   {admin && (
                     <div className="knapper">

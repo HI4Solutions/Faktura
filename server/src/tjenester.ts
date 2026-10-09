@@ -87,6 +87,9 @@ export type Oppgave =
   // A-meldingen: fila (XML) eller innsendingen til Skatteetaten, og tilbakemeldingen.
   | { type: "amelding-lag"; org_id: string; amelding_id: string }
   | { type: "amelding-status"; org_id: string; amelding_id: string; forsok?: number }
+  // NAV: sykmeldingene og forespørslene om inntektsmelding, og inntektsmeldingen som sendes.
+  | { type: "nav-hent"; org_id: string }
+  | { type: "nav-inntektsmelding"; org_id: string; inntektsmelding_id: string }
   // Rapportmodulen: rapporter (CSV og PDF) på e-post til regnskapsføreren.
   | {
       type: "rapport-send";

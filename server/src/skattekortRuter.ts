@@ -12,7 +12,7 @@ import { alle, en, somBetrodd, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { krevMfa } from "./auth.js";
 import { skattekortSattOpp, systemId } from "./maskinporten.js";
-import { godkjentUrl, PAKKENAVN, TILGANGSPAKKE, tilgangspakker } from "./altinn.js";
+import { godkjentUrl, PAKKEBRUK, PAKKENAVN, TILGANGSPAKKE, tilgangspakker } from "./altinn.js";
 import { leggIKo } from "./tjenester.js";
 
 const orgId = (c: Context) => z.string().uuid().parse(c.req.param("org"));
@@ -69,6 +69,8 @@ async function status(db: Db, org: string) {
           endring_url: tilgang.endring_status === "ny" ? tilgang.endring_url : null,
           // Tilgangspakkene systemet trenger nå og systembrukeren ikke har (be om å utvide tilgangen).
           mangler: tilgang.status === "godkjent" ? tilgangspakker().filter((p) => !tilgang.pakker.includes(p)).map((p) => PAKKENAVN[p] ?? p) : [],
+          // Hva tilgangspakkene som mangler, brukes til (f.eks. «a-meldingen»).
+          mangler_bruk: tilgang.status === "godkjent" ? tilgangspakker().filter((p) => !tilgang.pakker.includes(p)).map((p) => PAKKEBRUK[p] ?? p) : [],
           pakkenavn: tilgang.pakker.map((p) => PAKKENAVN[p] ?? p),
         }
       : null,

@@ -214,6 +214,7 @@ function PersonalOppsett() {
     betalingsfil_format: "pain.001.001.03" | "pain.001.001.09";
     virksomhet_orgnr: string;
     pensjonsinnretning_orgnr: string;
+    sykepenger_refusjon: boolean;
     egenmelding: Egenmeldingsordning;
     egenmelding_dager: string;
     egenmelding_ganger: string;
@@ -247,6 +248,7 @@ function PersonalOppsett() {
         betalingsfil_format: data.betalingsfil_format ?? "pain.001.001.03",
         virksomhet_orgnr: data.virksomhet_orgnr ?? "",
         pensjonsinnretning_orgnr: data.pensjonsinnretning_orgnr ?? "",
+        sykepenger_refusjon: data.sykepenger_refusjon ?? true,
         egenmelding: ordning(data.egenmelding_dager ?? 3, data.egenmelding_ganger === undefined ? 4 : data.egenmelding_ganger, data.egenmelding_dager_aar ?? null),
         egenmelding_dager: String(data.egenmelding_dager ?? 3),
         egenmelding_ganger: data.egenmelding_ganger == null ? "" : String(data.egenmelding_ganger),
@@ -285,6 +287,7 @@ function PersonalOppsett() {
               betalingsfil_format: o!.betalingsfil_format,
               virksomhet_orgnr: o!.virksomhet_orgnr.replace(/\s/g, "") || null,
               pensjonsinnretning_orgnr: o!.pensjonsinnretning_orgnr.replace(/\s/g, "") || null,
+              sykepenger_refusjon: o!.sykepenger_refusjon,
             }
           : {}),
       }),
@@ -477,6 +480,18 @@ function PersonalOppsett() {
               <span className="felt-hjelp">Med tabelltrekk trekkes det halv skatt én måned i året.</span>
             </label>
           </div>
+          <label>
+            Lønn under sykdom etter arbeidsgiverperioden
+            <select value={o.sykepenger_refusjon ? "ja" : "nei"} onChange={(e) => settO({ ...o, sykepenger_refusjon: e.target.value === "ja" })}>
+              <option value="ja">Vi betaler lønnen og krever refusjon fra NAV</option>
+              <option value="nei">NAV betaler sykepengene til den ansatte</option>
+            </select>
+            <span className="felt-hjelp">
+              {o.sykepenger_refusjon
+                ? "Lønnen går som vanlig (med timelønn: de planlagte timene), og refusjonen kreves i inntektsmeldingen til NAV (Lønn → Sykepenger). NAV refunderer høyst 6 G."
+                : "Etter de 16 dagene i arbeidsgiverperioden trekkes fastlønnen for sykedagene, og timelønn betales ikke; NAV betaler sykepengene til den ansatte."}
+            </span>
+          </label>
           <h4 className="lonn-under">Betalingsfil til nettbanken</h4>
           <div className="rad">
             <label>

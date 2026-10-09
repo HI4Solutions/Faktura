@@ -56,6 +56,10 @@ export const LONNSARTER: Lonnsart[] = [
   lonn("bonus", "Bonus", { otp: false, amelding: "bonus" }),
   lonn("etterbetaling", "Etterbetaling", { amelding: "fastloenn" }),
   lonn("sykepenger", "Sykepenger i arbeidsgiverperioden", { amelding: "timeloenn" }),
+  // Etter arbeidsgiverperioden (0079): arbeidsgiveren betaler (forskutterer) og krever refusjon fra
+  // NAV, eller NAV betaler, og da trekkes fastlønnen for de dagene. Regnes av fraværet.
+  lonn("sykepenger_nav", "Sykepenger etter arbeidsgiverperioden (refusjon fra NAV)", { manuell: false, amelding: "timeloenn" }),
+  lonn("trekk_sykdom", "Trekk for sykdom (NAV betaler sykepengene)", { fortegn: -1, manuell: false, amelding: "fastloenn" }),
   lonn("omsorgspenger", "Omsorgspenger (sykt barn)", { amelding: "timeloenn" }),
   lonn("feriepenger", "Feriepenger", { ferie: false, otp: false, amelding: "feriepenger" }),
   lonn("feriepenger_60", "Feriepenger for den ekstra ferieuka (over 60 år)", { ferie: false, otp: false, amelding: "feriepenger" }),

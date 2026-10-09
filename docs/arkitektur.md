@@ -668,6 +668,38 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   får varsel. Innsendingen er av til `AMELDING_INNSENDING` er satt; da ber systemet i Altinn også
   om tilgangspakken «A-ordningen», og kunder som er koblet til, utvider tilgangen med en
   endringsforespørsel (`be_om_utvidet_tilgang`, `skattekort_tilgang.pakker` og `endring_*`)
+- Sykepenger og NAV (`0079_nav_sykepenger.sql`, `server/src/navSykepenger.ts`,
+  `server/src/navInntektsmelding.ts`, `server/src/navRuter.ts`, `web/src/sider/LonnSykepenger.tsx`,
+  `docs/nav.md`): NAVs API for sykepenger (sykepenger-im-lps-api) med systembruker i Altinn
+  (tilgangspakken «Lønn med personopplysninger av særlig kategori») og et eget Maskinporten-token
+  med scopet `nav:helseytelser/sykepenger`. Hjerteslaget legger organisasjonene som har tilgang og
+  virksomhet, i kø hver time (`nav_henting` per type og virksomhet, fra siste løpenummer). Bare
+  workeren dekrypterer fødselsnumrene og kobler sykmeldingene og forespørslene til de ansatte;
+  fødselsnummeret lagres ikke. En sykmelding (`nav_sykmeldinger`) gir sykefravær for dagene som
+  ikke alt er registrert: egenmeldingsdagene før den som egenmelding, og periodene som sykmelding
+  med graden når den er gradert (`fravaer.sykmeldingsgrad` 1–99, `fravaer.nav_sykmelding`);
+  avventende sykmelding, behandlingsdager og reisetilskudd blir merknader. NAVs forespørsler om
+  inntektsmelding (`nav_forespoersler`: AKTIV, BESVART eller FORKASTET) hentes med inntekten i
+  a-ordningen de tre månedene før inntektsdatoen (`/v1/inntekt`), og statusen på dem som venter,
+  sjekkes. Forslaget til inntektsmelding (`forslagTilInntektsmelding`) har arbeidsgiverperioden
+  (de første 16 dagene i sykefraværstilfellet, fra NAVs perioder og fraværet i appen; uten fire
+  uker i jobben med redusert lønn og begrunnelsen), månedsinntekten (snittet i a-ordningen, ellers
+  fra de godkjente lønnskjøringene uten overtid, bonus og feriepenger), endringsårsaker appen ser
+  (lønns- og stillingsendring, nyansatt, ferie, sykefravær, permisjon) og refusjonen når
+  arbeidsgiveren betaler lønnen under sykdom (`lonn_oppsett.sykepenger_refusjon`), med stopp når
+  den ansatte slutter. Skjemaet (`inntektsmeldingSkjema`) følger NAVs regler, og forespørselen
+  kontrolleres (det NAV ber om). Eier og administrator sender (`bestill_inntektsmelding`: ikke
+  mens en sendes eller NAV kontrollerer den, og ikke når forespørselen er trukket tilbake);
+  workeren henter forespørselen på nytt, sender som ny eller korrigering (NAV kjenner igjen en
+  som er sendt før), og henter statusen (sendt, godkjent eller avvist med årsaken). Lønnen under
+  sykdom etter arbeidsgiverperioden: forskutterer arbeidsgiveren, går fastlønnen som vanlig og
+  timelønte får de planlagte timene (`sykepenger_nav`); ellers trekkes fastlønnen for virkedagene
+  (`trekk_sykdom`). Gradert sykmelding gir den sykmeldte delen av timene i arbeidsgiverperioden.
+  Rapporten «Sykepenger og refusjon» (`lonn.sykepenger`) har dagene i og etter
+  arbeidsgiverperioden og den beregnede refusjonen. Henting og innsending er av til
+  `NAV_SYKEPENGER` er satt; da ber systemet i Altinn også om tilgangspakken «Lønn med
+  personopplysninger av særlig kategori», og kunder som er koblet til, utvider tilgangen som for
+  a-meldingen
 - `skattekort_tilgang`, `altinn_system` og skattekortet på `ansatte` (`0068_skattekort_fra_skatteetaten.sql`,
   `server/src/skattekort.ts`, `server/src/altinn.ts`, `server/src/maskinporten.ts`,
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
@@ -736,6 +768,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 | Endre kontoene for lønnsbilaget, og bokføre en kjøring som ble godkjent før bokføringen kom | ✓ | ✓ | | | | |
 | Se a-meldingene (månedene, grunnlaget og avvikene) | ✓ | ✓ | | ✓ | | |
 | Lage og sende a-meldingen, laste ned fila og merke den som lastet opp | ✓ | ✓ | | | | |
+| Se sykmeldingene og forespørslene fra NAV, sende inntektsmeldingen og rapporten «Sykepenger og refusjon» | ✓ | ✓ | | | | |
+| Se egne sykmeldinger fra NAV | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Se egne lønnsslipper og egen årsoversikt (godkjente kjøringer) | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓¹ | ✓ |
 | Se årsoversiktene til alle, og laste dem ned | ✓ | ✓ | | ✓ | | |
 | Varsle de ansatte om årsoversikten | ✓ | ✓ | | | | |

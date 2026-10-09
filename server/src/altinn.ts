@@ -12,9 +12,21 @@ import { adresser, EtatFeil, etatKall, hentToken, SCOPE, systemId } from "./mask
 export const TILGANGSPAKKE = "urn:altinn:accesspackage:lonn";
 // Tilgangspakken for a-meldingen (docs/amelding.md); «Lønn» gjelder ikke der.
 export const A_ORDNING = "urn:altinn:accesspackage:a-ordning";
+// Tilgangspakken for sykmeldinger, forespørsler og inntektsmeldinger hos NAV (docs/nav.md).
+export const NAV_SYKEPENGER = "urn:altinn:accesspackage:lonn-personopplysninger-saerlig-kategori";
 // Tilgangspakkene systemet trenger nå: «Lønn» alltid, og de for funksjonene som er slått på.
-export const tilgangspakker = () => [TILGANGSPAKKE, ...(config.ameldingInnsending ? [A_ORDNING] : [])];
-export const PAKKENAVN: Record<string, string> = { [TILGANGSPAKKE]: "Lønn", [A_ORDNING]: "A-ordningen" };
+export const tilgangspakker = () => [TILGANGSPAKKE, ...(config.ameldingInnsending ? [A_ORDNING] : []), ...(config.navSykepenger ? [NAV_SYKEPENGER] : [])];
+export const PAKKENAVN: Record<string, string> = {
+  [TILGANGSPAKKE]: "Lønn",
+  [A_ORDNING]: "A-ordningen",
+  [NAV_SYKEPENGER]: "Lønn med personopplysninger av særlig kategori",
+};
+// Hva hver tilgangspakke brukes til (teksten i appen når den mangler).
+export const PAKKEBRUK: Record<string, string> = {
+  [TILGANGSPAKKE]: "skattekortene",
+  [A_ORDNING]: "a-meldingen",
+  [NAV_SYKEPENGER]: "sykmeldinger og inntektsmeldinger hos NAV",
+};
 // Adressen Altinn sender brukeren tilbake til (må stå i systemregisteret, nøyaktig slik).
 export const godkjentUrl = () => `${config.appUrl}/skattekort/godkjent`;
 

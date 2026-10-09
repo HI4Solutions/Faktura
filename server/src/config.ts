@@ -72,6 +72,12 @@ export const config = {
   altinnUrl: valgfri("ALTINN_URL"),
   skattekortUrl: valgfri("SKATTEKORT_URL"),
   ameldingUrl: valgfri("AMELDING_URL"),
+  // Sykepenger fra NAV (docs/nav.md): sykmeldingene og forespørslene om inntektsmelding hentes, og
+  // inntektsmeldingen sendes, når Medinnova AS har lagt scopet nav:helseytelser/sykepenger på
+  // Maskinporten-klienten. Da ber systemet også om tilgangspakken «Lønn med personopplysninger av
+  // særlig kategori». Adressen følger miljøet; den kan overstyres (tester).
+  navSykepenger: ["1", "true", "ja"].includes((valgfri("NAV_SYKEPENGER") ?? "").toLowerCase()),
+  navUrl: valgfri("NAV_SYKEPENGER_URL"),
 
   // AI: Gemini på Vertex AI i prosjektet (uten prosjekt er AI-funksjonene skjult), i EU.
   // Regionen kan også være multiregionen «eu» eller «global».

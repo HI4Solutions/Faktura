@@ -85,7 +85,8 @@ type LagretLinje = Linje & { id: string; slipp_id: string; kilde: "auto" | "manu
 async function hentOppsett(db: Db, org: string): Promise<Oppsett & { lonnsdag: number; halv_skatt: string }> {
   const o = await en<any>(
     db,
-    `select l.daglig_grense, l.ukentlig_grense, l.overtid_prosent, l.ferie_dager, l.aga_sone, l.otp_prosent, l.feriepenger_prosent, l.lonnsdag, l.halv_skatt
+    `select l.daglig_grense, l.ukentlig_grense, l.overtid_prosent, l.ferie_dager, l.aga_sone, l.otp_prosent, l.feriepenger_prosent, l.lonnsdag, l.halv_skatt,
+            l.sykepenger_refusjon
        from faktura.lonn_oppsett l where l.org_id = $1`,
     [org],
   );
@@ -99,6 +100,7 @@ async function hentOppsett(db: Db, org: string): Promise<Oppsett & { lonnsdag: n
     feriepenger_prosent: Number(o?.feriepenger_prosent ?? 12),
     lonnsdag: Number(o?.lonnsdag ?? 20),
     halv_skatt: o?.halv_skatt ?? "desember",
+    sykepenger_refusjon: o?.sykepenger_refusjon ?? true,
   };
 }
 
@@ -200,9 +202,9 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     : [];
   // Sykefravær og sykt barn (for arbeidsgiverperioden og omsorgsdagene), og de planlagte timene.
   const fravaer = ordinar
-    ? await alle<{ ansatt_id: string; fra: string; til: string; type: string }>(
+    ? await alle<{ ansatt_id: string; fra: string; til: string; type: string; grad: number }>(
         db,
-        `select ansatt_id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, type
+        `select ansatt_id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, type, coalesce(sykmeldingsgrad, 100) as grad
            from faktura.fravaer where org_id = $1 and type in ('syk', 'sykt_barn') and til >= $2 and fra <= $3`,
         [org, `${fra.slice(0, 4)}-01-01` < pluss(fra, -90) ? `${fra.slice(0, 4)}-01-01` : pluss(fra, -90), til],
       )
@@ -332,17 +334,27 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         for (const x of egne) {
           for (let d = x.fra; d <= x.til; d = pluss(d, 1)) {
             const timer = planlagt.get(`${a.id}|${d}`) ?? 0;
-            if (d >= fra && d <= til) dager.push({ dato: d, timer, type: x.type as Sykedag["type"] });
+            if (d >= fra && d <= til) dager.push({ dato: d, timer, type: x.type as Sykedag["type"], grad: Number(x.grad) });
             else if (x.type === "sykt_barn" && d < fra && d.slice(0, 4) === fra.slice(0, 4) && virkedag(d)) omsorgBrukt++;
           }
         }
-        const s = sykelinjer(a, dager, p.agp, omsorgBrukt);
+        const refusjon = o.sykepenger_refusjon !== false;
+        const navDager = new Set([...p.etter, ...p.utenOpptjening]);
+        const s = sykelinjer(a, dager, p.agp, omsorgBrukt, { dager: navDager, refusjon, fra, til });
         auto.push(...s.linjer);
         merknader.push(...s.merknader);
         const etter = dager.filter((d) => d.type === "syk" && p.etter.has(d.dato)).length;
-        if (etter) merknader.push(`Syk ${etter} ${etter === 1 ? "dag" : "dager"} etter arbeidsgiverperioden (16 dager). NAV betaler sykepenger da; betaler dere lønnen, kan dere kreve refusjon.`);
+        if (etter)
+          merknader.push(
+            refusjon
+              ? `Syk ${etter} ${etter === 1 ? "dag" : "dager"} etter arbeidsgiverperioden (16 dager): lønnen betales (dere forskutterer sykepengene), og refusjonen kreves i inntektsmeldingen til NAV (Lønn → Sykepenger).`
+              : `Syk ${etter} ${etter === 1 ? "dag" : "dager"} etter arbeidsgiverperioden (16 dager): NAV betaler sykepengene til den ansatte, og lønnen for de dagene er trukket.`,
+          );
         const uten = dager.filter((d) => d.type === "syk" && p.utenOpptjening.has(d.dato)).length;
-        if (uten) merknader.push(`Syk ${uten} ${uten === 1 ? "dag" : "dager"} før fire uker i arbeid: arbeidsgiveren betaler ikke sykepenger da (NAV kan).`);
+        if (uten)
+          merknader.push(
+            `Syk ${uten} ${uten === 1 ? "dag" : "dager"} før fire uker i arbeid: arbeidsgiveren har ikke plikt til å betale sykepenger da (NAV kan).${refusjon ? " Lønnen er betalt som om dere forskutterer." : ""}`,
+          );
       }
       if (a.lonnstype === "maaned" && !a.maanedslonn && ansatt) merknader.push("Mangler månedslønn på den ansatte.");
       if (a.lonnstype === "time" && !a.timelonn && uker.length) merknader.push("Mangler timelønn på den ansatte.");

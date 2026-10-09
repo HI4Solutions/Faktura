@@ -32,6 +32,7 @@ const RUTER: [RegExp, string][] = [
   [/^\/lonn(\/|$)/, "lonn"],
   [/^\/skattekort(\/|$)/, "lonn"],
   [/^\/(amelding|amelding-virksomheter)(\/|$)/, "lonn"],
+  [/^\/nav(\/|$)/, "lonn"],
 ];
 
 export const funksjonerFor = (sti: string) => [...new Set(RUTER.filter(([re]) => re.test(sti)).map(([, kode]) => kode))];

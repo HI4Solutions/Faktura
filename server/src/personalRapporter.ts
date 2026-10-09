@@ -158,7 +158,7 @@ export const personalRapporter: Rapportdef[] = [
     modul: "personal",
     navn: "Sykefravær og egenmeldinger",
     beskrivelse:
-      "Sykefraværet i perioden per ansatt: dager med egenmelding, med sykmelding og uten dokumentasjon, dager med sykt barn, og egenmeldingene i løpet av 12 måneder.",
+      "Sykefraværet i perioden per ansatt: dager med egenmelding, med sykmelding (og hvor mange av dem som er gradert) og uten dokumentasjon, dager med sykt barn, og egenmeldingene i løpet av 12 måneder.",
     funksjon: "vaktplan",
     tilgang: "personal",
     parameter: "periode",
@@ -171,6 +171,7 @@ export const personalRapporter: Rapportdef[] = [
         { nokkel: "egenmeldinger", navn: "Egenmeldinger", type: "antall", sum: true },
         { nokkel: "egenmeldt", navn: "Egenmeldt", type: "antall", sum: true },
         { nokkel: "sykmeldt", navn: "Sykmeldt", type: "antall", sum: true },
+        { nokkel: "gradert", navn: "Herav gradert", type: "antall", sum: true },
         { nokkel: "udokumentert", navn: "Uten dokumentasjon", type: "antall", sum: true },
         { nokkel: "sykt_barn", navn: "Sykt barn", type: "antall", sum: true },
         { nokkel: "ganger_12", navn: "Siste 12 mnd (ganger)", type: "antall" },
@@ -179,20 +180,21 @@ export const personalRapporter: Rapportdef[] = [
       rader: await alle(
         db,
         `with d as (
-           select f.ansatt_id, f.type, f.dokumentasjon, least(f.til, $3::date) - greatest(f.fra, $2::date) + 1 as dager
+           select f.ansatt_id, f.type, f.dokumentasjon, f.sykmeldingsgrad, least(f.til, $3::date) - greatest(f.fra, $2::date) + 1 as dager
              from faktura.fravaer f
             where f.org_id = $1 and f.type in ('syk', 'sykt_barn') and f.fra <= $3 and f.til >= $2
          ), p as (
            select d.ansatt_id,
                   coalesce(sum(d.dager) filter (where d.type = 'syk' and d.dokumentasjon = 'egenmelding'), 0)::int as egenmeldt,
                   coalesce(sum(d.dager) filter (where d.type = 'syk' and d.dokumentasjon = 'sykmelding'), 0)::int as sykmeldt,
+                  coalesce(sum(d.dager) filter (where d.type = 'syk' and d.sykmeldingsgrad is not null), 0)::int as gradert,
                   coalesce(sum(d.dager) filter (where d.type = 'syk' and d.dokumentasjon is null), 0)::int as udokumentert,
                   coalesce(sum(d.dager) filter (where d.type = 'sykt_barn'), 0)::int as sykt_barn
              from d group by d.ansatt_id
          )
          select a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn,
                 (select count(*) from faktura.egenmelding_tilfeller($1, a.id, 'syk') t where t.fra between $2 and $3)::int as egenmeldinger,
-                p.egenmeldt, p.sykmeldt, p.udokumentert, p.sykt_barn, b.ganger as ganger_12, b.dager as dager_12
+                p.egenmeldt, p.sykmeldt, p.gradert, p.udokumentert, p.sykt_barn, b.ganger as ganger_12, b.dager as dager_12
            from p join faktura.ansatte a on a.org_id = $1 and a.id = p.ansatt_id
            cross join lateral faktura.egenmelding_brukt($1, a.id, $3::date) b
           order by a.ansattnummer`,
