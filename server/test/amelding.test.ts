@@ -360,6 +360,9 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
       "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Ansatte og timer → A-melding.",
       "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Ansatte og timer → A-melding.",
       "Per Melding mangler yrkeskode (7 siffer, SSBs yrkeskoder).",
+      // OTP (0097): de som er med i ordningen, meldes inn hos pensjonsleverandøren.
+      "Kari Melding er med i OTP fra 01.01.2025: meld den ansatte inn hos pensjonsleverandøren, og før datoen på den ansatte.",
+      "Per Melding er med i OTP fra 01.01.2025: meld den ansatte inn hos pensjonsleverandøren, og før datoen på den ansatte.",
     ]);
     expect(g.grunnlag).toMatchObject({ antall_med_lonn: 2, inntekt: 70000 });
     expect((await api("POST", `/api/org/${org}/amelding/2026-09`, { innsending: "fil" })).data.error).toContain("mangler yrkeskode");
@@ -373,6 +376,7 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     const p = (await api("PATCH", `/api/org/${org}/ansatte/${per}`, { yrkeskode: "4110101", arbeidstidsordning: "skift365" })).data;
     expect((await api("GET", `/api/org/${org}/ansatte/${per}`)).data).toMatchObject({ yrkeskode: "4110101", arbeidstidsordning: "skift365", arbeidsforhold_type: "ordinaertArbeidsforhold" });
     expect(p).toBeTruthy();
+    for (const a of [kari, per]) expect((await api("PATCH", `/api/org/${org}/ansatte/${a}`, { otp_innmeldt: "2025-01-10" })).status).toBe(200);
     expect((await api("GET", `/api/org/${org}/amelding/2026-09`)).data.avvik).toEqual([]);
   });
 

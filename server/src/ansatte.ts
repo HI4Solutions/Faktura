@@ -119,6 +119,9 @@ const ansattSkjema = z.object({
   // Frilansere, oppdragstakere og styremedlemmer (0096): honoraret er honorar for oppdrag eller
   // styrehonorar (og godtgjørelse for verv).
   honorar_art: z.enum(["honorar", "styrehonorar"]).optional(),
+  // OTP (0097): da den ansatte ble meldt inn og ut hos pensjonsleverandøren.
+  otp_innmeldt: valgfri(datoS),
+  otp_utmeldt: valgfri(datoS),
   arbeidstidsordning: z
     .enum(["ikkeSkift", "andreSkift", "skift365", "doegnkontinuerligSkiftOgTurnus355", "helkontinuerligSkiftOgAndreOrdninger336", "offshore336"])
     .optional(),
@@ -161,6 +164,8 @@ const oppsettSkjema = z.object({
     .number()
     .refine((v) => v === 0 || (v >= 2 && v <= 25), "OTP-satsen er 0 (uten OTP) eller fra 2 til 25 %")
     .optional(),
+  // Ordningen tar ikke opp arbeidstakere som har fylt 75 år (0097; innskuddspensjonsloven § 4-2).
+  otp_unntak_75: z.boolean().optional(),
   feriepenger_prosent: z.number().min(10.2, "Feriepengene er minst 10,2 %").max(20, "Feriepengene kan være høyst 20 %").optional(),
   lonnsdag: z.number().int().min(1, "Velg en dag fra 1 til 31").max(31, "Velg en dag fra 1 til 31").optional(),
   halv_skatt: z.enum(["november", "desember"]).optional(),
@@ -227,6 +232,7 @@ const ANSATT = `
          a.skattekort_trekk,
          -- Arbeidsforholdet i a-meldingen (0077_amelding.sql).
          a.yrkeskode, a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato, a.honorar_art,
+         to_char(a.otp_innmeldt, 'YYYY-MM-DD') as otp_innmeldt, to_char(a.otp_utmeldt, 'YYYY-MM-DD') as otp_utmeldt,
          to_char(a.siste_lonnsendring, 'YYYY-MM-DD') as siste_lonnsendring, to_char(a.siste_stillingsendring, 'YYYY-MM-DD') as siste_stillingsendring,
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
@@ -281,6 +287,7 @@ type Oppsett = Regler & {
   helg: boolean;
   aga_sone: AgaSone;
   otp_prosent: number;
+  otp_unntak_75: boolean;
   feriepenger_prosent: number;
   lonnsdag: number;
   halv_skatt: "november" | "desember";
@@ -304,9 +311,9 @@ export async function regler(db: Db, org: string): Promise<Oppsett> {
   const r = await en<Oppsett>(
     db,
     `select aktiv, daglig_grense, ukentlig_grense, overtid_prosent, bursdag_varsel, full_stilling, ferie_dager, vaktbytte, helg,
-            aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt, egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager,
-            timebank, vaktbytte_fridag, lonnskonto, skatt_kontonr, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr, sykepenger_refusjon,
-            reise_satser, auto_kjoring
+            aga_sone, otp_prosent, otp_unntak_75, feriepenger_prosent, lonnsdag, halv_skatt, egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar,
+            egenmelding_barn_dager, timebank, vaktbytte_fridag, lonnskonto, skatt_kontonr, bank_bic, betalingsfil_format, virksomhet_orgnr,
+            pensjonsinnretning_orgnr, sykepenger_refusjon, reise_satser, auto_kjoring
        from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
@@ -321,6 +328,7 @@ export async function regler(db: Db, org: string): Promise<Oppsett> {
       helg: true,
       aga_sone: "1",
       otp_prosent: 2,
+      otp_unntak_75: false,
       feriepenger_prosent: 12,
       lonnsdag: 20,
       halv_skatt: "desember",
@@ -410,8 +418,8 @@ export function ansattRuter() {
                                              aga_sone, otp_prosent, feriepenger_prosent, lonnsdag, halv_skatt,
                                              egenmelding_dager, egenmelding_ganger, egenmelding_dager_aar, egenmelding_barn_dager, timebank,
                                              vaktbytte_fridag, lonnskonto, bank_bic, betalingsfil_format, virksomhet_orgnr, pensjonsinnretning_orgnr, sykepenger_refusjon,
-                                             skatt_kontonr, reise_satser, auto_kjoring)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+                                             skatt_kontonr, reise_satser, auto_kjoring, otp_unntak_75)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
            on conflict (org_id) do update set aktiv = excluded.aktiv, daglig_grense = excluded.daglig_grense,
              ukentlig_grense = excluded.ukentlig_grense, overtid_prosent = excluded.overtid_prosent, bursdag_varsel = excluded.bursdag_varsel,
              full_stilling = excluded.full_stilling, ferie_dager = excluded.ferie_dager, vaktbytte = excluded.vaktbytte, helg = excluded.helg,
@@ -422,7 +430,8 @@ export function ansattRuter() {
              vaktbytte_fridag = excluded.vaktbytte_fridag, lonnskonto = excluded.lonnskonto, bank_bic = excluded.bank_bic,
              betalingsfil_format = excluded.betalingsfil_format, virksomhet_orgnr = excluded.virksomhet_orgnr,
              pensjonsinnretning_orgnr = excluded.pensjonsinnretning_orgnr, sykepenger_refusjon = excluded.sykepenger_refusjon,
-             skatt_kontonr = excluded.skatt_kontonr, reise_satser = excluded.reise_satser, auto_kjoring = excluded.auto_kjoring`,
+             skatt_kontonr = excluded.skatt_kontonr, reise_satser = excluded.reise_satser, auto_kjoring = excluded.auto_kjoring,
+             otp_unntak_75 = excluded.otp_unntak_75`,
           [
             orgId(c),
             ny.aktiv,
@@ -454,6 +463,7 @@ export function ansattRuter() {
             ny.skatt_kontonr ?? null,
             ny.reise_satser ?? "staten",
             ny.auto_kjoring ?? true,
+            ny.otp_unntak_75 ?? false,
           ],
         );
         return regler(db, orgId(c));

@@ -901,6 +901,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   har dem som `honorarAkkordProsentProvisjon` og `styrehonorarOgGodtgjoerelseVerv`, og
   arbeidsforholdet bare i månedene med utbetaling, uten sluttårsak (yrket kreves). Lønnsbilaget:
   honorar (5390) og styrehonorar (5330)
+- OTP-medlemskapet (`0097_otp_medlemskap.sql`, `server/src/lonnsberegning.ts`, `server/src/amelding.ts`):
+  arbeidstakere er med fra 13-årsdagen (eller første dag), til sluttdatoen, og med
+  `lonn_oppsett.otp_unntak_75` til og med dagen før 75-årsdagen (`otpMedlemskap`; innskuddspensjonsloven
+  § 4-2). `summer` regner OTP bare når den ansatte er med på utbetalingsdatoen (`otpMedlem`), med
+  merknad ellers; OTP-grunnlaget vises likevel. `ansatte.otp_innmeldt` og `otp_utmeldt` er datoene
+  den ansatte ble meldt inn og ut hos pensjonsleverandøren (ut ikke før inn, `ansatte_otp_utmeldt`).
+  A-meldingens kontroll gir advarsel for den som er med i måneden uten å være meldt inn, og for den
+  som er meldt inn og er med til og med en dag i måneden (slutter eller fyller 75) uten å være meldt
+  ut. Rapporten «OTP» (`lonn.otp`) har datoene
 - Avstemmingen av lønnen og refusjonene fra NAV (`0085_nav_refusjon.sql`, `server/src/avstemming.ts`,
   `server/src/navRefusjon.ts`, Lønn → Sykepenger i `web/src/sider/LonnSykepenger.tsx`).
   Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften

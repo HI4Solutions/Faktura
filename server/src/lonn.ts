@@ -97,7 +97,7 @@ async function hentOppsett(db: Db, org: string): Promise<Oppsett & { lonnsdag: n
   const o = await en<any>(
     db,
     `select l.daglig_grense, l.ukentlig_grense, l.overtid_prosent, l.ferie_dager, l.aga_sone, l.otp_prosent, l.feriepenger_prosent, l.lonnsdag, l.halv_skatt,
-            l.sykepenger_refusjon
+            l.sykepenger_refusjon, l.otp_unntak_75
        from faktura.lonn_oppsett l where l.org_id = $1`,
     [org],
   );
@@ -108,6 +108,7 @@ async function hentOppsett(db: Db, org: string): Promise<Oppsett & { lonnsdag: n
     ferie_dager: Number(o?.ferie_dager ?? 25),
     aga_sone: o?.aga_sone ?? "1",
     otp_prosent: Number(o?.otp_prosent ?? 2),
+    otp_unntak_75: o?.otp_unntak_75 ?? false,
     feriepenger_prosent: Number(o?.feriepenger_prosent ?? 12),
     lonnsdag: Number(o?.lonnsdag ?? 20),
     halv_skatt: o?.halv_skatt ?? "desember",

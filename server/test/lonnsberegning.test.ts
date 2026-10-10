@@ -8,6 +8,8 @@ import {
   arbeidsgiverperiode,
   erFrilanser,
   fastlonn,
+  fyller,
+  otpMedlemskap,
   feriepengelinjer,
   ferietrekk,
   frister,
@@ -242,6 +244,42 @@ describe("frilansere og styremedlemmer (0096)", () => {
     const f = fastlonn({ ...kari, arbeidsforhold_type: "frilanserOppdragstakerHonorarPersonerMm" }, "2026-10-01", "2026-10-31")!;
     expect(somHonorar({ honorar_art: "honorar" }, f)).toMatchObject({ lonnsart: "honorar", tekst: "Fast honorar", belop: 50000 });
     expect(somHonorar({ honorar_art: "styrehonorar" }, f)).toMatchObject({ lonnsart: "styrehonorar", tekst: "Fast styrehonorar", belop: 50000 });
+  });
+});
+
+describe("OTP-medlemskapet (0097)", () => {
+  it("datoen den ansatte fyller år, også født 29. februar", () => {
+    expect(fyller("2013-11-15", 13)).toBe("2026-11-15");
+    expect(fyller("2008-02-29", 18)).toBe("2026-03-01");
+    expect(fyller("2008-02-29", 20)).toBe("2028-02-29");
+  });
+
+  it("med fra 13-årsdagen eller første dag, til og med dagen før 75-årsdagen når ordningen ikke tar dem opp", () => {
+    const a = { fodselsdato: "2013-11-15", ansatt_fra: "2026-06-01", ansatt_til: null, arbeidsforhold_type: "ordinaertArbeidsforhold" };
+    expect(otpMedlemskap(a, false)).toEqual({ fra: "2026-11-15", til: null });
+    expect(otpMedlemskap({ ...a, fodselsdato: "1990-01-01", ansatt_til: "2026-12-31" }, false)).toEqual({ fra: "2026-06-01", til: "2026-12-31" });
+    const eldre = { fodselsdato: "1951-03-01", ansatt_fra: "2020-01-01", ansatt_til: null, arbeidsforhold_type: "ordinaertArbeidsforhold" };
+    expect(otpMedlemskap(eldre, false)).toEqual({ fra: "2020-01-01", til: null });
+    expect(otpMedlemskap(eldre, true)).toEqual({ fra: "2020-01-01", til: "2026-02-28" });
+    // Fylt 75 før ansettelsen, frilanser, og uten fødselsdato.
+    expect(otpMedlemskap({ ...eldre, ansatt_fra: "2026-04-01" }, true)).toBeNull();
+    expect(otpMedlemskap({ ...a, arbeidsforhold_type: "frilanserOppdragstakerHonorarPersonerMm" }, false)).toBeNull();
+    expect(otpMedlemskap({ ...a, fodselsdato: null }, false)).toEqual({ fra: "2026-06-01", til: null });
+  });
+
+  it("OTP bare for medlemmer når lønnen utbetales, med merknad", () => {
+    const ung = { ...kari, fodselsdato: "2013-11-10", maanedslonn: 5000 };
+    const okt = summer([linje("fastlonn", 5000)], oppsett, trekk(ung), "2026-10-20", null);
+    expect(okt.otp).toBe(0);
+    expect(okt.otp_grunnlag).toBe(5000);
+    expect(okt.merknader).toContain("Ikke med i OTP: under 13 år (med fra 10.11.2026).");
+    expect(summer([linje("fastlonn", 5000)], oppsett, trekk(ung), "2026-11-20", null).otp).toBe(100);
+    const eldre = { ...kari, fodselsdato: "1951-03-01" };
+    expect(summer([linje("fastlonn", 40000)], oppsett, trekk(eldre), "2026-10-20", null).otp).toBe(800);
+    const uten = summer([linje("fastlonn", 40000)], { ...oppsett, otp_unntak_75: true }, trekk(eldre), "2026-10-20", null);
+    expect(uten.otp).toBe(0);
+    expect(uten.merknader).toContain("Ikke med i OTP: har fylt 75 år (ordningen tar ikke opp dem).");
+    expect(uten.aga_grunnlag).toBe(40000);
   });
 });
 

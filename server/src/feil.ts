@@ -43,6 +43,7 @@ const begrensninger: Record<string, string> = {
   faktura_linjer_en_rabatt: "Velg rabatt i prosent eller i kroner, ikke begge",
   produkter_en_konto: "Velg enten standardkontoen eller en annen konto som fast konto",
   ansatte_skattekort: "Skattekortet mangler opplysninger: tabelltrekk trenger tabellnummer og prosentsats, prosenttrekk en prosentsats og frikort et beløp",
+  ansatte_otp_utmeldt: "Datoen den ansatte ble meldt ut av OTP, kan ikke være før innmeldingen",
 };
 
 export function tilHttp(e: unknown): { status: number; error: string } {

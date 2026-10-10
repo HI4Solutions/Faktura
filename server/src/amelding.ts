@@ -13,7 +13,7 @@
 
 import { alle, en, type Db } from "./db.js";
 import { lonnsart } from "./lonnsarter.js";
-import { pluss, rund, virkedag } from "./lonnsberegning.js";
+import { otpMedlemskap, pluss, rund, virkedag } from "./lonnsberegning.js";
 import { PERMISJONSARTER, permisjonNavn, rapporteres, sluttdatoKjent, type PermisjonsArt } from "./permisjoner.js";
 
 export const NAVNEROM = "urn:ske:fastsetting:innsamling:a-meldingen:v2_3";
@@ -34,6 +34,11 @@ export type Arbeidsforholdsrad = {
   aarsak_sluttdato: string | null;
   siste_lonnsendring: string | null;
   siste_stillingsendring: string | null;
+  // OTP-medlemskapet (0097): fødselsdatoen, og da den ansatte ble meldt inn og ut hos
+  // pensjonsleverandøren.
+  fodselsdato?: string | null;
+  otp_innmeldt?: string | null;
+  otp_utmeldt?: string | null;
 };
 export type Slippdata = {
   ansatt_id: string;
@@ -58,6 +63,9 @@ export type Grunnlag = {
   slipper: Slippdata[];
   utkast: { periode: string; type: string }[]; // kjøringer med utbetaling i måneden som står som utkast
   permisjoner: Permisjonsrad[];
+  // OTP-satsen og om ordningen tar opp dem som har fylt 75 år (0097), til påminnelsene om inn- og
+  // utmelding.
+  otp?: { prosent: number; unntak75: boolean };
 };
 export type Avvik = { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string };
 
@@ -88,7 +96,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
   const o = await en<{ navn: string; orgnr: string | null }>(db, "select navn, orgnr from faktura.organisasjoner where id = $1", [org]);
   const oppsett = await en<any>(
     db,
-    "select aga_sone, full_stilling::float8 as full_stilling, virksomhet_orgnr, pensjonsinnretning_orgnr from faktura.lonn_oppsett where org_id = $1",
+    `select aga_sone, full_stilling::float8 as full_stilling, virksomhet_orgnr, pensjonsinnretning_orgnr, otp_prosent::float8 as otp_prosent, otp_unntak_75
+       from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
   const slipper = await alle<any>(
@@ -123,7 +132,9 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
             to_char(a.ansatt_til, 'YYYY-MM-DD') as ansatt_til, coalesce(g.stillingsprosent, a.stillingsprosent)::float8 as stillingsprosent,
             a.ansettelsestype, a.yrkeskode, a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato,
             to_char(coalesce(e.lonn, case when a.siste_lonnsendring <= $3::date then a.siste_lonnsendring end), 'YYYY-MM-DD') as siste_lonnsendring,
-            to_char(coalesce(e.stilling, case when a.siste_stillingsendring <= $3::date then a.siste_stillingsendring end), 'YYYY-MM-DD') as siste_stillingsendring
+            to_char(coalesce(e.stilling, case when a.siste_stillingsendring <= $3::date then a.siste_stillingsendring end), 'YYYY-MM-DD') as siste_stillingsendring,
+            to_char(a.fodselsdato, 'YYYY-MM-DD') as fodselsdato, to_char(a.otp_innmeldt, 'YYYY-MM-DD') as otp_innmeldt,
+            to_char(a.otp_utmeldt, 'YYYY-MM-DD') as otp_utmeldt
        from faktura.ansatte a
        left join lateral faktura.lonn_gjeldende(a.org_id, a.id, $3::date) g on true
        left join lateral faktura.lonn_endringsdatoer(a.org_id, a.id, $3::date) e on true
@@ -171,6 +182,7 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
     })),
     utkast,
     permisjoner,
+    otp: { prosent: Number(oppsett?.otp_prosent ?? 2), unntak75: !!oppsett?.otp_unntak_75 },
   };
 }
 
@@ -350,6 +362,17 @@ export function kontroller(g: Grunnlag): Avvik[] {
         ansatt_id: f.id,
       });
   }
+  // OTP (0097): den som er med i ordningen i måneden, meldes inn hos pensjonsleverandøren, og den
+  // som slutter (eller fyller 75 år når ordningen ikke tar dem opp), meldes ut.
+  if (g.otp && g.otp.prosent > 0)
+    for (const f of g.arbeidsforhold) {
+      const p = otpMedlemskap({ fodselsdato: f.fodselsdato ?? null, ansatt_fra: f.ansatt_fra, ansatt_til: f.ansatt_til, arbeidsforhold_type: f.arbeidsforhold_type }, g.otp.unntak75);
+      if (!p || p.fra > siste(g.maaned)) continue;
+      if (!f.otp_innmeldt && (!p.til || p.til >= forste(g.maaned)))
+        a.push({ niva: "advarsel", tekst: `${f.navn} er med i OTP fra ${visDato(p.fra)}: meld den ansatte inn hos pensjonsleverandøren, og før datoen på den ansatte.`, ansatt_id: f.id });
+      else if (f.otp_innmeldt && p.til && p.til <= siste(g.maaned) && !f.otp_utmeldt)
+        a.push({ niva: "advarsel", tekst: `${f.navn} er med i OTP til og med ${visDato(p.til)}: meld den ansatte ut hos pensjonsleverandøren, og før datoen på den ansatte.`, ansatt_id: f.id });
+    }
   if (!g.arbeidsforhold.length && !g.slipper.length) a.push({ niva: "advarsel", tekst: "Ingen er ansatt eller har fått lønn i måneden, så det er ingenting å rapportere." });
   return a;
 }

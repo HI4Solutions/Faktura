@@ -206,6 +206,7 @@ function PersonalOppsett() {
     timebank: boolean;
     aga_sone: string;
     otp_prosent: string;
+    otp_unntak_75: boolean;
     feriepenger_prosent: string;
     lonnsdag: string;
     halv_skatt: "november" | "desember";
@@ -243,6 +244,7 @@ function PersonalOppsett() {
         timebank: data.timebank ?? false,
         aga_sone: data.aga_sone ?? "1",
         otp_prosent: tekst(data.otp_prosent ?? 2),
+        otp_unntak_75: data.otp_unntak_75 ?? false,
         feriepenger_prosent: tekst(data.feriepenger_prosent ?? 12),
         lonnsdag: String(data.lonnsdag ?? 20),
         halv_skatt: data.halv_skatt ?? "desember",
@@ -285,6 +287,7 @@ function PersonalOppsett() {
           ? {
               aga_sone: o!.aga_sone,
               otp_prosent: tall(o!.otp_prosent),
+              otp_unntak_75: o!.otp_unntak_75,
               feriepenger_prosent: tall(o!.feriepenger_prosent),
               lonnsdag: tall(o!.lonnsdag),
               halv_skatt: o!.halv_skatt,
@@ -483,6 +486,16 @@ function PersonalOppsett() {
               )}
             </label>
           </div>
+          {tall(o.otp_prosent) > 0 && (
+            <label>
+              <input type="checkbox" checked={o.otp_unntak_75} onChange={(e) => settO({ ...o, otp_unntak_75: e.target.checked })} />
+              OTP-ordningen tar ikke opp ansatte som har fylt 75 år
+              <span className="felt-hjelp">
+                Alle ansatte fra 13 år er med i OTP fra første dag og første krone (frilansere og oppdragstakere er ikke med). Ordningens regelverk kan si at de som har
+                fylt 75 år ikke tas opp; kryss av om deres gjør det. A-meldingen minner om dem som skal meldes inn eller ut hos pensjonsleverandøren.
+              </span>
+            </label>
+          )}
           <div className="rad">
             <label>
               Lønnsdag (dagen i måneden)

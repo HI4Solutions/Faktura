@@ -86,6 +86,8 @@ export function frister(utbetalt: string) {
 export type Oppsett = Regler & {
   aga_sone: string;
   otp_prosent: number;
+  // Ordningen tar ikke opp arbeidstakere som har fylt 75 år (0097).
+  otp_unntak_75?: boolean;
   feriepenger_prosent: number;
   ferie_dager: number;
   // Lønn under sykdom etter arbeidsgiverperioden (0079): arbeidsgiveren betaler og krever refusjon
@@ -138,6 +140,47 @@ export const somHonorar = (a: Pick<Ansatt, "honorar_art">, l: Linje): Linje => (
   lonnsart: honorarArt(a),
   tekst: l.tekst.replace(/^Fastlønn/, a.honorar_art === "styrehonorar" ? "Fast styrehonorar" : "Fast honorar"),
 });
+
+// --- OTP-medlemskapet (0097) ------------------------------------------------------------------
+// Innskuddspensjonsloven § 4-2 (fra 2022): arbeidstakere som har fylt 13 år er med i ordningen fra
+// første krone og første dag, og ordningens regelverk kan si at de som har fylt 75 år ikke tas opp.
+// Frilansere og oppdragstakere er ikke arbeidstakere. Uten fødselsdato regnes den ansatte som med.
+
+export const OTP_FRA_ALDER = 13;
+export const OTP_TIL_ALDER = 75;
+
+// Datoen den ansatte fyller år (29. februar blir 1. mars i år som ikke er skuddår).
+export function fyller(fodselsdato: string, alder: number) {
+  const aar = Number(fodselsdato.slice(0, 4)) + alder;
+  const d = `${aar}-${fodselsdato.slice(5)}`;
+  return fodselsdato.slice(5) === "02-29" && !(aar % 4 === 0 && (aar % 100 !== 0 || aar % 400 === 0)) ? `${aar}-03-01` : d;
+}
+
+// Perioden den ansatte er med i OTP (fra og med, til og med; null: ingen grense), eller null når
+// den ansatte ikke er med (frilanser, eller har fylt 75 år før ansettelsen når ordningen ikke tar
+// dem opp).
+export function otpMedlemskap(a: Pick<Ansatt, "fodselsdato" | "ansatt_fra" | "ansatt_til" | "arbeidsforhold_type">, unntak75: boolean) {
+  if (erFrilanser(a)) return null;
+  let fra = a.ansatt_fra;
+  let til = a.ansatt_til;
+  if (a.fodselsdato) {
+    const tretten = fyller(a.fodselsdato, OTP_FRA_ALDER);
+    if (tretten > fra) fra = tretten;
+    if (unntak75) {
+      const sytti = pluss(fyller(a.fodselsdato, OTP_TIL_ALDER), -1);
+      if (!til || sytti < til) til = sytti;
+    }
+  }
+  return til && til < fra ? null : { fra, til };
+}
+
+// Om den ansatte er med i OTP på datoen (lønnen utbetales), og grunnen når den ikke er det.
+export function otpMedlem(a: Pick<Ansatt, "fodselsdato" | "ansatt_fra" | "ansatt_til" | "arbeidsforhold_type">, unntak75: boolean, dato: string): { medlem: boolean; grunn?: string } {
+  if (erFrilanser(a)) return { medlem: false, grunn: "frilanser eller oppdragstaker" };
+  if (a.fodselsdato && fyller(a.fodselsdato, OTP_FRA_ALDER) > dato) return { medlem: false, grunn: `under ${OTP_FRA_ALDER} år (med fra ${fyller(a.fodselsdato, OTP_FRA_ALDER).split("-").reverse().join(".")})` };
+  if (a.fodselsdato && unntak75 && fyller(a.fodselsdato, OTP_TIL_ALDER) <= dato) return { medlem: false, grunn: `har fylt ${OTP_TIL_ALDER} år (ordningen tar ikke opp dem)` };
+  return { medlem: true };
+}
 
 // Honoraret for timene med timelønn: alle de godkjente timene i ukene som ikke er lønnet (det
 // som er godkjent i alt, minus det som er lønnet før), uten overtid og timebank. Med fast honorar
@@ -612,7 +655,10 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   const feriepengegrunnlag = rund(ferie);
   const otpProsent = Number(o.otp_prosent);
   const otpTak = (12 * grunnbelop(dato)) / 12;
-  const otp = otpProsent > 0 ? rund((Math.max(0, Math.min(otpGrunnlag, otpTak)) * otpProsent) / 100) : 0;
+  // OTP for dem som er med i ordningen når lønnen utbetales (0097).
+  const m = otpMedlem(a, !!o.otp_unntak_75, dato);
+  if (otpProsent > 0 && otpGrunnlag > 0 && !m.medlem && !erFrilanser(a)) merknader.push(`Ikke med i OTP: ${m.grunn}.`);
+  const otp = otpProsent > 0 && m.medlem ? rund((Math.max(0, Math.min(otpGrunnlag, otpTak)) * otpProsent) / 100) : 0;
   const netto = rund(brutto - trekk + utgifter + trekkEtter);
   if (netto < 0) merknader.push("Nettolønnen er negativ. Sjekk trekkene.");
   return {

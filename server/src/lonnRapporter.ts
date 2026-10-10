@@ -377,7 +377,7 @@ export const lonnRapporter: Rapportdef[] = [
     id: "lonn.otp",
     modul: "lonn",
     navn: "OTP",
-    beskrivelse: "Grunnlaget for obligatorisk tjenestepensjon og OTP per ansatt i perioden, til pensjonsleverandøren.",
+    beskrivelse: "Grunnlaget for obligatorisk tjenestepensjon og OTP per ansatt i perioden, til pensjonsleverandøren, med datoene den ansatte ble meldt inn og ut.",
     funksjon: "lonn",
     tilgang: "personal_les",
     parameter: "periode",
@@ -388,13 +388,18 @@ export const lonnRapporter: Rapportdef[] = [
         { nokkel: "navn", navn: "Ansatt" },
         { nokkel: "otp_grunnlag", navn: "OTP-grunnlag", type: "kr", sum: true },
         { nokkel: "otp", navn: "OTP", type: "kr", sum: true },
+        { nokkel: "innmeldt", navn: "Meldt inn", type: "dato" },
+        { nokkel: "utmeldt", navn: "Meldt ut", type: "dato" },
       ],
+      // Meldt inn og ut hos pensjonsleverandøren (0097): datoene på den ansatte.
       rader: await alle(
         db,
-        `select s.ansattnummer, s.navn, sum(s.otp_grunnlag)::float8 as otp_grunnlag, sum(s.otp)::float8 as otp
+        `select s.ansattnummer, s.navn, sum(s.otp_grunnlag)::float8 as otp_grunnlag, sum(s.otp)::float8 as otp,
+                to_char(a.otp_innmeldt, 'YYYY-MM-DD') as innmeldt, to_char(a.otp_utmeldt, 'YYYY-MM-DD') as utmeldt
            from faktura.lonnsslipper s join faktura.lonnskjoringer k on k.id = s.kjoring_id
+           join faktura.ansatte a on a.org_id = s.org_id and a.id = s.ansatt_id
           where ${KJORINGER}
-          group by s.ansattnummer, s.navn order by s.ansattnummer`,
+          group by s.ansattnummer, s.navn, a.otp_innmeldt, a.otp_utmeldt order by s.ansattnummer`,
         parametre(org, v),
       ),
     }),

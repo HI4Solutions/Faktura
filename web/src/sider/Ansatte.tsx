@@ -78,6 +78,9 @@ type Ansatt = {
   aarsak_sluttdato: string | null;
   // Frilansere og styremedlemmer (0096): honorar for oppdrag eller styrehonorar.
   honorar_art: "honorar" | "styrehonorar";
+  // OTP (0097): da den ansatte ble meldt inn og ut hos pensjonsleverandøren.
+  otp_innmeldt: string | null;
+  otp_utmeldt: string | null;
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -89,6 +92,35 @@ type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"
 const ansettelsestype: Record<string, string> = { fast: "Fast", midlertidig: "Midlertidig", tilkalling: "Tilkalling" };
 // Kodene i a-meldingen (0077_amelding.sql).
 const FRILANSER = "frilanserOppdragstakerHonorarPersonerMm";
+// OTP-medlemskapet (0097, som otpMedlemskap i lonnsberegning.ts): alle arbeidstakere fra 13 år, fra
+// første dag; ordningen kan si at de som har fylt 75 år ikke tas opp.
+const fyller = (fodt: string, alder: number) => {
+  const aar = Number(fodt.slice(0, 4)) + alder;
+  return fodt.slice(5) === "02-29" && !(aar % 4 === 0 && (aar % 100 !== 0 || aar % 400 === 0)) ? `${aar}-03-01` : `${aar}-${fodt.slice(5)}`;
+};
+const dagFor = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+function otpTekst(a: { fodselsdato: string; ansatt_fra: string; ansatt_til: string }, unntak75: boolean) {
+  if (!a.ansatt_fra) return "Med i OTP fra første arbeidsdag.";
+  let fra = a.ansatt_fra;
+  let til = a.ansatt_til || null;
+  let grunnFra = "";
+  let grunnTil = "";
+  if (a.fodselsdato) {
+    const tretten = fyller(a.fodselsdato, 13);
+    if (tretten > fra) {
+      fra = tretten;
+      grunnFra = " (13-årsdagen)";
+    }
+    const sytti = dagFor(fyller(a.fodselsdato, 75));
+    if (unntak75 && (!til || sytti < til)) {
+      til = sytti;
+      grunnTil = " (ordningen tar ikke opp dem som har fylt 75 år)";
+    }
+  }
+  if (til && til < fra) return "Ikke med i OTP: hadde fylt 75 år da ansettelsen begynte, og ordningen tar ikke opp dem.";
+  const vis = (d: string) => d.split("-").reverse().join(".");
+  return `Med i OTP fra ${vis(fra)}${grunnFra}${til ? ` til og med ${vis(til)}${grunnTil}` : ""}. Meld den ansatte inn hos pensjonsleverandøren, og ut når den ansatte slutter; a-meldingen minner om det som mangler.`;
+}
 const ARBEIDSFORHOLD: Record<string, string> = {
   ordinaertArbeidsforhold: "Ordinært arbeidsforhold",
   maritimtArbeidsforhold: "Maritimt arbeidsforhold",
@@ -393,6 +425,8 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     yrkeskode: ansatt.yrkeskode ?? "",
     arbeidsforhold_type: ansatt.arbeidsforhold_type ?? "ordinaertArbeidsforhold",
     honorar_art: ansatt.honorar_art ?? "honorar",
+    otp_innmeldt: ansatt.otp_innmeldt ?? "",
+    otp_utmeldt: ansatt.otp_utmeldt ?? "",
     arbeidstidsordning: ansatt.arbeidstidsordning ?? "ikkeSkift",
     aarsak_sluttdato: ansatt.aarsak_sluttdato ?? "",
     // Lønns- og stillingsendringer (Lonnsendringer.tsx): datoen endringen gjelder fra, og grunnen.
@@ -407,7 +441,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     stillingsprosent: ansatt.stillingsprosent ?? 100,
   }));
   // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
-  const oppsett = useData(() => hent<{ bursdag_varsel: string; full_stilling: number; ferie_dager: number }>(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
+  const oppsett = useData(
+    () => hent<{ bursdag_varsel: string; full_stilling: number; ferie_dager: number; otp_prosent: number; otp_unntak_75: boolean }>(`/org/${org!.id}/lonn-oppsett`),
+    [org?.id],
+  );
   const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
   // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Ansatte og timer).
   const fullStilling = Number(oppsett.data?.full_stilling ?? 37.5);
@@ -641,6 +678,9 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       kropp.yrkeskode = a.yrkeskode.replace(/\s/g, "") || null;
       kropp.arbeidsforhold_type = a.arbeidsforhold_type;
       kropp.honorar_art = a.honorar_art;
+      if (a.otp_innmeldt && a.otp_utmeldt && a.otp_utmeldt < a.otp_innmeldt) return h.settFeil("Datoen den ansatte ble meldt ut av OTP, kan ikke være før innmeldingen.");
+      kropp.otp_innmeldt = a.otp_innmeldt || null;
+      kropp.otp_utmeldt = a.otp_utmeldt || null;
       kropp.arbeidstidsordning = a.arbeidstidsordning;
       // Årsaken til sluttdatoen rapporteres ikke for frilansere og styremedlemmer.
       kropp.aarsak_sluttdato = a.ansatt_til && a.aarsak_sluttdato && a.arbeidsforhold_type !== FRILANSER ? a.aarsak_sluttdato : null;
@@ -1158,6 +1198,22 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                   får honorar. Med fastlønn blir månedslønnen et fast honorar, og med timelønn får de honorar for timene (uten overtid). Et styrehonorar for året legges til
                   i lønnskjøringen («Styrehonorar og godtgjørelse for verv»). Skatten trekkes etter prosentsatsen på skattekortet.
                 </p>
+              )}
+              {a.arbeidsforhold_type !== FRILANSER && Number(oppsett.data?.otp_prosent ?? 0) > 0 && (
+                <>
+                  <h3>OTP (tjenestepensjon)</h3>
+                  <p className="felt-hjelp tillegg-hjelp">{otpTekst(a, !!oppsett.data?.otp_unntak_75)}</p>
+                  <div className="rad">
+                    <label>
+                      Meldt inn hos pensjonsleverandøren
+                      <input type="date" {...felt("otp_innmeldt")} />
+                    </label>
+                    <label>
+                      Meldt ut
+                      <input type="date" {...felt("otp_utmeldt")} />
+                    </label>
+                  </div>
+                </>
               )}
             </>
           )}

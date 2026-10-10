@@ -19,7 +19,9 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    utbetalingsdato, arbeidsgiveravgiften og inntektsmottakerne, og det som mangler: fødselsnummer,
    yrkeskode, virksomheten (underenheten) og pensjonsleverandøren når det er OTP stopper meldingen;
    og en permisjon over 14 dager uten valgt art stopper meldingen; lønnskjøringer som står som utkast,
-   sluttdato uten årsak og en permisjon som slutter i måneden uten bekreftet sluttdato er advarsler.
+   sluttdato uten årsak, en permisjon som slutter i måneden uten bekreftet sluttdato, og en ansatt
+   som er med i OTP uten å være meldt inn hos pensjonsleverandøren (eller slutter uten å være meldt
+   ut) er advarsler.
 3. **Fila.** Eier eller administrator trykker «Lag fil (XML)» (med totrinnsbekreftelse, fila har
    fødselsnumrene). Workeren lager fila (bare workeren kan lese fødselsnumrene), og den lastes ned
    og lastes opp på skatteetaten.no. Merk den som lastet opp etterpå: da erstatter en ny melding for
