@@ -3,7 +3,7 @@
 // utbyttet og overføringen av årsresultatet til annen egenkapital, bilagserie Å) og periodelåsen.
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, hent } from "../api";
+import { api, hent, lastNed } from "../api";
 import { Feil, Laster, useData, useHandling } from "../felles";
 import { useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
@@ -276,6 +276,25 @@ export function Aarsoppgjor({ aar, velg }: { aar: string | null; velg: (aar: str
               </button>
             )}
           </div>
+        </div>
+        <div className="aars-saft">
+          <div>
+            <strong>SAF-T Regnskap</strong>
+            <p className="liten dempet">
+              Hele regnskapet for {s.aar} i Skatteetatens standardformat: kontoene med saldo, kundene, leverandørene, mva-kodene og alle bilagene. Skatteetaten kan be om
+              filen, og regnskapsføreren kan lese den inn.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={h.opptatt}
+            onClick={() => {
+              const stempel = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
+              void h.kjor(() => lastNed(`${sti}/saft?aar=${s.aar}`, `SAF-T Financial_${org!.orgnr ?? "uten-orgnr"}_${stempel}.xml`));
+            }}
+          >
+            Last ned SAF-T for {s.aar}
+          </button>
         </div>
         <Feil melding={h.feil} />
       </div>

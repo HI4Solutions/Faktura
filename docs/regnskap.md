@@ -1,4 +1,4 @@
-# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, mva-meldingen, årsoppgjøret, anleggsmidler, periodiseringer og saldoavskrivninger
+# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, mva-meldingen, årsoppgjøret og SAF-T, anleggsmidler, periodiseringer og saldoavskrivninger
 
 Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
@@ -253,6 +253,28 @@ Mva-meldingen for hver termin regnes fra bilagene (Regnskap → Mva; `server/src
 - Rapportene «Resultatregnskap» og «Balanse» (Rapporter → Regnskap) gjelder en periode (balansen ved
   slutten av den), med samme periode året før, og kan sendes til regnskapsføreren hver måned.
 
+## SAF-T Regnskap
+
+Under Årsoppgjør lastes hele regnskapet for et år ned i Skatteetatens standardformat (SAF-T
+Financial; `server/src/saft.ts`), som Skatteetaten kan be om (bokføringsforskriften § 7-8) og som
+regnskapsføreren kan lese inn. Versjon 1.30 for årene før 2027 og 1.40 fra 2027. Filnavnet er
+`SAF-T Financial_<organisasjonsnummer>_<tidspunkt>.xml`, og organisasjonsnummeret må være lagt inn.
+
+- **Header**: selskapet (organisasjonsnummer, navn, adresse, kontaktpersonen som lager filen, telefon
+  og e-post, mva-registreringen og bankkontoen), periodene 1–12 og at grunnlaget er regnskapet.
+- **Kontoene** med inngående og utgående saldo (resultatkontoene fra 1. januar) og grupperingen etter
+  næringsspesifikasjonen (GroupingCategory og GroupingCode, påkrevd fra 1.30): kontoklassen gir
+  kategorien, og koden er kontoen selv når den finnes i listen, ellers den nærmeste koden under (med
+  unntak der standard kontoplan og næringsspesifikasjonen skiller lag, f.eks. avgiftskontoene på
+  2740, feriepengene på 2949 og reisekostnadene med og uten opplysningsplikt).
+- **Kundene** (kundenummeret) og **leverandørene** (organisasjonsnummeret, ellers navnet) med saldoen
+  på kundefordringene og leverandørgjelden, og **mva-kodene** (Skatteetatens standardkoder med
+  satsen).
+- **Bilagene** i året, en journal per serie: linjene i debet eller kredit, kunden eller leverandøren på
+  reskontrolinjene, og mva-informasjonen på grunnlagslinjene (koden, satsen, grunnlaget og avgiften,
+  for omvendt avgiftsplikt den beregnede), ikke på avgiftslinjene.
+- Filen valideres mot Skatteetatens XSD for 1.30 og 1.40 i testene (`server/test/saft`).
+
 ## Anleggsregisteret og avskrivningsplanen
 
 - Et anleggsmiddel har kategori (goodwill, andre immaterielle eiendeler, tomt, bygning, fast
@@ -402,6 +424,9 @@ Resultatregnskap og Balanse (kan sendes hver måned).
 - Perioder låses ikke av seg selv: låsen settes under Årsoppgjør (eller fra Mva når terminen er
   levert). Skattekostnaden regnes ikke ut (den står i skattemeldingen), og utsatt skatt føres med et
   manuelt bilag.
+- SAF-T: kunden og leverandøren står bare på reskontrolinjer fra fakturaene, innbetalingene og
+  utgiftene (ikke fra manuelle bilag), dimensjoner (Analysis) og kildedokumenter er ikke med, og
+  filen sendes ikke fra appen (Skatteetaten ber om den).
 - Mva-meldingen leveres i Altinn av brukeren (linjene står under Regnskap → Mva); innsending
   direkte fra appen er ikke med. Uttak, tap på krav, justering og tilbakeføring av inngående avgift
   (spesifikasjonslinjene) regnes ikke ut, og innførsel av varer (14, 15, 81–85) kommer bare med fra
@@ -433,6 +458,9 @@ Resultatregnskap og Balanse (kan sendes hver måned).
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/lag-kid-nar-du-er-arbeidsgiver>
 - Regnskapsloven § 4-1 (grunnleggende regnskapsprinsipper: opptjening og sammenstilling, grunnlaget
   for periodiseringene): <https://lovdata.no/lov/1998-07-17-56/§4-1>
+- Skatteetaten, SAF-T Financial (XSD 1.30 og 1.40, eksempelfilen med mva-informasjonen på
+  grunnlagslinjene, og at 1.30 gjelder fra 2025 og 1.40 fra 2027): <https://github.com/Skatteetaten/saf-t>
+  (mappene «SAF-T_Financial_1.3» og «SAF-T_Financial_1.4»)
 - Skatteetaten, næringsspesifikasjonen (kodene for resultat og balanse som SAF-T grupperes etter, blant
   dem 2050 egenkapital, 2500 betalbar skatt, 2800 avsatt utbytte, 8300 betalbar skatt og 8800
   disponering av årets resultat): <https://github.com/Skatteetaten/saf-t> (mappen «Grouping Category

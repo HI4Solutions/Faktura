@@ -46,6 +46,10 @@ jobs:
       - name: Installer psql
         timeout-minutes: 5
         run: command -v psql >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
+      # xmllint: SAF-T-filen valideres mot Skatteetatens XSD (server/test/saft.test.ts).
+      - name: Installer xmllint
+        timeout-minutes: 5
+        run: command -v xmllint >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils)
       - run: npm ci
         working-directory: server
       - run: npm run typecheck

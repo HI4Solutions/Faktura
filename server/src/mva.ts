@@ -134,6 +134,11 @@ const UTGAENDE: Record<string, number> = { "3": 25, "31": 15, "32": 11.11, "33":
 const UTEN_AVGIFT = ["5", "6", "51", "52", "85"]; // sats 0; 85 er kjøp (innførsel), de andre salg
 const OMVENDT: Record<string, number> = { "81": 25, "82": 25, "83": 15, "84": 15, "86": 25, "87": 25, "88": 12, "89": 12, "91": 25, "92": 25 };
 const INNGAENDE = ["1", "11", "12", "13", "14", "15"];
+const INN_SATS: Record<string, number> = { "1": 25, "11": 15, "12": 11.11, "13": 12, "14": 25, "15": 15 };
+// Satsen for koden (0 for omsetning uten avgift), og om avgiften beregnes av kjøperen (omvendt
+// avgiftsplikt: grunnlaget er det kjøpet avgiften er beregnet av). Til SAF-T (saft.ts).
+export const mvaSats = (kode: string) => UTGAENDE[kode] ?? OMVENDT[kode] ?? INN_SATS[kode] ?? 0;
+export const omvendtAvgift = (kode: string) => kode in OMVENDT;
 const FRADRAG_OMVENDT = ["81", "83", "86", "88", "91"];
 
 // Avgiftskontoene: utgående (med kode), beregnet ved kjøp fra utlandet, inngående (med kode) og

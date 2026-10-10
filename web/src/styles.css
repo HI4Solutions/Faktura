@@ -2603,6 +2603,8 @@ table.aars-tabell td, table.aars-tabell th { padding-top: 8px; padding-bottom: 8
 table.aars-tabell tr.sum td { font-weight: 650; border-top: 1px solid var(--kant-sterk); }
 .aars-felt { margin-top: 8px; }
 .aars-kort .mva-levert { margin-top: 12px; }
+.aars-saft { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-top: 14px; border-top: 1px solid var(--kant); padding-top: 12px; }
+.aars-saft p { margin: 4px 0 0; max-width: 70ch; }
 @media (max-width: 900px) {
   .aars-tabeller { grid-template-columns: 1fr; }
 }

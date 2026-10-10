@@ -715,6 +715,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   API-et avviser manuelle bilag i en låst periode (`krevAapenPeriode`). Årsoppgjøret føres med
   `bokfor_aarsoppgjor` (serie Å, kilde aarsoppgjor, `kilde_id` er raden i `aarsoppgjor` med skatten og
   utbyttet; ett gjeldende per år) og angres med `angre_aarsoppgjor`; begge avviser et låst år.
+  SAF-T Regnskap (`server/src/saft.ts`, `GET /regnskap/saft?aar=`): filen bygges fra bilagene og
+  posteringene til og med året (saldoene), med kunden fra fakturaen eller innbetalingen og
+  leverandøren fra utgiften bilaget kommer fra, grupperingen fra næringsspesifikasjonen
+  (`gruppering`) og mva-informasjonen fordelt på grunnlagslinjene. Testen validerer den mot XSD-ene i
+  `server/test/saft` med xmllint (installert i CI).
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen
