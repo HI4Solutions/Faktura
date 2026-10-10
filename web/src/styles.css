@@ -2779,3 +2779,9 @@ h2.utgift-gruppe .dempet { font-weight: 450; }
   .bank-kontoer { grid-template-columns: minmax(0, 1fr); }
   .bank-konto-skjema { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Yrkesskader (Yrkesskader.tsx): skaderegisteret med det som gjenstår å melde. */
+.yrkesskade-liste { list-style: none; padding: 0; margin: 8px 0; }
+.yrkesskade-liste > li { padding: 11px 0; border-bottom: 1px solid var(--kant); }
+.yrkesskade-oppgaver { margin: 6px 0 0; padding-left: 18px; }
+.yrkesskader .topp { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

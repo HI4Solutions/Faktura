@@ -957,6 +957,9 @@ export function ansattRuter() {
         [orgId(c), id(c)],
       );
       if (l!.n > 0) throw new ApiFeil(409, "Den ansatte har lønnsslipper (som skal oppbevares) og kan ikke slettes. Sett en sluttdato i stedet.");
+      // Yrkesskadene (0102) skal også oppbevares.
+      const y = await en<{ n: number }>(db, "select count(*)::int as n from faktura.yrkesskader where org_id = $1 and ansatt_id = $2", [orgId(c), id(c)]);
+      if (y!.n > 0) throw new ApiFeil(409, "Den ansatte har yrkesskader i registeret (som skal oppbevares) og kan ikke slettes. Sett en sluttdato i stedet.");
       await db.query("delete from faktura.lonnsslipper where org_id = $1 and ansatt_id = $2", [orgId(c), id(c)]);
       const res = await db.query("delete from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), id(c)]);
       if (!res.rowCount) throw new ApiFeil(404, "Fant ikke den ansatte");

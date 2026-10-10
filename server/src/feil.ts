@@ -45,6 +45,8 @@ const begrensninger: Record<string, string> = {
   ansatte_skattekort: "Skattekortet mangler opplysninger: tabelltrekk trenger tabellnummer og prosentsats, prosenttrekk en prosentsats og frikort et beløp",
   ansatte_otp_utmeldt: "Datoen den ansatte ble meldt ut av OTP, kan ikke være før innmeldingen",
   ansatte_dodsdato: "Sluttdatoen er dødsdatoen når den ansatte er død",
+  // Fremmednøkler (23503).
+  yrkesskader_ansatt: "Den ansatte har yrkesskader i registeret (som skal oppbevares) og kan ikke slettes. Sett en sluttdato i stedet.",
 };
 
 export function tilHttp(e: unknown): { status: number; error: string } {
@@ -59,6 +61,7 @@ export function tilHttp(e: unknown): { status: number; error: string } {
   const kode = (e as { code?: string })?.code;
   const begrensning = (e as { constraint?: string })?.constraint;
   if (kode === "23514" && begrensning && begrensninger[begrensning]) return { status: 400, error: begrensninger[begrensning] };
+  if (kode === "23503" && begrensning && begrensninger[begrensning]) return { status: 409, error: begrensninger[begrensning] };
   if (kode && pgKoder[kode]) {
     const egen = kode.startsWith("FA") || kode === "P0002";
     return { status: pgKoder[kode], error: egen ? (e as Error).message : pgMeldinger[kode] ?? "Ugyldig forespørsel" };

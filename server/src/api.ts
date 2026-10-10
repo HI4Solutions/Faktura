@@ -46,6 +46,7 @@ import { reiseRuter } from "./reiseRuter.js";
 import { navRefusjonRuter } from "./navRefusjon.js";
 import { afpRuter } from "./afpPremier.js";
 import { virksomhetRuter } from "./virksomheter.js";
+import { yrkesskadeRuter } from "./yrkesskader.js";
 import { regnskapRuter } from "./regnskapRuter.js";
 import { regnskapBilagRuter } from "./regnskapBilagRuter.js";
 import { utgiftRuter } from "./utgifter.js";
@@ -451,6 +452,7 @@ export function lagApi() {
   org.route("/", navRefusjonRuter());
   org.route("/", afpRuter());
   org.route("/", virksomhetRuter());
+  org.route("/", yrkesskadeRuter());
   org.route("/", regnskapRuter());
   org.route("/", regnskapBilagRuter());
   org.route("/", utgiftRuter());

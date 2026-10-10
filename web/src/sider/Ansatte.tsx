@@ -22,6 +22,7 @@ import { LonnsTrekk } from "./LonnsTrekk";
 import { LonnNaturalytelser } from "./LonnNaturalytelser";
 import { IKKE_ANSATT_HJELP, RollerOppsett, type Rolle } from "./Roller";
 import { SkattekortFraSkatteetaten, type Trekk } from "./Skattekort";
+import { Yrkesskader } from "./Yrkesskader";
 
 type Ansatt = {
   id: string;
@@ -197,6 +198,8 @@ export function Ansatte() {
   // Rollene (f.eks. lege og sekretær) settes opp her og i bemanningskalenderen.
   const [roller, settRoller] = useState(false);
   const [rolleVersjon, settRolleVersjon] = useState(0);
+  // Yrkesskadene (0102): forsikringen og skaderegisteret.
+  const [skader, settSkader] = useState(false);
   const rolleliste = useData(() => (roller ? hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`) : Promise.resolve(null)), [org?.id, roller, rolleVersjon]);
   // Alle, også de som har sluttet (de som er hentet inn fra en kunde, hentes ikke inn igjen).
   const allePersoner = useData(() => (roller ? hent<Ansatt[]>(`/org/${org!.id}/ansatte`) : Promise.resolve(null)), [org?.id, roller, rolleVersjon]);
@@ -233,6 +236,9 @@ export function Ansatte() {
             <button type="button" onClick={() => settRoller(true)}>
               Roller
             </button>
+            <button type="button" onClick={() => settSkader(true)}>
+              Yrkesskader
+            </button>
             {harFunksjon(org, "import") && (
               <Link className="knapp" to="/ansatte/importer">
                 Importer
@@ -255,6 +261,9 @@ export function Ansatte() {
             lukk={() => (settRoller(false), last())}
           />
         )}
+      </Dialog>
+      <Dialog apen={skader} lukk={() => settSkader(false)} tittel="Yrkesskader" bred>
+        {skader && <Yrkesskader personer={(data ?? []).filter((a) => erAnsatt(a))} />}
       </Dialog>
       <div className="liste-verktoy">
         <div className="faner" role="tablist">

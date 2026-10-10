@@ -992,6 +992,17 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   hovedvirksomheten med sonen der (lagret på premien). Henting av sykmeldinger og forespørsler fra
   NAV gjelder alle virksomhetene. Rapporten «Arbeidsgiveravgift per virksomhet og sone»
   (`lonn.aga_soner`, termin)
+- Yrkesskader (Lønn K8, `0102_yrkesskader.sql`, `server/src/yrkesskader.ts`, `web/src/sider/Yrkesskader.tsx`
+  fra Ansatte → Yrkesskader). Yrkesskadeforsikringen (selskapet og polisenummeret) står i
+  lønnsoppsettet (`yrkesskade_selskap`, `yrkesskade_polise`, `PUT /yrkesskader/forsikring`).
+  `faktura.yrkesskader` er registeret over personskadene under arbeidet (arbeidsmiljøloven § 5-1):
+  den ansatte, dato og klokkeslett, arbeidsulykke eller yrkessykdom, stedet, hva som skjedde, skaden,
+  om den er alvorlig (dødsfall eller alvorlig personskade) og førte til fravær, tiltakene, og datoene
+  den ble meldt til NAV og forsikringen og varslet til Arbeidstilsynet og politiet. `oppgaver` sier
+  hva som gjenstår: Arbeidstilsynet og politiet straks ved alvorlig skade (§ 5-2), skademeldingen
+  til NAV (så snart som mulig, også ved tvil) og meldingen til forsikringen. Bare eier og
+  administrator (helseopplysninger, som fraværet; RLS og revisjonsloggen). En ansatt med skader i
+  registeret slettes ikke. Rapporten «Skaderegister (yrkesskader)» (`personal.yrkesskader`, år)
 - Avstemmingen av lønnen og refusjonene fra NAV (`0085_nav_refusjon.sql`, `server/src/avstemming.ts`,
   `server/src/navRefusjon.ts`, Lønn → Sykepenger i `web/src/sider/LonnSykepenger.tsx`).
   Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften

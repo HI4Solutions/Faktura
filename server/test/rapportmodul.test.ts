@@ -157,6 +157,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "personal.timebank",
         "personal.ekstratimer",
         "personal.ansatte",
+        "personal.yrkesskader",
       ],
       lonn: [
         "lonn.journal",
