@@ -20,16 +20,19 @@ import {
   BankFeil,
   gyldigTil,
   hentBanker,
+  hentSaldo,
   hentTransaksjoner,
   kontonr,
   opprettOkt,
   oppsummer,
   slettOkt,
   startAutorisering,
+  tilBankposter,
   tilInnbetalinger,
   tilReserverte,
   velgBank,
   type BankNokkel,
+  type Bankpost,
   type Innbetaling,
   type Psu,
 } from "./enableBanking.js";
@@ -456,12 +459,31 @@ async function lagreReserverte(orgId: string, kontonummer: string, reserverte: I
   });
 }
 
+// Bankpostene (0091_bankposter.sql, bankAvstemming.ts): alle de bokførte transaksjonene på kontoen,
+// inn og ut, lagres én gang (saldoen etter hver oppdateres), og at kontoen er hentet fra datoen.
+async function lagreBankposter(orgId: string, kontonummer: string, poster: Bankpost[], fra: string) {
+  await somSystem(async (db) => {
+    for (const p of poster)
+      await db.query(
+        `insert into faktura.bankposter (org_id, konto, ekstern_id, dato, belop, valuta, motpart, motpart_konto, melding, referanse, saldo)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         on conflict (org_id, konto, ekstern_id) do update set saldo = coalesce(excluded.saldo, faktura.bankposter.saldo)`,
+        [orgId, kontonummer, p.ekstern_id, p.dato, p.belop, p.valuta, p.motpart, p.motpart_konto, p.melding, p.referanse, p.saldo],
+      );
+    await db.query(
+      `insert into faktura.bankpost_kontoer (org_id, konto, hentet_fra) values ($1, $2, $3)
+       on conflict (org_id, konto) do update set hentet_fra = least(faktura.bankpost_kontoer.hentet_fra, excluded.hentet_fra), oppdatert = now()`,
+      [orgId, kontonummer, fra],
+    );
+  });
+}
+
 // Henter nye innbetalinger fra kontoene som er lagt inn i HI4 Faktura, i én eller alle
 // bankene, og kobler dem til fakturaene.
 export async function hentInnbetalinger(orgId: string, valg: { koblingId?: string; psu?: Psu; kilde?: Hentekilde } = {}): Promise<Resultat> {
   const resultat: Resultat = { nye: 0, koblet: 0, forslag: 0 };
   const kilde: Hentekilde = valg.kilde ?? (valg.psu ? "manuell" : "automatisk");
-  const [app, koblinger, egne, start, aiAktiv] = await somSystem(
+  const [app, koblinger, egne, start, aiAktiv, regnskap] = await somSystem(
     async (db) =>
       [
         await bankApp(db, orgId),
@@ -476,6 +498,14 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
           (await en<{ ai_aktiv: boolean }>(db, "select ai_aktiv and faktura.har_funksjon(id, 'ai') as ai_aktiv from faktura.organisasjoner where id = $1", [orgId]))
             ?.ai_aktiv,
         ),
+        // Regnskapet: bankpostene lagres, fra og med startdatoen for banken, og hvor langt tilbake
+        // de er hentet for hver konto.
+        (await en<{ paa: boolean; fra: string | null; hentet: Record<string, string> | null }>(
+          db,
+          `select faktura.har_funksjon($1, 'regnskap') as paa, (select to_char(bank_fra, 'YYYY-MM-DD') from faktura.regnskap_oppsett where org_id = $1) as fra,
+                  (select jsonb_object_agg(konto, to_char(hentet_fra, 'YYYY-MM-DD')) from faktura.bankpost_kontoer where org_id = $1) as hentet`,
+          [orgId],
+        ))!,
       ] as const,
   );
   if (!app) return resultat;
@@ -502,7 +532,12 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
     try {
       for (const konto of kontoer) {
         const fra = senest(hentesFra(k, konto) ?? iDag(-60), startdato);
-        const rader = await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu);
+        // Bankpostene fra startdatoen for banken i regnskapet som ikke er hentet før (høyst 89 dager
+        // tilbake, som bankene tillater uten BankID): samme kall, fra en tidligere dato.
+        const tilbake = regnskap.paa && regnskap.fra ? senest(regnskap.fra, iDag(-89)) : null;
+        const hentet = regnskap.hentet?.[konto.kontonr] ?? null;
+        const fraKall = tilbake && tilbake < fra && (!hentet || tilbake < hentet) ? tilbake : fra;
+        const rader = await hentTransaksjoner(app.nokkel, konto.uid, fraKall, valg.psu);
         const o = oppsummer(rader);
         let reserverte: Innbetaling[] | null = tilReserverte(rader, iDag());
         // Med brukeren til stede, og uten reserverte i svaret: spør etter dem for seg (ikke alle
@@ -518,7 +553,7 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
           }
         }
         Object.assign(h, {
-          fra: !h.fra || fra < h.fra ? fra : h.fra,
+          fra: !h.fra || fraKall < h.fra ? fraKall : h.fra,
           kontoer: h.kontoer + 1,
           transaksjoner: h.transaksjoner + o.transaksjoner,
           inn: h.inn + o.inn,
@@ -526,6 +561,25 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
           nyeste: o.nyeste && (!h.nyeste || o.nyeste > h.nyeste) ? o.nyeste : h.nyeste,
         });
         for (const t of tilInnbetalinger(rader)) if (t.dato >= startdato) await lagreOgKoble(orgId, konto.kontonr, t, resultat, ai);
+        if (regnskap.paa) {
+          await lagreBankposter(orgId, konto.kontonr, tilBankposter(rader), fraKall);
+          // Saldoen i banken, når brukeren er til stede (teller ikke mot grensen for hentinger).
+          if (valg.psu)
+            await hentSaldo(app.nokkel, konto.uid, valg.psu, iDag())
+              .then((s) =>
+                s
+                  ? somSystem((db) =>
+                      db.query("update faktura.bankpost_kontoer set saldo = $3, saldo_dato = $4, oppdatert = now() where org_id = $1 and konto = $2", [
+                        orgId,
+                        konto.kontonr,
+                        s.belop,
+                        s.dato,
+                      ]),
+                    )
+                  : null,
+              )
+              .catch((e) => logg("WARNING", "Kunne ikke hente saldoen", { org_id: orgId, bank: k.bank, feil: (e as Error).message }));
+        }
         if (reserverte)
           await lagreReserverte(
             orgId,

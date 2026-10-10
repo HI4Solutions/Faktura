@@ -6,8 +6,8 @@
 // (skattemessig, med goodwill i gruppe b) og kontoene. Eier, administrator og regnskap, med
 // funksjonen «Regnskap».
 //
-// Fanen står i adressen (?fane=bilag|utgifter|saldobalanse|anlegg|periodiseringer|saldo|kontoer), og det som
-// er åpent, med ?anlegg= eller ?periodisering=.
+// Fanen står i adressen (?fane=bilag|utgifter|bank|saldobalanse|anlegg|periodiseringer|saldo|kontoer), og det
+// som er åpent, med ?anlegg=, ?periodisering=, ?utgift= eller ?post=.
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
@@ -19,6 +19,7 @@ import { Bilag, Saldobalansen } from "./RegnskapBilag";
 import { Maanedsavslutning, mndNavn, type Bilagsvar } from "./RegnskapAvslutning";
 import { PeriodiseringDetalj, Periodiseringer } from "./RegnskapPeriodiseringer";
 import { Utgifter } from "./RegnskapUtgifter";
+import { Bank, visKonto, type Bankoversikt } from "./RegnskapBank";
 
 type Kategori = { kode: string; navn: string; konto: string; avskrivningskonto: string | null; skatt: string; levetid_mnd: number | null };
 type Kontorad = { rolle: string; navn: string; standard: string; konto: string; endret: boolean };
@@ -32,6 +33,9 @@ type Oppsett = {
   mva_fradrag: number | null;
   periodiser_fra: number;
   utgifter_auto: boolean;
+  bank_fra: string | null;
+  bank_auto: boolean;
+  bankkontoer: Record<string, string>;
   kategorier: Kategori[];
   saldogrupper: { gruppe: string; navn: string; sats: number; samlet: boolean }[];
 };
@@ -106,6 +110,7 @@ export function Regnskap() {
   const faner: [string, string][] = [
     ["bilag", "Bilag"],
     ["utgifter", "Utgifter"],
+    ["bank", "Bank"],
     ["saldobalanse", "Saldobalanse"],
     ["anlegg", "Anleggsmidler"],
     ["periodiseringer", "Periodiseringer"],
@@ -139,7 +144,7 @@ export function Regnskap() {
             role="tab"
             aria-selected={fane === v}
             className={fane === v ? "valgt" : undefined}
-            onClick={() => ga({ fane: v, anlegg: null, periodisering: null, utgift: null })}
+            onClick={() => ga({ fane: v, anlegg: null, periodisering: null, utgift: null, post: null })}
           >
             {t}
           </button>
@@ -147,6 +152,7 @@ export function Regnskap() {
       </div>
       {fane === "bilag" && <Bilag />}
       {fane === "utgifter" && <Utgifter apen={sok.get("utgift")} apne={(id) => ga({ utgift: id })} />}
+      {fane === "bank" && <Bank apen={sok.get("post")} apne={(id) => ga({ post: id })} />}
       {fane === "saldobalanse" && <Saldobalansen />}
       {fane === "anlegg" && <Anleggsmidler apne={(id) => ga({ anlegg: id })} />}
       {fane === "periodiseringer" && <Periodiseringer apne={(id) => ga({ periodisering: id })} />}
@@ -1284,6 +1290,115 @@ function Utgiftsoppsett({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => voi
   );
 }
 
+// Banken (server/src/bankAvstemming.ts): startdatoen for bankpostene i regnskapet, om reglene fører
+// dem av seg selv, kontoen i regnskapet for hver bankkonto, og reglene som er lært.
+type Bankregel = { id: string; retning: "inn" | "ut"; motpart_konto: string | null; motpart: string | null; konto: string; tekst: string | null };
+function Bankoppsett({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => void }) {
+  const { org } = useKonto();
+  const sti = `/org/${org!.id}/regnskap`;
+  const bank = useData(() => hent<Bankoversikt>(`${sti}/bank`), [sti]);
+  const regler = useData(() => hent<Bankregel[]>(`${sti}/bank/regler`), [sti]);
+  const [skjema, settSkjema] = useState<{ fra: string; auto: boolean; kontoer: Record<string, string> } | null>(null);
+  const [ok, settOk] = useState(false);
+  const h = useHandling();
+  const v = skjema ?? { fra: o.bank_fra ?? "", auto: o.bank_auto, kontoer: { ...o.bankkontoer } };
+  const kontoer = [...new Set([...(bank.data?.kontoer.map((k) => k.konto) ?? []), ...Object.keys(o.bankkontoer)])];
+  const navn = (nr: string) => bank.data?.kontoer.find((k) => k.konto === nr)?.navn;
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    settOk(false);
+    const r = await h.kjor(() =>
+      api<Oppsett>("PUT", `${sti}/oppsett`, {
+        bank_fra: v.fra || null,
+        bank_auto: v.auto,
+        bankkontoer: Object.fromEntries(kontoer.map((k) => [k, v.kontoer[k]?.trim() || null])),
+      }),
+    );
+    if (r) {
+      lagret(r);
+      settSkjema(null);
+      settOk(true);
+      void bank.last();
+    }
+  }
+  async function slett(id: string) {
+    if (await h.kjor(() => api("DELETE", `${sti}/bank/regler/${id}`))) void regler.last();
+  }
+
+  return (
+    <form className="kort" onSubmit={lagre}>
+      <h3 style={{ marginTop: 0 }}>Banken</h3>
+      <p className="liten dempet">
+        Transaksjonene fra banken (Regnskap → Bank) føres i regnskapet fra og med startdatoen; det som er fra før, hører til den inngående balansen. Banken sender
+        høyst 89 dager tilbake uten BankID. Flyttes datoen fram, angres det som er ført før den.
+      </p>
+      <div className="rad">
+        <label>
+          Bankpostene føres fra og med
+          <input type="date" max={iDag()} value={v.fra} onChange={(e) => settSkjema({ ...v, fra: e.target.value })} />
+          <span className="felt-hjelp">Tomt felt: alt som er hentet.</span>
+        </label>
+      </div>
+      <label className="avkrysning">
+        <input type="checkbox" checked={v.auto} onChange={(e) => settSkjema({ ...v, auto: e.target.checked })} /> Før bankpostene av seg selv når reglene er sikre
+        (ellers bare forslag)
+      </label>
+      {kontoer.length > 0 && (
+        <>
+          <h4>Kontoen i regnskapet for hver bankkonto</h4>
+          <div className="rad">
+            {kontoer.map((k) => (
+              <label key={k}>
+                {navn(k) ? `${navn(k)} ` : ""}
+                {visKonto(k)}
+                <input
+                  inputMode="numeric"
+                  placeholder={o.kontoer.find((x) => x.rolle === "bank")?.konto ?? "1920"}
+                  value={v.kontoer[k] ?? ""}
+                  onChange={(e) => settSkjema({ ...v, kontoer: { ...v.kontoer, [k]: e.target.value } })}
+                />
+              </label>
+            ))}
+          </div>
+          <p className="liten dempet">Tomt felt: bankkontoen i kontoplanen. Gjelder bilagene som føres etterpå.</p>
+        </>
+      )}
+      <Feil melding={h.feil} />
+      {ok && (
+        <div className="melding ok" role="status">
+          Lagret.
+        </div>
+      )}
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt || !skjema}>
+          Lagre
+        </button>
+      </div>
+      {!!regler.data?.length && (
+        <>
+          <h4>Det reglene har lært</h4>
+          <div className="kort liste">
+            {regler.data.map((r) => (
+              <div key={r.id} className="liste-rad">
+                <span className="linje">
+                  <span className="tittel">
+                    {r.retning === "ut" ? "Til" : "Fra"} {r.motpart ?? visKonto(r.motpart_konto)} → {r.konto}
+                  </span>
+                  <button type="button" className="lenke" disabled={h.opptatt} onClick={() => void slett(r.id)}>
+                    Slett
+                  </button>
+                </span>
+                {r.tekst && <span className="under">{r.tekst}</span>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </form>
+  );
+}
+
 function Kontoer() {
   const { org } = useKonto();
   const sti = `/org/${org!.id}/regnskap/oppsett`;
@@ -1316,6 +1431,7 @@ function Kontoer() {
     <>
       <Salget o={o.data} lagret={(r) => o.settData(r)} />
       <Utgiftsoppsett o={o.data} lagret={(r) => o.settData(r)} />
+      <Bankoppsett o={o.data} lagret={(r) => o.settData(r)} />
       <form className="kort" onSubmit={lagre}>
         <h3 style={{ marginTop: 0 }}>Kontoene for salget, utgiftene, anleggsmidlene og periodiseringene</h3>
         <p className="liten dempet">

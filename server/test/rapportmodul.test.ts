@@ -188,6 +188,8 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "regnskap.periodiseringer",
         "regnskap.leverandorgjeld",
         "regnskap.utgifter",
+        "regnskap.bankavstemming",
+        "regnskap.bankposter",
       ],
     });
     const liste = (await kall("GET", `/api/org/${org}/rapportmodul`)).data;
@@ -215,6 +217,8 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "regnskap.periodiseringer",
         "regnskap.leverandorgjeld",
         "regnskap.utgifter",
+        "regnskap.bankavstemming",
+        "regnskap.bankposter",
       ]);
     expect((await kall("GET", `/api/org/${org}/rapportmodul/lonn.sykepenger`, undefined, regnskap)).status).toBe(403);
     expect(await moduler(fakturerer)).toEqual({ faktura: ["faktura.reskontro", "faktura.mva", "faktura.salg", "faktura.journal", "faktura.innbetalinger"] });

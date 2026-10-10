@@ -1,23 +1,24 @@
-# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, anleggsmidler, periodiseringer og saldoavskrivninger
+# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, anleggsmidler, periodiseringer og saldoavskrivninger
 
 Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
 hovedboken, fakturaene og innbetalingene som bokføres av seg selv, utgiftene (leverandørfakturaer og
-kvitteringer, lest med AI og vurdert av reglene), anleggsmidlene med
+kvitteringer, lest med AI og vurdert av reglene), alle transaksjonene i banken (ført og avstemt av
+reglene), anleggsmidlene med
 avskrivningsplanen over flere år (også goodwill), bokføringen av avskrivninger, nedskrivning, salg
 og utrangering, periodiseringene over flere måneder og år, månedsavslutningen og de skattemessige
 saldoavskrivningene.
 
 Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap» med fanene
-Bilag, Utgifter, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
+Bilag, Utgifter, Bank, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
 administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer og les ser den ikke.
 
 ## Bilagene og hovedboken
 
 - Et bilag har et nummer i en serie per år, en dato, en tekst og posteringer (konto og beløp,
   positivt i debet og negativt i kredit, og mva-koden der det er avgift) som går i null. Seriene:
-  **F** fakturaer og kreditnotaer, **B** innbetalinger og refusjoner, **U** utgifter og betalingen
-  av dem, **L** lønn og refusjoner fra NAV, **A** anleggsmidler, **P** periodiseringer og **M**
+  **F** fakturaer og kreditnotaer, **B** innbetalinger, refusjoner og bankpostene, **U** utgifter og
+  betalingen av dem, **L** lønn og refusjoner fra NAV, **A** anleggsmidler, **P** periodiseringer og **M**
   manuelle bilag.
 - Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp (og de
   samme mva-kodene). Anleggsmidlene og periodiseringene reverseres det siste først. En faktura
@@ -113,6 +114,71 @@ Leverandørfakturaer og kvitteringer (Regnskap → Utgifter; `server/src/utgifte
   ingenting er bokført etter), og utgiften blir en kladd igjen.
 - Rapportene «Leverandørgjeld» (de ubetalte, med forfall, mot saldoen på 2400) og «Utgifter» (linje
   for linje i perioden) under Rapporter → Regnskap.
+
+## Banken (bilagserie B)
+
+Alle transaksjonene på bankkontoene, inn og ut, føres i regnskapet (Regnskap → Bank;
+`server/src/bankAvstemming.ts`, `server/src/regnskapBank.ts`, `0091_bankposter.sql`). Workeren
+vurderer de nye postene hvert minutt og rett etter hver henting, og det reglene er sikre på, føres
+av seg selv.
+
+- **Bankpostene** kommer fra banken (open banking gjennom Enable Banking) i de samme hentingene som
+  innbetalingene: på de faste hentetidene og når noen henter selv. Hver bokførte transaksjon på
+  kontoene som er lagt inn i HI4 Faktura, blir en bankpost med datoen, beløpet, motparten og
+  kontonummeret, meldingen og KID-en. Første gang hentes de fra startdatoen (høyst 89 dager
+  tilbake, som bankene tillater uten BankID). Saldoen i banken hentes når brukeren henter selv
+  («Hent nå», når appen åpnes eller etter BankID), eller kommer med postene når banken sender
+  saldoen etter hver transaksjon.
+- **Reglene**, i rekkefølge (den første som passer):
+  1. En innbetaling som er registrert på en faktura (Fakturaer → Innbetalinger): kobles til bilaget
+     for innbetalingen. En innbetaling som ikke er registrert, venter der; «Ikke en
+     fakturabetaling» tar den bort derfra, og reglene vurderer den.
+  2. Et bilag som alt fører beløpet på bankkontoen og ikke er koblet til en annen bankpost (en
+     kvittering betalt med kort, lønnen ført mot banken, en refusjon fra NAV, et manuelt bilag),
+     datert fra ti dager før til fem dager etter: kobles til bilaget.
+  3. En ubetalt leverandørfaktura (Regnskap → Utgifter) med KID-en og beløpet, kontonummeret og
+     beløpet, fakturanummeret og beløpet, eller samme beløp og leverandør: betalingen bokføres
+     (leverandørgjelden mot banken, serie U, som når betalingen registreres for hånd). Bare samme
+     beløp gir et forslag.
+  4. Lønnen (de godkjente kjøringene med utbetalingsdato høyst ti dager unna): nettolønnen, samlet
+     eller til hver ansatt (mot skyldig lønn, 2930, eller koblet til lønnsbilaget når nettolønnen
+     føres mot banken), forskuddstrekket (KID-en, eller Skatteetatens kontonummer og beløpet; 2600)
+     og trekkene (mottakerens kontonummer og KID-en eller beløpet; kontoen for trekket).
+  5. Betalinger til Skatteetaten: det som står på kontoen for forskuddstrekk (2600), for
+     arbeidsgiveravgift (2770) eller begge, arbeidsgiveravgiften lønnen førte i den siste terminen,
+     eller merverdiavgiften på oppgjørskontoen (2740). Forskuddstrekket betales hver måned og
+     arbeidsgiveravgiften annenhver, med egen KID for hver.
+  6. Overføringer mellom egne kontoer: med motposten på den andre kontoen (samme beløp, høyst tre
+     dager unna), som hver føres på sin konto i regnskapet, eller mot kontoen den andre bankkontoen
+     føres på (Kontoer → Banken) når den ikke hentes.
+  7. Det brukeren har lært reglene: motparten (kontonummeret, ellers navnet) føres på kontoen.
+  8. Gebyrer (7770) og renter (8050 inn, 8150 ut) fra banken: poster uten motpartens kontonummer,
+     med gebyr eller renter i teksten.
+
+  Bilagene i serie B har bankkontoen mot motkontoen, og regelen står på posten («Hvorfor» i
+  rapporten). Det som ikke passer, eller der flere passer like godt, blir et forslag eller står
+  under «Må avklares» med det som mangler.
+- **Må avklares** (Regnskap → Bank): godta forslaget, før posten på en konto (med «neste gang av
+  seg selv» lærer reglene motparten), koble den til betalingen av en ubetalt leverandørfaktura
+  eller til et bilag, eller si at en innbetaling ikke er en fakturabetaling. Mangler kvitteringen,
+  lastes den opp under Utgifter; postene som venter, vurderes på nytt hvert kvarter, så betalingen
+  kobles når utgiften er bokført. **Angre** reverserer bilaget i serie B (eller betalingen av
+  utgiften, som står som ubetalt igjen); posten føres ikke av seg selv igjen, men reglene
+  foreslår.
+- **Avstemmingen** for hver bankkonto: saldoen i banken mot saldoen på kontoen i regnskapet, med
+  bankpostene som ikke er ført og bilagene på bankkontoen som ikke er koblet til en bankpost.
+  Differansen som står igjen, er saldoen fra før startdatoen som ikke er ført i den inngående
+  balansen, eller noe som er ført på andre måter. Deler flere bankkontoer konto i regnskapet,
+  regnes ikke differansen for hver.
+- **Startdatoen** (Regnskap → Kontoer → Banken → «Bankpostene føres fra og med»): postene fra og med
+  datoen føres; det som er fra før, hører til den inngående balansen (saldoen ved datoen føres som
+  et manuelt bilag på bankkontoen). Flyttes datoen fram, angres det som er ført før den. Tomt felt:
+  alt som er hentet. Organisasjonene som hentet fra banken da dette kom, fikk den første i
+  måneden som startdato.
+- **Innstillingene** under Regnskap → Kontoer → Banken: startdatoen, om reglene fører av seg selv
+  (ellers bare forslag), kontoen i regnskapet for hver bankkonto (f.eks. 1921 for en sparekonto;
+  tomt felt: 1920) og det reglene har lært (kan slettes). Kontoene for gebyrene, rentene og
+  oppgjøret for merverdiavgiften står med de andre kontoene.
 
 ## Anleggsregisteret og avskrivningsplanen
 
@@ -215,8 +281,8 @@ næringsspesifikasjonen (rapporten «Saldoskjema» under Rapporter → Regnskap)
 
 Under Rapporter → Regnskap, som tabell, CSV og PDF, og på e-post til regnskapsføreren:
 Saldobalanse og Bilagsjournal (kan sendes hver måned), Hovedbok, Anleggsregister, Avskrivningsplan,
-Avskrivninger og avganger (kan sendes hver måned), Saldoskjema, Periodiseringer, Leverandørgjeld
-og Utgifter (kan sendes hver måned).
+Avskrivninger og avganger (kan sendes hver måned), Saldoskjema, Periodiseringer, Leverandørgjeld,
+Utgifter, Bankavstemming og Bankposter (de tre siste kan sendes hver måned).
 
 ## Kontroller og det som ikke er med ennå
 
@@ -232,7 +298,11 @@ og Utgifter (kan sendes hver måned).
   fradraget settes til 0 på linja. Fakturaer i annen valuta må skrives om til kroner (det som ble
   betalt). Innførsel av varer (kode 14, 15 og 81–85), omvendt avgiftsplikt innenlands og den
   særskilte meldingen for den som ikke er mva-registrert og kjøper tjenester fra utlandet, er ikke
-  med. Betalingen bokføres når den registreres; banktransaksjonene matcher den av seg selv senere.
+  med. Betalingen bokføres når den registreres, eller når bankposten kobles til utgiften.
+- Banken: poster i annen valuta enn kroner føres ikke av seg selv. En egen konto som ikke hentes fra
+  banken, må ha en konto i regnskapet (Kontoer → Banken) for at overføringer dit skal føres av seg
+  selv. Merverdiavgiften kobles bare når beløpet er det som står på oppgjørskontoen (2740), og
+  saldoen i banken er bare kjent når brukeren har hentet selv eller banken sender den med postene.
 - Perioder låses ikke: et bilag kan føres med en dato i en periode som er rapportert. Årsoppgjøret
   (resultatet mot egenkapitalen, skatt) føres med et manuelt bilag.
 
@@ -247,6 +317,13 @@ og Utgifter (kan sendes hver måned).
   forholdsmessig fradrag), § 8-3 (representasjon) og § 8-4 (personkjøretøy):
   <https://lovdata.no/lov/2009-06-19-58>
 
+- Bokføringsloven § 4 (grunnleggende bokføringsprinsipper, blant dem fullstendighet: alle
+  transaksjoner skal bokføres) og § 7 (ajourhold): <https://lovdata.no/lov/2004-11-19-73/§4>
+- Skatteetaten, betaling av forskuddstrekk og arbeidsgiveravgift (fra 2026 betales
+  forskuddstrekket hver måned, arbeidsgiveravgiften annenhver måned):
+  <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/arbeidsgiveravgift/betaling-av-forskuddstrekk-og-arbeidsgiveravgift/>
+- Skatteetaten, KID for arbeidsgivere (egen KID for hver kravtype):
+  <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/lag-kid-nar-du-er-arbeidsgiver>
 - Regnskapsloven § 4-1 (grunnleggende regnskapsprinsipper: opptjening og sammenstilling, grunnlaget
   for periodiseringene): <https://lovdata.no/lov/1998-07-17-56/§4-1>
 - Bokføringsloven § 5 (spesifikasjoner av pliktig regnskapsrapportering: bokføringsspesifikasjon

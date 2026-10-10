@@ -63,7 +63,11 @@ export type Regnskapsrolle =
   | "inngaende_mva_utland"
   | "utgaende_mva_utland"
   | "kontanter"
-  | "gjeld_ansatte";
+  | "gjeld_ansatte"
+  | "bankgebyr"
+  | "renteinntekt"
+  | "rentekostnad"
+  | "oppgjor_mva";
 export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: string }[] = [
   { rolle: "avskrivning_bygg", navn: "Avskrivning på bygninger og annen fast eiendom", standard: "6000" },
   { rolle: "avskrivning_driftsmidler", navn: "Avskrivning på transportmidler, maskiner og inventar", standard: "6010" },
@@ -97,6 +101,12 @@ export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: 
   { rolle: "salg_fritatt", navn: "Salgsinntekt, fritatt for merverdiavgift", standard: "3100" },
   { rolle: "salg_unntatt", navn: "Salgsinntekt, utenfor merverdiavgiftsloven", standard: "3200" },
   { rolle: "purregebyr", navn: "Purregebyr", standard: "3900" },
+  // Banken (0091_bankposter.sql, bankAvstemming.ts): gebyrene og rentene fra banken, og betalingen
+  // av merverdiavgiften.
+  { rolle: "bankgebyr", navn: "Bank- og kortgebyrer", standard: "7770" },
+  { rolle: "renteinntekt", navn: "Renteinntekt fra banken", standard: "8050" },
+  { rolle: "rentekostnad", navn: "Rentekostnad til banken", standard: "8150" },
+  { rolle: "oppgjor_mva", navn: "Oppgjørskonto merverdiavgift", standard: "2740" },
   // Periodiseringene (periodisering.ts): balansekontoene som foreslås.
   { rolle: "forskuddsbetalt_kostnad", navn: "Forskuddsbetalt kostnad", standard: "1700" },
   { rolle: "paalopt_kostnad", navn: "Påløpt kostnad", standard: "2960" },
@@ -136,12 +146,17 @@ export type Regnskapsoppsett = {
   mva_fradrag: number | null;
   periodiser_fra: number;
   utgifter_auto: boolean;
+  // Banken (0091_bankposter.sql): bankpostene føres fra og med datoen (null: alle som er hentet), av
+  // seg selv eller bare som forslag, og kontoen i regnskapet for hver bankkonto (ellers bankkontoen).
+  bank_fra: string | null;
+  bank_auto: boolean;
+  bankkontoer: Record<string, string>;
 };
 export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnskapsoppsett> {
   const o = await en<Regnskapsoppsett>(
     db,
     `select kontoer, saldo_fra_aar, saldo_inngaende, to_char(salg_fra, 'YYYY-MM-DD') as salg_fra, uten_mva, mva_fradrag::float8 as mva_fradrag,
-            periodiser_fra::float8 as periodiser_fra, utgifter_auto
+            periodiser_fra::float8 as periodiser_fra, utgifter_auto, to_char(bank_fra, 'YYYY-MM-DD') as bank_fra, bank_auto, bankkontoer
        from faktura.regnskap_oppsett where org_id = $1`,
     [org],
   );
@@ -154,6 +169,9 @@ export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnska
     mva_fradrag: o?.mva_fradrag ?? null,
     periodiser_fra: o?.periodiser_fra ?? 5000,
     utgifter_auto: o?.utgifter_auto ?? true,
+    bank_fra: o?.bank_fra ?? null,
+    bank_auto: o?.bank_auto ?? true,
+    bankkontoer: o?.bankkontoer ?? {},
   };
 }
 // Kontoene som brukes: standarden, med det organisasjonen har endret.

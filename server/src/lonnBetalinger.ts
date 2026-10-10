@@ -6,6 +6,7 @@
 import { alle, en, type Db } from "./db.js";
 import { frister, maanedNavn } from "./lonnsberegning.js";
 import { TREKKTYPER, type Trekktype } from "./lonnstrekk.js";
+import type { Kontorolle } from "./lonnBokforing.js";
 
 export type Trekkbetaling = {
   mottaker: string;
@@ -15,6 +16,7 @@ export type Trekkbetaling = {
   belop: number;
   antall: number; // ansatte
   hva: string; // f.eks. «Fagforeningskontingent»
+  rolle: Kontorolle; // kontoen trekket er ført på i lønnsbilaget (betalingen føres mot den)
   mangler: string | null; // hvorfor den ikke er med i fila
 };
 export type Betalingsoversikt = {
@@ -50,6 +52,7 @@ export async function hentBetalinger(
           belop: skatt,
           antall: k.slipper.filter((s) => Number(s.skattetrekk) > 0).length,
           hva: "Forskuddstrekk",
+          rolle: "forskuddstrekk",
           mangler: !o?.skatt_kontonr
             ? "Legg inn Skatteetatens kontonummer for forskuddstrekk under Innstillinger → Ansatte og timer."
             : !k.forskuddstrekk_kid
@@ -87,6 +90,7 @@ export async function hentBetalinger(
       belop: 0,
       antall: 0,
       hva,
+      rolle: type.startsWith("utlegg") ? "paaleggstrekk" : type === "bidrag" ? "bidragstrekk" : "andre_trekk",
       mangler: r.kontonr ? null : `Legg inn kontonummeret${tilSkatt || type === "bidrag" ? " og KID-en fra pålegget" : ""} på trekket hos den ansatte.`,
       ansatte: new Set<string>(),
     };

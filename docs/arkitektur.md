@@ -671,7 +671,24 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `koble_utgift` (anleggsmiddelet eller periodiseringen, ført med `bokfor_anlegg` eller
   `bokfor_periodisering` i samme transaksjon), `betal_utgift` (kilde utgift_betaling),
   `angre_utgift` og `arkiver_utgift`; en bokført utgift endres og slettes ikke (trigger).
-  `bokfor_anlegg`, `bokfor_periodisering` og `bokfor_manuelt` tar med mva-koden på posteringene
+  `bokfor_anlegg`, `bokfor_periodisering` og `bokfor_manuelt` tar med mva-koden på posteringene.
+  Banken (`0091_bankposter.sql`, `server/src/bankAvstemming.ts`, `server/src/regnskapBank.ts`,
+  `web/src/sider/RegnskapBank.tsx`): alle de bokførte transaksjonene på de egne kontoene, inn og ut,
+  lagres i `bankposter` i de samme hentingene som innbetalingene (bare systemet skriver dem; med en
+  tidligere `date_from` i samme kall når startdatoen `regnskap_oppsett.bank_fra` er før det som er
+  hentet, `bankpost_kontoer.hentet_fra`, høyst 89 dager tilbake), og saldoen i banken når brukeren
+  er til stede (bakgrunnsjobbene sender aldri PSU-hoder). API-et har ingen systemtilkobling i
+  produksjon, så avstemmingen går i workeren: hvert minutt etter bokføringen av salget, og etter
+  hver henting (`avstemBankForAlle`). Reglene (`vurder`) gir et utfall (føres, forslag, uavklart
+  eller vent), og `utfor` gjennomfører det med databasefunksjonene `avstem_bankpost` (kobler til et
+  bilag med resten på bankkontoen, `bilag_bankrest`), `bokfor_bankpost` (serie B, kilde bank, med
+  motposten for en overføring), `avstem_overforing` (to poster på samme konto i regnskapet,
+  `par_id`) og `betal_utgift`; `sett_bankpost` lagrer forslaget. `apne_bankpost` angrer (reverserer
+  bilaget i serie B), og en post brukeren har angret, får `auto = false` og føres ikke av seg selv
+  igjen. Triggeren `bilag_reversert_bankposter` slipper postene når bilaget de er koblet til,
+  reverseres (en utgift som angres, en lønnskjøring som åpnes igjen), så de vurderes på nytt. Det
+  brukeren har lært, står i `bankregler` (retningen og motpartens kontonummer eller navn).
+  Rapportene «Bankavstemming» og «Bankposter» (`server/src/bankRapporter.ts`).
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen

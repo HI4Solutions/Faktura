@@ -5,7 +5,7 @@
 // «Regnskap»). Beregningene: anlegg.ts.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
-import { en, somBruker, type Db } from "./db.js";
+import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import {
   aarsplan,
@@ -67,6 +67,9 @@ async function oppsett(db: Db, org: string) {
     mva_fradrag: o.mva_fradrag,
     periodiser_fra: o.periodiser_fra,
     utgifter_auto: o.utgifter_auto,
+    bank_fra: o.bank_fra,
+    bank_auto: o.bank_auto,
+    bankkontoer: o.bankkontoer,
     kategorier: KATEGORIKODER.map((kode) => ({
       kode,
       navn: KATEGORIER[kode].navn,
@@ -90,6 +93,11 @@ const oppsettSkjema = z.object({
   mva_fradrag: z.number().finite().min(0, "Fradraget er i prosent").max(100, "Fradraget er i prosent").nullable().optional(),
   periodiser_fra: z.number().finite().min(0, "Grensen kan ikke være negativ").lt(1e9, "Grensen er for høy").optional(),
   utgifter_auto: z.boolean().optional(),
+  // Banken (bankAvstemming.ts): bankpostene føres fra og med datoen (null: alle som er hentet), av seg
+  // selv eller bare som forslag, og kontoen i regnskapet for en bankkonto (null: bankkontoen).
+  bank_fra: datoS.nullable().optional(),
+  bank_auto: z.boolean().optional(),
+  bankkontoer: z.record(z.string().regex(/^[0-9A-Z]{5,34}$/, "Ugyldig kontonummer"), kontoS.nullable()).optional(),
   saldo_fra_aar: z.number().int().min(2000, "Ugyldig år").max(2100, "Ugyldig år").nullable().optional(),
   saldo_inngaende: z.partialRecord(z.enum(["a", "c", "d", "gevinst_tap"]), z.number().finite().gt(-1e12).lt(1e12).nullable()).optional(),
 });
@@ -258,14 +266,22 @@ export function regnskapRuter() {
           if (v == null) delete inngaende[g];
           else inngaende[g] = Math.round(v * 100) / 100;
         }
+        const bankkontoer: Record<string, string> = { ...naa.bankkontoer };
+        for (const [nr, konto] of Object.entries(b.bankkontoer ?? {})) {
+          if (konto) bankkontoer[nr] = konto;
+          else delete bankkontoer[nr];
+        }
+        const bankFra = b.bank_fra !== undefined ? b.bank_fra : naa.bank_fra;
         await db.query(
           `insert into faktura.regnskap_oppsett (org_id, kontoer, saldo_fra_aar, saldo_inngaende, salg_fra, uten_mva, mva_fradrag, periodiser_fra,
-                                                 utgifter_auto, oppdatert)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+                                                 utgifter_auto, bank_fra, bank_auto, bankkontoer, oppdatert)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
            on conflict (org_id) do update set kontoer = excluded.kontoer, saldo_fra_aar = excluded.saldo_fra_aar,
                                               saldo_inngaende = excluded.saldo_inngaende, salg_fra = excluded.salg_fra,
                                               uten_mva = excluded.uten_mva, mva_fradrag = excluded.mva_fradrag,
-                                              periodiser_fra = excluded.periodiser_fra, utgifter_auto = excluded.utgifter_auto, oppdatert = now()`,
+                                              periodiser_fra = excluded.periodiser_fra, utgifter_auto = excluded.utgifter_auto,
+                                              bank_fra = excluded.bank_fra, bank_auto = excluded.bank_auto, bankkontoer = excluded.bankkontoer,
+                                              oppdatert = now()`,
           [
             orgId(c),
             JSON.stringify(kontoer),
@@ -276,8 +292,17 @@ export function regnskapRuter() {
             b.mva_fradrag !== undefined ? b.mva_fradrag : naa.mva_fradrag,
             b.periodiser_fra ?? naa.periodiser_fra,
             b.utgifter_auto ?? naa.utgifter_auto,
+            bankFra,
+            b.bank_auto ?? naa.bank_auto,
+            JSON.stringify(bankkontoer),
           ],
         );
+        // Flyttes startdatoen for banken fram, angres føringen av bankpostene før den (bilagene i
+        // serie B reverseres); flyttes den bakover, fører workeren dem som er hentet.
+        if (bankFra && (!naa.bank_fra || bankFra > naa.bank_fra))
+          for (const x of await alle<{ id: string }>(db, "select id from faktura.bankposter where org_id = $1 and status = 'avstemt' and dato < $2 order by dato", [orgId(c), bankFra]))
+            if ((await en<{ status: string }>(db, "select status from faktura.bankposter where id = $1", [x.id]))?.status === "avstemt")
+              await db.query("select faktura.apne_bankpost($1, $2, true)", [orgId(c), x.id]);
         return oppsett(db, orgId(c));
       }),
     );

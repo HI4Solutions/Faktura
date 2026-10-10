@@ -267,8 +267,18 @@ describe.skipIf(!process.env.DATABASE_URL)("trekk i lønnen i appen", () => {
     expect(b.forskuddstrekk).toMatchObject({ mottaker: "Skatteetaten", kontonr: "86011117947", kid: null, belop: 26832, antall: 2 });
     expect(b.forskuddstrekk.mangler).toBe("Legg inn KID-en for forskuddstrekk i oktober 2026 (fra Skatteetatens KID-generator).");
     expect(b.trekk).toEqual([
-      { mottaker: "Fellesforbundet", kontonr: "12345678903", kid: null, tekst: "Kontingent", belop: 560, antall: 1, hva: "Fagforeningskontingent", mangler: null },
-      { mottaker: "Skatteetaten", kontonr: "86011117947", kid: "12345678903", tekst: null, belop: 3000, antall: 1, hva: "Utleggstrekk (samordnet, Skatteetaten)", mangler: null },
+      { mottaker: "Fellesforbundet", kontonr: "12345678903", kid: null, tekst: "Kontingent", belop: 560, antall: 1, hva: "Fagforeningskontingent", rolle: "andre_trekk", mangler: null },
+      {
+        mottaker: "Skatteetaten",
+        kontonr: "86011117947",
+        kid: "12345678903",
+        tekst: null,
+        belop: 3000,
+        antall: 1,
+        hva: "Utleggstrekk (samordnet, Skatteetaten)",
+        rolle: "paaleggstrekk",
+        mangler: null,
+      },
     ]);
     expect((await kall("PUT", `${sti}/forskuddstrekk-kid`, { kid: "123" })).data.error).toBe("KID-en for forskuddstrekk har 19 siffer");
     b = (await kall("PUT", `${sti}/forskuddstrekk-kid`, { kid: "0091500017 7052610 12" })).data;

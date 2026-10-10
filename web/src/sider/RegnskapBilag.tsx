@@ -33,6 +33,7 @@ export const KILDER: Record<string, string> = {
   innbetaling: "Innbetaling",
   utgift: "Utgift",
   utgift_betaling: "Betaling av utgift",
+  bank: "Bankpost",
   lonn: "Lønn",
   nav_refusjon: "Refusjon fra NAV",
   anlegg: "Anleggsmidler",
@@ -45,6 +46,7 @@ const ANDRE_STEDER: Record<string, string> = {
   innbetaling: "En innbetaling reverseres ved å ta bort betalingen på fakturaen (eller koble innbetalingen fra fakturaen under Innbetalinger).",
   utgift: "En utgift rettes under Regnskap → Utgifter (Angre bokføringen).",
   utgift_betaling: "En betaling av en utgift rettes under Regnskap → Utgifter (Angre bokføringen).",
+  bank: "En bankpost rettes under Regnskap → Bank (Angre).",
   lonn: "Et lønnsbilag reverseres ved å åpne lønnskjøringen igjen (Lønn → Lønnskjøringer).",
   nav_refusjon: "En refusjon fra NAV reverseres ved å slette den (Lønn → Sykepenger).",
 };
@@ -53,6 +55,7 @@ const LENKETEKST: Record<string, string> = {
   innbetaling: "Åpne fakturaen",
   utgift: "Åpne utgiften",
   utgift_betaling: "Åpne utgiften",
+  bank: "Åpne bankposten",
   lonn: "Åpne lønnskjøringen",
 };
 const aarsstart = () => `${iDag().slice(0, 4)}-01-01`;
@@ -122,7 +125,8 @@ export function Bilag() {
   return (
     <>
       <p className="dempet liten">
-        Alle bilagene i regnskapet: fakturaer og kreditnotaer (serie F) og innbetalinger (B), som bokføres av seg selv, utgifter (U), lønn (L, også refusjoner fra NAV),
+        Alle bilagene i regnskapet: fakturaer og kreditnotaer (serie F) og bankpostene (B: innbetalinger, gebyrer, overføringer og annet fra banken), som bokføres av
+        seg selv, utgifter (U), lønn (L, også refusjoner fra NAV),
         anleggsmidler (A), periodiseringer (P) og manuelle bilag (M), som den inngående balansen. Et bilag endres aldri; det reverseres med et nytt bilag med
         motsatte beløp. Bilagsjournalen, hovedboken og saldobalansen står også under{" "}
         <Link to="/rapporter?fane=regnskap">Rapporter → Regnskap</Link> (CSV og PDF).

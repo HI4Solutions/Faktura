@@ -231,8 +231,9 @@ function lesInnbetaling(t: any, dato: string): Omit<Innbetaling, "ekstern_id"> {
   };
 }
 
-// Bankens id, ellers et fingeravtrykk; like transaksjoner samme dag nummereres. I datoorden.
-function medId(rader: { t: any; i: Omit<Innbetaling, "ekstern_id"> }[]): Innbetaling[] {
+// Bankens id, ellers et fingeravtrykk (prefiks: fp for innbetalingene, fu for utbetalingene); like
+// transaksjoner samme dag nummereres. I datoorden, med transaksjonen fra banken.
+function medId(rader: { t: any; i: Omit<Innbetaling, "ekstern_id"> }[], prefiks = "fp"): { t: any; x: Innbetaling }[] {
   const sett = new Map<string, number>();
   const ut = rader.map(({ t, i }) => {
     let id = tekst(t?.entry_reference) ?? tekst(t?.transaction_id);
@@ -240,21 +241,100 @@ function medId(rader: { t: any; i: Omit<Innbetaling, "ekstern_id"> }[]): Innbeta
       const avtrykk = createHash("sha256").update(JSON.stringify(i)).digest("base64url").slice(0, 32);
       const nr = (sett.get(avtrykk) ?? 0) + 1;
       sett.set(avtrykk, nr);
-      id = `fp:${avtrykk}:${nr}`;
+      id = `${prefiks}:${avtrykk}:${nr}`;
     }
-    return { ekstern_id: id, ...i };
+    return { t, x: { ekstern_id: id, ...i } };
   });
-  return ut.sort((a, b) => a.dato.localeCompare(b.dato));
+  return ut.sort((a, b) => a.x.dato.localeCompare(b.x.dato));
 }
+
+const bokforingsdato = (t: any) => tekst(t?.booking_date) ?? tekst(t?.value_date) ?? tekst(t?.transaction_date);
 
 // Innbetalingene (bokførte penger inn) blant transaksjonene.
 export function tilInnbetalinger(transaksjoner: any[]): Innbetaling[] {
   return medId(
     transaksjoner.flatMap((t) => {
-      const dato = erBokfort(t) && erInn(t) ? (tekst(t?.booking_date) ?? tekst(t?.value_date) ?? tekst(t?.transaction_date)) : null;
+      const dato = erBokfort(t) && erInn(t) ? bokforingsdato(t) : null;
       return dato ? [{ t, i: lesInnbetaling(t, dato) }] : [];
     }),
-  );
+  ).map((r) => r.x);
+}
+
+// En bankpost (0091_bankposter.sql): en bokført transaksjon, inn (positivt beløp) eller ut
+// (negativt). motpart: betaleren eller mottakeren; motpart_konto: kontonummeret deres (11 siffer
+// for norske kontoer); saldo: saldoen etter transaksjonen, når banken sender den.
+export type Bankpost = {
+  ekstern_id: string;
+  dato: string;
+  belop: number;
+  valuta: string;
+  motpart: string | null;
+  motpart_konto: string | null;
+  melding: string | null;
+  referanse: string | null;
+  saldo: number | null;
+};
+
+// Kontonummeret uten mellomrom og punktum; en norsk IBAN blir de 11 sifrene.
+export function rentKontonr(x: string | null | undefined): string | null {
+  const k = (x ?? "").replace(/[\s.]/g, "").toUpperCase();
+  if (!k) return null;
+  if (/^NO\d{13}$/.test(k)) return k.slice(4);
+  return /^[0-9A-Z]{5,34}$/.test(k) ? k : null;
+}
+
+const erUt = (t: any) => {
+  const belop = Number(t?.transaction_amount?.amount);
+  const ut = t?.credit_debit_indicator ? t.credit_debit_indicator === "DBIT" : belop < 0;
+  return ut && Number.isFinite(belop) && belop !== 0;
+};
+
+// Utbetalingen i en transaksjon: som innbetalingen, med mottakeren (creditor) som motpart.
+function lesUtbetaling(t: any, dato: string): Omit<Innbetaling, "ekstern_id"> {
+  const i = lesInnbetaling(t, dato);
+  return {
+    ...i,
+    betaler: tekst(t?.creditor?.name),
+    betaler_konto: tekst(t?.creditor_account?.iban) ?? tekst(t?.creditor_account?.other?.identification) ?? tekst(t?.creditor_account?.bban),
+  };
+}
+
+function saldoEtter(t: any): number | null {
+  const n = Number(t?.balance_after_transaction?.balance_amount?.amount ?? t?.balance_after_transaction?.amount);
+  return t?.balance_after_transaction && Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+// Alle de bokførte transaksjonene som bankposter, inn og ut. Innbetalingene får samme id som i
+// tilInnbetalinger (samme transaksjon), utbetalingene sine egne fingeravtrykk.
+export function tilBankposter(transaksjoner: any[]): Bankpost[] {
+  const rader = (inn: boolean) =>
+    transaksjoner.flatMap((t) => {
+      const dato = erBokfort(t) && (inn ? erInn(t) : erUt(t)) ? bokforingsdato(t) : null;
+      return dato ? [{ t, i: inn ? lesInnbetaling(t, dato) : lesUtbetaling(t, dato) }] : [];
+    });
+  const post = ({ t, x }: { t: any; x: Innbetaling }, fortegn: 1 | -1): Bankpost => ({
+    ekstern_id: x.ekstern_id,
+    dato: x.dato,
+    belop: fortegn * x.belop,
+    valuta: x.valuta,
+    motpart: x.betaler,
+    motpart_konto: rentKontonr(x.betaler_konto),
+    melding: x.melding,
+    referanse: x.referanse,
+    saldo: saldoEtter(t),
+  });
+  return [...medId(rader(true)).map((r) => post(r, 1)), ...medId(rader(false), "fu").map((r) => post(r, -1))].sort((a, b) => a.dato.localeCompare(b.dato));
+}
+
+// Den bokførte saldoen på kontoen (ved slutten av dagen, ellers nå), når brukeren er til stede.
+export async function hentSaldo(n: BankNokkel, kontoUid: string, psu: Psu, iDag: string): Promise<{ belop: number; dato: string } | null> {
+  const d = await kall(n, "GET", `/accounts/${encodeURIComponent(kontoUid)}/balances`, undefined, psu);
+  const saldoer: any[] = Array.isArray(d?.balances) ? d.balances : [];
+  for (const type of ["CLBD", "ITBD"]) {
+    const b = saldoer.find((x) => x?.balance_type === type && Number.isFinite(Number(x?.balance_amount?.amount)));
+    if (b) return { belop: Math.round(Number(b.balance_amount.amount) * 100) / 100, dato: tekst(b.reference_date)?.slice(0, 10) ?? iDag };
+  }
+  return null;
 }
 
 // Innbetalingene som er reservert i banken (ikke bokført ennå). Uten dato fra banken: i dag.
@@ -263,5 +343,5 @@ export function tilReserverte(transaksjoner: any[], iDag: string): Innbetaling[]
     transaksjoner.flatMap((t) =>
       erReservert(t) && erInn(t) ? [{ t, i: lesInnbetaling(t, tekst(t?.transaction_date) ?? tekst(t?.value_date) ?? tekst(t?.booking_date) ?? iDag) }] : [],
     ),
-  );
+  ).map((r) => r.x);
 }

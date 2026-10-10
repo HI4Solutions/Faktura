@@ -20,6 +20,7 @@ import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepe
 import { aktiverLonnsendringer } from "./lonnsendringer.js";
 import { lonnHverMorgen, oppdaterLonnsutkast } from "./lonnAutomatikk.js";
 import { bokforSalgForAlle } from "./salgBokforing.js";
+import { avstemBankForAlle } from "./bankAvstemming.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
@@ -155,7 +156,12 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "varsel") return void (await sendVarsel(o.varsel));
   if (o.type === "bank-auth") return lagBankAdresse(o.org_id, o.kobling_id);
   if (o.type === "bank-okt") return fullforBankOkt(o.org_id, o.kobling_id, o.kode, o.psu);
-  if (o.type === "bank-hent") return void (await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu, kilde: o.kilde }));
+  if (o.type === "bank-hent") {
+    await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu, kilde: o.kilde });
+    // Bankpostene som kom, føres med en gang (bankAvstemming.ts).
+    await avstemBankForAlle(1, o.org_id).catch((e) => logg("ERROR", "Avstemmingen av banken feilet", { org: o.org_id, feil: (e as Error).message }));
+    return;
+  }
   if (o.type === "bank-slett") return slettBankOkter(o.org_id, o.okt_ider, o.alt);
   if (o.type === "skattekort-tilgang") return lagTilgang(o.org_id);
   if (o.type === "skattekort-status") return sjekkTilgang(o.org_id);
@@ -621,7 +627,8 @@ export function lagWorker() {
   // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker
   // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
   // a-meldingene som venter på tilbakemelding. Lønnsutkastene der noe er endret, regnes ut på nytt,
-  // og fakturaene og innbetalingene som ikke er bokført, bokføres (salgBokforing.ts).
+  // fakturaene og innbetalingene som ikke er bokført, bokføres (salgBokforing.ts), og bankpostene
+  // avstemmes (bankAvstemming.ts).
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
@@ -633,6 +640,7 @@ export function lagWorker() {
     await planleggNavHenting().catch((e) => logg("ERROR", "Planlegging av hentingen fra NAV feilet", { feil: (e as Error).message }));
     await oppdaterLonnsutkast().catch((e) => logg("ERROR", "Omregningen av lønnsutkastene feilet", { feil: (e as Error).message }));
     await bokforSalgForAlle().catch((e) => logg("ERROR", "Bokføringen av fakturaene og innbetalingene feilet", { feil: (e as Error).message }));
+    await avstemBankForAlle().catch((e) => logg("ERROR", "Avstemmingen av banken feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));

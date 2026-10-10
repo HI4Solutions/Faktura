@@ -2683,3 +2683,29 @@ h2.utgift-gruppe .dempet { font-weight: 450; }
   .utgift-fil iframe { height: 50vh; }
   .utgift-linje { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Regnskap → Bank */
+.bank-kontoer { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 4px; }
+.bank-konto { padding: 14px 16px; }
+.bank-konto-hode { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.bank-konto-hode .dempet { font-variant-numeric: tabular-nums; }
+.bank-tall { display: grid; gap: 4px; margin: 0 0 8px; }
+.bank-tall > div { display: flex; justify-content: space-between; gap: 12px; }
+.bank-tall dt { color: var(--dempet); font-size: 0.9rem; }
+.bank-tall dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 550; }
+.bank-konto p { margin: 0; }
+.bank-belop.ut { color: var(--tekst); }
+.bank-belop.inn { color: var(--ok); }
+.bank-belop.stor { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.bank-maaned { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin: 22px 0 8px; }
+.bank-maaned h2.utgift-gruppe { margin: 0; }
+.bank-post-hode { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.bank-felter { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 12px; font-size: 0.92rem; }
+.bank-felter dt { color: var(--dempet); }
+.bank-felter dd { margin: 0; overflow-wrap: anywhere; }
+.bank-post h3 { font-size: 0.95rem; margin: 18px 0 8px; }
+.bank-konto-skjema { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 0 12px; }
+.bank-konto-skjema .avkrysning, .bank-konto-skjema .knapper { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+  .bank-kontoer { grid-template-columns: minmax(0, 1fr); }
+  .bank-konto-skjema { grid-template-columns: minmax(0, 1fr); }
+}

@@ -14,6 +14,7 @@ export const KILDER: Record<string, string> = {
   innbetaling: "Innbetaling",
   utgift: "Utgift",
   utgift_betaling: "Betaling av utgift",
+  bank: "Bankpost",
   lonn: "Lønn",
   nav_refusjon: "Refusjon fra NAV",
   anlegg: "Anleggsmidler",
@@ -60,6 +61,7 @@ export async function hentRegnskapsbilag(db: Db, org: string, v: { fra?: string;
               when 'innbetaling' then (select '/fakturaer/' || p.faktura_id from faktura.betalinger p where p.id = b.kilde_id)
               when 'utgift' then '/regnskap?fane=utgifter&utgift=' || b.kilde_id
               when 'utgift_betaling' then '/regnskap?fane=utgifter&utgift=' || b.kilde_id
+              when 'bank' then '/regnskap?fane=bank&post=' || b.kilde_id
               when 'lonn' then '/lonn?kjoring=' || b.kilde_id
             end as lenke
        from faktura.bilag b

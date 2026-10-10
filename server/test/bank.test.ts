@@ -231,6 +231,9 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
       return f(k);
     });
 
+    // Saldoen (bare når brukeren er til stede og regnskapet er slått på).
+    svar["GET /accounts/:uid/balances"] = () =>
+      json(200, { balances: [{ balance_type: "CLBD", balance_amount: { amount: "12500.00", currency: "NOK" }, reference_date: dagerSiden(1) }] });
     org = (await api("POST", "/api/organisasjoner", { navn: "Bank Test AS" })).data.id;
     expect((await api("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
     // Organisasjonen er opprettet i dag; testene henter de siste 60 dagene (se «startdato» under).
@@ -517,8 +520,14 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(kall.slice(for_).map((k) => [k.sti, k.psu])).toEqual([
       ["/accounts/k-drift/transactions?date_from=2026-09-20", "203.0.113.9"],
       ["/accounts/k-drift/transactions?date_from=2026-09-20&transaction_status=PDNG", "203.0.113.9"],
+      ["/accounts/k-drift/balances", "203.0.113.9"],
       [`/accounts/k-husleie/transactions?date_from=${dagerSiden(5)}`, "203.0.113.9"],
       [`/accounts/k-husleie/transactions?date_from=${dagerSiden(5)}&transaction_status=PDNG`, "203.0.113.9"],
+      ["/accounts/k-husleie/balances", "203.0.113.9"],
+    ]);
+    // Saldoen banken oppga, til avstemmingen i regnskapet.
+    expect(await somSystem((db) => alle(db, "select konto, saldo::float8 as saldo, to_char(saldo_dato, 'YYYY-MM-DD') as dato from faktura.bankpost_kontoer where org_id = $1 and konto = '86011117947'", [org]))).toEqual([
+      { konto: "86011117947", saldo: 12500, dato: dagerSiden(1) },
     ]);
     expect((await kobling(dnbId))!.kontoer[0]).toMatchObject({ kontonr: "86011117947", hent_fra: dagerSiden(5) });
     expect((await hentinger()).slice(-2).map((h: any) => [h.bank, h.kilde, h.fra])).toEqual([
@@ -782,6 +791,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(kall.slice(for2).map((k) => [k.sti, k.psu])).toEqual([
       [`/accounts/k-drift-2/transactions?date_from=${dagerSiden(5)}`, "203.0.113.9"],
       [`/accounts/k-drift-2/transactions?date_from=${dagerSiden(5)}&transaction_status=PDNG`, "203.0.113.9"],
+      ["/accounts/k-drift-2/balances", "203.0.113.9"],
     ]);
     expect((await reserverte()).map((r: any) => r.id)).toEqual([lagret[0].id]);
     // Svarer banken med en feil på det, blir de som er lagret, stående.
