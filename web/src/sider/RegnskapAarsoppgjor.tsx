@@ -1,6 +1,7 @@
 // Regnskap → Årsoppgjør (server/src/aarsoppgjor.ts): sjekklisten for året (det som gjenstår i
 // månedsavslutningene), resultatregnskapet og balansen med fjoråret, årsoppgjøret (skattekostnaden,
-// utbyttet og overføringen av årsresultatet til annen egenkapital, bilagserie Å) og periodelåsen.
+// utbyttet og overføringen av årsresultatet til annen egenkapital, bilagserie Å), periodelåsen, SAF-T
+// og lenkene til grunnlaget for skattemeldingen (næringsspesifikasjonen og saldoskjemaet).
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, hent, lastNed } from "../api";
@@ -295,6 +296,23 @@ export function Aarsoppgjor({ aar, velg }: { aar: string | null; velg: (aar: str
           >
             Last ned SAF-T for {s.aar}
           </button>
+        </div>
+        <div className="aars-saft">
+          <div>
+            <strong>Skattemeldingen</strong>
+            <p className="liten dempet">
+              Grunnlaget for næringsspesifikasjonen: kontoene samlet på postene i næringsspesifikasjonen, med resultatregnskapet og balansen. De skattemessige saldoene
+              og forskjellene står i saldoskjemaet.
+            </p>
+          </div>
+          <div className="knapper">
+            <Link className="knapp" to={`/rapporter?fane=regnskap&rapport=regnskap.naeringsspesifikasjon`}>
+              Næringsspesifikasjon
+            </Link>
+            <Link className="knapp" to={`/rapporter?fane=regnskap&rapport=regnskap.saldoskjema`}>
+              Saldoskjema
+            </Link>
+          </div>
         </div>
         <Feil melding={h.feil} />
       </div>

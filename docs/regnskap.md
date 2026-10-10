@@ -302,6 +302,13 @@ kapittel 9; `server/src/mvaJustering.ts`, `0095_mva_justering.sql`), under Regns
   nyttår minner om det.
 - Rapportene «Resultatregnskap» og «Balanse» (Rapporter → Regnskap) gjelder en periode (balansen ved
   slutten av den), med samme periode året før, og kan sendes til regnskapsføreren hver måned.
+- **Grunnlaget for skattemeldingen**: rapporten «Næringsspesifikasjon (grunnlag)»
+  (`server/src/naeringsspesifikasjon.ts`, lenke under Årsoppgjør) samler kontoene på postene i
+  næringsspesifikasjonen etter Skatteetatens gruppering av standard kontoplan (som i SAF-T), med
+  navnet på posten: resultatregnskapet for året og balansen 31. desember, med positive beløp som i
+  næringsspesifikasjonen (inntektene og kostnadene, eiendelene, egenkapitalen og gjelden), og med
+  årsresultatet og resultatet som ikke er disponert når årsoppgjøret ikke er bokført. De skattemessige saldoene og forskjellene står i
+  «Saldoskjema».
 
 ## SAF-T Regnskap
 
@@ -454,8 +461,8 @@ Saldobalanse og Bilagsjournal (kan sendes hver måned), Hovedbok, Anleggsregiste
 Avskrivninger og avganger (kan sendes hver måned), Saldoskjema, Periodiseringer, Leverandørgjeld,
 Utgifter, Bankavstemming, Bankposter og Månedsavslutning (de fire siste kan sendes hver måned; den
 siste er sjekklisten for hver måned i perioden), Mva-melding (når terminen er slutt),
-Resultatregnskap og Balanse (kan sendes hver måned), og Mva-justering for kapitalvarer (etter
-nyttår).
+Resultatregnskap og Balanse (kan sendes hver måned), Mva-justering for kapitalvarer (etter
+nyttår) og Næringsspesifikasjon (grunnlag).
 
 ## Kontroller og det som ikke er med ennå
 
@@ -484,7 +491,8 @@ nyttår).
   saldoen i banken er bare kjent når brukeren har hentet selv eller banken sender den med postene.
 - Perioder låses ikke av seg selv: låsen settes under Årsoppgjør (eller fra Mva når terminen er
   levert). Skattekostnaden regnes ikke ut (den står i skattemeldingen), og utsatt skatt føres med et
-  manuelt bilag.
+  manuelt bilag. Næringsspesifikasjonen fylles ikke ut og sendes ikke fra appen: rapporten er
+  grunnlaget, og kontoer utenfor standard kontoplan havner på den nærmeste posten under.
 - SAF-T: kunden og leverandøren står bare på reskontrolinjer fra fakturaene, innbetalingene og
   utgiftene (ikke fra manuelle bilag), dimensjoner (Analysis) og kildedokumenter er ikke med, og
   filen sendes ikke fra appen (Skatteetaten ber om den).
@@ -496,9 +504,11 @@ nyttår).
 
 ## Kilder
 
-- Skatteetaten, standard mva-koder for SAF-T (Standard Tax Codes) og standard kontoplan (General
-  Ledger Standard Accounts, 4 siffer): <https://github.com/Skatteetaten/saf-t> (mappene «Standard
-  Tax Codes» og «General Ledger Standard Accounts»)
+- Skatteetaten, standard mva-koder for SAF-T (Standard Tax Codes), standard kontoplan (General
+  Ledger Standard Accounts, 4 siffer) og grupperingen etter næringsspesifikasjonen med navnet på
+  postene (Grouping Category Code 2025-2026, `naeringsspesifikasjon.csv`):
+  <https://github.com/Skatteetaten/saf-t> (mappene «Standard Tax Codes», «General Ledger Standard
+  Accounts» og «Grouping Category Code 2025-2026»)
 - Skatteloven § 14-40 (aktivering av driftsmidler med kostpris fra 30 000 kr og brukstid på minst tre
   år): <https://lovdata.no/lov/1999-03-26-14/§14-40>
 - Merverdiavgiftsloven § 3-30 (tjenester kjøpt fra utlandet), § 8-1 og § 8-2 (fradrag og

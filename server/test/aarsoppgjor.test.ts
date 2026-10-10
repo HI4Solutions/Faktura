@@ -157,6 +157,18 @@ describe.skipIf(!process.env.DATABASE_URL)("årsoppgjøret i appen", () => {
     const bal = await ok("GET", o("/rapportmodul/regnskap.balanse?fra=2025-12-01&til=2025-12-31"));
     expect(bal.rader.find((x: any) => x.navn === "Sum eiendeler").belop).toBe(95000);
     expect(bal.merknad).toBe("Balansen 31.12.2025. Eiendelene er lik egenkapitalen og gjelden.");
+    // Grunnlaget for næringsspesifikasjonen: postene med navnet, kontoene og beløpet (årsoppgjøret er
+    // angret, så resultatet er ikke disponert).
+    const ns = await ok("GET", o("/rapportmodul/regnskap.naeringsspesifikasjon?aar=2025"));
+    expect(ns.rader).toEqual([
+      { del: "Resultatregnskap", post: "3200", navn: "Salg og uttak utenfor mva-loven", kontoer: "3200", belop: 100000 },
+      { del: "Resultatregnskap", post: "5000", navn: "Lønn og feriepenger med mer", kontoer: "5000", belop: 20000 },
+      { del: "Resultatregnskap", post: "6300", navn: "Leie av lokaler", kontoer: "6300", belop: 35000 },
+      { del: "Balanse", post: "1920", navn: "Bankinnskudd", kontoer: "1920", belop: 95000 },
+      { del: "Balanse", post: "2000", navn: "Aksjekapital/Egenkapital andre foretak", kontoer: "2000", belop: 50000 },
+    ]);
+    expect(ns.merknad).toContain("Driftsinntekter 100 000,00 kr, driftskostnader 55 000,00 kr, netto finans 0,00 kr og årsresultat 45 000,00 kr.");
+    expect(ns.merknad).toContain("Resultat som ikke er disponert: 45 000,00 kr");
     expect((await kall("POST", o("/regnskap/aarsoppgjor/2026"), {})).data.error).toBe("Året er ikke over");
     expect((await kall("GET", o("/regnskap/aarsoppgjor?aar=2099"))).data.error).toBe("Året har ikke begynt");
     expect((await kall("GET", o("/regnskap/aarsoppgjor?aar=2025"), undefined, fakturerer)).status).toBe(403);

@@ -719,7 +719,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   posteringene til og med året (saldoene), med kunden fra fakturaen eller innbetalingen og
   leverandøren fra utgiften bilaget kommer fra, grupperingen fra næringsspesifikasjonen
   (`gruppering`) og mva-informasjonen fordelt på grunnlagslinjene. Testen validerer den mot XSD-ene i
-  `server/test/saft` med xmllint (installert i CI).
+  `server/test/saft` med xmllint (installert i CI). Samme gruppering gir rapporten med grunnlaget for
+  næringsspesifikasjonen (`server/src/naeringsspesifikasjon.ts`, med navnene på postene fra
+  Skatteetatens liste).
   Mva-justeringen for kapitalvarer (`0095_mva_justering.sql`, `server/src/mvaJustering.ts`,
   `web/src/sider/RegnskapMvaJustering.tsx`): kapitalvaren står på anleggsmiddelet (`mva_inngaende`,
   `mva_fradrag`, `mva_felles` og `mva_bruk` med egen prosent per år; låst etter salg av
