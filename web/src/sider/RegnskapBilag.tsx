@@ -36,6 +36,7 @@ export const KILDER: Record<string, string> = {
   bank: "Bankpost",
   lonn: "Lønn",
   nav_refusjon: "Refusjon fra NAV",
+  afp_premie: "AFP-premie",
   anlegg: "Anleggsmidler",
   periodisering: "Periodisering",
   manuell: "Manuelt bilag",
@@ -49,6 +50,7 @@ const ANDRE_STEDER: Record<string, string> = {
   bank: "En bankpost rettes under Regnskap → Bank (Angre).",
   lonn: "Et lønnsbilag reverseres ved å åpne lønnskjøringen igjen (Lønn → Lønnskjøringer).",
   nav_refusjon: "En refusjon fra NAV reverseres ved å slette den (Lønn → Sykepenger).",
+  afp_premie: "En betaling av AFP-premien reverseres ved å slette den (Lønn → AFP).",
 };
 const LENKETEKST: Record<string, string> = {
   faktura: "Åpne fakturaen",

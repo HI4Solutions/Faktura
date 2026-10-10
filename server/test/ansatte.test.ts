@@ -120,6 +120,10 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
       otp_prosent: 2,
       // OTP også for dem som har fylt 75 år til ordningen sier noe annet (0097).
       otp_unntak_75: false,
+      // Ikke med i Fellesordningen for AFP til det slås på (0098).
+      afp: false,
+      afp_sats: 2.7,
+      ou_premie: 0,
       feriepenger_prosent: 12,
       lonnsdag: 20,
       halv_skatt: "desember",

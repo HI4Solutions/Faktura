@@ -20,6 +20,7 @@ export const KILDER: Record<string, string> = {
   aarsoppgjor: "Årsoppgjør",
   lonn: "Lønn",
   nav_refusjon: "Refusjon fra NAV",
+  afp_premie: "AFP-premie",
   anlegg: "Anleggsmidler",
   periodisering: "Periodisering",
   manuell: "Manuelt bilag",

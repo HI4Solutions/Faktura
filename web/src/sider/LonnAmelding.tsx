@@ -35,6 +35,8 @@ type Grunnlag = {
   forskuddstrekk: { dato: string; belop: number }[];
   sum_forskuddstrekk: number;
   arbeidsgiveravgift: number;
+  // AFP-premien som er betalt i måneden (0098): avgiften av den er med.
+  afp_premie?: number;
   mottakere: {
     ansatt_id: string;
     navn: string;
@@ -55,8 +57,11 @@ const BESKRIVELSE: Record<string, string> = {
   fastTillegg: "Faste tillegg",
   uregelmessigeTilleggKnyttetTilArbeidetTid: "Uregelmessige tillegg",
   bonus: "Bonus",
+  sluttvederlag: "Sluttvederlag",
   feriepenger: "Feriepenger",
   trekkILoennForFerie: "Trekk i lønn for ferie",
+  honorarAkkordProsentProvisjon: "Honorar",
+  styrehonorarOgGodtgjoerelseVerv: "Styrehonorar",
   // Naturalytelser og utgiftsgodtgjørelser (reiser).
   bil: "Fri bil",
   elektroniskKommunikasjon: "Elektronisk kommunikasjon",
@@ -353,7 +358,7 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
         <div className="kort">
           <div className="etikett">Arbeidsgiveravgift</div>
           <div className="verdi">{kr(g.arbeidsgiveravgift)}</div>
-          <div className="under">Betales annenhver måned</div>
+          <div className="under">Betales annenhver måned{g.afp_premie ? ` · med avgiften av AFP-premien som er betalt (${kr(g.afp_premie)})` : ""}</div>
         </div>
       </div>
 

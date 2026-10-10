@@ -4,6 +4,9 @@
 import { describe, expect, it } from "vitest";
 import { AML } from "../src/arbeidstid.js";
 import {
+  afpAlder,
+  afpLonn,
+  afpPremie,
   arbeidsgiveravgift,
   arbeidsgiverperiode,
   erFrilanser,
@@ -17,6 +20,7 @@ import {
   honorarArt,
   honorarTimer,
   somHonorar,
+  snittG,
   sykelinjer,
   summer,
   tabelloppslag,
@@ -419,6 +423,40 @@ describe("skattetrekket og summene", () => {
     expect(s.otp_grunnlag).toBe(200000);
     expect(s.otp).toBe(2730.98); // 2 % av 136 549 (12 G / 12)
     expect(s.aga_grunnlag).toBe(217730.98);
+  });
+});
+
+describe("AFP og OU (0098)", () => {
+  it("gjennomsnittlig G i året, og aldersgrensene (fra året den ansatte fyller 13 til og med året den fyller 61)", () => {
+    expect(snittG(2026)).toBe(134419.33); // (4 × 130 160 + 8 × 136 549) / 12
+    expect(afpAlder("1965-12-31", 2026)).toBe(true);
+    expect(afpAlder("1964-01-01", 2026)).toBe(false);
+    expect(afpAlder("2013-12-31", 2026)).toBe(true);
+    expect(afpAlder("2014-01-01", 2026)).toBe(false);
+    expect(afpAlder(null, 2026)).toBe(true);
+  });
+
+  it("premien av lønnen mellom 1 og 7,1 G i året: det i år med slippen, minus det før", () => {
+    expect(afpPremie(2.7, 2026, 0, 100000)).toBe(0);
+    expect(afpPremie(2.7, 2026, 100000, 50000)).toBe(420.68); // (150 000 − 134 419,33) × 2,7 %
+    expect(afpPremie(2.7, 2026, 150000, 50000)).toBe(1350); // hele slippen er over 1 G
+    expect(afpPremie(2.7, 2026, 900000, 100000)).toBe(1468.19); // opp til 7,1 G (954 377,24)
+    expect(afpPremie(2.7, 2026, 1000000, 50000)).toBe(0);
+  });
+
+  it("grunnlaget er den avgiftspliktige kontantlønnen; ikke for frilansere, og avgiften ikke på slippen", () => {
+    expect(["fastlonn", "bonus", "feriepenger", "sluttvederlag", "natural_bil", "km_bil_trekk", "utgift"].map(afpLonn)).toEqual([true, true, true, true, false, false, false]);
+    const o: Oppsett = { ...oppsett, afp: true, afp_sats: 2.7, ou_premie: 46 };
+    const linjer = [linje("fastlonn", 200000), linje("bonus", 10000), linje("natural_bil", 5000), linje("km_bil", 1000), linje("sluttvederlag", 20000)];
+    const s = summer(linjer, o, trekk(kari, { afpGrunnlagFor: 0, ouAndel: 0.5 }), "2026-10-20", null);
+    expect(s).toMatchObject({ afp_grunnlag: 230000, afp: 2580.68, ou: 23 });
+    // Arbeidsgiveravgiften av AFP-premien regnes når den betales: lønnen, naturalytelsen og OTP.
+    expect(s.aga_grunnlag).toBe(237730.98);
+    const frilanser = { ...kari, arbeidsforhold_type: "frilanserOppdragstakerHonorarPersonerMm" } as Ansatt;
+    expect(summer([linje("honorar", 50000)], o, trekk(frilanser, { ouAndel: 1 }), "2026-10-20", null)).toMatchObject({ afp_grunnlag: 0, afp: 0, ou: 0 });
+    expect(summer([linje("fastlonn", 50000)], { ...o, afp: false }, trekk(kari, { ouAndel: 1 }), "2026-10-20", null)).toMatchObject({ afp_grunnlag: 0, afp: 0, ou: 0 });
+    // 62 år i året: ikke med i grunnlaget, men OU-premien gjelder.
+    expect(summer([linje("fastlonn", 50000)], o, trekk({ ...kari, fodselsdato: "1964-03-01" }, { ouAndel: 1 }), "2026-10-20", null)).toMatchObject({ afp_grunnlag: 0, afp: 0, ou: 46 });
   });
 });
 

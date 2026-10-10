@@ -22,6 +22,7 @@ async function oppsett(db: Db, org: string) {
     feriepenger: o.feriepenger,
     netto: o.netto,
     otp: o.otp,
+    afp: !!o.afp,
   };
 }
 
@@ -50,6 +51,7 @@ export function lonnBokforingRuter() {
         feriepenger: z.enum(["avsetning", "utbetaling"]).optional(),
         netto: z.enum(["skyldig", "bank"]).optional(),
         otp: z.boolean().optional(),
+        afp: z.boolean().optional(),
       })
       .parse(await c.req.json().catch(() => ({})));
     return c.json(
@@ -64,8 +66,9 @@ export function lonnBokforingRuter() {
           else kontoer[rolle] = nr;
         }
         const n = await db.query(
-          "update faktura.lonn_oppsett set bokforing_kontoer = $2, bokforing_feriepenger = $3, bokforing_netto = $4, bokforing_otp = $5 where org_id = $1",
-          [orgId(c), JSON.stringify(kontoer), b.feriepenger ?? naa.feriepenger, b.netto ?? naa.netto, b.otp ?? naa.otp],
+          `update faktura.lonn_oppsett set bokforing_kontoer = $2, bokforing_feriepenger = $3, bokforing_netto = $4, bokforing_otp = $5, bokforing_afp = $6
+            where org_id = $1`,
+          [orgId(c), JSON.stringify(kontoer), b.feriepenger ?? naa.feriepenger, b.netto ?? naa.netto, b.otp ?? naa.otp, b.afp ?? !!naa.afp],
         );
         if (!n.rowCount) throw new ApiFeil(409, "Slå på Ansatte og timer først");
         return oppsett(db, orgId(c));

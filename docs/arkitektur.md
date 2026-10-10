@@ -910,6 +910,29 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   A-meldingens kontroll gir advarsel for den som er med i måneden uten å være meldt inn, og for den
   som er meldt inn og er med til og med en dag i måneden (slutter eller fyller 75) uten å være meldt
   ut. Rapporten «OTP» (`lonn.otp`) har datoene
+- AFP og OU (`0098_afp.sql`, `server/src/lonnsberegning.ts`, `server/src/lonn.ts`, `server/src/afpPremier.ts`,
+  Lønn → AFP i `web/src/sider/LonnAfp.tsx`). Med `lonn_oppsett.afp` setter `summer` AFP-grunnlaget på
+  slippen til den avgiftspliktige kontantlønnen (`afpLonn`: lønnsarter av typen lønn som er trekk- og
+  avgiftspliktige, også feriepenger, bonus og sluttvederlag) for de ansatte som er 13–61 år i året
+  (`afpAlder`; ikke frilansere), og AFP-premien til `afpPremie`: satsen av lønnen i året mellom 1 og
+  7,1 G (`snittG`, gjennomsnittlig G med fire måneder før og åtte etter 1. mai) med slippen, minus
+  den uten. Lønnen før i året regner `lonn.ts` av linjene i de godkjente kjøringene (så den er riktig
+  også når AFP slås på i løpet av året), med den trekkpliktige lønnen fra et tidligere lønnssystem.
+  OU-premien er `ou_premie` ganger stillingsprosenten ganger andelen av måneden (bare den ordinære
+  kjøringen). Premiene lagres på slippen (`afp_grunnlag`, `afp`, `ou`) og er ikke med i
+  arbeidsgiveravgiften der: avgiftsplikten følger innbetalingen av premien. `faktura.afp_premier` er
+  betalingene av fakturaene (dato, kvartal, AFP- og OU-premien, avgiftssatsen og avgiften, regnet
+  med sonen og fribeløpet i sone 1a); `registrer_afp_premie` fører bilaget i serie L (kilde
+  `afp_premie`: påløpt premie med `bokforing_afp`, ellers kostnaden, mot banken, og avgiften mot
+  skyldig arbeidsgiveravgift), `slett_afp_premie` reverserer det. A-meldingen legger AFP-premien
+  som er betalt i måneden til i `tilskuddOgPremieTilPensjon` og summen av avgiften
+  (`avgiftsgrunnlag` med premiene), også uten lønn i måneden, og gir advarsel i andre og tredje
+  måned i et kvartal når premien for forrige kvartal er avsatt uten registrert betaling.
+  Avstemmingen tar med avgiften av premiene og bilagene for dem. Lønnsbilaget fører avsetningen
+  (`afp` 5942, `ou` 5941 mot `paalopt_afp` 2989) når `bokforing_afp` er valgt. Rapporten «AFP og OU»
+  (`lonn.afp`). Lønnsarten `sluttvederlag` (a-meldingen: `sluttvederlag`) er trekk- og
+  avgiftspliktig og trekkes etter prosentsatsen med tabellkort, uten feriepenger og OTP.
+  `lonnskontoer_gyldige` godtar nå også kontoene for honorar og styrehonorar (manglet i 0096)
 - Avstemmingen av lønnen og refusjonene fra NAV (`0085_nav_refusjon.sql`, `server/src/avstemming.ts`,
   `server/src/navRefusjon.ts`, Lønn → Sykepenger i `web/src/sider/LonnSykepenger.tsx`).
   Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften

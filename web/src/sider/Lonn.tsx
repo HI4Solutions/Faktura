@@ -5,7 +5,7 @@
 // lønnsslippen. Regnskap ser kjøringene. De ansatte ser sine egne lønnsslipper («Mine
 // lønnsslipper»).
 //
-// Fanen står i adressen (?fane=kjoringer|amelding|sykepenger|reiser|aar|mine), kjøringen som er
+// Fanen står i adressen (?fane=kjoringer|amelding|sykepenger|afp|reiser|aar|mine), kjøringen som er
 // åpen med ?kjoring=, måneden i a-meldingen med ?maaned= (LonnAmelding.tsx), forespørselen fra NAV
 // med ?foresporsel= (LonnSykepenger.tsx), reiseregningen med ?reise= (LonnReiser.tsx), og året for
 // årsoversikten med ?aar= (LonnAar.tsx).
@@ -23,6 +23,7 @@ import { Sykepenger } from "./LonnSykepenger";
 import { KjoringBokforing } from "./LonnBokforing";
 import { LonnBetalinger } from "./LonnBetalinger";
 import { Reiser } from "./LonnReiser";
+import { Afp } from "./LonnAfp";
 
 export interface Linje {
   id: string;
@@ -60,6 +61,10 @@ export interface Slipp {
   feriepenger_opptjent: number;
   otp_grunnlag: number;
   otp: number;
+  // AFP- og OU-premien som er avsatt (0098).
+  afp_grunnlag?: number;
+  afp?: number;
+  ou?: number;
   aga_grunnlag: number;
   aga: number;
   aga_sats: number;
@@ -78,6 +83,8 @@ type Summer = {
   feriepengegrunnlag: number;
   feriepenger_opptjent: number;
   otp: number;
+  afp?: number;
+  ou?: number;
   aga_grunnlag: number;
   aga: number;
   merknader: number;
@@ -158,10 +165,13 @@ export function Lonn() {
   const [sok, settSok] = useSearchParams();
   const leder = !erAnsatt(org?.rolle) && kanSePersonal(org?.rolle);
   const egen = !!org?.ansatt_id;
+  // AFP (0098): fanen når organisasjonen er med i Fellesordningen (eller den står i adressen).
+  const oppsett = useData(() => (leder && org?.personal ? hent<{ afp?: boolean }>(`/org/${org.id}/lonn-oppsett`) : Promise.resolve(null)), [org?.id, leder]);
   const faner: [string, string][] = [];
   if (leder) faner.push(["kjoringer", "Lønnskjøringer"], ["amelding", "A-melding"], ["aar", "Årsoversikt"]);
   // Sykepenger og NAV: helseopplysninger, så bare eier og administrator.
   if (leder && erAdmin(org?.rolle)) faner.splice(2, 0, ["sykepenger", "Sykepenger"]);
+  if (leder && (oppsett.data?.afp || sok.get("fane") === "afp")) faner.splice(faner.length - 1, 0, ["afp", "AFP"]);
   // Reiseregningene: de som ser lønnen, ser alle; den ansatte fører og ser sine egne (etter
   // lønnsslippene, som er det den ansatte ser først).
   if (leder) faner.push(["reiser", "Reiser"]);
@@ -220,6 +230,7 @@ export function Lonn() {
       {fane === "kjoringer" && (kjoring ? <KjoringSide id={kjoring} tilbake={() => ga({ kjoring: null })} /> : <Kjoringer apne={(id) => ga({ kjoring: id })} />)}
       {fane === "amelding" && <Ameldinger />}
       {fane === "sykepenger" && <Sykepenger />}
+      {fane === "afp" && <Afp />}
       {fane === "reiser" && <Reiser leder={leder} reise={sok.get("reise")} apne={(id) => ga({ reise: id })} />}
       {fane === "aar" && <Aarsoversikter />}
       {fane === "mine" && <MineSlipper />}
@@ -554,6 +565,7 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
           <div className="verdi">{kr(d.sum.aga)}</div>
           <div className="under">
             OTP {kr(d.sum.otp)} · feriepenger opptjent {kr(d.sum.feriepenger_opptjent)}
+            {d.sum.afp || d.sum.ou ? ` · AFP og OU avsatt ${kr((d.sum.afp ?? 0) + (d.sum.ou ?? 0))}` : ""}
           </div>
         </div>
       </div>
@@ -950,6 +962,7 @@ function SlippKort({
               </div>
               <div>
                 OTP {kr(s.otp)} · arbeidsgiveravgift {kr(s.aga)}
+                {s.afp || s.ou ? ` · AFP-premie ${kr(s.afp ?? 0)} · OU-premie ${kr(s.ou ?? 0)} (avsatt)` : ""}
               </div>
               {s.antall_timeforinger > 0 && (
                 <div>

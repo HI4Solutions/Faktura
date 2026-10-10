@@ -1,8 +1,9 @@
 // Avstemmingen av lønnen (lønn, fase J). For hver måned: det lønnskjøringene gir i a-meldingen nå
 // (de godkjente kjøringene med utbetaling i måneden: forskuddstrekket og arbeidsgiveravgiften
-// regnet som i meldingen, og lønnen etter beskrivelsen), det som er rapportert i den siste
-// a-meldingen som er levert for måneden (oppsummeringen som ble lagret med den), og det som er
-// bokført i lønnsbilagene (kontoene for forskuddstrekk og skyldig arbeidsgiveravgift). Avvik på
+// regnet som i meldingen, og lønnen etter beskrivelsen; med arbeidsgiveravgiften av AFP-premien som
+// er betalt i måneden), det som er rapportert i den siste a-meldingen som er levert for måneden
+// (oppsummeringen som ble lagret med den), og det som er bokført i lønnsbilagene og bilagene for
+// AFP-premien (kontoene for forskuddstrekk og skyldig arbeidsgiveravgift). Avvik på
 // 1 kr eller mer mellom lønnen og a-meldingen (mindre er avrunding: meldingen har hele kroner), og
 // på 1 øre mellom lønnen og bokføringen, vises med hva som bør gjøres.
 //
@@ -46,11 +47,16 @@ const sumAv = (x: Record<string, number>) => rund(Object.values(x).reduce((s, n)
 export async function hentMaaned(db: Db, org: string, maaned: string, kontoer: { forskuddstrekk: string; skyldig_aga: string }): Promise<Maanedsdata> {
   const g = await hentGrunnlag(db, org, maaned);
   const o = oppsummer(g);
-  const lonn = g.slipper.length
+  // Arbeidsgiveravgiften av AFP-premien som er betalt i måneden (0098) hører med.
+  const premieAga = (g.premier ?? []).reduce((s, x) => s + Number(x.aga), 0);
+  const lonn = g.slipper.length || g.premier?.length
     ? {
         forskuddstrekk: o.sum_forskuddstrekk,
         aga: o.arbeidsgiveravgift,
-        eksakt: { forskuddstrekk: rund(g.slipper.reduce((s, x) => s + Number(x.skattetrekk), 0)), aga: rund(g.slipper.reduce((s, x) => s + Number(x.aga), 0)) },
+        eksakt: {
+          forskuddstrekk: rund(g.slipper.reduce((s, x) => s + Number(x.skattetrekk), 0)),
+          aga: rund(g.slipper.reduce((s, x) => s + Number(x.aga), 0) + premieAga),
+        },
         inntekter: perBeskrivelse(o.mottakere),
         mottakere: o.antall_med_lonn,
       }
@@ -77,7 +83,7 @@ export async function hentMaaned(db: Db, org: string, maaned: string, kontoer: {
     `select coalesce(sum(case when p.konto = $3 then -p.belop end), 0)::float8 as forskuddstrekk,
             coalesce(sum(case when p.konto = $4 then -p.belop end), 0)::float8 as aga, count(distinct b.id)::int as bilag
        from faktura.bilag b join faktura.posteringer p on p.org_id = b.org_id and p.bilag_id = b.id
-      where b.org_id = $1 and b.kilde = 'lonn' and b.dato between $2::date and ($2::date + interval '1 month' - interval '1 day')::date`,
+      where b.org_id = $1 and b.kilde in ('lonn', 'afp_premie') and b.dato between $2::date and ($2::date + interval '1 month' - interval '1 day')::date`,
     [org, `${maaned}-01`, kontoer.forskuddstrekk, kontoer.skyldig_aga],
   );
   return { maaned, frist: frist(maaned), lonn, amelding, bokfort: b && b.bilag > 0 ? { forskuddstrekk: rund(b.forskuddstrekk), aga: rund(b.aga) } : null };

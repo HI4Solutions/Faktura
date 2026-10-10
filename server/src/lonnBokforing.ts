@@ -12,6 +12,11 @@
 // er ikke med i avsetningen og kostnadsføres når det utbetales. Med «utbetaling» kostnadsføres
 // feriepengene når de utbetales.
 //
+// AFP og OU (0098), når det er valgt: premiene som er avsatt på slippene, føres som kostnad mot
+// påløpt premie. Betalingen av fakturaen fra Fellesordningen (afpPremier.ts) har sitt eget bilag:
+// den påløpte premien (eller kostnaden, uten avsetning) mot banken, og arbeidsgiveravgiften av
+// AFP-premien.
+//
 // Beløpene regnes i øre, så bilaget alltid går i null.
 import { alle, en, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
@@ -25,6 +30,8 @@ export type Kontorolle =
   | "aga"
   | "aga_feriepenger"
   | "otp"
+  | "afp"
+  | "ou"
   | "utgifter"
   | "forskuddstrekk"
   | "paaleggstrekk"
@@ -42,6 +49,7 @@ export type Kontorolle =
   | "skyldig_lonn"
   | "skyldige_feriepenger"
   | "skyldig_otp"
+  | "paalopt_afp"
   | "bank";
 
 // Kontoene i bilaget, med standardkontoen (NS 4102).
@@ -54,6 +62,9 @@ export const KONTOROLLER: { rolle: Kontorolle; navn: string; standard: string }[
   { rolle: "aga", navn: "Arbeidsgiveravgift", standard: "5400" },
   { rolle: "aga_feriepenger", navn: "Arbeidsgiveravgift av påløpte feriepenger", standard: "5405" },
   { rolle: "otp", navn: "Pensjon (OTP)", standard: "5945" },
+  // AFP- og OU-premien til Fellesordningen (0098).
+  { rolle: "afp", navn: "AFP-premie (Fellesordningen)", standard: "5942" },
+  { rolle: "ou", navn: "OU-premie", standard: "5941" },
   { rolle: "utgifter", navn: "Utgiftsgodtgjørelse", standard: "7790" },
   { rolle: "forskuddstrekk", navn: "Forskuddstrekk", standard: "2600" },
   { rolle: "paaleggstrekk", navn: "Påleggstrekk (utleggstrekk)", standard: "2610" },
@@ -72,6 +83,7 @@ export const KONTOROLLER: { rolle: Kontorolle; navn: string; standard: string }[
   { rolle: "skyldig_lonn", navn: "Skyldig lønn", standard: "2930" },
   { rolle: "skyldige_feriepenger", navn: "Skyldige feriepenger", standard: "2940" },
   { rolle: "skyldig_otp", navn: "Skyldig pensjon (OTP)", standard: "2990" },
+  { rolle: "paalopt_afp", navn: "Påløpt AFP- og OU-premie", standard: "2989" },
   { rolle: "bank", navn: "Bank", standard: "1920" },
 ];
 const KONTONAVN = Object.fromEntries(KONTOROLLER.map((k) => [k.rolle, k.navn])) as Record<Kontorolle, string>;
@@ -81,6 +93,8 @@ export type Bokforingsoppsett = {
   feriepenger: "avsetning" | "utbetaling";
   netto: "skyldig" | "bank";
   otp: boolean;
+  // AFP- og OU-premien avsettes hver måned (0098).
+  afp?: boolean;
 };
 
 // Kontoene som brukes: standarden, med det organisasjonen har endret.
@@ -100,6 +114,9 @@ export type Bilagsslipp = {
   netto: number;
   feriepenger_opptjent: number;
   otp: number;
+  // AFP- og OU-premien som er avsatt på slippen (0098).
+  afp?: number;
+  ou?: number;
   aga: number;
   aga_sats: number;
   // Feriepengene som utbetales på slippen (lønnsartene feriepenger og feriepenger_60).
@@ -156,6 +173,8 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
   const opptjent = sum((s) => ore(s.feriepenger_opptjent));
   const agaOpptjent = sum((s) => Math.round((ore(s.feriepenger_opptjent) * Number(s.aga_sats)) / 100));
   const otp = sum((s) => ore(s.otp));
+  const afp = sum((s) => ore(s.afp ?? 0));
+  const ou = sum((s) => ore(s.ou ?? 0));
 
   const p: Postering[] = [];
   const post = (rolle: Kontorolle, belopOre: number, tekst: string) => {
@@ -196,6 +215,11 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
     post("otp", otp, "OTP");
     post("skyldig_otp", -otp, "OTP");
   }
+  if (o.afp) {
+    post("afp", afp, "Avsatt AFP-premie");
+    post("ou", ou, "Avsatt OU-premie");
+    post("paalopt_afp", -(afp + ou), "Avsatt AFP- og OU-premie");
+  }
   const rest = p.reduce((a, x) => a + ore(x.belop), 0);
   if (rest !== 0) throw new Error(`Lønnsbilaget går ikke i null (${(rest / 100).toFixed(2)} kr). Regn ut lønnskjøringen på nytt.`);
   const k = g.kjoring;
@@ -211,9 +235,9 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
 // --- Databasen ------------------------------------------------------------------------------
 
 export async function hentBokforingsoppsett(db: Db, org: string): Promise<Bokforingsoppsett> {
-  const o = await en<{ bokforing_kontoer: Record<string, string>; bokforing_feriepenger: string; bokforing_netto: string; bokforing_otp: boolean }>(
+  const o = await en<{ bokforing_kontoer: Record<string, string>; bokforing_feriepenger: string; bokforing_netto: string; bokforing_otp: boolean; bokforing_afp: boolean }>(
     db,
-    "select bokforing_kontoer, bokforing_feriepenger, bokforing_netto, bokforing_otp from faktura.lonn_oppsett where org_id = $1",
+    "select bokforing_kontoer, bokforing_feriepenger, bokforing_netto, bokforing_otp, bokforing_afp from faktura.lonn_oppsett where org_id = $1",
     [org],
   );
   return {
@@ -221,6 +245,7 @@ export async function hentBokforingsoppsett(db: Db, org: string): Promise<Bokfor
     feriepenger: o?.bokforing_feriepenger === "utbetaling" ? "utbetaling" : "avsetning",
     netto: o?.bokforing_netto === "bank" ? "bank" : "skyldig",
     otp: Boolean(o?.bokforing_otp),
+    afp: Boolean(o?.bokforing_afp),
   };
 }
 
@@ -236,7 +261,8 @@ export async function hentBilagsgrunnlag(db: Db, org: string, kjoring: string): 
   const slipper = await alle<Bilagsslipp>(
     db,
     `select s.brutto::float8 as brutto, s.skattetrekk::float8 as skattetrekk, s.utgifter::float8 as utgifter, s.trekk_etter_skatt::float8 as trekk_etter_skatt,
-            s.netto::float8 as netto, s.feriepenger_opptjent::float8 as feriepenger_opptjent, s.otp::float8 as otp, s.aga::float8 as aga, s.aga_sats::float8 as aga_sats,
+            s.netto::float8 as netto, s.feriepenger_opptjent::float8 as feriepenger_opptjent, s.otp::float8 as otp, s.afp::float8 as afp, s.ou::float8 as ou,
+            s.aga::float8 as aga, s.aga_sats::float8 as aga_sats,
             coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'feriepenger'), 0)::float8 as feriepenger,
             coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'feriepenger_60'), 0)::float8 as feriepenger_60,
             coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'honorar'), 0)::float8 as honorar,
@@ -299,8 +325,9 @@ export type LagretBilag = {
   posteringer: Postering[];
 };
 
-// Bilagene (med posteringene) for en kjøring, eller for kjøringene og refusjonene fra NAV (0085)
-// med bilag i perioden. Nyeste først for en kjøring; i rekkefølgen i serien for perioden.
+// Bilagene (med posteringene) for en kjøring, eller for kjøringene, refusjonene fra NAV (0085) og
+// betalingene av AFP-premien (0098) med bilag i perioden. Nyeste først for en kjøring; i
+// rekkefølgen i serien for perioden.
 export async function hentBilag(db: Db, org: string, valg: { kjoring: string } | { fra: string; til: string }): Promise<LagretBilag[]> {
   const plan = kontoplan(await hentBokforingsoppsett(db, org));
   const enKjoring = "kjoring" in valg;
@@ -309,7 +336,7 @@ export async function hentBilag(db: Db, org: string, valg: { kjoring: string } |
     `select b.id, b.serie || '-' || b.aar || '-' || b.nummer as bilagsnummer, to_char(b.dato, 'YYYY-MM-DD') as dato, b.tekst,
             b.reverserer, b.reversert_av, b.opprettet, (select coalesce(u.navn, u.epost) from faktura.brukere u where u.id = b.opprettet_av) as opprettet_av
        from faktura.bilag b
-      where b.org_id = $1 and ${enKjoring ? "b.kilde = 'lonn' and b.kilde_id = $2" : "b.kilde in ('lonn', 'nav_refusjon') and b.dato between $2 and $3"}
+      where b.org_id = $1 and ${enKjoring ? "b.kilde = 'lonn' and b.kilde_id = $2" : "b.kilde in ('lonn', 'nav_refusjon', 'afp_premie') and b.dato between $2 and $3"}
       order by ${enKjoring ? "b.opprettet desc, b.nummer desc" : "b.aar, b.nummer"}`,
     enKjoring ? [org, valg.kjoring] : [org, valg.fra, valg.til],
   );

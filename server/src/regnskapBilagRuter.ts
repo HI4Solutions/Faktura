@@ -328,6 +328,7 @@ export function regnskapBilagRuter() {
         const fn: Record<string, string> = { anlegg: "reverser_anlegg", periodisering: "reverser_periodisering", manuell: "reverser_manuelt" };
         if (bilag.kilde === "lonn") throw new ApiFeil(409, "Et lønnsbilag reverseres ved å åpne lønnskjøringen igjen (Lønn → Lønnskjøringer)");
         if (bilag.kilde === "nav_refusjon") throw new ApiFeil(409, "En refusjon fra NAV reverseres ved å slette den (Lønn → Sykepenger)");
+        if (bilag.kilde === "afp_premie") throw new ApiFeil(409, "En betaling av AFP-premien reverseres ved å slette den (Lønn → AFP)");
         if (bilag.kilde === "faktura") throw new ApiFeil(409, "En faktura rettes med en kreditnota (Fakturaer), og kreditnotaen bokføres av seg selv");
         if (bilag.kilde === "innbetaling")
           throw new ApiFeil(409, "En innbetaling reverseres ved å ta bort betalingen på fakturaen (eller koble innbetalingen fra fakturaen under Innbetalinger)");

@@ -50,6 +50,8 @@ export type Slippdata = {
   otp: number;
   linjer: { lonnsart: string; belop: number; antall: number | null; opptjent_fra?: string | null; opptjent_til?: string | null; tillegg?: Record<string, unknown> | null }[];
 };
+// AFP-premien som er betalt i måneden (0098, afpPremier.ts): premien og arbeidsgiveravgiften av den.
+export type Premiedata = { afp: number; aga: number; aga_sats: number };
 // Permisjon og permittering som berører måneden (0084; prosent 1–100).
 export type Permisjonsrad = { id: string; ansatt_id: string; fra: string; til: string; art: string | null; prosent: number; slutt_ukjent: boolean; betalt: boolean };
 export type Grunnlag = {
@@ -66,6 +68,11 @@ export type Grunnlag = {
   // OTP-satsen og om ordningen tar opp dem som har fylt 75 år (0097), til påminnelsene om inn- og
   // utmelding.
   otp?: { prosent: number; unntak75: boolean };
+  // AFP (0098): premiene som er betalt i måneden (arbeidsgiveravgiften følger innbetalingen), og
+  // premien som er avsatt for forrige kvartal uten at betalingen er registrert (påminnelsen, i
+  // andre og tredje måned i kvartalet).
+  premier?: Premiedata[];
+  afpIkkeBetalt?: { kvartal: string; avsatt: number } | null;
 };
 export type Avvik = { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string };
 
@@ -96,7 +103,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
   const o = await en<{ navn: string; orgnr: string | null }>(db, "select navn, orgnr from faktura.organisasjoner where id = $1", [org]);
   const oppsett = await en<any>(
     db,
-    `select aga_sone, full_stilling::float8 as full_stilling, virksomhet_orgnr, pensjonsinnretning_orgnr, otp_prosent::float8 as otp_prosent, otp_unntak_75
+    `select aga_sone, full_stilling::float8 as full_stilling, virksomhet_orgnr, pensjonsinnretning_orgnr, otp_prosent::float8 as otp_prosent, otp_unntak_75,
+            afp
        from faktura.lonn_oppsett where org_id = $1`,
     [org],
   );
@@ -160,6 +168,27 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
       order by f.fra`,
     [org, fra, til],
   );
+  // AFP-premiene som er betalt i måneden, og om premien for forrige kvartal er betalt.
+  const premier = await alle<Premiedata>(
+    db,
+    "select afp::float8 as afp, aga::float8 as aga, aga_sats::float8 as aga_sats from faktura.afp_premier where org_id = $1 and dato between $2::date and $3::date order by dato",
+    [org, fra, til],
+  );
+  let afpIkkeBetalt: Grunnlag["afpIkkeBetalt"] = null;
+  const nr = Number(maaned.slice(5, 7));
+  if (oppsett?.afp && nr % 3 !== 1) {
+    const q = Math.floor((nr - 1) / 3) + 1;
+    const f = q === 1 ? { aar: Number(maaned.slice(0, 4)) - 1, kvartal: 4 } : { aar: Number(maaned.slice(0, 4)), kvartal: q - 1 };
+    const qFra = `${f.aar}-${String((f.kvartal - 1) * 3 + 1).padStart(2, "0")}-01`;
+    const x = await en<{ avsatt: number; betalt: boolean }>(
+      db,
+      `select coalesce((select sum(s.afp + s.ou) from faktura.lonnsslipper s join faktura.lonnskjoringer k on k.id = s.kjoring_id
+                         where s.org_id = $1 and k.status = 'godkjent' and k.utbetalingsdato between $2::date and ($2::date + interval '3 months' - interval '1 day')::date), 0)::float8 as avsatt,
+              exists (select 1 from faktura.afp_premier p where p.org_id = $1 and p.aar = $3 and p.kvartal = $4) as betalt`,
+      [org, qFra, f.aar, f.kvartal],
+    );
+    if (x && x.avsatt > 0 && !x.betalt) afpIkkeBetalt = { kvartal: `${f.kvartal}. kvartal ${f.aar}`, avsatt: rund(x.avsatt) };
+  }
   return {
     maaned,
     org: { navn: o?.navn ?? "", orgnr: o?.orgnr ?? null },
@@ -183,6 +212,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
     utkast,
     permisjoner,
     otp: { prosent: Number(oppsett?.otp_prosent ?? 2), unntak75: !!oppsett?.otp_unntak_75 },
+    premier,
+    afpIkkeBetalt,
   };
 }
 
@@ -286,9 +317,10 @@ export function forskuddstrekk(slipper: Slippdata[]) {
 
 const STANDARDSATS: Record<string, number> = { "1": 14.1, "1a": 10.6, "2": 10.6, "3": 6.4, "4": 5.1, "4a": 7.9, "5": 0 };
 
-// Avgiftsgrunnlaget per sats: lønnen og pensjonen (OTP) for seg. I sone 1a deles en slipp der
-// fribeløpet ble brukt opp, i delen med redusert sats og delen med full sats.
-export function avgiftsgrunnlag(slipper: Slippdata[], sone: string) {
+// Avgiftsgrunnlaget per sats: lønnen og pensjonen (OTP, og AFP-premien som er betalt i måneden)
+// for seg. I sone 1a deles en slipp (eller premie) der fribeløpet ble brukt opp, i delen med
+// redusert sats og delen med full sats.
+export function avgiftsgrunnlag(slipper: Slippdata[], sone: string, premier: Premiedata[] = []) {
   const per = new Map<number, { lonn: number; pensjon: number }>();
   const legg = (sats: number, lonn: number, pensjon: number) => {
     const x = per.get(sats) ?? { lonn: 0, pensjon: 0 };
@@ -296,11 +328,15 @@ export function avgiftsgrunnlag(slipper: Slippdata[], sone: string) {
     x.pensjon += pensjon;
     per.set(sats, x);
   };
-  for (const s of slipper) {
-    const g = s.aga_grunnlag;
+  const grunnlag = [
+    ...slipper.map((s) => ({ g: s.aga_grunnlag, pensjon: s.otp, aga: s.aga, sats: s.aga_sats })),
+    ...premier.map((p) => ({ g: p.afp, pensjon: p.afp, aga: p.aga, sats: p.aga_sats })),
+  ];
+  for (const s of grunnlag) {
+    const g = s.g;
     if (!g) continue;
-    const andelPensjon = s.otp / g;
-    const sats = rund(s.aga_sats);
+    const andelPensjon = s.pensjon / g;
+    const sats = rund(s.sats);
     if (sone === "1a" && sats !== STANDARDSATS["1a"] && sats !== 14.1) {
       const full = Math.min(g, Math.max(0, (s.aga - (g * 10.6) / 100) / ((14.1 - 10.6) / 100)));
       for (const [del, x] of [
@@ -308,7 +344,7 @@ export function avgiftsgrunnlag(slipper: Slippdata[], sone: string) {
         [14.1, full],
       ] as const)
         if (x > 0) legg(del, x * (1 - andelPensjon), x * andelPensjon);
-    } else legg(sats, g - s.otp, s.otp);
+    } else legg(sats, g - s.pensjon, s.pensjon);
   }
   return [...per]
     .map(([sats, x]) => ({ sats, lonn: rund(x.lonn), pensjon: rund(x.pensjon) }))
@@ -373,6 +409,12 @@ export function kontroller(g: Grunnlag): Avvik[] {
       else if (f.otp_innmeldt && p.til && p.til <= siste(g.maaned) && !f.otp_utmeldt)
         a.push({ niva: "advarsel", tekst: `${f.navn} er med i OTP til og med ${visDato(p.til)}: meld den ansatte ut hos pensjonsleverandøren, og før datoen på den ansatte.`, ansatt_id: f.id });
     }
+  // AFP (0098): premien for forrige kvartal er avsatt, men betalingen er ikke registrert.
+  if (g.afpIkkeBetalt)
+    a.push({
+      niva: "advarsel",
+      tekst: `AFP-premien for ${g.afpIkkeBetalt.kvartal} (avsatt ${g.afpIkkeBetalt.avsatt.toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/[\u00a0\u202f]/g, " ")} kr) er ikke registrert som betalt. Registrer betalingen under Lønn → AFP når fakturaen fra Fellesordningen er betalt, så kommer arbeidsgiveravgiften av premien med i a-meldingen for den måneden.`,
+    });
   if (!g.arbeidsforhold.length && !g.slipper.length) a.push({ niva: "advarsel", tekst: "Ingen er ansatt eller har fått lønn i måneden, så det er ingenting å rapportere." });
   return a;
 }
@@ -382,7 +424,7 @@ export function kontroller(g: Grunnlag): Avvik[] {
 export function oppsummer(g: Grunnlag) {
   const inn = inntekter(g.slipper);
   const trekk = forskuddstrekk(g.slipper);
-  const avgift = avgiftsgrunnlag(g.slipper, g.sone);
+  const avgift = avgiftsgrunnlag(g.slipper, g.sone, g.premier);
   return {
     maaned: g.maaned,
     virksomhet: g.virksomhet,
@@ -394,6 +436,8 @@ export function oppsummer(g: Grunnlag) {
     sum_utleggstrekk: trekkILonn(g.slipper).sumUtlegg,
     arbeidsgiveravgift: sumAvgift(avgift),
     avgiftsgrunnlag: avgift,
+    // AFP-premien som er betalt i måneden (med arbeidsgiveravgift av den).
+    afp_premie: rund((g.premier ?? []).reduce((x, p) => x + Number(p.afp), 0)),
     mottakere: g.arbeidsforhold
       .map((f) => ({
         ansatt_id: f.id,
@@ -462,7 +506,7 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
   if (!g.virksomhet) throw new Error("Virksomheten mangler organisasjonsnummer");
   const inn = inntekter(g.slipper);
   const trekk = forskuddstrekk(g.slipper);
-  const avgift = avgiftsgrunnlag(g.slipper, g.sone);
+  const avgift = avgiftsgrunnlag(g.slipper, g.sone, g.premier);
   const iLonn = trekkILonn(g.slipper);
   const mottakere = g.arbeidsforhold
     .map((f) => {
@@ -517,7 +561,7 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
     virksomhet.arbeidsgiveravgift = aga;
   }
   const oppgave: Record<string, unknown> = {};
-  if (g.slipper.length) {
+  if (g.slipper.length || g.premier?.length) {
     const betaling: Record<string, unknown> = { sumArbeidsgiveravgift: sumAvgift(avgift) };
     if (iLonn.sumUtlegg) betaling.sumUtleggstrekk = iLonn.sumUtlegg;
     const perDato = trekk.perDato.filter(([, b]) => b !== 0);

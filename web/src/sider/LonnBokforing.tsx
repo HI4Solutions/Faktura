@@ -9,7 +9,7 @@ import { erAdmin, useKonto } from "../konto";
 import { dato, kr } from "../format";
 
 type Kontorad = { rolle: string; navn: string; standard: string; konto: string; endret: boolean };
-type Oppsett = { kontoer: Kontorad[]; feriepenger: "avsetning" | "utbetaling"; netto: "skyldig" | "bank"; otp: boolean };
+type Oppsett = { kontoer: Kontorad[]; feriepenger: "avsetning" | "utbetaling"; netto: "skyldig" | "bank"; otp: boolean; afp?: boolean };
 type Postering = { rolle: string; konto: string; navn: string; tekst: string; belop: number };
 type Bilag = {
   id: string;
@@ -30,12 +30,20 @@ export function BokforingOppsett() {
   const { org } = useKonto();
   const { data, settData, feil } = useData(() => hent<Oppsett>(`/org/${org!.id}/lonn/bokforing`), [org?.id]);
   const h = useHandling();
-  const [skjema, settSkjema] = useState<{ kontoer: Record<string, string>; feriepenger: Oppsett["feriepenger"]; netto: Oppsett["netto"]; otp: boolean } | null>(null);
+  const [skjema, settSkjema] = useState<{ kontoer: Record<string, string>; feriepenger: Oppsett["feriepenger"]; netto: Oppsett["netto"]; otp: boolean; afp: boolean } | null>(
+    null,
+  );
   const [lagret, settLagret] = useState(false);
 
   useEffect(() => {
     if (data && !skjema)
-      settSkjema({ kontoer: Object.fromEntries(data.kontoer.map((k) => [k.rolle, k.endret ? k.konto : ""])), feriepenger: data.feriepenger, netto: data.netto, otp: data.otp });
+      settSkjema({
+        kontoer: Object.fromEntries(data.kontoer.map((k) => [k.rolle, k.endret ? k.konto : ""])),
+        feriepenger: data.feriepenger,
+        netto: data.netto,
+        otp: data.otp,
+        afp: !!data.afp,
+      });
   }, [data, skjema]);
 
   if (feil) return <Feil melding={feil} />;
@@ -65,7 +73,7 @@ export function BokforingOppsett() {
         regnskapsføreren med de andre lønnsrapportene). De blir en del av regnskapsmodulen.
       </p>
 
-      <h4 className="lonn-under">Feriepenger, nettolønn og OTP</h4>
+      <h4 className="lonn-under">Feriepenger, nettolønn, OTP og AFP</h4>
       <div className="rad">
         <label>
           Feriepengene
@@ -95,6 +103,15 @@ export function BokforingOppsett() {
       <label>
         <input type="checkbox" checked={skjema.otp} onChange={(e) => settSkjema({ ...skjema, otp: e.target.checked })} />
         Avsett OTP fra lønnen (ellers føres den fra fakturaen fra pensjonsleverandøren)
+      </label>
+      <label>
+        <input type="checkbox" checked={skjema.afp} onChange={(e) => settSkjema({ ...skjema, afp: e.target.checked })} />
+        Avsett AFP- og OU-premien hver måned (når dere er med i Fellesordningen for AFP)
+        <span className="felt-hjelp">
+          {skjema.afp
+            ? `Premien som avsettes i lønnskjøringen, føres som kostnad mot påløpt premie (${konto("paalopt_afp")}), og betalingen av fakturaen (Lønn → AFP) føres mot den.`
+            : "Premien føres som kostnad når betalingen av fakturaen registreres (Lønn → AFP)."}
+        </span>
       </label>
 
       <h4 className="lonn-under">Kontoer</h4>

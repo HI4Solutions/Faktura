@@ -88,6 +88,11 @@ export type Oppsett = Regler & {
   otp_prosent: number;
   // Ordningen tar ikke opp arbeidstakere som har fylt 75 år (0097).
   otp_unntak_75?: boolean;
+  // AFP og OU (0098): med i Fellesordningen for AFP, premiesatsen, og OU-premien per måned per
+  // heltidsansatt.
+  afp?: boolean;
+  afp_sats?: number;
+  ou_premie?: number;
   feriepenger_prosent: number;
   ferie_dager: number;
   // Lønn under sykdom etter arbeidsgiverperioden (0079): arbeidsgiveren betaler og krever refusjon
@@ -180,6 +185,43 @@ export function otpMedlem(a: Pick<Ansatt, "fodselsdato" | "ansatt_fra" | "ansatt
   if (a.fodselsdato && fyller(a.fodselsdato, OTP_FRA_ALDER) > dato) return { medlem: false, grunn: `under ${OTP_FRA_ALDER} år (med fra ${fyller(a.fodselsdato, OTP_FRA_ALDER).split("-").reverse().join(".")})` };
   if (a.fodselsdato && unntak75 && fyller(a.fodselsdato, OTP_TIL_ALDER) <= dato) return { medlem: false, grunn: `har fylt ${OTP_TIL_ALDER} år (ordningen tar ikke opp dem)` };
   return { medlem: true };
+}
+
+// --- AFP og OU (0098) --------------------------------------------------------------------------
+// Fellesordningen for AFP: premien er satsen av den delen av den ansattes lønn i året som er mellom
+// 1 G og 7,1 G (gjennomsnittlig G i året), fra og med året den ansatte fyller 13 til og med året den
+// ansatte fyller 61. Grunnlaget er den avgiftspliktige kontantlønnen (lønn, tillegg, overtid, bonus
+// og feriepenger; ikke naturalytelser og utgiftsgodtgjørelser). Lønnskjøringen avsetter premien for
+// året så langt, minus det som er avsatt før i året, så den blir riktig selv om lønnen varierer
+// (som Fellesordningen gjør kvartal for kvartal). OU-premien er et fast beløp per måned per
+// heltidsansatt (etter stillingsprosenten og dagene den ansatte er ansatt). Arbeidsgiveravgiften av
+// AFP-premien regnes når premien betales (afpPremier.ts), ikke på slippen.
+
+export const AFP_FRA_ALDER = 13;
+export const AFP_TIL_ALDER = 61;
+
+// Gjennomsnittlig G i året (G endres 1. mai): fire måneder med G før og åtte med G etter.
+export const snittG = (aar: number) => rund((4 * grunnbelop(`${aar}-04-30`) + 8 * grunnbelop(`${aar}-05-01`)) / 12);
+
+// Lønnsartene som er med i grunnlaget for AFP-premien: trekk- og avgiftspliktig kontantlønn.
+export const afpLonn = (kode: string) => {
+  const art = lonnsart(kode);
+  return art.type === "lonn" && art.trekk && art.aga;
+};
+
+// Om den ansatte er med i grunnlaget for AFP-premien det året (13–61 år i året; uten fødselsdato: ja).
+export const afpAlder = (fodselsdato: string | null, aar: number) => {
+  if (!fodselsdato) return true;
+  const alder = aar - Number(fodselsdato.slice(0, 4));
+  return alder >= AFP_FRA_ALDER && alder <= AFP_TIL_ALDER;
+};
+
+// AFP-premien for slippen: premien av grunnlaget i året med slippen, minus premien av grunnlaget
+// før den.
+export function afpPremie(sats: number, aar: number, grunnlagFor: number, grunnlag: number) {
+  const g = snittG(aar);
+  const premie = (sum: number) => (Math.max(0, Math.min(sum, 7.1 * g) - g) * sats) / 100;
+  return rund(premie(grunnlagFor + grunnlag) - premie(grunnlagFor));
 }
 
 // Honoraret for timene med timelønn: alle de godkjente timene i ukene som ikke er lønnet (det
@@ -516,6 +558,11 @@ export type Summer = {
   feriepenger_opptjent: number;
   otp_grunnlag: number;
   otp: number;
+  // AFP og OU (0098): grunnlaget (den avgiftspliktige kontantlønnen), AFP-premien og OU-premien som
+  // avsettes.
+  afp_grunnlag: number;
+  afp: number;
+  ou: number;
   aga_grunnlag: number;
   merknader: string[];
 };
@@ -550,6 +597,10 @@ export type Trekkgrunnlag = {
   halvSkatt: boolean;
   tabell: Trekkrad[] | null; // null: tabellen for året er ikke lastet inn
   frikortBrukt: number; // trekkpliktig lønn i år før denne kjøringen
+  // AFP (0098): grunnlaget i år før denne kjøringen, og andelen av en heltidsansatt måned for
+  // OU-premien (stillingsprosenten ganger dagene den ansatte er ansatt; 0 i ekstra kjøringer).
+  afpGrunnlagFor?: number;
+  ouAndel?: number;
 };
 
 // Fagforeningskontingenten som trekkes i lønnen, reduserer grunnlaget for forskuddstrekket med
@@ -571,6 +622,7 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   let prosentdel = 0; // trekkes etter prosentsatsen med tabellkort (lønnsartene med prosenttrekk)
   let fradrag = 0; // fagforeningskontingent trukket i lønnen (positiv)
   let natural = 0; // naturalytelser (0083)
+  let kontant = 0; // den avgiftspliktige kontantlønnen, grunnlaget for AFP (0098)
   for (const l of aktive) {
     const art = lonnsart(l.lonnsart);
     const b = Number(l.belop);
@@ -585,6 +637,7 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
     if (art.aga) agaGrunnlag += b;
     if (l.lonnsart === "feriepenger" && l.opptjeningsaar != null && l.opptjeningsaar < t.aar) unntatt += b;
     if (art.prosenttrekk && art.trekk) prosentdel += b;
+    if (afpLonn(l.lonnsart)) kontant += b;
     if (art.fradrag) fradrag -= b;
   }
   brutto = rund(brutto);
@@ -659,6 +712,11 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   const m = otpMedlem(a, !!o.otp_unntak_75, dato);
   if (otpProsent > 0 && otpGrunnlag > 0 && !m.medlem && !erFrilanser(a)) merknader.push(`Ikke med i OTP: ${m.grunn}.`);
   const otp = otpProsent > 0 && m.medlem ? rund((Math.max(0, Math.min(otpGrunnlag, otpTak)) * otpProsent) / 100) : 0;
+  // AFP og OU (0098): ikke for frilansere og oppdragstakere.
+  const iAfp = !!o.afp && !erFrilanser(a);
+  const afpGrunnlag = iAfp && afpAlder(a.fodselsdato, t.aar) ? rund(kontant) : 0;
+  const afp = iAfp && afpGrunnlag ? afpPremie(Number(o.afp_sats ?? 0), t.aar, Number(t.afpGrunnlagFor ?? 0), afpGrunnlag) : 0;
+  const ou = iAfp ? rund(Number(o.ou_premie ?? 0) * Number(t.ouAndel ?? 0)) : 0;
   const netto = rund(brutto - trekk + utgifter + trekkEtter);
   if (netto < 0) merknader.push("Nettolønnen er negativ. Sjekk trekkene.");
   return {
@@ -675,6 +733,10 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
     feriepenger_opptjent: rund((feriepengegrunnlag * Number(o.feriepenger_prosent)) / 100),
     otp_grunnlag: rund(otpGrunnlag),
     otp,
+    afp_grunnlag: afpGrunnlag,
+    afp,
+    ou,
+    // Arbeidsgiveravgift også av OTP-premien (AFP-premien: når den betales, afpPremier.ts).
     aga_grunnlag: rund(agaGrunnlag + otp),
     merknader,
   };

@@ -8,7 +8,7 @@
 // amelding: beskrivelsen i a-meldingen (steg 4). fradrag: trekket reduserer grunnlaget for
 // forskuddstrekket (fagforeningskontingent, 0082). prosenttrekk: med tabellkort trekkes skatten av
 // linjen etter prosentsatsen (ytelser som ikke er lønn for en bestemt periode: tillegget for den
-// ekstra ferieuka, honorar og styrehonorar).
+// ekstra ferieuka, honorar, styrehonorar og sluttvederlag).
 //
 // Feriepenger er trekkpliktige, men ved tabelltrekk trekkes det ikke skatt av feriepenger som
 // utbetales i ferieåret (opptjent året før); tillegget for den ekstra ferieuka over 60 år trekkes
@@ -103,6 +103,10 @@ export const LONNSARTER: Lonnsart[] = [
   lonn("fast_tillegg", "Fast tillegg", { amelding: "fastTillegg" }),
   lonn("uregelmessig_tillegg", "Tillegg for kveld, natt eller helg", { amelding: "uregelmessigeTilleggKnyttetTilArbeidetTid" }),
   lonn("bonus", "Bonus", { otp: false, amelding: "bonus" }),
+  // Sluttvederlag (sluttpakke) fra arbeidsgiveren når arbeidsforholdet slutter (0098): trekk- og
+  // avgiftspliktig, ikke med i feriepengene og OTP. Lønn i oppsigelsestiden er vanlig lønn. (Den
+  // tariffestede sluttvederlagsordningen LO/NHO er avviklet; utbetalinger fra den kom fra ordningen.)
+  lonn("sluttvederlag", "Sluttvederlag", { ferie: false, otp: false, amelding: "sluttvederlag", prosenttrekk: true }),
   lonn("etterbetaling", "Etterbetaling", { amelding: "fastloenn" }),
   // Etterbetaling (eller trekk) når lønnen er endret tilbake i tid (0080): timelønn og merarbeid, og
   // overtid. Regnes av lønnshistorikken.
@@ -177,6 +181,7 @@ export const AMELDING_NAVN: Record<string, string> = {
   fastTillegg: "Faste tillegg",
   uregelmessigeTilleggKnyttetTilArbeidetTid: "Uregelmessige tillegg knyttet til arbeidet tid",
   bonus: "Bonus",
+  sluttvederlag: "Sluttvederlag",
   feriepenger: "Feriepenger",
   trekkILoennForFerie: "Trekk i lønn for ferie",
   honorarAkkordProsentProvisjon: "Honorar, akkord-, prosent- eller provisjonslønn",

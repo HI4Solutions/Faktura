@@ -176,6 +176,31 @@ describe("a-meldingen (uten database)", () => {
     expect(sumAvgift(g)).toBe(1235);
   });
 
+  it("AFP (0098): premien som er betalt i måneden, er pensjonspremie med avgift (også uten lønn i måneden)", () => {
+    const premier = [{ afp: 1111.36, aga: 156.7, aga_sats: 14.1 }];
+    const g = avgiftsgrunnlag(GRUNNLAG.slipper, "1", premier);
+    expect(g).toEqual([{ sats: 14.1, lonn: 57300, pensjon: 2111.36 }]);
+    expect(sumAvgift(g)).toBe(sumAvgift(avgiftsgrunnlag(GRUNNLAG.slipper, "1")) + 157);
+    // Bare premien i måneden: betalingsinformasjonen og avgiften er med.
+    const bare: Grunnlag = { ...GRUNNLAG, slipper: [], premier };
+    const { leveranse } = byggLeveranse(bare, VALG) as any;
+    expect(leveranse.oppgave.betalingsinformasjon).toEqual({ sumArbeidsgiveravgift: 157 });
+    expect(leveranse.oppgave.virksomhet[0].arbeidsgiveravgift).toEqual({
+      tilskuddOgPremieTilPensjon: [{ beregningskodeForArbeidsgiveravgift: "generelleNaeringer", sone: "1", avgiftsgrunnlagBeloep: "1111.36", prosentsatsForAvgiftsberegning: "14.1" }],
+    });
+    if (harXmllint) valider(tilXml(byggLeveranse(bare, VALG)));
+    // Sluttvederlaget (0098) har sin egen beskrivelse.
+    const slutt: Grunnlag = { ...GRUNNLAG, slipper: GRUNNLAG.slipper.map((x, i) => (i ? x : { ...x, linjer: [...x.linjer, { lonnsart: "sluttvederlag", belop: 100000, antall: null }] })) };
+    const inntekt = (byggLeveranse(slutt, VALG) as any).leveranse.oppgave.virksomhet[0].inntektsmottaker[0].inntekt;
+    expect(inntekt.find((i: any) => i.loennsinntekt?.beskrivelse === "sluttvederlag")).toMatchObject({ fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "100000.00", loennsinntekt: { beskrivelse: "sluttvederlag" } });
+    if (harXmllint) valider(tilXml(byggLeveranse(slutt, VALG)));
+    expect(oppsummer(bare)).toMatchObject({ arbeidsgiveravgift: 157, afp_premie: 1111.36 });
+    // Påminnelsen når premien for forrige kvartal ikke er registrert som betalt.
+    expect(kontroller({ ...GRUNNLAG, afpIkkeBetalt: { kvartal: "3. kvartal 2026", avsatt: 12345.6 } }).map((a) => a.tekst)).toContain(
+      "AFP-premien for 3. kvartal 2026 (avsatt 12 345,60 kr) er ikke registrert som betalt. Registrer betalingen under Lønn → AFP når fakturaen fra Fellesordningen er betalt, så kommer arbeidsgiveravgiften av premien med i a-meldingen for den måneden.",
+    );
+  });
+
   it("frilansere og styremedlemmer (0096): honorar og styrehonorar, arbeidsforholdet uten ansettelsesform og sluttårsak", () => {
     const frilans = { arbeidsforhold_type: "frilanserOppdragstakerHonorarPersonerMm" };
     const g: Grunnlag = {

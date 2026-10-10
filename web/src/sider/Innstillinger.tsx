@@ -207,6 +207,9 @@ function PersonalOppsett() {
     aga_sone: string;
     otp_prosent: string;
     otp_unntak_75: boolean;
+    afp: boolean;
+    afp_sats: string;
+    ou_premie: string;
     feriepenger_prosent: string;
     lonnsdag: string;
     halv_skatt: "november" | "desember";
@@ -245,6 +248,9 @@ function PersonalOppsett() {
         aga_sone: data.aga_sone ?? "1",
         otp_prosent: tekst(data.otp_prosent ?? 2),
         otp_unntak_75: data.otp_unntak_75 ?? false,
+        afp: data.afp ?? false,
+        afp_sats: tekst(data.afp_sats ?? 2.7),
+        ou_premie: data.ou_premie ? tekst(data.ou_premie) : "",
         feriepenger_prosent: tekst(data.feriepenger_prosent ?? 12),
         lonnsdag: String(data.lonnsdag ?? 20),
         halv_skatt: data.halv_skatt ?? "desember",
@@ -288,6 +294,8 @@ function PersonalOppsett() {
               aga_sone: o!.aga_sone,
               otp_prosent: tall(o!.otp_prosent),
               otp_unntak_75: o!.otp_unntak_75,
+              afp: o!.afp,
+              ...(o!.afp ? { afp_sats: tall(o!.afp_sats), ou_premie: o!.ou_premie.trim() ? tall(o!.ou_premie) : 0 } : {}),
               feriepenger_prosent: tall(o!.feriepenger_prosent),
               lonnsdag: tall(o!.lonnsdag),
               halv_skatt: o!.halv_skatt,
@@ -495,6 +503,29 @@ function PersonalOppsett() {
                 fylt 75 år ikke tas opp; kryss av om deres gjør det. A-meldingen minner om dem som skal meldes inn eller ut hos pensjonsleverandøren.
               </span>
             </label>
+          )}
+          <label id="afp">
+            <input type="checkbox" checked={o.afp} onChange={(e) => settO({ ...o, afp: e.target.checked })} />
+            Med i Fellesordningen for AFP (tariffavtale)
+            <span className="felt-hjelp">
+              Lønnskjøringene avsetter AFP-premien hver måned: satsen av lønnen mellom 1 og 7,1 G i året for de ansatte fra året de fyller 13 til og med året de fyller
+              61 (ikke frilansere). Fakturaen fra Fellesordningen kommer kvartalsvis; betalingen registreres under Lønn → AFP, og da kommer arbeidsgiveravgiften av
+              premien med i a-meldingen.
+            </span>
+          </label>
+          {o.afp && (
+            <div className="rad">
+              <label>
+                AFP-premie (%)
+                <input inputMode="decimal" required value={o.afp_sats} onChange={(e) => settO({ ...o, afp_sats: e.target.value })} />
+                <span className="felt-hjelp">Satsen Fellesordningen har fastsatt (2,7 % for 2025 og 2026).</span>
+              </label>
+              <label>
+                OU-premie (kr per måned per heltidsansatt)
+                <input inputMode="decimal" placeholder="0" value={o.ou_premie} onChange={(e) => settO({ ...o, ou_premie: e.target.value })} />
+                <span className="felt-hjelp">Opplysnings- og utviklingsfondet (LO/NHO), faktureres sammen med AFP-premien, f.eks. 46 kr i 2026. Tom: ingen.</span>
+              </label>
+            </div>
           )}
           <div className="rad">
             <label>

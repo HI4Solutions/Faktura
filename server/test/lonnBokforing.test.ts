@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { lagApi } from "../src/api.js";
 import { somBruker } from "../src/db.js";
 import { kontoplan, lagLonnsbilag, type Bilagsgrunnlag } from "../src/lonnBokforing.js";
+import { premiebilag } from "../src/afpPremier.js";
 
 const GRUNNLAG: Bilagsgrunnlag = {
   kjoring: { id: "k1", periode: "2026-06-01", type: "ordinar", utbetalingsdato: "2026-06-20" },
@@ -76,8 +77,34 @@ describe("lønnsbilaget", () => {
     expect(() => lagLonnsbilag(feil, { kontoer: {}, feriepenger: "avsetning", netto: "skyldig", otp: false })).toThrow("Lønnsbilaget går ikke i null (0.01 kr)");
   });
 
+  it("AFP og OU (0098): avsetningen i lønnsbilaget, og bilaget for betalingen av premien", () => {
+    const g: Bilagsgrunnlag = { ...GRUNNLAG, slipper: GRUNNLAG.slipper.map((x, i) => ({ ...x, afp: i ? 0 : 420.68, ou: i ? 23 : 46 })) };
+    const b = lagLonnsbilag(g, { kontoer: {}, feriepenger: "utbetaling", netto: "bank", otp: false, afp: true });
+    expect(kort(b).slice(-3)).toEqual([
+      ["5942", 420.68, "Avsatt AFP-premie"],
+      ["5941", 69, "Avsatt OU-premie"],
+      ["2989", -489.68, "Avsatt AFP- og OU-premie"],
+    ]);
+    // Uten valget føres ikke avsetningen.
+    expect(kort(lagLonnsbilag(g, { kontoer: {}, feriepenger: "utbetaling", netto: "bank", otp: false })).some(([k]) => k === "5942")).toBe(false);
+    // Betalingen: den påløpte premien (med avsetning) eller kostnaden mot banken, og avgiften.
+    const t = "AFP- og OU-premie 1. kvartal 2026 (Fellesordningen)";
+    expect(premiebilag({ afp: 1111.36, ou: 345, aga: 156.7 }, { kontoer: {}, afp: true }, t).map((x) => [x.konto, x.belop])).toEqual([
+      ["2989", 1456.36],
+      ["1920", -1456.36],
+      ["5400", 156.7],
+      ["2770", -156.7],
+    ]);
+    expect(premiebilag({ afp: 1111.36, ou: 0, aga: 156.7 }, { kontoer: { bank: "1921" }, afp: false }, t).map((x) => [x.konto, x.belop])).toEqual([
+      ["5942", 1111.36],
+      ["1921", -1111.36],
+      ["5400", 156.7],
+      ["2770", -156.7],
+    ]);
+  });
+
   it("kontoplanen: standarden og det som er endret", () => {
-    expect(kontoplan({ kontoer: {} })).toMatchObject({ lonn: "5000", feriepenger: "5020", skyldig_lonn: "2930", bank: "1920" });
+    expect(kontoplan({ kontoer: {} })).toMatchObject({ lonn: "5000", feriepenger: "5020", skyldig_lonn: "2930", bank: "1920", afp: "5942", ou: "5941", paalopt_afp: "2989" });
     expect(kontoplan({ kontoer: { feriepenger: "5092" } }).feriepenger).toBe("5092");
   });
 });
