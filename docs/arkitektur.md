@@ -889,6 +889,21 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   endringsårsaken «Permittering». Eier og administrator lager varselet om permittering som PDF
   (`GET /fravaer/:id/permitteringsvarsel`). Rapporten «Permisjoner og permitteringer»
   (`lonn.permisjoner`, bare eier og administrator, som fraværet)
+- Permittering, reglene (Lønn K4, `server/src/permisjoner.ts`, `server/src/fravaer.ts`,
+  `server/src/lonn.ts`, `server/src/amelding.ts`): lønnsplikten foreslås som 15 arbeidsdager med de
+  permitterte timene summert (`lonnspliktDager`: 30 arbeidsdager ved 50 %). Fritaksperioden
+  (`fritaksperiode`): dagene etter lønnsplikten i alle permitteringene til den ansatte teller, i
+  rekkefølge, til 26 uker (182 dager) i løpet av de siste 18 månedene (`maanederFor`); den første
+  dagen etter er `lonnsplikt_igjen` for permitteringen. Lønnskjøringen henter permitteringene de
+  siste 19 månedene, og `permisjonslinjer` trekker ikke lønnen fra den dagen (med timelønn lønnes de
+  planlagte timene, som i lønnspliktperioden), med merknad. Når en permittering lagres, får svaret
+  `merknader`: når fritaksperioden blir brukt opp, og meldingen til NAV når minst 10 ansatte
+  permitteres med start innen 30 dager (arbeidsmarkedsloven § 8); a-meldingens kontroll minner om
+  meldingen når minst 10 permitteringer begynner i måneden. Avviket for en permisjon uten art har
+  `fravaer_id`, så arten kan velges rett fra a-meldingen (eldre permisjoner registrert før arten kom).
+  Rapporten «Permisjoner og permitteringer» har «Lønnsplikt igjen fra». Arbeidsgiverperiode II
+  (lønnsplikt på nytt midt i permitteringen) gjelder ikke nå og er ikke laget; den har vært innført
+  ved forskrift i krisetider. 14-dagersvarselet vises i skjemaet
 - Frilansere, oppdragstakere og styremedlemmer (`0096_frilans.sql`, `server/src/lonnsberegning.ts`,
   `server/src/lonn.ts`): arbeidsforholdet `frilanserOppdragstakerHonorarPersonerMm` gir honorar i
   stedet for lønn (`erFrilanser`). `ansatte.honorar_art` (honorar eller styrehonorar) er

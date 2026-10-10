@@ -74,7 +74,8 @@ export type Grunnlag = {
   premier?: Premiedata[];
   afpIkkeBetalt?: { kvartal: string; avsatt: number } | null;
 };
-export type Avvik = { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string };
+// fravaer_id: permisjonen avviket gjelder (appen lar arten velges der).
+export type Avvik = { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string; fravaer_id?: string };
 
 // Fristen: den 5. i måneden etter, eller neste virkedag.
 export function frist(maaned: string) {
@@ -390,6 +391,7 @@ export function kontroller(g: Grunnlag): Avvik[] {
         niva: "feil",
         tekst: `Velg hva slags permisjon ${f.navn} har (${visDato(p.fra)}–${visDato(p.til)}, under Fravær): permisjon over 14 dager skal med i a-meldingen.`,
         ansatt_id: f.id,
+        fravaer_id: p.id,
       });
     else if (p.slutt_ukjent && p.til <= siste(g.maaned))
       a.push({
@@ -398,6 +400,13 @@ export function kontroller(g: Grunnlag): Avvik[] {
         ansatt_id: f.id,
       });
   }
+  // Permittering av minst 10 (arbeidsmarkedsloven § 8): melding til NAV senest samtidig med varselet.
+  const permitterte = new Set(g.permisjoner.filter((p) => p.art === "permittering" && p.fra >= forste(g.maaned) && p.fra <= siste(g.maaned)).map((p) => p.ansatt_id));
+  if (permitterte.size >= 10)
+    a.push({
+      niva: "advarsel",
+      tekst: `${permitterte.size} ansatte er permittert fra en dag i måneden. Når minst 10 permitteres, skal arbeidsgiveren gi melding til NAV senest samtidig med varselet til de ansatte (arbeidsmarkedsloven § 8, på nav.no). Gjør det om det ikke er gjort.`,
+    });
   // OTP (0097): den som er med i ordningen i måneden, meldes inn hos pensjonsleverandøren, og den
   // som slutter (eller fyller 75 år når ordningen ikke tar dem opp), meldes ut.
   if (g.otp && g.otp.prosent > 0)

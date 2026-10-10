@@ -70,6 +70,9 @@ export const PERMISJONSARTER: Record<PermisjonsArt, { navn: string; valg: string
   permittering: { navn: "Permittering", valg: "Permittering" },
 };
 // Lønnsplikten ved permittering: normalt de 15 første arbeidsdagene (virkedagene); den siste dagen.
+// Ved delvis permittering legges de permitterte timene sammen til 15 hele dager (30 arbeidsdager ved
+// 50 %).
+export const lonnspliktDager = (prosent?: number | null) => Math.ceil((15 * 100) / Math.min(100, Math.max(1, prosent || 100)) - 1e-9);
 export function lonnspliktSlutt(fra: string, dager = 15): string {
   let n = 0;
   let d = fra;
@@ -196,7 +199,7 @@ export function FravaerSkjema({
     sluttUkjent: !!fravaer.slutt_ukjent,
     varslet: fravaer.varslet ?? iDag(),
     lonnsplikt: !fravaer.id || fravaer.permisjon_art !== "permittering" || !!fravaer.lonnsplikt_til,
-    lonnspliktTil: fravaer.lonnsplikt_til ?? lonnspliktSlutt(fravaer.fra ?? iDag()),
+    lonnspliktTil: fravaer.lonnsplikt_til ?? lonnspliktSlutt(fravaer.fra ?? iDag(), lonnspliktDager(fravaer.prosent)),
   }));
   // Lønnsplikten foreslås av startdatoen, til den endres for hånd.
   const lonnspliktEndret = useRef(!!fravaer.lonnsplikt_til);
@@ -206,6 +209,9 @@ export function FravaerSkjema({
   const [egen, settEgen] = useState({ send: !!egenmelding && !fravaer.dokumentasjon, arbeidsrelatert: "nei" as "nei" | "ja" | "vet_ikke" });
   const h = useHandling();
   const sett = (e: Partial<typeof f>) => settF({ ...f, ...e });
+  // Den foreslåtte lønnsplikten følger startdatoen og prosenten ved permittering, til den endres for hånd.
+  const nyLonnsplikt = (fra: string, prosent: number | null) =>
+    f.type === "permittering" && !lonnspliktEndret.current && /^\d{4}-\d{2}-\d{2}$/.test(fra) ? { lonnspliktTil: lonnspliktSlutt(fra, lonnspliktDager(prosent)) } : {};
   // Avspasering bare når timebanken er på (eller fraværet alt er avspasering); permittering etter
   // permisjon.
   const typer: Valg[] = selv
@@ -267,13 +273,13 @@ export function FravaerSkjema({
     if (!r) return;
     const hvem = selv ? "Du" : r.ansatt_navn;
     ferdig(
-      sendEgen
+      (sendEgen
         ? `Egenmeldingen er sendt (${fravaerPeriode(r)}). Lederen din har fått beskjed.`
         : fravaer.id
           ? "Fraværet er endret."
           : selv
             ? `Sykdommen er meldt (${fravaerPeriode(r)}). Lederen din har fått beskjed.`
-            : `${fravaerNavn(r)} for ${hvem} er registrert (${fravaerPeriode(r)}).`,
+            : `${fravaerNavn(r)} for ${hvem} er registrert (${fravaerPeriode(r)}).`) + (r.merknader?.length ? ` ${r.merknader.join(" ")}` : ""),
       r.vakter,
     );
   }
@@ -319,7 +325,9 @@ export function FravaerSkjema({
               sett({
                 fra: e.target.value,
                 til: f.til < e.target.value ? e.target.value : f.til,
-                ...(!lonnspliktEndret.current && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) ? { lonnspliktTil: lonnspliktSlutt(e.target.value) } : {}),
+                ...(!lonnspliktEndret.current && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value)
+                  ? { lonnspliktTil: lonnspliktSlutt(e.target.value, lonnspliktDager(f.delvis ? Number(f.prosent) : null)) }
+                  : {}),
               })
             }
           />
@@ -397,8 +405,9 @@ export function FravaerSkjema({
             <input type="checkbox" checked={f.lonnsplikt} onChange={(e) => sett({ lonnsplikt: e.target.checked })} />
             Lønnsplikt: arbeidsgiveren betaler lønnen de første dagene
             <span className="felt-hjelp">
-              Foreslått: de 15 første arbeidsdagene av permitteringen. Med fastlønn går lønnen som vanlig så lenge, og deretter trekkes den permitterte delen; med
-              timelønn lønnes de planlagte timene. Sjekk reglene på nav.no.
+              Foreslått: de 15 første arbeidsdagene av permitteringen (ved delvis permittering summeres de permitterte timene til 15 dager, så perioden blir
+              lengre). Med fastlønn går lønnen som vanlig så lenge, og deretter trekkes den permitterte delen; med timelønn lønnes de planlagte timene. Etter 26
+              uker uten lønnsplikt i løpet av 18 måneder gjelder lønnsplikten igjen. Sjekk reglene på nav.no.
             </span>
           </label>
         </>
@@ -406,13 +415,26 @@ export function FravaerSkjema({
       {!selv && permisjon && (
         <>
           <label>
-            <input type="checkbox" checked={f.delvis} onChange={(e) => sett({ delvis: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={f.delvis}
+              onChange={(e) => sett({ delvis: e.target.checked, ...nyLonnsplikt(f.fra, e.target.checked ? Number(f.prosent) : null) })}
+            />
             {permittering ? "Delvis permittering (jobber resten)" : "Delvis permisjon (jobber resten)"}
           </label>
           {f.delvis && (
             <label>
               Prosent av stillingen
-              <input type="number" inputMode="numeric" required min={1} max={99} placeholder="50" value={f.prosent} onChange={(e) => sett({ prosent: e.target.value })} />
+              <input
+                type="number"
+                inputMode="numeric"
+                required
+                min={1}
+                max={99}
+                placeholder="50"
+                value={f.prosent}
+                onChange={(e) => sett({ prosent: e.target.value, ...nyLonnsplikt(f.fra, Number(e.target.value)) })}
+              />
               <span className="felt-hjelp">
                 Andelen av stillingen {permittering ? "som er permittert" : "permisjonen gjelder"}, f.eks. 40 når den ansatte jobber 60 % av den. Den ansatte er på jobb i
                 vaktplanen og på tavla, og kan ha ferie og annet fravær i perioden.

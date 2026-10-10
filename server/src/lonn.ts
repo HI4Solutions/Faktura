@@ -55,7 +55,7 @@ import {
   type Trekkrad,
 } from "./lonnsberegning.js";
 import { lagLonnsslippPdf } from "./lonnsslippPdf.js";
-import { permisjonslinjer, type Permisjon } from "./permisjoner.js";
+import { fritaksperiode, permisjonslinjer, type Permisjon } from "./permisjoner.js";
 import { hentLogo } from "./dokument.js";
 import { leggIKo } from "./tjenester.js";
 import { lonnsrapportOppgave } from "./rapportmodul.js";
@@ -285,8 +285,28 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         [org, fra, til],
       )
     : [];
+  // Fritaksperioden ved permittering (26 uker i løpet av 18 måneder): permitteringene til de samme
+  // ansatte de siste 18 månedene, og dagen lønnsplikten gjelder igjen.
+  const permittert = permisjoner.filter((p) => p.art === "permittering");
+  if (permittert.length) {
+    const tidligere = await alle<{ id: string; ansatt_id: string; fra: string; til: string; lonnsplikt_til: string | null }>(
+      db,
+      `select id, ansatt_id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, to_char(lonnsplikt_til, 'YYYY-MM-DD') as lonnsplikt_til
+         from faktura.fravaer
+        where org_id = $1 and type = 'permisjon' and permisjon_art = 'permittering' and til >= ($2::date - interval '19 months') and fra <= $3
+          and ansatt_id = any($4::uuid[])`,
+      [org, fra, til, [...new Set(permittert.map((p) => p.ansatt_id))]],
+    );
+    for (const ansattId of new Set(permittert.map((p) => p.ansatt_id))) {
+      const igjen = fritaksperiode(tidligere.filter((x) => x.ansatt_id === ansattId));
+      for (const p of permittert) if (p.ansatt_id === ansattId) p.lonnsplikt_igjen = igjen.get(p.id) ?? null;
+    }
+  }
   const planlagt = new Map<string, number>(); // «ansatt|dato» → timer
-  if (ordinar && (fravaer.some((f) => f.til >= fra) || permisjoner.some((p) => p.art === "permittering" && p.lonnsplikt_til && p.lonnsplikt_til >= fra))) {
+  if (
+    ordinar &&
+    (fravaer.some((f) => f.til >= fra) || permittert.some((p) => (p.lonnsplikt_til && p.lonnsplikt_til >= fra) || (p.lonnsplikt_igjen && p.lonnsplikt_igjen <= til)))
+  ) {
     const vakter = await alle<{ ansatt_id: string; dato: string; timer: number }>(
       db,
       "select ansatt_id, to_char(dato, 'YYYY-MM-DD') as dato, sum(timer)::float8 as timer from faktura.vakter where org_id = $1 and dato between $2 and $3 and ansatt_id is not null group by 1, 2",

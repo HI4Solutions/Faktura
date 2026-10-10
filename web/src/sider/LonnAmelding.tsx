@@ -10,6 +10,7 @@ import { erAdmin, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { IkonVenstre } from "../ikoner";
 import { maaned as maanedTekst } from "../lonn";
+import { PERMISJONSARTER, type PermisjonsArt } from "./Fravaer";
 
 type Status = "lages" | "klar" | "levert" | "sendt" | "mottatt" | "avvist" | "feil";
 type Melding = {
@@ -257,7 +258,14 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
   const admin = erAdmin(org?.rolle);
   const d = useData(
     () =>
-      hent<{ maaned: string; frist: string; avvik: { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string }[]; grunnlag: Grunnlag; meldinger: Melding[]; innsending: Innsending }>(
+      hent<{
+        maaned: string;
+        frist: string;
+        avvik: { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string; fravaer_id?: string }[];
+        grunnlag: Grunnlag;
+        meldinger: Melding[];
+        innsending: Innsending;
+      }>(
         `/org/${org!.id}/amelding/${maaned}`,
       ),
     [org?.id, maaned],
@@ -306,6 +314,10 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
   const merkLevert = async (m: Melding, levert: boolean) => {
     if (await h.kjor(() => api("POST", `/org/${org!.id}/amelding/fil/${m.id}/levert`, { levert }))) void d.last();
   };
+  // Arten på en permisjon som mangler den (registrert før arten kom).
+  const velgArt = async (fravaerId: string, art: string) => {
+    if (art && (await h.kjor(() => api("PATCH", `/org/${org!.id}/fravaer/${fravaerId}`, { permisjon_art: art })))) void d.last();
+  };
 
   return (
     <>
@@ -329,7 +341,16 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
           {x.avvik.map((a, i) => (
             <li key={i} className={a.niva === "feil" ? "fare-tekst" : "advarsel-tekst"}>
               {a.tekst}{" "}
-              {a.ansatt_id ? (
+              {a.fravaer_id && admin ? (
+                <select aria-label="Hva slags permisjon" className="amelding-art" value="" disabled={h.opptatt} onChange={(e) => void velgArt(a.fravaer_id!, e.target.value)}>
+                  <option value="">Velg permisjon …</option>
+                  {(Object.keys(PERMISJONSARTER) as PermisjonsArt[]).map((k) => (
+                    <option key={k} value={k}>
+                      {PERMISJONSARTER[k].valg}
+                    </option>
+                  ))}
+                </select>
+              ) : a.ansatt_id ? (
                 <Link to={`/ansatte/${a.ansatt_id}`}>Åpne den ansatte</Link>
               ) : /Innstillinger/.test(a.tekst) ? (
                 <Link to="/innstillinger?fane=personal#amelding">Til innstillingene</Link>

@@ -155,15 +155,20 @@ describe.skipIf(!process.env.DATABASE_URL)("permisjon og permittering i appen", 
     expect((await kall("POST", "/api/invitasjoner/aksepter", { token: inv.lenke.split("/").pop() }, olaInn)).status).toBe(200);
   });
 
-  it("permitteringen: arten, prosenten, varselet og lønnsplikten (standard 15 arbeidsdager), og den ansatte får beskjed", async () => {
+  it("permitteringen: arten, prosenten, varselet og lønnsplikten (15 arbeidsdager, summert ved delvis permittering), og den ansatte får beskjed", async () => {
     const kropp = { ansatt_id: ola, type: "permisjon", permisjon_art: "permittering", fra: "2026-10-01", til: "2026-12-31", prosent: 50, slutt_ukjent: true, notat: "Ordremangel" };
     expect((await kall("POST", `/api/org/${org}/fravaer`, { ...kropp, varslet: "2026-10-02" })).data.error).toBe("Varselet må være gitt før permitteringen begynner");
     expect((await kall("POST", `/api/org/${org}/fravaer`, { ...kropp, lonnsplikt_til: "2026-09-30" })).data.error).toBe("Lønnsplikten kan ikke slutte før permitteringen begynner");
     const r = await kall("POST", `/api/org/${org}/fravaer`, { ...kropp, varslet: "2026-09-10", betalt: true });
     expect(r.status, JSON.stringify(r.data)).toBe(201);
     permId = r.data.id;
-    expect(r.data).toMatchObject({ type: "permisjon", permisjon_art: "permittering", prosent: 50, delvis: true, slutt_ukjent: true, varslet: "2026-09-10", lonnsplikt_til: "2026-10-21", betalt: false });
+    // 50 % permittert: de permitterte timene summeres til 15 dager, så lønnsplikten varer i 30
+    // arbeidsdager.
+    expect(r.data).toMatchObject({ type: "permisjon", permisjon_art: "permittering", prosent: 50, delvis: true, slutt_ukjent: true, varslet: "2026-09-10", lonnsplikt_til: "2026-11-11", betalt: false });
+    expect(r.data.merknader).toEqual([]);
     expect(varsler().at(-1)).toMatchObject({ tittel: "Permittering registrert", tekst: "tor. 1. okt.–tor. 31. des.." });
+    // Lønnsplikten kan settes for hånd.
+    expect((await kall("PATCH", `/api/org/${org}/fravaer/${permId}`, { lonnsplikt_til: "2026-10-21" })).data.lonnsplikt_til).toBe("2026-10-21");
     // Foreldrepermisjon over ett år (lov for permisjon).
     const f = await kall("POST", `/api/org/${org}/fravaer`, { ansatt_id: kari, type: "permisjon", permisjon_art: "foreldre", fra: "2026-10-12", til: "2027-10-31" });
     expect(f.status, JSON.stringify(f.data)).toBe(201);
@@ -219,7 +224,12 @@ describe.skipIf(!process.env.DATABASE_URL)("permisjon og permittering i appen", 
     ]);
     expect(mottaker(per).arbeidsforhold[0].permisjon).toBeUndefined();
     expect(kontroller(g).filter((a) => a.tekst.includes("permisjon"))).toEqual([
-      { niva: "feil", tekst: "Velg hva slags permisjon Per Gammel har (01.10.2026–31.10.2026, under Fravær): permisjon over 14 dager skal med i a-meldingen.", ansatt_id: per },
+      {
+        niva: "feil",
+        tekst: "Velg hva slags permisjon Per Gammel har (01.10.2026–31.10.2026, under Fravær): permisjon over 14 dager skal med i a-meldingen.",
+        ansatt_id: per,
+        fravaer_id: expect.any(String),
+      },
     ]);
     expect(oppsummer(g).mottakere.find((x) => x.ansatt_id === ola)!.permisjoner).toEqual([{ navn: "Permittering", fra: "2026-10-01", til: null, prosent: 50 }]);
     valider(tilXml(m), "amelding_v2_3");

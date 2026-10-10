@@ -27,7 +27,7 @@ import { ApiFeil } from "./feil.js";
 import { datoS, tekst, valgfri, varslePersonal } from "./ansatte.js";
 import { leggIKo } from "./tjenester.js";
 import { virkedag } from "./lonnsberegning.js";
-import { ARTER, lonnspliktSlutt, permisjonNavn } from "./permisjoner.js";
+import { ARTER, fritaksperiode, lonnspliktDager, lonnspliktSlutt, permisjonNavn } from "./permisjoner.js";
 import { lagPermitteringsvarselPdf } from "./permitteringsvarselPdf.js";
 import { hentLogo } from "./dokument.js";
 
@@ -51,6 +51,7 @@ export const fravaerNavn = (type: Type, betalt?: boolean | null, art?: string | 
 
 const dagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 const dag = (iso: string) => dagFormat.format(new Date(`${iso}T12:00:00Z`));
+const visDato = (iso: string) => iso.split("-").reverse().join(".");
 export const periode = (fra: string, til: string) => (fra === til ? dag(fra) : `${dag(fra)}–${dag(til)}`);
 
 const skjema = z.object({
@@ -82,6 +83,36 @@ const skjema = z.object({
 function sjekkPermittering(fra: string, varslet: string | null | undefined, lonnspliktTil: string | null | undefined) {
   if (varslet && varslet > fra) throw new ApiFeil(400, "Varselet må være gitt før permitteringen begynner");
   if (lonnspliktTil && lonnspliktTil < fra) throw new ApiFeil(400, "Lønnsplikten kan ikke slutte før permitteringen begynner");
+}
+
+// Merknadene til en permittering som lagres: når fritaksperioden (26 uker i løpet av 18 måneder)
+// blir brukt opp, og meldingen til NAV når minst 10 ansatte permitteres (arbeidsmarkedsloven § 8;
+// regnet som permitteringene som begynner innen 30 dager før eller etter denne).
+async function permitteringsmerknader(db: Db, org: string, f: { id: string; ansatt_id: string; fra: string; til: string }) {
+  const ut: string[] = [];
+  const egne = await alle<{ id: string; fra: string; til: string; lonnsplikt_til: string | null }>(
+    db,
+    `select id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, to_char(lonnsplikt_til, 'YYYY-MM-DD') as lonnsplikt_til
+       from faktura.fravaer
+      where org_id = $1 and ansatt_id = $2 and type = 'permisjon' and permisjon_art = 'permittering' and til >= ($3::date - interval '19 months') and fra <= $4`,
+    [org, f.ansatt_id, f.fra, f.til],
+  );
+  const igjen = fritaksperiode(egne).get(f.id);
+  if (igjen)
+    ut.push(
+      `Fritaksperioden (26 uker i løpet av 18 måneder) blir brukt opp: lønnsplikten gjelder igjen fra ${visDato(igjen)}, og lønnskjøringen trekker ikke lønnen etter det. Avslutt permitteringen før, eller betal lønnen.`,
+    );
+  const n = await en<{ n: number }>(
+    db,
+    `select count(distinct ansatt_id)::int as n from faktura.fravaer
+      where org_id = $1 and type = 'permisjon' and permisjon_art = 'permittering' and fra between ($2::date - 30) and ($2::date + 30)`,
+    [org, f.fra],
+  );
+  if ((n?.n ?? 0) >= 10)
+    ut.push(
+      `${n!.n} ansatte permitteres innen 30 dager. Når minst 10 permitteres, skal arbeidsgiveren gi melding til NAV senest samtidig med varselet til de ansatte (arbeidsmarkedsloven § 8, på nav.no).`,
+    );
+  return ut;
 }
 
 // Typen og notatet ser bare eier, administrator og den ansatte selv (0047_fravaer_skjult.sql);
@@ -175,11 +206,13 @@ export function fravaerRuter() {
           b.type === "permisjon" && b.prosent != null && b.prosent < 100 ? b.prosent : null,
           b.type === "permisjon" && !!b.slutt_ukjent,
           permittering ? (b.varslet ?? null) : null,
-          // Lønnsplikten: standard de 15 første arbeidsdagene.
-          permittering ? (b.lonnsplikt_til === undefined ? lonnspliktSlutt(b.fra) : b.lonnsplikt_til) : null,
+          // Lønnsplikten: standard de 15 første arbeidsdagene (de permitterte timene summert ved
+          // delvis permittering).
+          permittering ? (b.lonnsplikt_til === undefined ? lonnspliktSlutt(b.fra, lonnspliktDager(b.prosent)) : b.lonnsplikt_til) : null,
         ],
       );
       const f = (await en<Fravaer>(db, `${FRAVAER} where f.id = $1`, [ny!.id]))!;
+      const merknader = permittering ? await permitteringsmerknader(db, orgId(c), f) : [];
       const vakter = await alle<{ id: string; dato: string; fra: string; til: string; oppgave: string | null }>(
         db,
         `select v.id, v.dato, to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.oppgave
@@ -191,9 +224,9 @@ export function fravaerRuter() {
       );
       const bruker =
         ansatt === selv ? null : (await en<{ bruker_id: string | null }>(db, "select bruker_id from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), ansatt]))?.bruker_id;
-      return { f, vakter, selv: ansatt === selv, bruker };
+      return { f, vakter, selv: ansatt === selv, bruker, merknader };
     });
-    const { f, vakter } = svar;
+    const { f, vakter, merknader } = svar;
     if (svar.selv) {
       // Meldt av den ansatte selv: eier og administrator får vite det, med vaktene som trenger vikar.
       const n = vakter.length;
@@ -221,7 +254,7 @@ export function fravaerRuter() {
         },
       });
     }
-    return c.json({ ...f, vakter }, 201);
+    return c.json({ ...f, vakter, merknader }, 201);
   });
 
   // Endre fraværet. Den ansatte endrer sluttdatoen og sender egenmelding (med erklæringen) for
@@ -232,9 +265,17 @@ export function fravaerRuter() {
     if (b.sykmeldingsgrad === 100) b.sykmeldingsgrad = null;
     if (b.prosent === 100) b.prosent = null;
     const svar = await bruk(c, async (db) => {
-      const naa = await en<{ dokumentasjon: string | null; selv: boolean; fra: string; permisjon_art: string | null; varslet: string | null; lonnsplikt_til: string | null }>(
+      const naa = await en<{
+        dokumentasjon: string | null;
+        selv: boolean;
+        fra: string;
+        permisjon_art: string | null;
+        varslet: string | null;
+        lonnsplikt_til: string | null;
+        prosent: number | null;
+      }>(
         db,
-        `select dokumentasjon, faktura.er_meg(org_id, ansatt_id) as selv, fra, permisjon_art, varslet, lonnsplikt_til
+        `select dokumentasjon, faktura.er_meg(org_id, ansatt_id) as selv, fra, permisjon_art, varslet, lonnsplikt_til, prosent
            from faktura.fravaer where org_id = $1 and id = $2`,
         [orgId(c), id(c)],
       );
@@ -242,7 +283,8 @@ export function fravaerRuter() {
       // Blir fraværet en permittering, er lønnsplikten standard de 15 første arbeidsdagene.
       const art = b.permisjon_art !== undefined ? b.permisjon_art : naa.permisjon_art;
       if (art === "permittering" && (b.type ?? "permisjon") === "permisjon") {
-        if (b.lonnsplikt_til === undefined && naa.permisjon_art !== "permittering") b.lonnsplikt_til = lonnspliktSlutt(b.fra ?? naa.fra);
+        if (b.lonnsplikt_til === undefined && naa.permisjon_art !== "permittering")
+          b.lonnsplikt_til = lonnspliktSlutt(b.fra ?? naa.fra, lonnspliktDager(b.prosent !== undefined ? b.prosent : naa.prosent));
         sjekkPermittering(
           b.fra ?? naa.fra,
           b.varslet !== undefined ? b.varslet : naa.varslet,
@@ -260,7 +302,9 @@ export function fravaerRuter() {
         ...navn.map((k) => felt[k]),
       ]);
       if (!res.rowCount) throw new ApiFeil(404, "Fant ikke fraværet");
-      return { f: (await en<Fravaer>(db, `${FRAVAER} where f.id = $1`, [id(c)]))!, egenmeldt: egenmelding && naa.selv };
+      const f = (await en<Fravaer>(db, `${FRAVAER} where f.id = $1`, [id(c)]))!;
+      const merknader = f.permisjon_art === "permittering" ? await permitteringsmerknader(db, orgId(c), f) : [];
+      return { f, egenmeldt: egenmelding && naa.selv, merknader };
     });
     if (svar.egenmeldt)
       await varslePersonal(
@@ -272,7 +316,7 @@ export function fravaerRuter() {
         `/ansatte/${svar.f.ansatt_id}`,
         `egenmelding-${svar.f.id}`,
       );
-    return c.json(svar.f);
+    return c.json({ ...svar.f, merknader: svar.merknader });
   });
 
   r.delete("/fravaer/:id", async (c) => {

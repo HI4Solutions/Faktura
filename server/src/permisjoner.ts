@@ -41,9 +41,12 @@ export const ARTER = Object.keys(PERMISJONSARTER) as [PermisjonsArt, ...Permisjo
 export const permisjonNavn = (art: string | null | undefined, betalt?: boolean | null) =>
   art && art in PERMISJONSARTER && art !== "annen" ? PERMISJONSARTER[art as PermisjonsArt].navn : betalt ? "Permisjon med lønn" : "Permisjon";
 
-// Lønnsplikten ved permittering: normalt de 15 første arbeidsdagene (permitteringslønnsloven).
-// Arbeidsdagene er virkedagene (ikke helg og helligdager).
+// Lønnsplikten ved permittering: normalt de 15 første arbeidsdagene (permitteringslønnsloven § 3,
+// arbeidsgiverperioden). Ved delvis permittering legges de permitterte timene sammen til 15 hele
+// dager, så perioden blir lengre (30 arbeidsdager ved 50 %). Arbeidsdagene er virkedagene (ikke
+// helg og helligdager).
 export const LONNSPLIKT_DAGER = 15;
+export const lonnspliktDager = (prosent: number | null | undefined) => Math.ceil((LONNSPLIKT_DAGER * 100) / Math.min(100, Math.max(1, prosent ?? 100)) - 1e-9);
 export function lonnspliktSlutt(fra: string, dager = LONNSPLIKT_DAGER): string | null {
   if (dager <= 0) return null;
   let n = 0;
@@ -53,6 +56,44 @@ export function lonnspliktSlutt(fra: string, dager = LONNSPLIKT_DAGER): string |
 }
 
 const dagerI = (fra: string, til: string) => Math.round((Date.parse(`${til}T12:00:00Z`) - Date.parse(`${fra}T12:00:00Z`)) / 86_400_000) + 1;
+
+// Fritaksperioden (permitteringslønnsloven § 3): etter lønnsplikten er arbeidsgiveren fritatt fra
+// lønnsplikt i inntil 26 uker i løpet av de siste 18 månedene, for alle permitteringene til den
+// ansatte (hel og delvis permittering teller likt). Når den er brukt opp, gjelder lønnsplikten igjen
+// så lenge permitteringen varer. (Arbeidsgiverperiode II, lønnsplikt på nytt midt i permitteringen,
+// gjelder ikke nå; den har vært innført ved forskrift i krisetider.)
+export const FRITAK_UKER = 26;
+export const FRITAK_MAANEDER = 18;
+
+// Datoen n måneder før (dagen settes til den siste i måneden når den ikke finnes der).
+export function maanederFor(dato: string, n: number) {
+  const [a, m, d] = dato.split("-").map(Number) as [number, number, number];
+  const forste = new Date(Date.UTC(a, m - 1 - n, 1));
+  const sisteDag = new Date(Date.UTC(forste.getUTCFullYear(), forste.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${forste.getUTCFullYear()}-${String(forste.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(d, sisteDag)).padStart(2, "0")}`;
+}
+
+// Den første dagen med lønnsplikt igjen for hver permittering (id → dato, null: fritaksperioden er
+// ikke brukt opp i den). Dagene etter lønnsplikten teller, i rekkefølge, så lenge de er innenfor 26
+// uker i de siste 18 månedene; dagene etter at fritaket er brukt opp, teller ikke.
+export function fritaksperiode(perioder: { id: string; fra: string; til: string; lonnsplikt_til: string | null }[]): Map<string, string | null> {
+  const ut = new Map<string, string | null>();
+  const fritak: string[] = [];
+  let start = 0;
+  for (const p of [...perioder].sort((x, y) => x.fra.localeCompare(y.fra))) {
+    ut.set(p.id, null);
+    for (let d = p.lonnsplikt_til && p.lonnsplikt_til >= p.fra ? pluss(p.lonnsplikt_til, 1) : p.fra; d <= p.til; d = pluss(d, 1)) {
+      const grense = maanederFor(d, FRITAK_MAANEDER);
+      while (start < fritak.length && fritak[start]! <= grense) start++;
+      if (fritak.length - start >= FRITAK_UKER * 7) {
+        ut.set(p.id, d);
+        break;
+      }
+      fritak.push(d);
+    }
+  }
+  return ut;
+}
 
 // Skal permisjonen med i a-meldingen? Permittering alltid; permisjon når den varer over 14 dager.
 export const rapporteres = (p: { art: string | null; fra: string; til: string }) => p.art === "permittering" || dagerI(p.fra, p.til) > 14;
@@ -70,6 +111,8 @@ export type Permisjon = {
   art: PermisjonsArt | null;
   prosent: number; // 1–100
   lonnsplikt_til: string | null;
+  // Permittering: den første dagen med lønnsplikt igjen når fritaksperioden er brukt opp.
+  lonnsplikt_igjen?: string | null;
 };
 
 const rund4 = (n: number) => Math.round((n + Number.EPSILON) * 10000) / 10000;
@@ -108,11 +151,13 @@ export function permisjonslinjer(
     let pliktTimer = 0;
     let pliktBelop = 0;
     const timesatser = new Set<number>();
+    const igjen = permittering ? (p.lonnsplikt_igjen ?? null) : null;
     for (let d = start; d <= slutt; d = pluss(d, 1)) {
       const x = gjeldende(a, historie, d);
-      if (permittering && p.lonnsplikt_til && d <= p.lonnsplikt_til) {
-        // Lønnsplikten: fastlønnen går som vanlig; med timelønn lønnes den permitterte delen av de
-        // planlagte timene (også vakter i helgene).
+      if (permittering && ((p.lonnsplikt_til && d <= p.lonnsplikt_til) || (igjen && d >= igjen))) {
+        // Lønnsplikten (de første dagene, og igjen når fritaksperioden er brukt opp): fastlønnen går
+        // som vanlig; med timelønn lønnes den permitterte delen av de planlagte timene (også vakter
+        // i helgene).
         if (x.lonnstype === "time") {
           if (virkedag(d)) pliktDager++;
           const t = planlagt(d) * andel;
@@ -152,6 +197,10 @@ export function permisjonslinjer(
       });
     else if (pliktDager)
       merknader.push(`Permittert i lønnspliktperioden (${flertall(pliktDager, "virkedag", "virkedager")}) uten planlagte timer: legg inn lønnen for lønnspliktdagene for hånd.`);
+    if (igjen && igjen <= slutt)
+      merknader.push(
+        `Fritaksperioden for permitteringen (26 uker i løpet av 18 måneder) er brukt opp: lønnsplikten gjelder igjen fra ${visDato(igjen)}, så lønnen trekkes ikke etter det (permitteringslønnsloven § 3). Avslutt permitteringen, eller betal lønnen.`,
+      );
     if (permittering && p.fra >= fra && p.fra <= til)
       merknader.push(
         `Permittert fra ${visDato(p.fra)} (${p.prosent} %)${p.lonnsplikt_til ? `: lønnsplikt til og med ${visDato(p.lonnsplikt_til)}, deretter trekkes lønnen` : ": uten lønnsplikt, lønnen trekkes fra første dag"}. Den ansatte kan søke dagpenger fra NAV.`,

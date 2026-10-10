@@ -21,9 +21,11 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    og en permisjon over 14 dager uten valgt art stopper meldingen; lønnskjøringer som står som utkast,
    sluttdato uten årsak, en permisjon som slutter i måneden uten bekreftet sluttdato, en ansatt
    som er med i OTP uten å være meldt inn hos pensjonsleverandøren (eller slutter uten å være meldt
-   ut), og AFP-premien for forrige kvartal som ikke er registrert som betalt (andre og tredje måned i
-   kvartalet) er advarsler. AFP-premien som er betalt i måneden (Lønn → AFP), er med i
-   arbeidsgiveravgiften som tilskudd og premie til pensjon, også når det ikke er lønn i måneden.
+   ut), AFP-premien for forrige kvartal som ikke er registrert som betalt (andre og tredje måned i
+   kvartalet), og minst 10 permitteringer som begynner i måneden (melding til NAV) er advarsler.
+   Arten for en permisjon som mangler den, kan velges rett fra avviket. AFP-premien som er betalt i
+   måneden (Lønn → AFP), er med i arbeidsgiveravgiften som tilskudd og premie til pensjon, også når
+   det ikke er lønn i måneden.
 3. **Fila.** Eier eller administrator trykker «Lag fil (XML)» (med totrinnsbekreftelse, fila har
    fødselsnumrene). Workeren lager fila (bare workeren kan lese fødselsnumrene), og den lastes ned
    og lastes opp på skatteetaten.no. Merk den som lastet opp etterpå: da erstatter en ny melding for

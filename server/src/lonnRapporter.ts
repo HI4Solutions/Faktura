@@ -15,7 +15,7 @@ import { hentBilag } from "./lonnBokforing.js";
 import type { Rapportdef, Valg } from "./rapportmodul.js";
 import { gjeldende, kjent, type Lonnsendring } from "./lonnsendringer.js";
 import type { Ansatt } from "./lonnsberegning.js";
-import { permisjonNavn, rapporteres } from "./permisjoner.js";
+import { fritaksperiode, permisjonNavn, rapporteres } from "./permisjoner.js";
 
 const rund = (n: number) => Math.round(n * 100) / 100;
 // Rekkefølgen på beskrivelsene i a-meldingsgrunnlaget (forskuddstrekket sist).
@@ -640,7 +640,7 @@ export const lonnRapporter: Rapportdef[] = [
     modul: "lonn",
     navn: "Permisjoner og permitteringer",
     beskrivelse:
-      "Permisjonene og permitteringene i perioden per ansatt: arten, datoene, prosenten av stillingen, om de er med lønn, varselet og lønnsplikten ved permittering, om de rapporteres i a-meldingen (permisjon over 14 dager og all permittering), og trekket i lønnen i de godkjente kjøringene med utbetaling i perioden.",
+      "Permisjonene og permitteringene i perioden per ansatt: arten, datoene, prosenten av stillingen, om de er med lønn, varselet og lønnsplikten ved permittering (og når den gjelder igjen fordi fritaksperioden på 26 uker i løpet av 18 måneder er brukt opp), om de rapporteres i a-meldingen (permisjon over 14 dager og all permittering), og trekket i lønnen i de godkjente kjøringene med utbetaling i perioden.",
     funksjon: "lonn",
     // Fravær: bare eier og administrator (som fraværsrapporten).
     tilgang: "personal",
@@ -648,6 +648,8 @@ export const lonnRapporter: Rapportdef[] = [
     maanedlig: true,
     hent: async (db, org, v) => {
       const rader = await alle<{
+        id: string;
+        ansatt_id: string;
         ansattnummer: number;
         navn: string;
         art: string | null;
@@ -661,7 +663,7 @@ export const lonnRapporter: Rapportdef[] = [
         trekk: number;
       }>(
         db,
-        `select a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, f.permisjon_art as art, f.betalt,
+        `select f.id, f.ansatt_id, a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, f.permisjon_art as art, f.betalt,
                 to_char(f.fra, 'YYYY-MM-DD') as fra, to_char(f.til, 'YYYY-MM-DD') as til, f.slutt_ukjent, coalesce(f.prosent, 100)::int as prosent,
                 to_char(f.varslet, 'YYYY-MM-DD') as varslet, to_char(f.lonnsplikt_til, 'YYYY-MM-DD') as lonnsplikt_til,
                 coalesce((select sum(l.belop) from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id
@@ -672,6 +674,19 @@ export const lonnRapporter: Rapportdef[] = [
           order by f.fra, a.ansattnummer`,
         parametre(org, v),
       );
+      // Fritaksperioden: permitteringene til de samme ansatte de siste 18 månedene før.
+      const ider = [...new Set(rader.filter((r) => r.art === "permittering").map((r) => r.ansatt_id))];
+      const alleP = ider.length
+        ? await alle<{ id: string; ansatt_id: string; fra: string; til: string; lonnsplikt_til: string | null }>(
+            db,
+            `select id, ansatt_id, to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, to_char(lonnsplikt_til, 'YYYY-MM-DD') as lonnsplikt_til
+               from faktura.fravaer
+              where org_id = $1 and type = 'permisjon' and permisjon_art = 'permittering' and til >= ($2::date - interval '19 months') and ansatt_id = any($3::uuid[])`,
+            [org, v.fra, ider],
+          )
+        : [];
+      const igjen = new Map<string, string | null>();
+      for (const a of ider) for (const [id, d] of fritaksperiode(alleP.filter((x) => x.ansatt_id === a))) igjen.set(id, d);
       return {
         kolonner: [
           { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
@@ -683,6 +698,7 @@ export const lonnRapporter: Rapportdef[] = [
           { nokkel: "lonn", navn: "Lønn" },
           { nokkel: "varslet", navn: "Varslet", type: "dato" },
           { nokkel: "lonnsplikt_til", navn: "Lønnsplikt til", type: "dato" },
+          { nokkel: "lonnsplikt_igjen", navn: "Lønnsplikt igjen fra", type: "dato" },
           { nokkel: "amelding", navn: "A-meldingen" },
           { nokkel: "trekk", navn: "Trekk i lønnen", type: "kr", sum: true },
         ],
@@ -696,6 +712,7 @@ export const lonnRapporter: Rapportdef[] = [
           lonn: r.betalt ? "Med lønn" : r.art === "permittering" ? (r.lonnsplikt_til ? "Lønnsplikt" : "Uten") : "Uten",
           varslet: r.varslet,
           lonnsplikt_til: r.lonnsplikt_til,
+          lonnsplikt_igjen: r.art === "permittering" ? (igjen.get(r.id) ?? null) : null,
           amelding: rapporteres(r) ? (r.slutt_ukjent ? "Ja (sluttdato ukjent)" : "Ja") : "Nei (14 dager eller kortere)",
           trekk: rund(r.trekk),
         })),
