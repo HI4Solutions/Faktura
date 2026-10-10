@@ -58,28 +58,32 @@ export function premiebilag(b: { afp: number; ou: number; aga: number }, o: Pick
   return p;
 }
 
-// Fribeløpet i sone 1a som er brukt i året: den sparte avgiften i godkjente kjøringer (utenom en)
-// og på premiene som er betalt.
+// Fribeløpet i sone 1a som er brukt i året (per foretak): den sparte avgiften i godkjente kjøringer
+// (utenom en) og på premiene som er betalt, i sone 1a (sonen på slippen og premien, 0101; eldre
+// har sonen i lønnsoppsettet).
 export async function fribelopBrukt(db: Db, org: string, aar: number, utenomKjoring: string | null = null) {
   const r = await en<{ n: number }>(
     db,
-    `select (coalesce((select sum(s.aga_grunnlag * ${AGA_FULL} / 100 - s.aga)
+    `with o as (select coalesce((select aga_sone from faktura.lonn_oppsett where org_id = $1), '1') as sone)
+     select (coalesce((select sum(s.aga_grunnlag * ${AGA_FULL} / 100 - s.aga)
                          from faktura.lonnsslipper s join faktura.lonnskjoringer k on k.id = s.kjoring_id
                         where s.org_id = $1 and k.status = 'godkjent' and k.id is distinct from $3::uuid
+                          and coalesce(s.aga_sone, (select sone from o)) = '1a'
                           and k.utbetalingsdato between $2::date and ($2::date + interval '1 year' - interval '1 day')::date), 0)
            + coalesce((select sum(p.afp * ${AGA_FULL} / 100 - p.aga) from faktura.afp_premier p
-                        where p.org_id = $1 and p.dato between $2::date and ($2::date + interval '1 year' - interval '1 day')::date), 0))::float8 as n`,
+                        where p.org_id = $1 and coalesce(p.aga_sone, (select sone from o)) = '1a'
+                          and p.dato between $2::date and ($2::date + interval '1 year' - interval '1 day')::date), 0))::float8 as n`,
     [org, `${aar}-01-01`, utenomKjoring],
   );
   return Number(r?.n ?? 0);
 }
 
-// Arbeidsgiveravgiften av en AFP-premie som betales på datoen.
+// Arbeidsgiveravgiften av en AFP-premie som betales på datoen, i sonen til hovedvirksomheten.
 export async function avgiftAvPremie(db: Db, org: string, afp: number, dato: string) {
   const o = await en<{ aga_sone: string }>(db, "select aga_sone from faktura.lonn_oppsett where org_id = $1", [org]);
   const sone = o?.aga_sone ?? "1";
   const brukt = sone === "1a" ? await fribelopBrukt(db, org, Number(dato.slice(0, 4))) : 0;
-  return arbeidsgiveravgift(sone, [afp], brukt)[0]!;
+  return { ...arbeidsgiveravgift(sone, [afp], brukt)[0]!, sone };
 }
 
 export type Kvartal = {
@@ -180,7 +184,7 @@ export function afpRuter() {
         const posteringer = premiebilag({ afp: b.afp, ou, aga: a.aga }, await hentBokforingsoppsett(db, orgId(c)), tekst);
         const ny = await en<{ id: string }>(db, "select faktura.registrer_afp_premie($1, $2, $3, $4) as id", [
           orgId(c),
-          JSON.stringify({ dato: b.dato, aar: b.aar, kvartal: b.kvartal, afp: b.afp, ou, aga_sats: a.sats, aga: a.aga, tekst: b.tekst ?? null }),
+          JSON.stringify({ dato: b.dato, aar: b.aar, kvartal: b.kvartal, afp: b.afp, ou, aga_sats: a.sats, aga: a.aga, aga_sone: a.sone, tekst: b.tekst ?? null }),
           tekst,
           JSON.stringify(posteringer),
         ]);

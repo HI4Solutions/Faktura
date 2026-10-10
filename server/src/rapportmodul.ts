@@ -24,6 +24,7 @@ import { lonnRapporter } from "./lonnRapporter.js";
 import { afpRapporter } from "./afpPremier.js";
 import { lonnsgarantiRapporter } from "./lonnsgaranti.js";
 import { kildeskattRapporter } from "./kildeskatt.js";
+import { virksomhetRapporter } from "./virksomheter.js";
 import { avstemmingRapporter } from "./avstemming.js";
 import { sykepengerRapporter } from "./sykepengerRapporter.js";
 import { regnskapRapporter } from "./regnskapRapporter.js";
@@ -84,6 +85,7 @@ export const RAPPORTER: Rapportdef[] = [
   ...afpRapporter,
   ...lonnsgarantiRapporter,
   ...kildeskattRapporter,
+  ...virksomhetRapporter,
   ...avstemmingRapporter,
   ...sykepengerRapporter,
   ...regnskapRapporter,

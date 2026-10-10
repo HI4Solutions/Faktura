@@ -175,6 +175,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "lonn.afp",
         "lonn.lonnsgaranti",
         "lonn.kildeskatt",
+        "lonn.aga_soner",
         "lonn.avstemming",
         "lonn.avstemming_aar",
         "lonn.nav_refusjoner",
@@ -209,7 +210,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte"]);
     // Sykepengene og refusjonene fra NAV (helseopplysninger) og permisjonene (fravær) ser bare eier
     // og administrator; avstemmingen ser regnskap.
-    expect(r.lonn).toHaveLength(17);
+    expect(r.lonn).toHaveLength(18);
     expect(r.lonn).not.toContain("lonn.sykepenger");
     expect(r.lonn).not.toContain("lonn.nav_refusjoner");
     expect(r.lonn).not.toContain("lonn.permisjoner");

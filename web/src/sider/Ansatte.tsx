@@ -85,6 +85,8 @@ type Ansatt = {
   dodsdato: string | null;
   // Kildeskatt på lønn (0100): på kildeskatteordningen for utenlandske arbeidstakere (med prosenttrekk).
   kildeskatt: boolean;
+  // Virksomheten den ansatte jobber i (0101; null: hovedvirksomheten).
+  virksomhet_id: string | null;
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -433,6 +435,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     otp_utmeldt: ansatt.otp_utmeldt ?? "",
     dodsdato: ansatt.dodsdato ?? "",
     kildeskatt: ansatt.kildeskatt ?? false,
+    virksomhet_id: ansatt.virksomhet_id ?? "",
     arbeidstidsordning: ansatt.arbeidstidsordning ?? "ikkeSkift",
     aarsak_sluttdato: ansatt.aarsak_sluttdato ?? "",
     // Lønns- og stillingsendringer (Lonnsendringer.tsx): datoen endringen gjelder fra, og grunnen.
@@ -452,6 +455,16 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     [org?.id],
   );
   const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
+  // Virksomhetene (0101, Innstillinger → Ansatte og timer → A-melding): valget vises når foretaket har flere.
+  const virksomheter = useData(
+    () =>
+      harFunksjon(org, "lonn")
+        ? hent<{ hoved: { orgnr: string | null; navn: string; aga_sone: string }; andre: { id: string; orgnr: string; navn: string; aga_sone: string }[] }>(
+            `/org/${org!.id}/lonn/virksomheter`,
+          ).catch(() => null)
+        : Promise.resolve(null),
+    [org?.id],
+  );
   // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Ansatte og timer).
   const fullStilling = Number(oppsett.data?.full_stilling ?? 37.5);
   // Rollene (f.eks. lege og sekretær, Roller.tsx); en ny kan lages rett herfra (nyRolle) når
@@ -683,6 +696,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       kropp.skattekort_aar = k && a.skattekort_aar.trim() ? Number(a.skattekort_aar) : null;
       kropp.biarbeidsgiver = a.biarbeidsgiver;
       kropp.kildeskatt = k === "prosent" && a.kildeskatt;
+      if (virksomheter.data?.andre.length || ansatt.virksomhet_id) kropp.virksomhet_id = a.virksomhet_id || null;
       // Arbeidsforholdet i a-meldingen.
       kropp.yrkeskode = a.yrkeskode.replace(/\s/g, "") || null;
       kropp.arbeidsforhold_type = a.arbeidsforhold_type;
@@ -1163,6 +1177,23 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
               </p>
               {ansatt.id && <SkattekortFraSkatteetaten a={ansatt as Ansatt} />}
               <h3>A-melding</h3>
+              {!!virksomheter.data?.andre.length && (
+                <label>
+                  Virksomhet
+                  <select {...felt("virksomhet_id")}>
+                    <option value="">
+                      {virksomheter.data.hoved.navn} (hovedvirksomheten{virksomheter.data.hoved.orgnr ? `, ${virksomheter.data.hoved.orgnr}` : ""}, sone{" "}
+                      {virksomheter.data.hoved.aga_sone})
+                    </option>
+                    {virksomheter.data.andre.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.navn} ({v.orgnr}, sone {v.aga_sone})
+                      </option>
+                    ))}
+                  </select>
+                  <span className="felt-hjelp">Virksomheten (underenheten) den ansatte jobber i: arbeidsgiveravgiften regnes med sonen der, og a-meldingen har den ansatte der.</span>
+                </label>
+              )}
               <div className="rad">
                 <label>
                   Yrkeskode

@@ -38,8 +38,12 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    (første gang etter to minutter, så sjeldnere, og minst hver halvtime i en uke). Status og avvik
    vises på måneden, og eier og administrator får varsel når den er mottatt eller avvist.
 
-Det som ikke er med ennå: finansskatt på lønn, inntektsmottakere uten norsk fødselsnummer eller
-D-nummer, og mer enn én virksomhet per organisasjon.
+Flere virksomheter (underenheter): hver får sin `virksomhet` i meldingen med de ansatte som har
+lønnen og arbeidsforholdet der, og arbeidsgiveravgiften per sone; summene er for hele foretaket.
+AFP-premien rapporteres på hovedvirksomheten.
+
+Det som ikke er med ennå: finansskatt på lønn, og inntektsmottakere uten norsk fødselsnummer eller
+D-nummer.
 
 Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og XML),
 `server/src/ameldingInnsending.ts` (workeren: fila, innsendingen og tilbakemeldingen),

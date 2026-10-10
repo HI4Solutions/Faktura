@@ -276,7 +276,13 @@ export async function hentFraNav(org: string) {
   const t = await hentTilgang(org);
   if (!t?.orgnr || !harPakke(t, NAV_SYKEPENGER)) return;
   const virksomheter = await somSystem((db) =>
-    alle<{ orgnr: string }>(db, "select virksomhet_orgnr as orgnr from faktura.lonn_oppsett where org_id = $1 and virksomhet_orgnr is not null", [org]),
+    // Hovedvirksomheten og de andre virksomhetene (0101).
+    alle<{ orgnr: string }>(
+      db,
+      `select virksomhet_orgnr as orgnr from faktura.lonn_oppsett where org_id = $1 and virksomhet_orgnr is not null
+       union select orgnr from faktura.virksomheter where org_id = $1`,
+      [org],
+    ),
   );
   if (!virksomheter.length) return;
   let cache: Promise<Map<string, { id: string; navn: string }>> | null = null;
@@ -601,8 +607,10 @@ export async function planleggNavHenting(): Promise<number> {
     await somSystem((db) =>
       db.query(
         `insert into faktura.nav_henting (org_id, type, virksomhet_orgnr, sist_hentet)
-         select l.org_id, t.type, l.virksomhet_orgnr, now() from faktura.lonn_oppsett l cross join (values ('sykmelding'), ('forespoersel')) t(type)
-          where l.org_id = $1 and l.virksomhet_orgnr is not null
+         select $1::uuid, t.type, v.orgnr, now()
+           from (select virksomhet_orgnr as orgnr from faktura.lonn_oppsett where org_id = $1 and virksomhet_orgnr is not null
+                 union select orgnr from faktura.virksomheter where org_id = $1) v
+          cross join (values ('sykmelding'), ('forespoersel')) t(type)
          on conflict (org_id, type, virksomhet_orgnr) do update set sist_hentet = now()`,
         [r.org_id],
       ),

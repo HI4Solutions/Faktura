@@ -123,7 +123,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AFP og OU", () => {
     const mai = (await kall("GET", `/api/org/${org}/amelding/2026-05`)).data;
     expect(mai.avvik.filter((a: any) => a.tekst.includes("AFP"))).toEqual([]);
     expect(mai.grunnlag.afp_premie).toBe(1111.36);
-    expect(mai.grunnlag.avgiftsgrunnlag).toEqual([{ sats: 14.1, lonn: 0, pensjon: 1111.36 }]);
+    expect(mai.grunnlag.avgiftsgrunnlag).toEqual([{ sone: "1", sats: 14.1, lonn: 0, pensjon: 1111.36 }]);
     expect(mai.grunnlag.arbeidsgiveravgift).toBe(157);
     // Avstemmingen for 3. termin: avgiften i bilaget stemmer med det a-meldingen gir.
     const t = (await kall("GET", `/api/org/${org}/rapportmodul/lonn.avstemming?aar=2026&termin=3`)).data.rader as any[];

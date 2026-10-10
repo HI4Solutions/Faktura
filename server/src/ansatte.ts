@@ -126,6 +126,8 @@ const ansattSkjema = z.object({
   dodsdato: valgfri(datoS),
   // Kildeskatt på lønn (0100): på kildeskatteordningen (med prosenttrekk).
   kildeskatt: z.boolean().optional(),
+  // Virksomheten den ansatte jobber i (0101; null: hovedvirksomheten).
+  virksomhet_id: valgfri(z.string().uuid("Ugyldig virksomhet")),
   arbeidstidsordning: z
     .enum(["ikkeSkift", "andreSkift", "skift365", "doegnkontinuerligSkiftOgTurnus355", "helkontinuerligSkiftOgAndreOrdninger336", "offshore336"])
     .optional(),
@@ -242,7 +244,7 @@ const ANSATT = `
          -- Arbeidsforholdet i a-meldingen (0077_amelding.sql).
          a.yrkeskode, a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato, a.honorar_art,
          to_char(a.otp_innmeldt, 'YYYY-MM-DD') as otp_innmeldt, to_char(a.otp_utmeldt, 'YYYY-MM-DD') as otp_utmeldt,
-         to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato, a.kildeskatt,
+         to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato, a.kildeskatt, a.virksomhet_id,
          to_char(a.siste_lonnsendring, 'YYYY-MM-DD') as siste_lonnsendring, to_char(a.siste_stillingsendring, 'YYYY-MM-DD') as siste_stillingsendring,
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
@@ -539,6 +541,8 @@ export function ansattRuter() {
   async function sjekkGruppe(db: Db, org: string, f: Record<string, unknown>) {
     if (typeof f.gruppe_id === "string" && !(await en(db, "select 1 from faktura.ansattgrupper where org_id = $1 and id = $2", [org, f.gruppe_id])))
       throw new ApiFeil(400, "Fant ikke rollen");
+    if (typeof f.virksomhet_id === "string" && !(await en(db, "select 1 from faktura.virksomheter where org_id = $1 and id = $2", [org, f.virksomhet_id])))
+      throw new ApiFeil(400, "Fant ikke virksomheten");
     if (typeof f.kunde_id === "string" && !(await en(db, "select 1 from faktura.kunder where org_id = $1 and id = $2", [org, f.kunde_id])))
       throw new ApiFeil(400, "Fant ikke kunden");
   }

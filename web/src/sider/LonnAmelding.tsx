@@ -38,6 +38,8 @@ type Grunnlag = {
   arbeidsgiveravgift: number;
   // AFP-premien som er betalt i måneden (0098): avgiften av den er med.
   afp_premie?: number;
+  // Virksomhetene i meldingen når foretaket har flere (0101).
+  virksomheter?: { orgnr: string | null; navn: string; sone: string; hoved: boolean; antall_arbeidsforhold: number; arbeidsgiveravgift: number }[];
   mottakere: {
     ansatt_id: string;
     navn: string;
@@ -383,6 +385,29 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
           <div className="under">Betales annenhver måned{g.afp_premie ? ` · med avgiften av AFP-premien som er betalt (${kr(g.afp_premie)})` : ""}</div>
         </div>
       </div>
+      {(g.virksomheter?.length ?? 0) > 1 && (
+        <div className="kort">
+          <h3 style={{ marginTop: 0 }}>Virksomhetene</h3>
+          <table className="kompakt">
+            <tbody>
+              {g.virksomheter!.map((v) => (
+                <tr key={v.orgnr ?? "hoved"}>
+                  <td>
+                    {v.navn}
+                    <div className="dempet liten">
+                      {v.orgnr ?? "Mangler organisasjonsnummer"}
+                      {v.hoved ? " · hovedvirksomheten" : ""}
+                    </div>
+                  </td>
+                  <td>Sone {v.sone}</td>
+                  <td className="tall">{v.antall_arbeidsforhold === 1 ? "1 arbeidsforhold" : `${v.antall_arbeidsforhold} arbeidsforhold`}</td>
+                  <td className="tall">{kr(v.arbeidsgiveravgift)} kr</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {admin && (
         <div className="kort amelding-handling">

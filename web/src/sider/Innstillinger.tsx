@@ -165,6 +165,106 @@ const AGA_SONER: [string, string][] = [
   ["4a", "Sone 4a – 7,9 %"],
   ["5", "Sone 5 – 0 % (Finnmark og Nord-Troms)"],
 ];
+// Flere virksomheter (0101_virksomheter.sql): underenhetene i foretaket med sonen for
+// arbeidsgiveravgift. Den ansatte velger virksomheten i ansattskjemaet; uten valg er det
+// hovedvirksomheten (A-melding over). Lagres for seg (ikke med skjemaet rundt).
+type Virksomhet = { id: string; orgnr: string; navn: string; aga_sone: string; ansatte: number };
+function FlereVirksomheter({ enhetsregisteret, hoved }: { enhetsregisteret: { orgnr: string; navn: string }[]; hoved: string }) {
+  const { org } = useKonto();
+  const { data, last } = useData(() => hent<{ andre: Virksomhet[] }>(`/org/${org!.id}/lonn/virksomheter`), [org?.id]);
+  const tom = { orgnr: "", navn: "", aga_sone: "1" };
+  const [ny, settNy] = useState(tom);
+  const h = useHandling();
+  const kan = Boolean(org && erAdmin(org.rolle));
+  const andre = data?.andre ?? [];
+  async function leggTil() {
+    const r = await h.kjor(() => api("POST", `/org/${org!.id}/lonn/virksomheter`, { ...ny, orgnr: ny.orgnr.replace(/\s/g, ""), navn: ny.navn.trim() }));
+    if (r) {
+      settNy(tom);
+      last();
+    }
+  }
+  const sone = (v: Virksomhet, aga_sone: string) => h.kjor(() => api("PATCH", `/org/${org!.id}/lonn/virksomheter/${v.id}`, { aga_sone })).then(last);
+  const fjern = (v: Virksomhet) => confirm(`Fjerne ${v.navn}?`) && h.kjor(() => api("DELETE", `/org/${org!.id}/lonn/virksomheter/${v.id}`)).then(last);
+  return (
+    <>
+      <h4 className="lonn-under">Flere virksomheter</h4>
+      <p className="felt-hjelp">
+        Har foretaket flere virksomheter (underenheter), kanskje i andre soner for arbeidsgiveravgift? Legg dem inn her, og velg virksomheten på hver ansatt (uten valg:
+        hovedvirksomheten over). Lønnskjøringen regner avgiften med sonen til virksomheten, og a-meldingen får én virksomhet per underenhet.
+      </p>
+      {andre.length > 0 && (
+        <table className="kompakt virksomheter">
+          <tbody>
+            {andre.map((v) => (
+              <tr key={v.id}>
+                <td>
+                  {v.navn}
+                  <div className="dempet liten">
+                    {orgnr(v.orgnr)} · {v.ansatte === 1 ? "1 ansatt" : `${v.ansatte} ansatte`}
+                  </div>
+                </td>
+                <td>
+                  <select aria-label={`Sone for ${v.navn}`} value={v.aga_sone} disabled={!kan || h.opptatt} onChange={(e) => sone(v, e.target.value)}>
+                    {AGA_SONER.map(([z, t]) => (
+                      <option key={z} value={z}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="hoyre">
+                  {kan && (
+                    <button type="button" className="lenke" onClick={() => fjern(v)}>
+                      Fjern
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {kan && (
+        <div className="rad" style={{ alignItems: "end" }}>
+          <label>
+            Organisasjonsnummer
+            <input
+              inputMode="numeric"
+              list="amelding-virksomheter"
+              placeholder="9 siffer"
+              value={ny.orgnr}
+              onChange={(e) => {
+                const treff = enhetsregisteret.find((x) => x.orgnr === e.target.value.replace(/\s/g, ""));
+                settNy({ ...ny, orgnr: e.target.value, navn: ny.navn || treff?.navn || "" });
+              }}
+            />
+          </label>
+          <label>
+            Navn
+            <input value={ny.navn} onChange={(e) => settNy({ ...ny, navn: e.target.value })} />
+          </label>
+          <label>
+            Sone
+            <select value={ny.aga_sone} onChange={(e) => settNy({ ...ny, aga_sone: e.target.value })}>
+              {AGA_SONER.map(([z, t]) => (
+                <option key={z} value={z}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <button type="button" onClick={leggTil} disabled={h.opptatt || !ny.orgnr.trim() || !ny.navn.trim() || ny.orgnr.replace(/\s/g, "") === hoved}>
+              Legg til
+            </button>
+          </label>
+        </div>
+      )}
+      <Feil melding={h.feil} />
+    </>
+  );
+}
 // Egenmelding (0071_egenmelding.sql): lovens regler, IA-ordningen eller en egen ordning.
 type Egenmeldingsordning = "lov" | "ia" | "egen";
 const ordning = (dager: number, ganger: number | null, dagerAar: number | null): Egenmeldingsordning =>
@@ -471,7 +571,10 @@ function PersonalOppsett() {
                 </option>
               ))}
             </select>
-            <span className="felt-hjelp">Sonen der virksomheten er registrert (kommunen). I sone 1a gjelder den reduserte satsen til den sparte avgiften i året når 850 000 kr.</span>
+            <span className="felt-hjelp">
+              Sonen der (hoved)virksomheten er registrert (kommunen). I sone 1a gjelder den reduserte satsen til den sparte avgiften i året når 850 000 kr, for hele
+              foretaket. Virksomheter i andre soner legges inn under A-melding.
+            </span>
           </label>
           <div className="rad">
             <label>
@@ -648,6 +751,7 @@ function PersonalOppsett() {
               <span className="felt-hjelp">Organisasjonsnummeret til pensjonsinnretningen (står i OTP-avtalen). Må med i a-meldingen når det er OTP.</span>
             </label>
           </div>
+          <FlereVirksomheter enhetsregisteret={virksomheter.data ?? []} hoved={o.virksomhet_orgnr.replace(/\s/g, "")} />
           <p className="liten dempet">
             Skattekortet registreres på hver ansatt, eller hentes fra Skatteetaten når dere har koblet til (under). Lønnskjøringene og a-meldingen er under{" "}
             <Link to="/lonn">Lønn</Link>.

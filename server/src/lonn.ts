@@ -24,7 +24,7 @@ import {
   afpLonn,
   andelAnsatt,
   arbeidsgiverperiode,
-  arbeidsgiveravgift,
+  arbeidsgiveravgiftSoner,
   erFrilanser,
   feriepengelinjer,
   honorarArt,
@@ -94,11 +94,11 @@ type LagretLinje = Linje & { id: string; slipp_id: string; kilde: "auto" | "manu
 
 // --- Oppsettet --------------------------------------------------------------------------------
 
-async function hentOppsett(db: Db, org: string): Promise<Oppsett & { lonnsdag: number; halv_skatt: string }> {
+async function hentOppsett(db: Db, org: string): Promise<Oppsett & { lonnsdag: number; halv_skatt: string; virksomhet_orgnr: string | null }> {
   const o = await en<any>(
     db,
     `select l.daglig_grense, l.ukentlig_grense, l.overtid_prosent, l.ferie_dager, l.aga_sone, l.otp_prosent, l.feriepenger_prosent, l.lonnsdag, l.halv_skatt,
-            l.sykepenger_refusjon, l.otp_unntak_75, l.afp, l.afp_sats::float8 as afp_sats, l.ou_premie::float8 as ou_premie
+            l.sykepenger_refusjon, l.otp_unntak_75, l.afp, l.afp_sats::float8 as afp_sats, l.ou_premie::float8 as ou_premie, l.virksomhet_orgnr
        from faktura.lonn_oppsett l where l.org_id = $1`,
     [org],
   );
@@ -117,6 +117,7 @@ async function hentOppsett(db: Db, org: string): Promise<Oppsett & { lonnsdag: n
     lonnsdag: Number(o?.lonnsdag ?? 20),
     halv_skatt: o?.halv_skatt ?? "desember",
     sykepenger_refusjon: o?.sykepenger_refusjon ?? true,
+    virksomhet_orgnr: o?.virksomhet_orgnr ?? null,
   };
 }
 
@@ -133,7 +134,7 @@ const ANSATTE = `
          a.maanedslonn::float8 as maanedslonn, a.timelonn::float8 as timelonn, a.stillingsprosent::float8 as stillingsprosent,
          a.ukentlig_arbeidstid::float8 as ukentlig_arbeidstid, a.ferie_dager::float8 as ferie_dager, a.kontonr, a.skattekort,
          a.skatt_tabell, a.skatt_prosent::float8 as skatt_prosent, a.skatt_frikort::float8 as skatt_frikort, a.skattekort_aar,
-         a.skattekort_resultat, a.skattekort_tillegg, a.aktiv, a.arbeidsforhold_type, a.honorar_art, to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato, a.kildeskatt
+         a.skattekort_resultat, a.skattekort_tillegg, a.aktiv, a.arbeidsforhold_type, a.honorar_art, to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato, a.kildeskatt, a.virksomhet_id
     from faktura.ansatte a`;
 
 // Regner ut kjøringen på nytt og lagrer slippene (bare et utkast). De manuelle linjene (lagt til,
@@ -377,9 +378,21 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       l.push({ grunnlag: r.grunnlag, trekk: r.trekk });
     }
   }
-  // Fribeløpet i sone 1a: den sparte avgiften i godkjente kjøringer i år, og på AFP-premiene som er
-  // betalt (0098).
-  const fribelopBrukt = o.aga_sone === "1a" ? await fribelopIAar(db, org, aar, k.id) : 0;
+  // Virksomhetene (0101): den ansatte jobber i hovedvirksomheten (lønnsoppsettet) eller en av de
+  // andre, med sonen for arbeidsgiveravgift der.
+  const virksomheter = new Map(
+    (await alle<{ id: string; orgnr: string; aga_sone: string }>(db, "select id, orgnr, aga_sone from faktura.virksomheter where org_id = $1", [org])).map(
+      (v) => [v.id, v],
+    ),
+  );
+  const sted = (a: Ansatt) => {
+    const v = a.virksomhet_id ? virksomheter.get(a.virksomhet_id) : undefined;
+    return { orgnr: v?.orgnr ?? o.virksomhet_orgnr, sone: v?.aga_sone ?? o.aga_sone };
+  };
+  // Fribeløpet i sone 1a (per foretak): den sparte avgiften i godkjente kjøringer i år, og på
+  // AFP-premiene som er betalt (0098).
+  const fribelopBrukt =
+    o.aga_sone === "1a" || [...virksomheter.values()].some((v) => v.aga_sone === "1a") ? await fribelopIAar(db, org, aar, k.id) : 0;
 
   // Lønnshistorikken (0080): lønnen og stillingen per dag, og det som var kjent da tidligere
   // kjøringer ble godkjent (etterbetaling når en endring gjelder tilbake i tid).
@@ -707,7 +720,10 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     if (!r.a.kontonr && s.netto > 0) s.merknader.push("Mangler kontonummer på den ansatte.");
     return { r, auto, s };
   });
-  const aga = arbeidsgiveravgift(o.aga_sone, beregnet.map((b) => b.s.aga_grunnlag), fribelopBrukt);
+  const aga = arbeidsgiveravgiftSoner(
+    beregnet.map((b) => ({ sone: sted(b.r.a).sone, grunnlag: b.s.aga_grunnlag })),
+    fribelopBrukt,
+  );
 
   const behold = new Set<string>();
   for (const [i, { r, auto, s }] of beregnet.entries()) {
@@ -753,6 +769,8 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       s.afp,
       s.ou,
       !!r.a.dodsdato && k.utbetalingsdato > r.a.dodsdato,
+      sted(r.a).orgnr,
+      sted(r.a).sone,
     ];
     let slippId = r.slipp?.id;
     if (slippId) {
@@ -761,7 +779,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
                 trekkgrunnlag = $9, skattetrekk = $10, skattetrekk_manuell = $11, brutto = $12, utgifter = $13, trekk_etter_skatt = $14, netto = $15,
                 feriepengegrunnlag = $16, feriepenger_opptjent = $17, otp_grunnlag = $18, otp = $19, aga_grunnlag = $20, aga = $21, aga_sats = $22,
                 timeforinger = $23, merknader = $24, timebank_poster = $25, naturalytelser = $26, reiseregninger = $27, afp_grunnlag = $28,
-                afp = $29, ou = $30, etter_dodsfall = $31
+                afp = $29, ou = $30, etter_dodsfall = $31, virksomhet_orgnr = $32, aga_sone = $33
           where id = $1`,
         [slippId, ...felles],
       );
@@ -772,9 +790,9 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         `insert into faktura.lonnsslipper (org_id, kjoring_id, ansatt_id, navn, ansattnummer, lonnstype, periode, utbetalingsdato, trekkmetode, trekkpliktig,
                 trekkgrunnlag, skattetrekk, skattetrekk_manuell, brutto, utgifter, trekk_etter_skatt, netto, feriepengegrunnlag, feriepenger_opptjent,
                 otp_grunnlag, otp, aga_grunnlag, aga, aga_sats, timeforinger, merknader, timebank_poster, naturalytelser, reiseregninger,
-                afp_grunnlag, afp, ou, etter_dodsfall)
+                afp_grunnlag, afp, ou, etter_dodsfall, virksomhet_orgnr, aga_sone)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
-                 $30, $31, $32, $33) returning id`,
+                 $30, $31, $32, $33, $34, $35) returning id`,
         [org, k.id, r.a.id, ...felles],
       ))!.id;
     }
@@ -802,7 +820,7 @@ const SLIPP = `
          s.feriepengegrunnlag::float8 as feriepengegrunnlag, s.feriepenger_opptjent::float8 as feriepenger_opptjent,
          s.otp_grunnlag::float8 as otp_grunnlag, s.otp::float8 as otp, s.aga_grunnlag::float8 as aga_grunnlag, s.aga::float8 as aga,
          s.aga_sats::float8 as aga_sats, cardinality(s.timeforinger) as antall_timeforinger, s.merknader, s.naturalytelser::float8 as naturalytelser,
-         s.afp_grunnlag::float8 as afp_grunnlag, s.afp::float8 as afp, s.ou::float8 as ou, s.etter_dodsfall
+         s.afp_grunnlag::float8 as afp_grunnlag, s.afp::float8 as afp, s.ou::float8 as ou, s.etter_dodsfall, s.virksomhet_orgnr, s.aga_sone
     from faktura.lonnsslipper s`;
 const LINJE = `
   select l.id, l.slipp_id, l.lonnsart, l.tekst, l.antall::float8 as antall, l.sats::float8 as sats, l.belop::float8 as belop, l.kilde, l.nokkel,
@@ -854,6 +872,8 @@ export async function hentKjoring(db: Db, org: string, id: string) {
     ...k,
     timer: timer ?? { levert: 0, utkast: 0 },
     aga_sone: o.aga_sone,
+    // Sonene slippene er regnet med (flere virksomheter, 0101).
+    aga_soner: [...new Set(slipper.map((s) => s.aga_sone ?? o.aga_sone))].sort(),
     otp_prosent: o.otp_prosent,
     afp: o.afp,
     feriepenger_prosent: o.feriepenger_prosent,

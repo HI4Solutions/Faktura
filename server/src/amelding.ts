@@ -39,6 +39,8 @@ export type Arbeidsforholdsrad = {
   fodselsdato?: string | null;
   otp_innmeldt?: string | null;
   otp_utmeldt?: string | null;
+  // Virksomheten den ansatte jobber i nå (0101; null: hovedvirksomheten i lønnsoppsettet).
+  virksomhet?: string | null;
 };
 export type Slippdata = {
   ansatt_id: string;
@@ -50,10 +52,15 @@ export type Slippdata = {
   otp: number;
   // Utbetalt etter dødsdatoen (0099): lønnen er lønn etter dødsfall.
   etter_dodsfall?: boolean;
+  // Virksomheten og sonen slippen ble regnet med (0101; null på eldre slipper: hovedvirksomheten og
+  // sonen i lønnsoppsettet).
+  virksomhet?: string | null;
+  aga_sone?: string | null;
   linjer: { lonnsart: string; belop: number; antall: number | null; opptjent_fra?: string | null; opptjent_til?: string | null; tillegg?: Record<string, unknown> | null }[];
 };
 // AFP-premien som er betalt i måneden (0098, afpPremier.ts): premien og arbeidsgiveravgiften av den.
-export type Premiedata = { afp: number; aga: number; aga_sats: number };
+// Sonen (0101; null på eldre: sonen i lønnsoppsettet). Premien rapporteres på hovedvirksomheten.
+export type Premiedata = { afp: number; aga: number; aga_sats: number; aga_sone?: string | null };
 // Permisjon og permittering som berører måneden (0084; prosent 1–100).
 export type Permisjonsrad = { id: string; ansatt_id: string; fra: string; til: string; art: string | null; prosent: number; slutt_ukjent: boolean; betalt: boolean };
 export type Grunnlag = {
@@ -75,6 +82,8 @@ export type Grunnlag = {
   // andre og tredje måned i kvartalet).
   premier?: Premiedata[];
   afpIkkeBetalt?: { kvartal: string; avsatt: number } | null;
+  // De andre virksomhetene i foretaket (0101: underenhetene, med sonen for arbeidsgiveravgift).
+  virksomheter?: { orgnr: string; navn: string; sone: string }[];
 };
 // fravaer_id: permisjonen avviket gjelder (appen lar arten velges der).
 export type Avvik = { niva: "feil" | "advarsel"; tekst: string; ansatt_id?: string; fravaer_id?: string };
@@ -114,7 +123,7 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
   const slipper = await alle<any>(
     db,
     `select s.id, s.ansatt_id, to_char(s.utbetalingsdato, 'YYYY-MM-DD') as utbetalingsdato, s.skattetrekk::float8 as skattetrekk, s.aga::float8 as aga,
-            s.aga_grunnlag::float8 as aga_grunnlag, s.aga_sats::float8 as aga_sats, s.otp::float8 as otp, s.etter_dodsfall
+            s.aga_grunnlag::float8 as aga_grunnlag, s.aga_sats::float8 as aga_sats, s.otp::float8 as otp, s.etter_dodsfall, s.virksomhet_orgnr, s.aga_sone
        from faktura.lonnsslipper s join faktura.lonnskjoringer k on k.id = s.kjoring_id
       where s.org_id = $1 and k.status = 'godkjent' and s.utbetalingsdato between $2::date and $3::date
       order by s.utbetalingsdato, s.ansattnummer`,
@@ -145,7 +154,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
             to_char(coalesce(e.lonn, case when a.siste_lonnsendring <= $3::date then a.siste_lonnsendring end), 'YYYY-MM-DD') as siste_lonnsendring,
             to_char(coalesce(e.stilling, case when a.siste_stillingsendring <= $3::date then a.siste_stillingsendring end), 'YYYY-MM-DD') as siste_stillingsendring,
             to_char(a.fodselsdato, 'YYYY-MM-DD') as fodselsdato, to_char(a.otp_innmeldt, 'YYYY-MM-DD') as otp_innmeldt,
-            to_char(a.otp_utmeldt, 'YYYY-MM-DD') as otp_utmeldt
+            to_char(a.otp_utmeldt, 'YYYY-MM-DD') as otp_utmeldt,
+            (select v.orgnr from faktura.virksomheter v where v.org_id = a.org_id and v.id = a.virksomhet_id) as virksomhet
        from faktura.ansatte a
        left join lateral faktura.lonn_gjeldende(a.org_id, a.id, $3::date) g on true
        left join lateral faktura.lonn_endringsdatoer(a.org_id, a.id, $3::date) e on true
@@ -174,7 +184,7 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
   // AFP-premiene som er betalt i måneden, og om premien for forrige kvartal er betalt.
   const premier = await alle<Premiedata>(
     db,
-    "select afp::float8 as afp, aga::float8 as aga, aga_sats::float8 as aga_sats from faktura.afp_premier where org_id = $1 and dato between $2::date and $3::date order by dato",
+    "select afp::float8 as afp, aga::float8 as aga, aga_sats::float8 as aga_sats, aga_sone from faktura.afp_premier where org_id = $1 and dato between $2::date and $3::date order by dato",
     [org, fra, til],
   );
   let afpIkkeBetalt: Grunnlag["afpIkkeBetalt"] = null;
@@ -209,6 +219,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
       aga_sats: s.aga_sats,
       otp: s.otp,
       etter_dodsfall: !!s.etter_dodsfall,
+      virksomhet: s.virksomhet_orgnr ?? null,
+      aga_sone: s.aga_sone ?? null,
       linjer: linjer
         .filter((l) => l.slipp_id === s.id)
         .map(({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til, tillegg }) => ({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til, tillegg })),
@@ -218,7 +230,32 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
     otp: { prosent: Number(oppsett?.otp_prosent ?? 2), unntak75: !!oppsett?.otp_unntak_75 },
     premier,
     afpIkkeBetalt,
+    virksomheter: await alle<{ orgnr: string; navn: string; sone: string }>(
+      db,
+      "select orgnr, navn, aga_sone as sone from faktura.virksomheter where org_id = $1 order by navn, orgnr",
+      [org],
+    ),
   };
+}
+
+// --- Virksomhetene (0101) ---------------------------------------------------------------------
+
+// Virksomheten en slipp hører til (null på eldre slipper: hovedvirksomheten), og virksomheten et
+// arbeidsforhold rapporteres på: der lønnen i måneden er utbetalt (den siste slippen), ellers der
+// den ansatte jobber nå.
+const slippVirksomhet = (g: Grunnlag, s: Slippdata) => s.virksomhet ?? g.virksomhet;
+function forholdVirksomhet(g: Grunnlag, f: Arbeidsforholdsrad) {
+  const s = g.slipper.filter((x) => x.ansatt_id === f.id).at(-1);
+  return s ? slippVirksomhet(g, s) : (f.virksomhet ?? g.virksomhet);
+}
+// Virksomhetene i meldingen: hovedvirksomheten først, så de andre som har arbeidsforhold eller lønn.
+export function virksomheterI(g: Grunnlag) {
+  const iBruk = new Set<string | null>([...g.slipper.map((s) => slippVirksomhet(g, s)), ...g.arbeidsforhold.map((f) => forholdVirksomhet(g, f))]);
+  const andre = (g.virksomheter ?? []).filter((v) => v.orgnr !== g.virksomhet && iBruk.has(v.orgnr));
+  return [
+    { orgnr: g.virksomhet, navn: g.org.navn, sone: g.sone, hoved: true },
+    ...andre.map((v) => ({ orgnr: v.orgnr as string | null, navn: v.navn, sone: v.sone, hoved: false })),
+  ].filter((v) => v.hoved || iBruk.has(v.orgnr));
 }
 
 // --- Inntektene, trekket og avgiften ----------------------------------------------------------
@@ -324,38 +361,39 @@ export function forskuddstrekk(slipper: Slippdata[]) {
 
 const STANDARDSATS: Record<string, number> = { "1": 14.1, "1a": 10.6, "2": 10.6, "3": 6.4, "4": 5.1, "4a": 7.9, "5": 0 };
 
-// Avgiftsgrunnlaget per sats: lønnen og pensjonen (OTP, og AFP-premien som er betalt i måneden)
-// for seg. I sone 1a deles en slipp (eller premie) der fribeløpet ble brukt opp, i delen med
-// redusert sats og delen med full sats.
+// Avgiftsgrunnlaget per sone og sats: lønnen og pensjonen (OTP, og AFP-premien som er betalt i
+// måneden) for seg. Sonen er den slippen (eller premien) er regnet med (0101; ellers sonen). I sone
+// 1a deles en slipp (eller premie) der fribeløpet ble brukt opp, i delen med redusert sats og delen
+// med full sats.
 export function avgiftsgrunnlag(slipper: Slippdata[], sone: string, premier: Premiedata[] = []) {
-  const per = new Map<number, { lonn: number; pensjon: number }>();
-  const legg = (sats: number, lonn: number, pensjon: number) => {
-    const x = per.get(sats) ?? { lonn: 0, pensjon: 0 };
+  const per = new Map<string, { sone: string; sats: number; lonn: number; pensjon: number }>();
+  const legg = (z: string, sats: number, lonn: number, pensjon: number) => {
+    const x = per.get(`${z}|${sats}`) ?? { sone: z, sats, lonn: 0, pensjon: 0 };
     x.lonn += lonn;
     x.pensjon += pensjon;
-    per.set(sats, x);
+    per.set(`${z}|${sats}`, x);
   };
   const grunnlag = [
-    ...slipper.map((s) => ({ g: s.aga_grunnlag, pensjon: s.otp, aga: s.aga, sats: s.aga_sats })),
-    ...premier.map((p) => ({ g: p.afp, pensjon: p.afp, aga: p.aga, sats: p.aga_sats })),
+    ...slipper.map((s) => ({ sone: s.aga_sone ?? sone, g: s.aga_grunnlag, pensjon: s.otp, aga: s.aga, sats: s.aga_sats })),
+    ...premier.map((p) => ({ sone: p.aga_sone ?? sone, g: p.afp, pensjon: p.afp, aga: p.aga, sats: p.aga_sats })),
   ];
   for (const s of grunnlag) {
     const g = s.g;
     if (!g) continue;
     const andelPensjon = s.pensjon / g;
     const sats = rund(s.sats);
-    if (sone === "1a" && sats !== STANDARDSATS["1a"] && sats !== 14.1) {
+    if (s.sone === "1a" && sats !== STANDARDSATS["1a"] && sats !== 14.1) {
       const full = Math.min(g, Math.max(0, (s.aga - (g * 10.6) / 100) / ((14.1 - 10.6) / 100)));
       for (const [del, x] of [
         [10.6, g - full],
         [14.1, full],
       ] as const)
-        if (x > 0) legg(del, x * (1 - andelPensjon), x * andelPensjon);
-    } else legg(sats, g - s.pensjon, s.pensjon);
+        if (x > 0) legg(s.sone, del, x * (1 - andelPensjon), x * andelPensjon);
+    } else legg(s.sone, sats, g - s.pensjon, s.pensjon);
   }
-  return [...per]
-    .map(([sats, x]) => ({ sats, lonn: rund(x.lonn), pensjon: rund(x.pensjon) }))
-    .sort((a, b) => b.sats - a.sats);
+  return [...per.values()]
+    .map((x) => ({ sone: x.sone, sats: x.sats, lonn: rund(x.lonn), pensjon: rund(x.pensjon) }))
+    .sort((a, b) => a.sone.localeCompare(b.sone) || b.sats - a.sats);
 }
 
 // Arbeidsgiveravgiften i hele kroner (summen av grunnlagene ganger satsene).
@@ -453,6 +491,21 @@ export function oppsummer(g: Grunnlag) {
     avgiftsgrunnlag: avgift,
     // AFP-premien som er betalt i måneden (med arbeidsgiveravgift av den).
     afp_premie: rund((g.premier ?? []).reduce((x, p) => x + Number(p.afp), 0)),
+    // Virksomhetene i meldingen når foretaket har flere (0101), med sonen og avgiften.
+    virksomheter: (g.virksomheter?.length ? virksomheterI(g) : []).map((vh) => ({
+      orgnr: vh.orgnr,
+      navn: vh.navn,
+      sone: vh.sone,
+      hoved: vh.hoved,
+      antall_arbeidsforhold: g.arbeidsforhold.filter((f) => forholdVirksomhet(g, f) === vh.orgnr).length,
+      arbeidsgiveravgift: sumAvgift(
+        avgiftsgrunnlag(
+          g.slipper.filter((s) => slippVirksomhet(g, s) === vh.orgnr),
+          g.sone,
+          vh.hoved ? g.premier : [],
+        ),
+      ),
+    })),
     mottakere: g.arbeidsforhold
       .map((f) => ({
         ansatt_id: f.id,
@@ -515,75 +568,89 @@ function arbeidsforhold(f: Arbeidsforholdsrad, g: Grunnlag) {
   return x;
 }
 
-// Leveransen som JSON til API-et ({"leveranse": …}).
+// Leveransen som JSON til API-et ({"leveranse": …}). Én virksomhet per underenhet (0101): de
+// ansatte med lønnen og arbeidsforholdet der, og arbeidsgiveravgiften per sone. Betalingen
+// (summene) er for hele foretaket, og AFP-premien er på hovedvirksomheten.
 export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
   if (!g.org.orgnr) throw new Error("Organisasjonen mangler organisasjonsnummer");
   if (!g.virksomhet) throw new Error("Virksomheten mangler organisasjonsnummer");
-  const inn = inntekter(g.slipper);
   const trekk = forskuddstrekk(g.slipper);
-  const avgift = avgiftsgrunnlag(g.slipper, g.sone, g.premier);
   const iLonn = trekkILonn(g.slipper);
-  const mottakere = g.arbeidsforhold
-    .map((f) => {
-      const fnr = v.fnr(f.id);
-      if (!fnr) throw new Error(`${f.navn} mangler fødselsnummer`);
-      const x: Record<string, unknown> = { norskIdentifikator: fnr, arbeidsforhold: [arbeidsforhold(f, g)] };
-      const fradrag = iLonn.fradrag.get(f.id) ?? 0;
-      if (fradrag) x.fradrag = [{ beskrivelse: "fagforeningskontingent", beloep: belop(-fradrag) }];
-      const t = trekk.perAnsatt.get(f.id) ?? 0;
-      if (t) x.forskuddstrekk = [{ beskrivelse: "ordinaert", beloep: -t }];
-      const i = inn.get(f.id) ?? [];
-      if (i.length)
-        x.inntekt = i.map((y) => {
-          // Elementene i rekkefølgen XSD-en krever: beskrivelse, tilleggsinformasjon, antall.
-          const loennsinntekt: Record<string, unknown> = { beskrivelse: y.beskrivelse };
-          if (y.bil)
-            loennsinntekt.tilleggsinformasjon = {
-              bilOgBaat: y.bil.bilpool
-                ? { listeprisForBil: belop(y.bil.listepris), erBilpool: true }
-                : { listeprisForBil: belop(y.bil.listepris), bilregistreringsnummer: y.bil.regnr ?? "" },
+  const alleAvgift: ReturnType<typeof avgiftsgrunnlag> = [];
+  const virksomheter = virksomheterI(g).map((vh) => {
+    const slipper = g.slipper.filter((s) => slippVirksomhet(g, s) === vh.orgnr);
+    const forhold = new Set(g.arbeidsforhold.filter((f) => forholdVirksomhet(g, f) === vh.orgnr).map((f) => f.id));
+    const medLonn = new Set(slipper.map((s) => s.ansatt_id));
+    const inn = inntekter(slipper);
+    const t = forskuddstrekk(slipper);
+    const il = trekkILonn(slipper);
+    const mottakere = g.arbeidsforhold
+      .filter((f) => forhold.has(f.id) || medLonn.has(f.id))
+      .map((f) => {
+        const fnr = v.fnr(f.id);
+        if (!fnr) throw new Error(`${f.navn} mangler fødselsnummer`);
+        const x: Record<string, unknown> = { norskIdentifikator: fnr };
+        if (forhold.has(f.id)) x.arbeidsforhold = [arbeidsforhold(f, g)];
+        const fradrag = il.fradrag.get(f.id) ?? 0;
+        if (fradrag) x.fradrag = [{ beskrivelse: "fagforeningskontingent", beloep: belop(-fradrag) }];
+        const tr = t.perAnsatt.get(f.id) ?? 0;
+        if (tr) x.forskuddstrekk = [{ beskrivelse: "ordinaert", beloep: -tr }];
+        const i = inn.get(f.id) ?? [];
+        if (i.length)
+          x.inntekt = i.map((y) => {
+            // Elementene i rekkefølgen XSD-en krever: beskrivelse, tilleggsinformasjon, antall.
+            const loennsinntekt: Record<string, unknown> = { beskrivelse: y.beskrivelse };
+            if (y.bil)
+              loennsinntekt.tilleggsinformasjon = {
+                bilOgBaat: y.bil.bilpool
+                  ? { listeprisForBil: belop(y.bil.listepris), erBilpool: true }
+                  : { listeprisForBil: belop(y.bil.listepris), bilregistreringsnummer: y.bil.regnr ?? "" },
+              };
+            if (y.antall != null && y.antall > 0) loennsinntekt.antall = desimal(y.antall);
+            return {
+              ...(y.opptjent ? { startdatoOpptjeningsperiode: y.opptjent.fra, sluttdatoOpptjeningsperiode: y.opptjent.til } : {}),
+              fordel: y.fordel,
+              utloeserArbeidsgiveravgift: y.aga,
+              inngaarIGrunnlagForTrekk: y.trekk,
+              beloep: belop(y.belop),
+              arbeidsforholdId: String(f.ansattnummer),
+              loennsinntekt,
             };
-          if (y.antall != null && y.antall > 0) loennsinntekt.antall = desimal(y.antall);
-          return {
-            ...(y.opptjent ? { startdatoOpptjeningsperiode: y.opptjent.fra, sluttdatoOpptjeningsperiode: y.opptjent.til } : {}),
-            fordel: y.fordel,
-            utloeserArbeidsgiveravgift: y.aga,
-            inngaarIGrunnlagForTrekk: y.trekk,
-            beloep: belop(y.belop),
-            arbeidsforholdId: String(f.ansattnummer),
-            loennsinntekt,
-          };
-        });
-      const u = iLonn.utlegg.get(f.id) ?? [];
-      if (u.length) x.utleggstrekk = u.map((y) => ({ beskrivelse: y.beskrivelse, beloep: -y.beloep, datoForUtleggstrekk: y.dato }));
-      return x;
-    })
-    .filter((m) => m.arbeidsforhold || m.inntekt);
-  const virksomhet: Record<string, unknown> = { norskIdentifikator: g.virksomhet };
-  if (mottakere.length) virksomhet.inntektsmottaker = mottakere;
-  const lonn = avgift.filter((x) => x.lonn > 0);
-  const pensjon = avgift.filter((x) => x.pensjon > 0);
-  if (lonn.length || pensjon.length) {
-    const grunnlag = (beloep: number, sats: number) => ({
-      beregningskodeForArbeidsgiveravgift: "generelleNaeringer",
-      sone: g.sone,
-      avgiftsgrunnlagBeloep: belop(beloep),
-      prosentsatsForAvgiftsberegning: desimal(sats),
-    });
-    const aga: Record<string, unknown> = {};
-    if (lonn.length) aga.loennOgGodtgjoerelse = lonn.map((x) => grunnlag(x.lonn, x.sats));
-    if (pensjon.length) aga.tilskuddOgPremieTilPensjon = pensjon.map((x) => grunnlag(x.pensjon, x.sats));
-    virksomhet.arbeidsgiveravgift = aga;
-  }
+          });
+        const u = il.utlegg.get(f.id) ?? [];
+        if (u.length) x.utleggstrekk = u.map((y) => ({ beskrivelse: y.beskrivelse, beloep: -y.beloep, datoForUtleggstrekk: y.dato }));
+        return x;
+      })
+      .filter((m) => m.arbeidsforhold || m.inntekt);
+    const virksomhet: Record<string, unknown> = { norskIdentifikator: vh.orgnr };
+    if (mottakere.length) virksomhet.inntektsmottaker = mottakere;
+    const avgift = avgiftsgrunnlag(slipper, g.sone, vh.hoved ? g.premier : []);
+    alleAvgift.push(...avgift);
+    const lonn = avgift.filter((x) => x.lonn > 0);
+    const pensjon = avgift.filter((x) => x.pensjon > 0);
+    if (lonn.length || pensjon.length) {
+      const grunnlag = (beloep: number, x: { sone: string; sats: number }) => ({
+        beregningskodeForArbeidsgiveravgift: "generelleNaeringer",
+        sone: x.sone,
+        avgiftsgrunnlagBeloep: belop(beloep),
+        prosentsatsForAvgiftsberegning: desimal(x.sats),
+      });
+      const aga: Record<string, unknown> = {};
+      if (lonn.length) aga.loennOgGodtgjoerelse = lonn.map((x) => grunnlag(x.lonn, x));
+      if (pensjon.length) aga.tilskuddOgPremieTilPensjon = pensjon.map((x) => grunnlag(x.pensjon, x));
+      virksomhet.arbeidsgiveravgift = aga;
+    }
+    return virksomhet;
+  });
   const oppgave: Record<string, unknown> = {};
   if (g.slipper.length || g.premier?.length) {
-    const betaling: Record<string, unknown> = { sumArbeidsgiveravgift: sumAvgift(avgift) };
+    const betaling: Record<string, unknown> = { sumArbeidsgiveravgift: sumAvgift(alleAvgift) };
     if (iLonn.sumUtlegg) betaling.sumUtleggstrekk = iLonn.sumUtlegg;
     const perDato = trekk.perDato.filter(([, b]) => b !== 0);
     if (perDato.length) betaling.sumForskuddstrekkPerLoennsutbetalingsdato = perDato.map(([dato, b]) => ({ loennsutbetalingsdato: dato, beloep: b }));
     oppgave.betalingsinformasjon = betaling;
   }
-  oppgave.virksomhet = [virksomhet];
+  oppgave.virksomhet = virksomheter;
   if (g.pensjonsinnretning && g.slipper.some((s) => s.otp > 0)) oppgave.pensjonsinnretning = [{ identifikator: g.pensjonsinnretning }];
   const leveranse: Record<string, unknown> = { leveringstidspunkt: v.tidspunkt, kalendermaaned: g.maaned, kildesystem: KILDESYSTEM };
   if (v.erstatter) leveranse.erstatterMeldingsId = v.erstatter;

@@ -101,6 +101,7 @@ interface Kjoring {
   godkjent_at: string | null;
   godkjent_av: string | null;
   aga_sone: string;
+  aga_soner?: string[]; // sonene slippene er regnet med (flere virksomheter, 0101)
   otp_prosent: number;
   feriepenger_prosent: number;
   trekktabeller: { aar: number; lastet: boolean };
@@ -155,6 +156,11 @@ const tidspunkt = (iso: string) => {
 const tallTekst = (n: number, maks = 2) => new Intl.NumberFormat("nb-NO", { maximumFractionDigits: maks }).format(n);
 const prosentArt = (art: string) => art === "feriepenger" || art === "feriepenger_60";
 const AGA_SONER: Record<string, string> = { "1": "sone 1, 14,1 %", "1a": "sone 1a, 10,6 % til fribeløpet", "2": "sone 2, 10,6 %", "3": "sone 3, 6,4 %", "4": "sone 4, 5,1 %", "4a": "sone 4a, 7,9 %", "5": "sone 5, 0 %" };
+// Sonene i kjøringen: én (som før) eller flere virksomheter i ulike soner (0101).
+const soneTekst = (d: { aga_sone: string; aga_soner?: string[] }) => {
+  const soner = d.aga_soner?.length ? d.aga_soner : [d.aga_sone];
+  return soner.length === 1 ? (AGA_SONER[soner[0]!] ?? `sone ${soner[0]}`) : `sone ${soner.slice(0, -1).join(", ")} og ${soner.at(-1)}`;
+};
 const synlig = (l: Linje) => l.nokkel !== "lagt_til";
 
 // Lønnsslippen som PDF i en ny fane.
@@ -497,7 +503,7 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
         <span className={`merke ${utkast ? "merke-advarsel" : "merke-ok"}`}>{utkast ? "Utkast" : "Godkjent"}</span>
       </div>
       <p className="undertittel">
-        Utbetales {dato(d.utbetalingsdato)}. Skattetrekket betales til Skatteetaten senest {dato(d.frister.skattetrekk)}, og arbeidsgiveravgiften ({AGA_SONER[d.aga_sone] ?? `sone ${d.aga_sone}`}) senest{" "}
+        Utbetales {dato(d.utbetalingsdato)}. Skattetrekket betales til Skatteetaten senest {dato(d.frister.skattetrekk)}, og arbeidsgiveravgiften ({soneTekst(d)}) senest{" "}
         {dato(d.frister.aga)}.
         {d.halv_skatt && " Halv skatt (tabelltrekk) denne måneden."}
         {d.feriepenger && ` Feriepengene for ${Number(d.utbetalingsdato.slice(0, 4)) - 1} utbetales.`}
@@ -661,7 +667,7 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
       <p className="liten dempet">
         Fastlønn for arbeidsdagene den ansatte er ansatt, timelønn og overtid fra de godkjente timene som ikke er lønnet, faste tillegg, sykepenger i arbeidsgiverperioden og
         omsorgsdager for dem med timelønn, naturalytelsene, de godkjente reiseregningene og de faste trekkene, og feriepenger i juni. Skattetrekket etter skattekortet (50 % uten skattekort), OTP med {tallTekst(d.otp_prosent)} %, feriepenger med{" "}
-        {tallTekst(d.feriepenger_prosent)} % og arbeidsgiveravgift i {AGA_SONER[d.aga_sone] ?? `sone ${d.aga_sone}`}. Satsene står under{" "}
+        {tallTekst(d.feriepenger_prosent)} % og arbeidsgiveravgift i {soneTekst(d)}. Satsene står under{" "}
         <Link to="/innstillinger?fane=personal">Innstillinger → Ansatte og timer</Link>.
       </p>
 

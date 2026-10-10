@@ -170,8 +170,8 @@ describe("a-meldingen (uten database)", () => {
   it("sone 1a: slippen der fribeløpet ble brukt opp, deles i redusert og full sats", () => {
     const g = avgiftsgrunnlag([{ ansatt_id: "a", utbetalingsdato: "2026-11-20", skattetrekk: 0, aga: 1235, aga_grunnlag: 10000, aga_sats: 12.35, otp: 0, linjer: [] }], "1a");
     expect(g).toEqual([
-      { sats: 14.1, lonn: 5000, pensjon: 0 },
-      { sats: 10.6, lonn: 5000, pensjon: 0 },
+      { sone: "1a", sats: 14.1, lonn: 5000, pensjon: 0 },
+      { sone: "1a", sats: 10.6, lonn: 5000, pensjon: 0 },
     ]);
     expect(sumAvgift(g)).toBe(1235);
   });
@@ -179,7 +179,7 @@ describe("a-meldingen (uten database)", () => {
   it("AFP (0098): premien som er betalt i måneden, er pensjonspremie med avgift (også uten lønn i måneden)", () => {
     const premier = [{ afp: 1111.36, aga: 156.7, aga_sats: 14.1 }];
     const g = avgiftsgrunnlag(GRUNNLAG.slipper, "1", premier);
-    expect(g).toEqual([{ sats: 14.1, lonn: 57300, pensjon: 2111.36 }]);
+    expect(g).toEqual([{ sone: "1", sats: 14.1, lonn: 57300, pensjon: 2111.36 }]);
     expect(sumAvgift(g)).toBe(sumAvgift(avgiftsgrunnlag(GRUNNLAG.slipper, "1")) + 157);
     // Bare premien i måneden: betalingsinformasjonen og avgiften er med.
     const bare: Grunnlag = { ...GRUNNLAG, slipper: [], premier };

@@ -129,6 +129,8 @@ export type Ansatt = {
   dodsdato?: string | null;
   // Kildeskatt på lønn (0100): på kildeskatteordningen for utenlandske arbeidstakere (PAYE).
   kildeskatt?: boolean;
+  // Virksomheten den ansatte jobber i (0101; null: hovedvirksomheten).
+  virksomhet_id?: string | null;
 };
 
 // --- Frilansere, oppdragstakere og styremedlemmer (0096) ---------------------------------------
@@ -778,12 +780,13 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   };
 }
 
-// Arbeidsgiveravgiften for slippene i en kjøring (i rekkefølge), med fribeløpet i sone 1a:
-// redusert sats til den sparte avgiften i året (brukt før + i kjøringen) når 850 000 kr.
-export function arbeidsgiveravgift(sone: string, grunnlag: number[], fribelopBrukt: number): { aga: number; sats: number }[] {
-  const sats = AGA_SATS[sone] ?? AGA_FULL;
+// Arbeidsgiveravgiften for slippene i en kjøring (i rekkefølge), hver med sonen til virksomheten
+// den ansatte jobber i (0101). Fribeløpet i sone 1a gjelder per foretak: redusert sats til den
+// sparte avgiften i året (brukt før + i kjøringen, i alle virksomhetene i sone 1a) når 850 000 kr.
+export function arbeidsgiveravgiftSoner(rader: { sone: string; grunnlag: number }[], fribelopBrukt: number): { aga: number; sats: number }[] {
   let brukt = fribelopBrukt;
-  return grunnlag.map((g) => {
+  return rader.map(({ sone, grunnlag: g }) => {
+    const sats = AGA_SATS[sone] ?? AGA_FULL;
     if (sone !== "1a") return { aga: rund((g * sats) / 100), sats };
     const full = (g * AGA_FULL) / 100;
     const redusert = (g * sats) / 100;
@@ -798,3 +801,9 @@ export function arbeidsgiveravgift(sone: string, grunnlag: number[], fribelopBru
     return { aga, sats: g ? rund((aga / g) * 100) : AGA_FULL };
   });
 }
+// Med én sone for alle (AFP-premien og eldre kall).
+export const arbeidsgiveravgift = (sone: string, grunnlag: number[], fribelopBrukt: number) =>
+  arbeidsgiveravgiftSoner(
+    grunnlag.map((g) => ({ sone, grunnlag: g })),
+    fribelopBrukt,
+  );

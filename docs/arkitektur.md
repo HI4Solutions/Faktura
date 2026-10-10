@@ -976,6 +976,22 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   slippen merknad om at den ansatte skal ha nytt skattekort. A-meldingen har ordinært forskuddstrekk
   og de vanlige beskrivelsene (det finnes ikke egne for kildeskatt på lønn). Rapporten «Kildeskatt på
   lønn» (`lonn.kildeskatt`, år) har satsen, lønnen og trekket i året og grensen
+- Flere virksomheter og soner (Lønn K7, `0101_virksomheter.sql`, `server/src/virksomheter.ts`,
+  `server/src/lonn.ts`, `server/src/amelding.ts`, `server/src/afpPremier.ts`, `server/src/navSykepenger.ts`).
+  Hovedvirksomheten er den i lønnsoppsettet (`virksomhet_orgnr`, `aga_sone`); `faktura.virksomheter`
+  er de andre underenhetene i foretaket med sonen for arbeidsgiveravgift (`/lonn/virksomheter`, eier
+  og administrator endrer; en virksomhet med ansatte slettes ikke). `ansatte.virksomhet_id` er
+  virksomheten den ansatte jobber i (null: hovedvirksomheten). Lønnskjøringen regner avgiften med
+  sonen til virksomheten (`arbeidsgiveravgiftSoner`), med fribeløpet i sone 1a felles for foretaket
+  (`fribelopBrukt` teller bare slipper og premier i sone 1a), og lagrer virksomheten og sonen på
+  slippen (`lonnsslipper.virksomhet_orgnr`, `aga_sone`; eldre slipper: lønnsoppsettet). A-meldingen
+  har én `virksomhet` per underenhet (`virksomheterI`, hovedvirksomheten først): inntektsmottakerne
+  med lønnen der (fra slippene) og arbeidsforholdet der lønnen er utbetalt (ellers der den ansatte
+  jobber nå), og avgiftsgrunnlaget per sone og sats (`avgiftsgrunnlag` grupperer på sonen på
+  slippen). Summene i betalingsinformasjonen er for hele foretaket, og AFP-premien rapporteres på
+  hovedvirksomheten med sonen der (lagret på premien). Henting av sykmeldinger og forespørsler fra
+  NAV gjelder alle virksomhetene. Rapporten «Arbeidsgiveravgift per virksomhet og sone»
+  (`lonn.aga_soner`, termin)
 - Avstemmingen av lønnen og refusjonene fra NAV (`0085_nav_refusjon.sql`, `server/src/avstemming.ts`,
   `server/src/navRefusjon.ts`, Lønn → Sykepenger i `web/src/sider/LonnSykepenger.tsx`).
   Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften
