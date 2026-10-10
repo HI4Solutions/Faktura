@@ -320,6 +320,36 @@ describe("skattetrekket og summene", () => {
     });
   });
 
+  it("lønn etter dødsfall (0099): til dødsboet uten forskuddstrekk, arbeidsgiveravgift, OTP og AFP", () => {
+    const dod = { ...kari, ansatt_til: "2026-10-05", dodsdato: "2026-10-05", skattekort_aar: 2025 };
+    const s = summer(
+      [linje("fastlonn", 50000), linje("feriepenger", 6000)],
+      { ...oppsett, afp: true, afp_sats: 2.7, ou_premie: 46 },
+      trekk(dod, { etterDodsfall: true, ouAndel: 1 }),
+      "2026-10-20",
+      null,
+    );
+    expect(s).toMatchObject({
+      brutto: 56000,
+      trekkpliktig: 0,
+      trekkgrunnlag: 0,
+      skattetrekk: 0,
+      trekkmetode: "Ikke forskuddstrekk (lønn etter dødsfall)",
+      netto: 56000,
+      feriepengegrunnlag: 50000,
+      otp: 0,
+      afp: 0,
+      ou: 0,
+      aga_grunnlag: 0,
+    });
+    // Ingen merknad om skattekortet; bare om dødsfallet.
+    expect(s.merknader).toEqual([
+      "Utbetalt etter dødsfallet 05.10.2026: lønn etter dødsfall til dødsboet, uten forskuddstrekk og arbeidsgiveravgift. Kontonummeret på den ansatte skal være dødsboets.",
+    ]);
+    // Før dødsfallet (samme ansatte): vanlig trekk og avgift.
+    expect(summer([linje("fastlonn", 50000)], oppsett, trekk(dod), "2026-10-02", null)).toMatchObject({ skattetrekk: 15000, aga_grunnlag: 51000 });
+  });
+
   it("tabelltrekk, halv skatt, og prosentsatsen når tabellene ikke er lastet inn", () => {
     const a = { ...kari, skattekort: "tabell" as const, skatt_tabell: 7100, skatt_prosent: 31 };
     expect(summer([linje("fastlonn", 49950)], oppsett, trekk(a, { tabell }), "2026-10-20", null)).toMatchObject({ skattetrekk: 14040, trekkmetode: "Tabell 7100" });

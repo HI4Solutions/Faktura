@@ -125,6 +125,8 @@ export type Ansatt = {
   // Arbeidsforholdet (0077) og honoraret for frilansere og styremedlemmer (0096).
   arbeidsforhold_type?: string;
   honorar_art?: "honorar" | "styrehonorar";
+  // Dødsdatoen (0099): lønn utbetalt etter den er lønn etter dødsfall.
+  dodsdato?: string | null;
 };
 
 // --- Frilansere, oppdragstakere og styremedlemmer (0096) ---------------------------------------
@@ -601,6 +603,8 @@ export type Trekkgrunnlag = {
   // OU-premien (stillingsprosenten ganger dagene den ansatte er ansatt; 0 i ekstra kjøringer).
   afpGrunnlagFor?: number;
   ouAndel?: number;
+  // Lønn etter dødsfall (0099): slippen utbetales etter dødsdatoen, til dødsboet.
+  etterDodsfall?: boolean;
 };
 
 // Fagforeningskontingenten som trekkes i lønnen, reduserer grunnlaget for forskuddstrekket med
@@ -650,7 +654,16 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   let trekk = 0;
   let metode = "";
   let grunnlag = rund(Math.max(0, trekkpliktig - minus));
-  if (!a.skattekort) {
+  const dod = !!t.etterDodsfall;
+  if (dod) {
+    // Lønn etter dødsfall (0099): opptjent før dødsfallet og utbetalt til dødsboet, uten
+    // forskuddstrekk og arbeidsgiveravgift (a-meldingen: loennEtterDoedsfall).
+    grunnlag = 0;
+    metode = "Ikke forskuddstrekk (lønn etter dødsfall)";
+    merknader.push(
+      `Utbetalt etter dødsfallet${a.dodsdato ? ` ${a.dodsdato.split("-").reverse().join(".")}` : ""}: lønn etter dødsfall til dødsboet, uten forskuddstrekk og arbeidsgiveravgift. Kontonummeret på den ansatte skal være dødsboets.`,
+    );
+  } else if (!a.skattekort) {
     trekk = prosent(UTEN_SKATTEKORT, grunnlag);
     metode = `Uten skattekort (${UTEN_SKATTEKORT} %)`;
     if (trekkpliktig > 0) merknader.push(`Mangler skattekort: det trekkes ${UTEN_SKATTEKORT} %. Registrer skattekortet på den ansatte.`);
@@ -696,10 +709,10 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
     }
     if (unntatt > 0 && !t.ekstra) merknader.push("Det trekkes ikke skatt av feriepengene (tabelltrekk).");
   }
-  if (a.skattekort && a.skattekort_aar && a.skattekort_aar !== t.aar) merknader.push(`Skattekortet er for ${a.skattekort_aar}, ikke ${t.aar}. Hent det nye skattekortet.`);
-  if (a.skattekort_resultat === "vurderArbeidstillatelse")
+  if (!dod && a.skattekort && a.skattekort_aar && a.skattekort_aar !== t.aar) merknader.push(`Skattekortet er for ${a.skattekort_aar}, ikke ${t.aar}. Hent det nye skattekortet.`);
+  if (!dod && a.skattekort_resultat === "vurderArbeidstillatelse")
     merknader.push("Skatteetaten ber arbeidsgiveren vurdere om den ansatte har arbeidstillatelse (gjelder ofte utenlandske arbeidstakere).");
-  for (const x of a.skattekort_tillegg ?? []) if (TILLEGGSOPPLYSNINGER[x] && trekkpliktig > 0) merknader.push(TILLEGGSOPPLYSNINGER[x]);
+  if (!dod) for (const x of a.skattekort_tillegg ?? []) if (TILLEGGSOPPLYSNINGER[x] && trekkpliktig > 0) merknader.push(TILLEGGSOPPLYSNINGER[x]);
   if (manueltTrekk != null) {
     trekk = manueltTrekk;
     metode = `${metode} – endret for hånd`;
@@ -710,10 +723,10 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   const otpTak = (12 * grunnbelop(dato)) / 12;
   // OTP for dem som er med i ordningen når lønnen utbetales (0097).
   const m = otpMedlem(a, !!o.otp_unntak_75, dato);
-  if (otpProsent > 0 && otpGrunnlag > 0 && !m.medlem && !erFrilanser(a)) merknader.push(`Ikke med i OTP: ${m.grunn}.`);
-  const otp = otpProsent > 0 && m.medlem ? rund((Math.max(0, Math.min(otpGrunnlag, otpTak)) * otpProsent) / 100) : 0;
-  // AFP og OU (0098): ikke for frilansere og oppdragstakere.
-  const iAfp = !!o.afp && !erFrilanser(a);
+  if (!dod && otpProsent > 0 && otpGrunnlag > 0 && !m.medlem && !erFrilanser(a)) merknader.push(`Ikke med i OTP: ${m.grunn}.`);
+  const otp = !dod && otpProsent > 0 && m.medlem ? rund((Math.max(0, Math.min(otpGrunnlag, otpTak)) * otpProsent) / 100) : 0;
+  // AFP og OU (0098): ikke for frilansere og oppdragstakere (og ikke etter dødsfallet).
+  const iAfp = !!o.afp && !erFrilanser(a) && !dod;
   const afpGrunnlag = iAfp && afpAlder(a.fodselsdato, t.aar) ? rund(kontant) : 0;
   const afp = iAfp && afpGrunnlag ? afpPremie(Number(o.afp_sats ?? 0), t.aar, Number(t.afpGrunnlagFor ?? 0), afpGrunnlag) : 0;
   const ou = iAfp ? rund(Number(o.ou_premie ?? 0) * Number(t.ouAndel ?? 0)) : 0;
@@ -722,7 +735,7 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   return {
     brutto,
     naturalytelser: rund(natural),
-    trekkpliktig,
+    trekkpliktig: dod ? 0 : trekkpliktig,
     trekkgrunnlag: rund(Math.max(0, grunnlag)),
     skattetrekk: trekk,
     trekkmetode: metode,
@@ -736,8 +749,9 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
     afp_grunnlag: afpGrunnlag,
     afp,
     ou,
-    // Arbeidsgiveravgift også av OTP-premien (AFP-premien: når den betales, afpPremier.ts).
-    aga_grunnlag: rund(agaGrunnlag + otp),
+    // Arbeidsgiveravgift også av OTP-premien (AFP-premien: når den betales, afpPremier.ts); ikke
+    // av lønn etter dødsfall.
+    aga_grunnlag: dod ? 0 : rund(agaGrunnlag + otp),
     merknader,
   };
 }

@@ -44,6 +44,7 @@ const begrensninger: Record<string, string> = {
   produkter_en_konto: "Velg enten standardkontoen eller en annen konto som fast konto",
   ansatte_skattekort: "Skattekortet mangler opplysninger: tabelltrekk trenger tabellnummer og prosentsats, prosenttrekk en prosentsats og frikort et beløp",
   ansatte_otp_utmeldt: "Datoen den ansatte ble meldt ut av OTP, kan ikke være før innmeldingen",
+  ansatte_dodsdato: "Sluttdatoen er dødsdatoen når den ansatte er død",
 };
 
 export function tilHttp(e: unknown): { status: number; error: string } {

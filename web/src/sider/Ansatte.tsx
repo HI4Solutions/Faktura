@@ -81,6 +81,8 @@ type Ansatt = {
   // OTP (0097): da den ansatte ble meldt inn og ut hos pensjonsleverandøren.
   otp_innmeldt: string | null;
   otp_utmeldt: string | null;
+  // Dødsfall (0099): dødsdatoen (sluttdatoen er den samme).
+  dodsdato: string | null;
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -172,7 +174,7 @@ function Merker({ a }: { a: Ansatt }) {
           {a.honorar_art === "styrehonorar" ? "Styreverv" : "Frilanser"}
         </span>
       )}
-      {sluttet(a) && <span className="merke merke-noytral">{a.aktiv ? "Sluttet" : "Ikke aktiv"}</span>}
+      {sluttet(a) && <span className="merke merke-noytral">{a.dodsdato ? "Død" : a.aktiv ? "Sluttet" : "Ikke aktiv"}</span>}
       {a.tilgang === "koblet" && <span className="merke merke-ok">Innlogging</span>}
       {a.tilgang === "invitert" && <span className="merke merke-info">Invitert</span>}
     </span>
@@ -427,6 +429,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     honorar_art: ansatt.honorar_art ?? "honorar",
     otp_innmeldt: ansatt.otp_innmeldt ?? "",
     otp_utmeldt: ansatt.otp_utmeldt ?? "",
+    dodsdato: ansatt.dodsdato ?? "",
     arbeidstidsordning: ansatt.arbeidstidsordning ?? "ikkeSkift",
     aarsak_sluttdato: ansatt.aarsak_sluttdato ?? "",
     // Lønns- og stillingsendringer (Lonnsendringer.tsx): datoen endringen gjelder fra, og grunnen.
@@ -474,6 +477,8 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
   // Fravær og ferie registreres i en egen dialog utenfor skjemaet (FravaerDialog har sitt eget).
   const [fravaer, settFravaer] = useState<Partial<Fravaer> | null>(null);
   const [fravaerVersjon, settFravaerVersjon] = useState(0);
+  // Dødsfall: feltet for dødsdatoen vises når den er registrert, eller når brukeren vil registrere den.
+  const [visDod, settVisDod] = useState(!!ansatt.dodsdato);
   const h = useHandling();
   // Lønnsslipp (PDF eller bilde) lest med AI: fyller ut skjemaet, som brukeren ser over og lagrer.
   const orgData = useData(() => (kanEndre ? hent<{ ai_tilgjengelig: boolean; ai_aktiv: boolean }>(`/org/${org!.id}`) : Promise.resolve(null)), [org?.id]);
@@ -681,6 +686,9 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       if (a.otp_innmeldt && a.otp_utmeldt && a.otp_utmeldt < a.otp_innmeldt) return h.settFeil("Datoen den ansatte ble meldt ut av OTP, kan ikke være før innmeldingen.");
       kropp.otp_innmeldt = a.otp_innmeldt || null;
       kropp.otp_utmeldt = a.otp_utmeldt || null;
+      // Dødsdatoen er sluttdatoen (serveren setter den og sluttårsaken).
+      if (a.dodsdato && a.dodsdato > iDag()) return h.settFeil("Dødsdatoen kan ikke være fram i tid.");
+      if (a.dodsdato || ansatt.dodsdato) kropp.dodsdato = a.dodsdato || null;
       kropp.arbeidstidsordning = a.arbeidstidsordning;
       // Årsaken til sluttdatoen rapporteres ikke for frilansere og styremedlemmer.
       kropp.aarsak_sluttdato = a.ansatt_til && a.aarsak_sluttdato && a.arbeidsforhold_type !== FRILANSER ? a.aarsak_sluttdato : null;
@@ -996,8 +1004,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           </label>
           <label>
             {arbeidstaker ? "Sluttdato" : "Til"}
-            <input type="date" min={a.ansatt_fra} {...felt("ansatt_til")} />
-            <span className="felt-hjelp">{arbeidstaker ? "Tom hvis den ansatte fortsatt jobber her." : "Tom hvis personen fortsatt jobber her."}</span>
+            <input type="date" min={a.ansatt_fra} {...felt("ansatt_til")} disabled={!!a.dodsdato} />
+            <span className="felt-hjelp">
+              {a.dodsdato ? "Dødsdatoen (se Dødsfall nedenfor)." : arbeidstaker ? "Tom hvis den ansatte fortsatt jobber her." : "Tom hvis personen fortsatt jobber her."}
+            </span>
           </label>
         </div>
         {vaktplan && arbeidstaker && (
@@ -1198,6 +1208,56 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                   får honorar. Med fastlønn blir månedslønnen et fast honorar, og med timelønn får de honorar for timene (uten overtid). Et styrehonorar for året legges til
                   i lønnskjøringen («Styrehonorar og godtgjørelse for verv»). Skatten trekkes etter prosentsatsen på skattekortet.
                 </p>
+              )}
+              {ansatt.id && !visDod && (
+                <p className="felt-hjelp tillegg-hjelp">
+                  <button type="button" className="lenke" onClick={() => settVisDod(true)}>
+                    Registrer dødsfall
+                  </button>
+                </p>
+              )}
+              {visDod && (
+                <>
+                  <h3>Dødsfall</h3>
+                  <div className="rad">
+                    <label>
+                      Dødsdato
+                      <input
+                        type="date"
+                        min={a.ansatt_fra}
+                        max={iDag()}
+                        value={a.dodsdato}
+                        onChange={(e) => {
+                          const d = e.target.value;
+                          sett(
+                            d
+                              ? { dodsdato: d, ansatt_til: d, aarsak_sluttdato: a.arbeidsforhold_type !== FRILANSER ? "arbeidstakerHarSagtOppSelv" : a.aarsak_sluttdato }
+                              : { dodsdato: "" },
+                          );
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className="felt-hjelp tillegg-hjelp">
+                    Arbeidsforholdet slutter på dødsdatoen, med sluttårsaken «Den ansatte har sagt opp selv» (det Skatteetaten sier skal brukes). Lønn som er opptjent før
+                    dødsfallet og utbetales etter, går til dødsboet som «lønn etter dødsfall», uten forskuddstrekk og arbeidsgiveravgift: skriv dødsboets kontonummer i
+                    stedet for den ansattes. Feriepengene som ikke er utbetalt, tas med i lønnskjøringen for dødsmåneden (eller den første etter).{" "}
+                    <button
+                      type="button"
+                      className="lenke"
+                      onClick={() => {
+                        settVisDod(false);
+                        sett(
+                          ansatt.dodsdato
+                            ? { dodsdato: "", ansatt_til: "", aarsak_sluttdato: "" }
+                            : { dodsdato: "", ansatt_til: ansatt.ansatt_til ?? "", aarsak_sluttdato: ansatt.aarsak_sluttdato ?? "" },
+                        );
+                      }}
+                    >
+                      {ansatt.dodsdato ? "Fjern dødsdatoen" : "Avbryt"}
+                    </button>
+                  </p>
+                </>
               )}
               {a.arbeidsforhold_type !== FRILANSER && Number(oppsett.data?.otp_prosent ?? 0) > 0 && (
                 <>

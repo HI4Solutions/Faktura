@@ -25,7 +25,9 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    kvartalet), og minst 10 permitteringer som begynner i måneden (melding til NAV) er advarsler.
    Arten for en permisjon som mangler den, kan velges rett fra avviket. AFP-premien som er betalt i
    måneden (Lønn → AFP), er med i arbeidsgiveravgiften som tilskudd og premie til pensjon, også når
-   det ikke er lønn i måneden.
+   det ikke er lønn i måneden. Lønn og feriepenger som er utbetalt etter at den ansatte døde, er
+   «lønn etter dødsfall» (uten forskuddstrekk og arbeidsgiveravgift), og arbeidsforholdet slutter
+   på dødsdatoen med sluttårsaken «arbeidstaker har sagt opp selv».
 3. **Fila.** Eier eller administrator trykker «Lag fil (XML)» (med totrinnsbekreftelse, fila har
    fødselsnumrene). Workeren lager fila (bare workeren kan lese fødselsnumrene), og den lastes ned
    og lastes opp på skatteetaten.no. Merk den som lastet opp etterpå: da erstatter en ny melding for
@@ -131,3 +133,5 @@ beskrevet i `docs/skattekort.md`; de skal aldri sendes på e-post, i chat eller 
 - Altinn, systembruker for systemleverandører:
   <https://docs.altinn.studio/nb/authorization/guides/system-vendor/system-user/>
 - Tenor testdatasøk: <https://www.skatteetaten.no/testdata/>
+- Skatteetaten, lønn etter dødsfall:
+  <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/a-meldingen/veiledning/lonn-og-ytelser/oversikt-over-lonn-og-andre-ytelser/lonn-etter-dodsfall>

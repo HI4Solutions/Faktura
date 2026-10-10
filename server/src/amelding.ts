@@ -48,6 +48,8 @@ export type Slippdata = {
   aga_grunnlag: number;
   aga_sats: number;
   otp: number;
+  // Utbetalt etter dødsdatoen (0099): lønnen er lønn etter dødsfall.
+  etter_dodsfall?: boolean;
   linjer: { lonnsart: string; belop: number; antall: number | null; opptjent_fra?: string | null; opptjent_til?: string | null; tillegg?: Record<string, unknown> | null }[];
 };
 // AFP-premien som er betalt i måneden (0098, afpPremier.ts): premien og arbeidsgiveravgiften av den.
@@ -112,7 +114,7 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
   const slipper = await alle<any>(
     db,
     `select s.id, s.ansatt_id, to_char(s.utbetalingsdato, 'YYYY-MM-DD') as utbetalingsdato, s.skattetrekk::float8 as skattetrekk, s.aga::float8 as aga,
-            s.aga_grunnlag::float8 as aga_grunnlag, s.aga_sats::float8 as aga_sats, s.otp::float8 as otp
+            s.aga_grunnlag::float8 as aga_grunnlag, s.aga_sats::float8 as aga_sats, s.otp::float8 as otp, s.etter_dodsfall
        from faktura.lonnsslipper s join faktura.lonnskjoringer k on k.id = s.kjoring_id
       where s.org_id = $1 and k.status = 'godkjent' and s.utbetalingsdato between $2::date and $3::date
       order by s.utbetalingsdato, s.ansattnummer`,
@@ -206,6 +208,7 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
       aga_grunnlag: s.aga_grunnlag,
       aga_sats: s.aga_sats,
       otp: s.otp,
+      etter_dodsfall: !!s.etter_dodsfall,
       linjer: linjer
         .filter((l) => l.slipp_id === s.id)
         .map(({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til, tillegg }) => ({ lonnsart: art, belop: b, antall, opptjent_fra, opptjent_til, tillegg })),
@@ -257,7 +260,10 @@ export function inntekter(slipper: Slippdata[]): Map<string, Inntekt[]> {
     const per = ut.get(s.ansatt_id) ?? new Map<string, Inntekt>();
     ut.set(s.ansatt_id, per);
     for (const l of s.linjer) {
-      const art = lonnsart(l.lonnsart);
+      const egen = lonnsart(l.lonnsart);
+      // Lønn etter dødsfall (0099): kontantytelsene på en slipp utbetalt etter dødsdatoen, uten
+      // forskuddstrekk og arbeidsgiveravgift.
+      const art = s.etter_dodsfall && egen.type === "lonn" ? { ...egen, amelding: "loennEtterDoedsfall", aga: false, trekk: false } : egen;
       const fordel = FORDEL[art.type];
       if (!fordel || !art.amelding || !l.belop) continue;
       const opptjent = l.opptjent_fra && l.opptjent_til ? { fra: l.opptjent_fra, til: l.opptjent_til } : null;

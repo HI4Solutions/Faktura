@@ -948,6 +948,22 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (`lonn.afp`). Lønnsarten `sluttvederlag` (a-meldingen: `sluttvederlag`) er trekk- og
   avgiftspliktig og trekkes etter prosentsatsen med tabellkort, uten feriepenger og OTP.
   `lonnskontoer_gyldige` godtar nå også kontoene for honorar og styrehonorar (manglet i 0096)
+- Dødsfall, konkurs og lønnsgaranti (Lønn K5, `0099_dodsfall.sql`, `server/src/ansatte.ts`,
+  `server/src/lonn.ts`, `server/src/lonnsberegning.ts`, `server/src/amelding.ts`,
+  `server/src/lonnsgaranti.ts`). `ansatte.dodsdato` registreres i ansattskjemaet («Registrer
+  dødsfall»): serveren setter sluttdatoen til dødsdatoen og sluttårsaken til
+  `arbeidstakerHarSagtOppSelv` (det Skatteetaten sier skal brukes), og `ansatte_dodsdato` sier at de
+  er like. Lønnskjøringen merker slippene som utbetales etter dødsdatoen (`lonnsslipper.etter_dodsfall`,
+  `Trekkgrunnlag.etterDodsfall`): `summer` trekker ikke skatt og regner ikke arbeidsgiveravgift, OTP
+  eller AFP, med merknad om at kontonummeret skal være dødsboets. Sluttoppgjøret med feriepengene
+  kommer i kjøringen for dødsmåneden, eller i den første ordinære kjøringen etter (innen et år,
+  `dodForPerioden`) når kjøringen for dødsmåneden alt var godkjent; da er den døde med i kjøringen
+  bare for feriepengene som ikke er utbetalt. A-meldingen rapporterer lønnsartene av typen lønn på en
+  slik slipp som `loennEtterDoedsfall` (ikke trekk- og avgiftspliktig). Rapporten «Lønnskrav ved
+  konkurs» (`lonn.lonnsgaranti`, periode der til-datoen er fristdagen) har lønnen i de godkjente
+  kjøringene med utbetaling i perioden, feriepengene opptjent i fristdagens år og året før minus det
+  som er utbetalt (også fra et tidligere lønnssystem), og om kravet er over 2 G (G på fristdagen);
+  frilansere og oppdragstakere er ikke med. Etterlønn etter dødsfall (tariff, ikke lov) er ikke laget
 - Avstemmingen av lønnen og refusjonene fra NAV (`0085_nav_refusjon.sql`, `server/src/avstemming.ts`,
   `server/src/navRefusjon.ts`, Lønn → Sykepenger i `web/src/sider/LonnSykepenger.tsx`).
   Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften

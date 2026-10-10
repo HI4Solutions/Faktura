@@ -59,6 +59,7 @@ const BESKRIVELSE: Record<string, string> = {
   uregelmessigeTilleggKnyttetTilArbeidetTid: "Uregelmessige tillegg",
   bonus: "Bonus",
   sluttvederlag: "Sluttvederlag",
+  loennEtterDoedsfall: "Lønn etter dødsfall",
   feriepenger: "Feriepenger",
   trekkILoennForFerie: "Trekk i lønn for ferie",
   honorarAkkordProsentProvisjon: "Honorar",

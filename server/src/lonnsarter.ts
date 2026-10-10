@@ -182,6 +182,7 @@ export const AMELDING_NAVN: Record<string, string> = {
   uregelmessigeTilleggKnyttetTilArbeidetTid: "Uregelmessige tillegg knyttet til arbeidet tid",
   bonus: "Bonus",
   sluttvederlag: "Sluttvederlag",
+  loennEtterDoedsfall: "Lønn etter dødsfall",
   feriepenger: "Feriepenger",
   trekkILoennForFerie: "Trekk i lønn for ferie",
   honorarAkkordProsentProvisjon: "Honorar, akkord-, prosent- eller provisjonslønn",

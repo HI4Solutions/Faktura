@@ -122,13 +122,18 @@ async function hentOppsett(db: Db, org: string): Promise<Oppsett & { lonnsdag: n
 
 // --- Beregningen ------------------------------------------------------------------------------
 
+// Dødsfall (0099): død før perioden, innen et år. Den første ordinære kjøringen etter dødsmåneden
+// tar med feriepengene som ikke er utbetalt (til dødsboet), selv om den ansatte ikke har noe annet.
+const dodForPerioden = (a: Ansatt, fra: string) =>
+  !!a.dodsdato && a.ansatt_til === a.dodsdato && a.dodsdato < fra && a.dodsdato >= pluss(fra, -366);
+
 const ANSATTE = `
   select a.id, a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, to_char(a.fodselsdato, 'YYYY-MM-DD') as fodselsdato,
          to_char(a.ansatt_fra, 'YYYY-MM-DD') as ansatt_fra, to_char(a.ansatt_til, 'YYYY-MM-DD') as ansatt_til, a.lonnstype,
          a.maanedslonn::float8 as maanedslonn, a.timelonn::float8 as timelonn, a.stillingsprosent::float8 as stillingsprosent,
          a.ukentlig_arbeidstid::float8 as ukentlig_arbeidstid, a.ferie_dager::float8 as ferie_dager, a.kontonr, a.skattekort,
          a.skatt_tabell, a.skatt_prosent::float8 as skatt_prosent, a.skatt_frikort::float8 as skatt_frikort, a.skattekort_aar,
-         a.skattekort_resultat, a.skattekort_tillegg, a.aktiv, a.arbeidsforhold_type, a.honorar_art
+         a.skattekort_resultat, a.skattekort_tillegg, a.aktiv, a.arbeidsforhold_type, a.honorar_art, to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato
     from faktura.ansatte a`;
 
 // Regner ut kjøringen på nytt og lagrer slippene (bare et utkast). De manuelle linjene (lagt til,
@@ -615,7 +620,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     }
     for (const x of reiser.filter((y) => y.ansatt_id === a.id))
       x.beregning.forEach((l, i) => auto.push({ lonnsart: l.lonnsart, tekst: l.tekst, antall: l.antall, sats: l.sats, belop: Number(l.belop), nokkel: `reise:${x.id}:${i}` }));
-    if (!ansatt && !uker.length && !auto.length && !manuelle.length && !slipp) continue;
+    if (!ansatt && !uker.length && !auto.length && !manuelle.length && !slipp && !(ordinar && dodForPerioden(a, fra))) continue;
     if (!ordinar && !k.feriepenger && !slipp) continue;
     // OU-premien (0098): stillingsprosenten ved månedsslutt ganger andelen av måneden den ansatte er
     // ansatt (bare i den ordinære kjøringen).
@@ -627,7 +632,11 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
   // i perioden.
   for (const r of resultater) {
     const a = r.a;
-    if (!ordinar || !a.ansatt_til || a.ansatt_til < fra || a.ansatt_til > til) continue;
+    // Dødsfall (0099): feriepengene som ikke er utbetalt, tas med i den første ordinære kjøringen
+    // etter dødsmåneden også (innen et år), og utbetales til dødsboet.
+    const dodEtter = dodForPerioden(a, fra);
+    if (!ordinar || !a.ansatt_til || a.ansatt_til > til || (a.ansatt_til < fra && !dodEtter)) continue;
+    const forFerie = r.auto.length;
     const egne = r.auto.filter((l) => !r.manuelle.some((m) => m.nokkel && m.nokkel === l.nokkel));
     const gjeldende = [...egne, ...r.manuelle.filter((m) => !m.fjernet)];
     const ferieNa = gjeldende.filter((l) => lonnsart(l.lonnsart).ferie).reduce((s, l) => s + Number(l.belop), 0);
@@ -638,9 +647,16 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       const g = Number(iAar(a.id, y)?.feriepengegrunnlag ?? 0) + Number(inn(a.id, y)?.feriepengegrunnlag ?? 0);
       r.auto.push(...feriepengelinjer(a, o, y, g, ferieUtbetalt(a.id, y, "feriepenger") + Number(inn(a.id, y)?.feriepenger_utbetalt ?? 0), ferieUtbetalt(a.id, y, "feriepenger_60"), k.utbetalingsdato, true));
     }
-    // En frilanser får ikke feriepenger (bare de som er opptjent som ansatt, om noen).
-    if (!erFrilanser(a) || r.auto.some((l) => l.lonnsart === "feriepenger" || l.lonnsart === "feriepenger_60"))
-      r.merknader.push(`Slutter ${a.ansatt_til.split("-").reverse().join(".")}: feriepengene er tatt med (sluttoppgjør).`);
+    // En frilanser får ikke feriepenger (bare de som er opptjent som ansatt, om noen). Etter
+    // dødsmåneden bare når det er feriepenger igjen.
+    if (dodEtter) {
+      if (r.auto.length > forFerie) r.merknader.push(`Døde ${a.ansatt_til.split("-").reverse().join(".")}: feriepengene som ikke er utbetalt, er tatt med (til dødsboet).`);
+    } else if (!erFrilanser(a) || r.auto.some((l) => l.lonnsart === "feriepenger" || l.lonnsart === "feriepenger_60"))
+      r.merknader.push(
+        a.dodsdato
+          ? `Døde ${a.ansatt_til.split("-").reverse().join(".")}: feriepengene er tatt med (oppgjøret til dødsboet).`
+          : `Slutter ${a.ansatt_til.split("-").reverse().join(".")}: feriepengene er tatt med (sluttoppgjør).`,
+      );
   }
 
   // Summene, skattetrekket og arbeidsgiveravgiften, og lagringen.
@@ -662,6 +678,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
           // AFP: lønnen i år før kjøringen (fra et tidligere lønnssystem: den trekkpliktige lønnen).
           afpGrunnlagFor: (afpFor.get(r.a.id) ?? 0) + Number(inn(r.a.id, aar)?.trekkpliktig ?? 0),
           ouAndel: r.ouAndel,
+          etterDodsfall: !!r.a.dodsdato && k.utbetalingsdato > r.a.dodsdato,
         },
         k.utbetalingsdato,
         r.slipp?.skattetrekk_manuell ? Number(r.slipp.skattetrekk) : null,
@@ -735,6 +752,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       s.afp_grunnlag,
       s.afp,
       s.ou,
+      !!r.a.dodsdato && k.utbetalingsdato > r.a.dodsdato,
     ];
     let slippId = r.slipp?.id;
     if (slippId) {
@@ -743,7 +761,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
                 trekkgrunnlag = $9, skattetrekk = $10, skattetrekk_manuell = $11, brutto = $12, utgifter = $13, trekk_etter_skatt = $14, netto = $15,
                 feriepengegrunnlag = $16, feriepenger_opptjent = $17, otp_grunnlag = $18, otp = $19, aga_grunnlag = $20, aga = $21, aga_sats = $22,
                 timeforinger = $23, merknader = $24, timebank_poster = $25, naturalytelser = $26, reiseregninger = $27, afp_grunnlag = $28,
-                afp = $29, ou = $30
+                afp = $29, ou = $30, etter_dodsfall = $31
           where id = $1`,
         [slippId, ...felles],
       );
@@ -754,9 +772,9 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
         `insert into faktura.lonnsslipper (org_id, kjoring_id, ansatt_id, navn, ansattnummer, lonnstype, periode, utbetalingsdato, trekkmetode, trekkpliktig,
                 trekkgrunnlag, skattetrekk, skattetrekk_manuell, brutto, utgifter, trekk_etter_skatt, netto, feriepengegrunnlag, feriepenger_opptjent,
                 otp_grunnlag, otp, aga_grunnlag, aga, aga_sats, timeforinger, merknader, timebank_poster, naturalytelser, reiseregninger,
-                afp_grunnlag, afp, ou)
+                afp_grunnlag, afp, ou, etter_dodsfall)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
-                 $30, $31, $32) returning id`,
+                 $30, $31, $32, $33) returning id`,
         [org, k.id, r.a.id, ...felles],
       ))!.id;
     }
@@ -784,7 +802,7 @@ const SLIPP = `
          s.feriepengegrunnlag::float8 as feriepengegrunnlag, s.feriepenger_opptjent::float8 as feriepenger_opptjent,
          s.otp_grunnlag::float8 as otp_grunnlag, s.otp::float8 as otp, s.aga_grunnlag::float8 as aga_grunnlag, s.aga::float8 as aga,
          s.aga_sats::float8 as aga_sats, cardinality(s.timeforinger) as antall_timeforinger, s.merknader, s.naturalytelser::float8 as naturalytelser,
-         s.afp_grunnlag::float8 as afp_grunnlag, s.afp::float8 as afp, s.ou::float8 as ou
+         s.afp_grunnlag::float8 as afp_grunnlag, s.afp::float8 as afp, s.ou::float8 as ou, s.etter_dodsfall
     from faktura.lonnsslipper s`;
 const LINJE = `
   select l.id, l.slipp_id, l.lonnsart, l.tekst, l.antall::float8 as antall, l.sats::float8 as sats, l.belop::float8 as belop, l.kilde, l.nokkel,
