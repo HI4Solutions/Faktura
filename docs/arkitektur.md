@@ -688,7 +688,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   igjen. Triggeren `bilag_reversert_bankposter` slipper postene når bilaget de er koblet til,
   reverseres (en utgift som angres, en lønnskjøring som åpnes igjen), så de vurderes på nytt. Det
   brukeren har lært, står i `bankregler` (retningen og motpartens kontonummer eller navn).
-  Rapportene «Bankavstemming» og «Bankposter» (`server/src/bankRapporter.ts`).
+  Rapportene «Bankavstemming» og «Bankposter» (`server/src/bankRapporter.ts`). Månedsavslutningen
+  (`0092_maanedsavslutning.sql`, `server/src/maanedsavslutning.ts`) går i workerens hjerteslag fra
+  kl. 08: for organisasjonene med regnskapet og `regnskap_oppsett.maaned_auto` uten rad i
+  `maanedsavslutninger` for forrige måned bokføres avskrivningene og periodiseringene
+  (`bokforAvskrivninger`, `bokforPeriodiseringer`, som systemet, med en advisory-lås per organisasjon;
+  de unike indeksene på hendelsene og postene hindrer dobbel bokføring), sjekklisten (`maanedsstatus`)
+  lagres i raden (bare workeren skriver) og varsles (`regnskap`). `maaned_fra` settes første gang;
+  forslag fra før den stopper bokføringen (`sperret`). En organisasjon som feiler, prøves igjen etter
+  en time. Når ingen gjenstår, planlegges månedsrapportene (`planleggMaanedsrapporter`).
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen
@@ -964,10 +972,13 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   sykepenger og refusjon (`server/src/sykepengerRapporter.ts`), avstemming per termin,
   årsavstemming og refusjoner fra NAV (`server/src/avstemming.ts`). Regnskap: saldobalanse,
   hovedbok, bilagsjournal, anleggsregister, avskrivningsplan, avskrivninger og avganger,
-  saldoskjema og periodiseringer (`server/src/regnskapRapporter.ts`).
+  saldoskjema og periodiseringer (`server/src/regnskapRapporter.ts`), leverandørgjeld og utgifter
+  (`server/src/utgiftRapporter.ts`), bankavstemming og bankposter (`server/src/bankRapporter.ts`) og
+  månedsavslutning (`server/src/maanedsavslutning.ts`).
   `rapport_oppsett`: regnskapsføreren (høyst 10 adresser), om lønnsjournalen og summen per
   lønnsart skal sendes når en lønnskjøring godkjennes, og månedsrapportene som sendes den 1.
-  for forrige måned (terminrapporter når terminen er slutt, årsrapporter i januar). Bare eier og
+  for forrige måned, etter månedsavslutningen (fra kl. 08; terminrapporter når terminen er slutt,
+  årsrapporter i januar). Bare eier og
   administrator endrer det, med totrinn, og nye mottakere gir hendelsen
   `organisasjon.rapportmottakere_endret`, som sender e-post til alle eierne (mottakerne får
   lønn og personopplysninger). Rapportene sendes av workeren (oppgaven `rapport-send`) som PDF

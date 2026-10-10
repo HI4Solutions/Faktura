@@ -70,6 +70,7 @@ async function oppsett(db: Db, org: string) {
     bank_fra: o.bank_fra,
     bank_auto: o.bank_auto,
     bankkontoer: o.bankkontoer,
+    maaned_auto: o.maaned_auto,
     kategorier: KATEGORIKODER.map((kode) => ({
       kode,
       navn: KATEGORIER[kode].navn,
@@ -98,6 +99,8 @@ const oppsettSkjema = z.object({
   bank_fra: datoS.nullable().optional(),
   bank_auto: z.boolean().optional(),
   bankkontoer: z.record(z.string().regex(/^[0-9A-Z]{5,34}$/, "Ugyldig kontonummer"), kontoS.nullable()).optional(),
+  // Månedsavslutningen (maanedsavslutning.ts) går av seg selv når måneden er over.
+  maaned_auto: z.boolean().optional(),
   saldo_fra_aar: z.number().int().min(2000, "Ugyldig år").max(2100, "Ugyldig år").nullable().optional(),
   saldo_inngaende: z.partialRecord(z.enum(["a", "c", "d", "gevinst_tap"]), z.number().finite().gt(-1e12).lt(1e12).nullable()).optional(),
 });
@@ -274,14 +277,14 @@ export function regnskapRuter() {
         const bankFra = b.bank_fra !== undefined ? b.bank_fra : naa.bank_fra;
         await db.query(
           `insert into faktura.regnskap_oppsett (org_id, kontoer, saldo_fra_aar, saldo_inngaende, salg_fra, uten_mva, mva_fradrag, periodiser_fra,
-                                                 utgifter_auto, bank_fra, bank_auto, bankkontoer, oppdatert)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+                                                 utgifter_auto, bank_fra, bank_auto, bankkontoer, maaned_auto, oppdatert)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
            on conflict (org_id) do update set kontoer = excluded.kontoer, saldo_fra_aar = excluded.saldo_fra_aar,
                                               saldo_inngaende = excluded.saldo_inngaende, salg_fra = excluded.salg_fra,
                                               uten_mva = excluded.uten_mva, mva_fradrag = excluded.mva_fradrag,
                                               periodiser_fra = excluded.periodiser_fra, utgifter_auto = excluded.utgifter_auto,
                                               bank_fra = excluded.bank_fra, bank_auto = excluded.bank_auto, bankkontoer = excluded.bankkontoer,
-                                              oppdatert = now()`,
+                                              maaned_auto = excluded.maaned_auto, oppdatert = now()`,
           [
             orgId(c),
             JSON.stringify(kontoer),
@@ -295,6 +298,7 @@ export function regnskapRuter() {
             bankFra,
             b.bank_auto ?? naa.bank_auto,
             JSON.stringify(bankkontoer),
+            b.maaned_auto ?? naa.maaned_auto,
           ],
         );
         // Flyttes startdatoen for banken fram, angres føringen av bankpostene før den (bilagene i

@@ -28,6 +28,7 @@ export const VARSELTYPER = {
   beskjed: "Beskjeder til rollene dine",
   lonn: "Lønnsslippen er klar",
   reiser: "Reiseregninger sendt, godkjent og avvist",
+  regnskap: "Månedsavslutningen i regnskapet",
 } as const;
 export type Varseltype = keyof typeof VARSELTYPER;
 

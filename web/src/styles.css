@@ -2596,6 +2596,18 @@ h5.nav-under { margin: 14px 0 6px; font-size: 0.92rem; }
    månedsavslutningen, periodevalget, bilagene, det manuelle bilaget, saldobalansen og valgene. */
 .regnskap-avslutning .knapper { margin-top: 8px; }
 .regnskap-avslutning.forfalt { border-left: 3px solid var(--advarsel); }
+.maaned-status.gjenstar { border-left: 3px solid var(--advarsel); }
+.maaned-status-hode { display: flex; justify-content: space-between; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+.maaned-status-hode h3 { margin: 0; }
+.maaned-status .melding { margin: 8px 0; }
+ul.maaned-punkter { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+ul.maaned-punkter li { display: flex; align-items: baseline; gap: 10px; line-height: 1.4; }
+ul.maaned-punkter li .merke { flex: none; min-width: 88px; justify-content: center; }
+.maaned-status .bilagsnr { white-space: nowrap; }
+@media (max-width: 700px) {
+  .maaned-status-hode .ukevelger { width: 100%; }
+  ul.maaned-punkter li .merke { min-width: 82px; }
+}
 p.regnskap-bokfort { margin: 0 0 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .regnskap-filter { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; padding: 14px 18px; }
 .regnskap-filter > label { min-width: 160px; margin: 0; }

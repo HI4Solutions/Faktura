@@ -26,6 +26,7 @@ import { sykepengerRapporter } from "./sykepengerRapporter.js";
 import { regnskapRapporter } from "./regnskapRapporter.js";
 import { utgiftRapporter } from "./utgiftRapporter.js";
 import { bankRapporter } from "./bankRapporter.js";
+import { maanedsavslutningRapporter } from "./maanedsavslutning.js";
 
 // --- Typene ---------------------------------------------------------------------------------------
 
@@ -78,6 +79,7 @@ export const RAPPORTER: Rapportdef[] = [
   ...regnskapRapporter,
   ...utgiftRapporter,
   ...bankRapporter,
+  ...maanedsavslutningRapporter,
 ];
 const PER_ID = new Map(RAPPORTER.map((r) => [r.id, r]));
 export const rapport = (id: string) => PER_ID.get(id);

@@ -151,12 +151,17 @@ export type Regnskapsoppsett = {
   bank_fra: string | null;
   bank_auto: boolean;
   bankkontoer: Record<string, string>;
+  // Månedsavslutningen (0092_maanedsavslutning.sql): går av seg selv, fra og med måneden (ÅÅÅÅ-MM-01;
+  // null: settes første gang den går).
+  maaned_auto: boolean;
+  maaned_fra: string | null;
 };
 export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnskapsoppsett> {
   const o = await en<Regnskapsoppsett>(
     db,
     `select kontoer, saldo_fra_aar, saldo_inngaende, to_char(salg_fra, 'YYYY-MM-DD') as salg_fra, uten_mva, mva_fradrag::float8 as mva_fradrag,
-            periodiser_fra::float8 as periodiser_fra, utgifter_auto, to_char(bank_fra, 'YYYY-MM-DD') as bank_fra, bank_auto, bankkontoer
+            periodiser_fra::float8 as periodiser_fra, utgifter_auto, to_char(bank_fra, 'YYYY-MM-DD') as bank_fra, bank_auto, bankkontoer,
+            maaned_auto, to_char(maaned_fra, 'YYYY-MM-DD') as maaned_fra
        from faktura.regnskap_oppsett where org_id = $1`,
     [org],
   );
@@ -172,6 +177,8 @@ export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnska
     bank_fra: o?.bank_fra ?? null,
     bank_auto: o?.bank_auto ?? true,
     bankkontoer: o?.bankkontoer ?? {},
+    maaned_auto: o?.maaned_auto ?? true,
+    maaned_fra: o?.maaned_fra ?? null,
   };
 }
 // Kontoene som brukes: standarden, med det organisasjonen har endret.

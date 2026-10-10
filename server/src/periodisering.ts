@@ -204,3 +204,13 @@ export async function bokforPeriodisering(db: Db, org: string, b: Bilagsforslag)
     [r!.id],
   ))!;
 }
+
+// Periodiseringene som ikke er bokført til og med måneden, bokført måned for måned (et bilag per
+// måned, med månedens del for alle periodiseringene). Månedsavslutningen (brukeren eller workeren).
+export async function bokforPeriodiseringer(db: Db, org: string, til: string) {
+  const { periodiseringer, poster } = await hentPeriodiseringer(db, org);
+  const bilag = [];
+  for (const m of periodiseringsforslag(periodiseringer, poster, til))
+    bilag.push({ ...(await bokforPeriodisering(db, org, maanedsbilag(m.maaned, m.linjer))), sum: kr(m.linjer.reduce((s, l) => s + ore(l.belop), 0)) });
+  return bilag;
+}

@@ -36,6 +36,7 @@ type Oppsett = {
   bank_fra: string | null;
   bank_auto: boolean;
   bankkontoer: Record<string, string>;
+  maaned_auto: boolean;
   kategorier: Kategori[];
   saldogrupper: { gruppe: string; navn: string; sats: number; samlet: boolean }[];
 };
@@ -1290,6 +1291,52 @@ function Utgiftsoppsett({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => voi
   );
 }
 
+// Månedsavslutningen (server/src/maanedsavslutning.ts): om den går av seg selv når måneden er over.
+function Maanedsoppsett({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => void }) {
+  const { org } = useKonto();
+  const sti = `/org/${org!.id}/regnskap/oppsett`;
+  const [auto, settAuto] = useState<boolean | null>(null);
+  const [ok, settOk] = useState(false);
+  const h = useHandling();
+  const v = auto ?? o.maaned_auto;
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    settOk(false);
+    const r = await h.kjor(() => api<Oppsett>("PUT", sti, { maaned_auto: v }));
+    if (r) {
+      lagret(r);
+      settAuto(null);
+      settOk(true);
+    }
+  }
+
+  return (
+    <form className="kort" onSubmit={lagre}>
+      <h3 style={{ marginTop: 0 }}>Månedsavslutningen</h3>
+      <p className="liten dempet">
+        Når en måned er over (den 1. fra kl. 08, etter morgenhentingen fra banken), bokføres avskrivningene og periodiseringene for den, og eier, administrator og
+        regnskapsføreren får sjekklisten for måneden som varsel: bankpostene, utgiftene, lønnen, avskrivningene og periodiseringene. Månedsrapportene til
+        regnskapsføreren sendes etterpå. Det som ikke er bokført fra før automatikken gikk første gang, bokfører du selv under Bilag.
+      </p>
+      <label className="avkrysning">
+        <input type="checkbox" checked={v} onChange={(e) => settAuto(e.target.checked)} /> Månedsavslutningen går av seg selv
+      </label>
+      <Feil melding={h.feil} />
+      {ok && (
+        <div className="melding ok" role="status">
+          Lagret.
+        </div>
+      )}
+      <div className="knapper">
+        <button className="primar" disabled={h.opptatt || auto === null}>
+          Lagre
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // Banken (server/src/bankAvstemming.ts): startdatoen for bankpostene i regnskapet, om reglene fører
 // dem av seg selv, kontoen i regnskapet for hver bankkonto, og reglene som er lært.
 type Bankregel = { id: string; retning: "inn" | "ut"; motpart_konto: string | null; motpart: string | null; konto: string; tekst: string | null };
@@ -1432,6 +1479,7 @@ function Kontoer() {
       <Salget o={o.data} lagret={(r) => o.settData(r)} />
       <Utgiftsoppsett o={o.data} lagret={(r) => o.settData(r)} />
       <Bankoppsett o={o.data} lagret={(r) => o.settData(r)} />
+      <Maanedsoppsett o={o.data} lagret={(r) => o.settData(r)} />
       <form className="kort" onSubmit={lagre}>
         <h3 style={{ marginTop: 0 }}>Kontoene for salget, utgiftene, anleggsmidlene og periodiseringene</h3>
         <p className="liten dempet">

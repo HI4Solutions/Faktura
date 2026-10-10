@@ -21,6 +21,7 @@ import { aktiverLonnsendringer } from "./lonnsendringer.js";
 import { lonnHverMorgen, oppdaterLonnsutkast } from "./lonnAutomatikk.js";
 import { bokforSalgForAlle } from "./salgBokforing.js";
 import { avstemBankForAlle } from "./bankAvstemming.js";
+import { avsluttMaanederForAlle } from "./maanedsavslutning.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
@@ -308,13 +309,6 @@ export async function gjenta() {
     await varsleAarsoversikter();
   } catch (e) {
     logg("ERROR", "Varsel om årsoversikten feilet", { feil: (e as Error).message });
-  }
-
-  // Den 1. i måneden: månedsrapportene til regnskapsførerne som har bedt om dem.
-  try {
-    await planleggMaanedsrapporter();
-  } catch (e) {
-    logg("ERROR", "Planlegging av månedsrapporter feilet", { feil: (e as Error).message });
   }
 
   logg(resultat.some((r) => !r.ok) ? "WARNING" : "INFO", "Gjentakelser kjørt", { antall: resultat.length, feil: resultat.filter((r) => !r.ok) });
@@ -628,7 +622,8 @@ export function lagWorker() {
   // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
   // a-meldingene som venter på tilbakemelding. Lønnsutkastene der noe er endret, regnes ut på nytt,
   // fakturaene og innbetalingene som ikke er bokført, bokføres (salgBokforing.ts), og bankpostene
-  // avstemmes (bankAvstemming.ts).
+  // avstemmes (bankAvstemming.ts). Fra kl. 08 den 1. går månedsavslutningen (maanedsavslutning.ts), og
+  // når den er ferdig for alle, månedsrapportene til regnskapsførerne som har bedt om dem.
   app.post("/jobber/utboks", async (c) => {
     const r = await publiserUtboks();
     await sendPaaminnelser().catch((e) => logg("ERROR", "Påminnelser feilet", { feil: (e as Error).message }));
@@ -641,6 +636,8 @@ export function lagWorker() {
     await oppdaterLonnsutkast().catch((e) => logg("ERROR", "Omregningen av lønnsutkastene feilet", { feil: (e as Error).message }));
     await bokforSalgForAlle().catch((e) => logg("ERROR", "Bokføringen av fakturaene og innbetalingene feilet", { feil: (e as Error).message }));
     await avstemBankForAlle().catch((e) => logg("ERROR", "Avstemmingen av banken feilet", { feil: (e as Error).message }));
+    const m = await avsluttMaanederForAlle().catch((e) => (logg("ERROR", "Månedsavslutningene feilet", { feil: (e as Error).message }), null));
+    if (m?.ferdig) await planleggMaanedsrapporter().catch((e) => logg("ERROR", "Planlegging av månedsrapporter feilet", { feil: (e as Error).message }));
     return c.json(r);
   });
   app.post("/jobber/bank", async (c) => c.json({ planlagt: await planleggBankhenting() }));

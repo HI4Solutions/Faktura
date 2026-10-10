@@ -12,6 +12,7 @@ import { STANDARDKONTOER } from "./kontoplan.js";
 import { maanedNavn } from "./lonnsberegning.js";
 import {
   bokforPeriodisering,
+  bokforPeriodiseringer,
   fordeling,
   hentPeriodiseringer,
   maanedsbilag,
@@ -23,6 +24,7 @@ import {
   type Periodisering,
 } from "./periodisering.js";
 import { bokforAvskrivninger } from "./regnskapRuter.js";
+import { forrigeMaaned, hentAvslutning, maanedsstatus } from "./maanedsavslutning.js";
 
 const uuid = z.string().uuid();
 const orgId = (c: Context) => uuid.parse(c.req.param("org"));
@@ -77,6 +79,8 @@ async function maanedsforslag(db: Db, org: string, til: string) {
   const sum = (l: { belop: number }[]) => rund(l.reduce((s, x) => s + x.belop, 0));
   return {
     til,
+    // Månedsavslutningen går av seg selv når måneden er over (maanedsavslutning.ts).
+    auto: (await hentRegnskapsoppsett(db, org)).maaned_auto,
     maaneder: maaneder.map((m) => {
       const a = avskr.find((x) => x.maaned === m)?.linjer ?? [];
       const p = per.find((x) => x.maaned === m)?.linjer ?? [];
@@ -88,14 +92,6 @@ async function maanedsforslag(db: Db, org: string, til: string) {
       };
     }),
   };
-}
-
-async function bokforPeriodiseringer(db: Db, org: string, til: string) {
-  const { periodiseringer, poster } = await hentPeriodiseringer(db, org);
-  const bilag = [];
-  for (const m of periodiseringsforslag(periodiseringer, poster, til))
-    bilag.push({ ...(await bokforPeriodisering(db, org, maanedsbilag(m.maaned, m.linjer))), sum: rund(m.linjer.reduce((s, l) => s + l.belop, 0)) });
-  return bilag;
 }
 
 // --- Manuelle bilag ---------------------------------------------------------------------------
@@ -247,6 +243,26 @@ export function regnskapBilagRuter() {
       await bruk(c, async (db) => {
         await krev(db, orgId(c));
         return maanedsforslag(db, orgId(c), til);
+      }),
+    );
+  });
+
+  // Sjekklisten for en måned (standard: forrige måned) og månedsavslutningen som gikk av seg selv.
+  r.get("/regnskap/maanedsstatus", async (c) => {
+    const iDag = osloIDag();
+    const maaned = mndS.parse(c.req.query("maaned") ?? forrigeMaaned(iDag));
+    if (maaned > mnd(iDag)) throw new ApiFeil(400, "Måneden kan ikke være fram i tid");
+    return c.json(
+      await bruk(c, async (db) => {
+        await krev(db, orgId(c));
+        return {
+          maaned,
+          navn: maanedNavn(`${maaned}-01`),
+          over: maaned < mnd(iDag),
+          auto: (await hentRegnskapsoppsett(db, orgId(c))).maaned_auto,
+          punkter: await maanedsstatus(db, orgId(c), maaned, iDag),
+          avslutning: await hentAvslutning(db, orgId(c), maaned),
+        };
       }),
     );
   });

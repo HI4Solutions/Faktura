@@ -4,10 +4,9 @@ Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fik
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
 hovedboken, fakturaene og innbetalingene som bokføres av seg selv, utgiftene (leverandørfakturaer og
 kvitteringer, lest med AI og vurdert av reglene), alle transaksjonene i banken (ført og avstemt av
-reglene), anleggsmidlene med
-avskrivningsplanen over flere år (også goodwill), bokføringen av avskrivninger, nedskrivning, salg
-og utrangering, periodiseringene over flere måneder og år, månedsavslutningen og de skattemessige
-saldoavskrivningene.
+reglene), anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
+avskrivninger, nedskrivning, salg og utrangering, periodiseringene over flere måneder og år,
+månedsavslutningen (som går av seg selv) og de skattemessige saldoavskrivningene.
 
 Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap» med fanene
 Bilag, Utgifter, Bank, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
@@ -244,6 +243,27 @@ bilag per måned for avskrivningene (serie A) og et for periodiseringene (serie 
 dagen i måneden. Kortet står under Bilag, Anleggsmidler og Periodiseringer, og viser månedene som er
 over og ikke bokført; denne måneden kan bokføres når den er over (eller før).
 
+Månedsavslutningen går av seg selv (`server/src/maanedsavslutning.ts`, `0092_maanedsavslutning.sql`):
+
+- **Når en måned er over** (den 1. fra kl. 08, etter morgenhentingen fra banken) bokfører workeren
+  avskrivningene og periodiseringene for den, som om noen trykket på knappen.
+- **Sjekklisten** for måneden lagres med det som ble bokført: bankpostene (alle ført, ingen bilag på
+  bankkontoen uten bankpost, og saldoen i banken lik regnskapet ved månedsslutt), utgiftene (ingen
+  kladder), lønnen med utbetaling i måneden (godkjent, bokført og levert i a-meldingen, med fristen),
+  avskrivningene og periodiseringene (også periodiseringer som venter på starten). Et punkt er bare
+  med når organisasjonen bruker det.
+- **Varselet** (push, typen «Månedsavslutningen i regnskapet» under Innstillinger → App) går til
+  eier, administrator og regnskapsføreren: det som ble bokført og det som gjenstår.
+- **Månedsrapportene** til regnskapsføreren sendes etter månedsavslutningen, så de får med det som ble
+  bokført.
+- **Under Bilag** står sjekklisten for forrige måned (og de andre med pilene), med lenker til det som
+  gjenstår og bilagene som ble bokført. Denne måneden: avskrivningene og periodiseringene venter til
+  den er over.
+- **Det som er fra før**: automatikken bokfører aldri lenger tilbake enn måneden før den gikk første
+  gang. Avskrivninger eller periodiseringer fra før det som ikke er bokført, bokfører brukeren under
+  Bilag; til det er gjort, bokføres de ikke av seg selv (varselet og sjekklisten sier fra).
+- **Slås av** under Regnskap → Kontoer → Månedsavslutningen; da bokfører brukeren som før.
+
 ## Saldoavskrivningene (skattemessig)
 
 Regnet fra registeret år for år (skatteloven kapittel 14), som grunnlag for saldoskjemaet i
@@ -282,7 +302,8 @@ næringsspesifikasjonen (rapporten «Saldoskjema» under Rapporter → Regnskap)
 Under Rapporter → Regnskap, som tabell, CSV og PDF, og på e-post til regnskapsføreren:
 Saldobalanse og Bilagsjournal (kan sendes hver måned), Hovedbok, Anleggsregister, Avskrivningsplan,
 Avskrivninger og avganger (kan sendes hver måned), Saldoskjema, Periodiseringer, Leverandørgjeld,
-Utgifter, Bankavstemming og Bankposter (de tre siste kan sendes hver måned).
+Utgifter, Bankavstemming, Bankposter og Månedsavslutning (de fire siste kan sendes hver måned; den
+siste er sjekklisten for hver måned i perioden).
 
 ## Kontroller og det som ikke er med ennå
 
@@ -303,8 +324,9 @@ Utgifter, Bankavstemming og Bankposter (de tre siste kan sendes hver måned).
   banken, må ha en konto i regnskapet (Kontoer → Banken) for at overføringer dit skal føres av seg
   selv. Merverdiavgiften kobles bare når beløpet er det som står på oppgjørskontoen (2740), og
   saldoen i banken er bare kjent når brukeren har hentet selv eller banken sender den med postene.
-- Perioder låses ikke: et bilag kan føres med en dato i en periode som er rapportert. Årsoppgjøret
-  (resultatet mot egenkapitalen, skatt) føres med et manuelt bilag.
+- Perioder låses ikke: et bilag kan føres med en dato i en periode som er rapportert (også etter at
+  månedsavslutningen har gått). Årsoppgjøret (resultatet mot egenkapitalen, skatt) føres med et
+  manuelt bilag. Merverdiavgiften for terminen er ikke med i månedsavslutningen ennå.
 
 ## Kilder
 

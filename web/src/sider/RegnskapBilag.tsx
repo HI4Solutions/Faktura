@@ -10,7 +10,7 @@ import { useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
 import { IkonPluss, IkonRegnskap } from "../ikoner";
 import { Bilagstabell } from "./LonnBokforing";
-import { Maanedsavslutning } from "./RegnskapAvslutning";
+import { Maanedsavslutning, Maanedsstatus } from "./RegnskapAvslutning";
 
 type Postering = { konto: string; navn: string; tekst: string; belop: number; mva_kode?: string | null };
 type Regnskapsbilag = {
@@ -131,6 +131,7 @@ export function Bilag() {
         motsatte beløp. Bilagsjournalen, hovedboken og saldobalansen står også under{" "}
         <Link to="/rapporter?fane=regnskap">Rapporter → Regnskap</Link> (CSV og PDF).
       </p>
+      <Maanedsstatus />
       <Maanedsavslutning bokfort={() => void liste.last()} />
       <div className="knapper lonn-knapper">
         <button type="button" className="primar" onClick={() => settNy(true)}>
