@@ -16,6 +16,7 @@ import { aiPaa, generer, iDagOslo, medKvote } from "./ai.js";
 import { MAKS_UTGIFT, tilUtgift, UTGIFTSTYPER, utgiftForesporsel, type AiUtgift, type LestUtgift } from "./aiUtgift.js";
 import { bokfor as bokforAnlegg, hentRegnskapsoppsett, KATEGORIER, KATEGORIKODER, regnskapskontoer, type Kategori, type Regnskapsoppsett } from "./anlegg.js";
 import { bokforPeriodisering } from "./periodisering.js";
+import { kapitalvarefelt } from "./mvaJustering.js";
 import { lagAnleggsmiddel } from "./regnskapRuter.js";
 import { disposisjon } from "./vedlegg.js";
 import {
@@ -25,6 +26,7 @@ import {
   fradragsmerknader,
   kostnadsbilag,
   kostpris,
+  linjeposter,
   KOSTNADSKATEGORIER,
   sumLinjer,
   utgiftstekst,
@@ -261,6 +263,8 @@ export async function bokforUtgift(db: Db, org: string, id: string, auto = false
   } else if (u.behandling === "anlegg") {
     const kategori = u.anlegg_kategori!;
     const navn = (u.beskrivelse || u.linjer[0]?.beskrivelse || utgiftstekst(u)).slice(0, 120);
+    // Avgiften på kostprisen over grensen gjør anleggsmiddelet til en kapitalvare (mva-justering).
+    const avgift = u.linjer.map((l) => linjeposter(l, u.utland));
     const anlegg = await lagAnleggsmiddel(db, org, {
       navn,
       beskrivelse: utgiftstekst(u).slice(0, 500),
@@ -268,6 +272,11 @@ export async function bokforUtgift(db: Db, org: string, id: string, auto = false
       anskaffet: u.dato,
       kostpris: kostpris(u),
       levetid_mnd: u.levetid_mnd,
+      ...kapitalvarefelt(
+        kategori,
+        avgift.reduce((s, x) => s + x.mva, 0),
+        avgift.reduce((s, x) => s + x.fradrag, 0),
+      ),
     });
     const tekst = `Anskaffelse: ${navn}`;
     const bilag = await bokforAnlegg(db, org, {

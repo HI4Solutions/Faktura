@@ -29,6 +29,7 @@ import { bankRapporter } from "./bankRapporter.js";
 import { maanedsavslutningRapporter } from "./maanedsavslutning.js";
 import { mvaRapporter } from "./mva.js";
 import { aarsoppgjorRapporter } from "./aarsoppgjor.js";
+import { mvaJusteringRapporter } from "./mvaJustering.js";
 
 // --- Typene ---------------------------------------------------------------------------------------
 
@@ -84,6 +85,7 @@ export const RAPPORTER: Rapportdef[] = [
   ...maanedsavslutningRapporter,
   ...mvaRapporter,
   ...aarsoppgjorRapporter,
+  ...mvaJusteringRapporter,
 ];
 const PER_ID = new Map(RAPPORTER.map((r) => [r.id, r]));
 export const rapport = (id: string) => PER_ID.get(id);

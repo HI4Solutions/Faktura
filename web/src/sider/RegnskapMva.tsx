@@ -1,7 +1,8 @@
 // Regnskap → Mva (server/src/mva.ts): mva-meldingen for terminen regnet fra bilagene, med linjene
 // slik de føres i Altinn (koden, grunnlaget og satsen for utgående avgift, fradraget for inngående),
 // summen å betale eller til gode, fristen, kontrollene, oppgjøret (bilagserie V) og om meldingen er
-// levert. Terminene i året står under.
+// levert. Terminene i året står under, og mva-justeringen for kapitalvarene i året
+// (RegnskapMvaJustering.tsx).
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
@@ -9,8 +10,10 @@ import { Feil, Laster, Tom, useData, useHandling } from "../felles";
 import { useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
 import { IkonHoyre, IkonRegnskap, IkonVenstre } from "../ikoner";
+import { MvaJustering } from "./RegnskapMvaJustering";
 
-type Linje = { kode: string; beskrivelse: string; grunnlag: number | null; sats: number | null; merverdiavgift: number; fradrag: boolean };
+// spesifikasjon: «justering» for justeringen for kapitalvarer.
+type Linje = { kode: string; beskrivelse: string; grunnlag: number | null; sats: number | null; merverdiavgift: number; fradrag: boolean; spesifikasjon: "justering" | null };
 type Termin = { aar: number; type: "tomaaneder" | "aar" | "maaned"; termin: number; fra: string; til: string; navn: string; frist: string };
 type Status = {
   type: Termin["type"];
@@ -134,7 +137,7 @@ export function Mva({ aar, termin, velg }: { aar: string | null; termin: string 
                         <strong>{l.kode}</strong>
                         <div className="liten dempet">
                           {l.beskrivelse}
-                          {l.fradrag && ["81", "83", "86", "88", "91"].includes(l.kode) ? " (fradrag)" : ""}
+                          {l.fradrag && !l.spesifikasjon && ["81", "83", "86", "88", "91"].includes(l.kode) ? " (fradrag)" : ""}
                         </div>
                       </td>
                       <td className="tall">
@@ -288,6 +291,7 @@ export function Mva({ aar, termin, velg }: { aar: string | null; termin: string 
           ))}
         </div>
       )}
+      <MvaJustering key={t.aar} aar={t.aar} endret={() => void d.last()} />
     </>
   );
 }

@@ -720,6 +720,18 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   leverandøren fra utgiften bilaget kommer fra, grupperingen fra næringsspesifikasjonen
   (`gruppering`) og mva-informasjonen fordelt på grunnlagslinjene. Testen validerer den mot XSD-ene i
   `server/test/saft` med xmllint (installert i CI).
+  Mva-justeringen for kapitalvarer (`0095_mva_justering.sql`, `server/src/mvaJustering.ts`,
+  `web/src/sider/RegnskapMvaJustering.tsx`): kapitalvaren står på anleggsmiddelet (`mva_inngaende`,
+  `mva_fradrag`, `mva_felles` og `mva_bruk` med egen prosent per år; låst etter salg av
+  `anleggsmidler_foer`), og fellesprosenten for et år i `mva_justeringer` (null: regnet fra
+  omsetningen med mva-kode i bilagene). `aarsjustering` regner kapitalvarene i perioden for et år, og
+  justeringen føres med `bokfor_mva_justering` (serie V, kilde mva_justering; `kilde_id` er raden i
+  `mva_justeringer` for året eller anleggsmiddelet for den samlede justeringen ved salg; ett gjeldende,
+  linjene per kapitalvare i `mva_justeringslinjer`) og angres med `angre_mva_justering`; et låst år
+  avvises, og `reverser_anlegg` reverserer den samlede justeringen med salget. `beregnMva` legger
+  posteringene på avgiftskontoene i justeringsbilagene på en egen linje (kode 1, spesifikasjon
+  «justering»), og månedsavslutningen fører justeringen for året (`bokforJusteringTil`) før
+  mva-oppgjøret.
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen

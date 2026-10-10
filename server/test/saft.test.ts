@@ -200,6 +200,47 @@ describe.skipIf(!process.env.DATABASE_URL)("SAF-T-filen", () => {
     }
   });
 
+  it("salg av en kapitalvare med tap: grunnlaget og avgiften etter fortegnet, og den samlede mva-justeringen", async () => {
+    const org2 = (await ok("POST", "/api/organisasjoner", { navn: "SAF-T Utstyr AS", orgnr: "915000576" })).id;
+    const o2 = (x: string) => `/api/org/${org2}${x}`;
+    await ok("PATCH", o2(""), { kontonr: "86011117947", mva_registrert: true, adresse: "Fjordgata 2", postnr: "5003", poststed: "Bergen", epost: "post@utstyr.test" });
+    // Et ultralydapparat med 50 % fradrag, solgt med tap samme år (resten av perioden justeres samlet).
+    const a = await ok("POST", o2("/regnskap/anleggsmidler"), {
+      navn: "Ultralyd",
+      kategori: "inventar",
+      anskaffet: "2025-02-01",
+      kostpris: 270000,
+      levetid_mnd: 60,
+      mva_inngaende: 60000,
+      mva_fradrag: 50,
+      anskaffelse: { motkonto: "2400", mva: 30000 },
+    });
+    const s = await ok("POST", o2(`/regnskap/anleggsmidler/${a.anleggsmiddel.id}/avgang`), { dato: "2025-11-15", type: "salg", vederlag: 100000, mva: 25000 });
+    expect(s.mva_justering.salg).toMatchObject({ aar: 2025, aar_til: 2029, prosent: 100, belop: 30000, bilag: { bilagsnummer: "V-2025-1" } });
+    const r = await kall("GET", o2("/regnskap/saft?aar=2025"));
+    expect(r.status, String(r.data)).toBe(200);
+    const fil = new XMLParser({ parseTagValue: false }).parse(r.data).AuditFile;
+    const journaler = liste<any>(fil.GeneralLedgerEntries.Journal);
+    expect(journaler.map((j) => j.JournalID)).toEqual(["A", "V"]);
+    const tr = journaler.flatMap((j) => liste<any>(j.Transaction));
+    const salg = liste<any>(tr.find((x) => x.Description.startsWith("Salg:")).Line);
+    expect(salg.find((l) => l.AccountID === "1250").TaxInformation).toMatchObject({ TaxCode: "3", TaxBase: "225000.00", CreditTaxAmount: { Amount: "56250.00" } });
+    expect(salg.find((l) => l.AccountID === "7800").TaxInformation).toMatchObject({ TaxCode: "3", TaxBase: "125000.00", DebitTaxAmount: { Amount: "31250.00" } });
+    expect(salg.find((l) => l.AccountID === "2700").TaxInformation).toBeUndefined();
+    const just = liste<any>(tr.find((x) => x.TransactionID === "V-2025-1").Line);
+    expect(just.map((l) => [l.AccountID, l.DebitAmount?.Amount ?? `-${l.CreditAmount.Amount}`, l.TaxInformation ?? null])).toEqual([
+      ["2710", "30000.00", null],
+      ["3800", "-30000.00", null],
+    ]);
+    if (harXmllint) {
+      const mappe = fs.mkdtempSync(path.join(os.tmpdir(), "saft-"));
+      const f = path.join(mappe, "saft-salg.xml");
+      fs.writeFileSync(f, r.data);
+      const v = spawnSync("xmllint", ["--noout", "--schema", path.join(her, "saft", "Norwegian_SAF-T_Financial_Schema_v_1.30.xsd"), f], { encoding: "utf8" });
+      expect(v.status, v.stderr).toBe(0);
+    }
+  });
+
   it("organisasjonsnummer, år uten bilag og tilgangen", async () => {
     expect((await kall("GET", o("/regnskap/saft?aar=2019"))).data.error).toBe("Ingen bilag i regnskapet for 2019");
     expect((await kall("GET", o("/regnskap/saft?aar=2025"), undefined, fakturerer)).status).toBe(403);

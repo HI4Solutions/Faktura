@@ -74,7 +74,8 @@ export type Regnskapsrolle =
   | "utbytte"
   | "avsatt_utbytte"
   | "disponering"
-  | "annen_egenkapital";
+  | "annen_egenkapital"
+  | "mva_justering";
 export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: string }[] = [
   { rolle: "avskrivning_bygg", navn: "Avskrivning på bygninger og annen fast eiendom", standard: "6000" },
   { rolle: "avskrivning_driftsmidler", navn: "Avskrivning på transportmidler, maskiner og inventar", standard: "6010" },
@@ -124,6 +125,9 @@ export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: 
   { rolle: "avsatt_utbytte", navn: "Avsatt utbytte (gjeld)", standard: "2800" },
   { rolle: "disponering", navn: "Overføringer annen egenkapital", standard: "8960" },
   { rolle: "annen_egenkapital", navn: "Annen egenkapital", standard: "2050" },
+  // Mva-justeringen for kapitalvarer (mvaJustering.ts): den årlige justeringen av inngående avgift
+  // (ved salg føres den mot gevinst eller tap).
+  { rolle: "mva_justering", navn: "Justering av inngående merverdiavgift (kapitalvarer)", standard: "7798" },
   // Periodiseringene (periodisering.ts): balansekontoene som foreslås.
   { rolle: "forskuddsbetalt_kostnad", navn: "Forskuddsbetalt kostnad", standard: "1700" },
   { rolle: "paalopt_kostnad", navn: "Påløpt kostnad", standard: "2960" },
@@ -231,6 +235,12 @@ export type Anleggsmiddel = {
   avgang_dato: string | null;
   avgang_type: "salg" | "utrangering" | null;
   avgang_vederlag: number | null;
+  // Kapitalvaren for mva-justeringen (0095_mva_justering.sql): den inngående avgiften på kostprisen,
+  // fradragsprosenten ved anskaffelsen, om bruken følger fellesprosenten, og egen prosent per år.
+  mva_inngaende: number | null;
+  mva_fradrag: number | null;
+  mva_felles: boolean;
+  mva_bruk: Record<string, number>;
 };
 export type Hendelsestype = "anskaffelse" | "avskrivning" | "nedskrivning" | "reversering" | "avgang";
 export type Hendelse = {
@@ -253,7 +263,8 @@ export const ANLEGG = `
          a.levetid_mnd, a.konto, a.avskrivningskonto, a.skatt, a.skatt_kostpris::float8 as skatt_kostpris, a.skatt_sats::float8 as skatt_sats,
          to_char(a.tidligere_til, 'YYYY-MM-DD') as tidligere_til, a.tidligere_avskrevet::float8 as tidligere_avskrevet,
          a.skatt_inngaende::float8 as skatt_inngaende, to_char(a.avgang_dato, 'YYYY-MM-DD') as avgang_dato, a.avgang_type,
-         a.avgang_vederlag::float8 as avgang_vederlag
+         a.avgang_vederlag::float8 as avgang_vederlag, a.mva_inngaende::float8 as mva_inngaende, a.mva_fradrag::float8 as mva_fradrag,
+         a.mva_felles, a.mva_bruk
     from faktura.anleggsmidler a`;
 export const HENDELSER = `
   select h.id, h.anleggsmiddel_id, h.type, to_char(h.dato, 'YYYY-MM-DD') as dato, to_char(h.maaned, 'YYYY-MM') as maaned,
@@ -457,6 +468,8 @@ export function avskrivningsforslag(anlegg: Anleggsmiddel[], hendelser: Hendelse
   return [...per.entries()].sort(([x], [y]) => x.localeCompare(y)).map(([maaned, linjer]) => ({ maaned, linjer }));
 }
 
+// Anskaffelsen: kostprisen på balansekontoen, den inngående avgiften (kode 1 i mva-meldingen) og
+// motkontoen.
 export function anskaffelsesbilag(a: Anleggsmiddel, motkonto: string, mva: number, k: Record<Regnskapsrolle, string>): Bilagsforslag {
   const tekst = `Anskaffelse: ${navnPaa(a)}`;
   return {
@@ -464,7 +477,7 @@ export function anskaffelsesbilag(a: Anleggsmiddel, motkonto: string, mva: numbe
     tekst,
     posteringer: [
       { konto: a.konto, belop: a.kostpris, tekst },
-      ...(ore(mva) > 0 ? [{ konto: k.inngaende_mva, belop: mva, tekst: "Inngående merverdiavgift" }] : []),
+      ...(ore(mva) > 0 ? [{ konto: k.inngaende_mva, belop: mva, tekst: "Inngående merverdiavgift", mva_kode: "1" }] : []),
       { konto: motkonto, belop: -kr(ore(a.kostpris) + ore(mva)), tekst },
     ],
     hendelser: [{ anleggsmiddel_id: a.id, type: "anskaffelse", belop: a.kostpris }],
@@ -483,8 +496,22 @@ export function nedskrivningsbilag(a: Anleggsmiddel, dato: string, belop: number
   };
 }
 
+// Koden for utgående avgift etter satsen (avgiften av salgssummen): 25, 15, 12 eller 11,11 %.
+function utgaendeKode(mva: number, vederlag: number) {
+  const sats = vederlag > 0 ? (mva / vederlag) * 100 : 25;
+  return (
+    [
+      ["3", 25],
+      ["31", 15],
+      ["33", 12],
+      ["32", 11.11],
+    ] as const
+  ).reduce((best, x) => (Math.abs(sats - x[1]) < Math.abs(sats - best[1]) ? x : best))[0];
+}
+
 // Salg eller utrangering: vederlaget (med mva) på motkontoen, mva-en, den bokførte verdien ut, og
-// forskjellen som gevinst eller tap.
+// forskjellen som gevinst eller tap. Med avgift får avgiften og grunnlaget (verdien som går ut og
+// gevinsten eller tapet, til sammen salgssummen) koden for mva-meldingen.
 export function avgangsbilag(
   a: Anleggsmiddel,
   v: { dato: string; type: "salg" | "utrangering"; vederlag: number; mva: number; motkonto: string; verdi: number; tekst: string | null },
@@ -494,13 +521,14 @@ export function avgangsbilag(
   const vederlag = ore(v.vederlag);
   const mva = ore(v.mva);
   const verdi = ore(v.verdi);
+  const kode = mva > 0 ? utgaendeKode(mva, vederlag) : null;
   const p: Postering[] = [];
   if (vederlag + mva > 0) p.push({ konto: v.motkonto, belop: kr(vederlag + mva), tekst });
-  if (mva > 0) p.push({ konto: k.utgaende_mva, belop: kr(-mva), tekst: "Utgående merverdiavgift" });
-  if (verdi !== 0) p.push({ konto: a.konto, belop: kr(-verdi), tekst });
+  if (mva > 0) p.push({ konto: k.utgaende_mva, belop: kr(-mva), tekst: "Utgående merverdiavgift", mva_kode: kode });
+  if (verdi !== 0) p.push({ konto: a.konto, belop: kr(-verdi), tekst, mva_kode: kode });
   const diff = vederlag - verdi;
-  if (diff > 0) p.push({ konto: k.gevinst, belop: kr(-diff), tekst: `Gevinst: ${navnPaa(a)}` });
-  if (diff < 0) p.push({ konto: k.tap, belop: kr(-diff), tekst: `Tap: ${navnPaa(a)}` });
+  if (diff > 0) p.push({ konto: k.gevinst, belop: kr(-diff), tekst: `Gevinst: ${navnPaa(a)}`, mva_kode: kode });
+  if (diff < 0) p.push({ konto: k.tap, belop: kr(-diff), tekst: `Tap: ${navnPaa(a)}`, mva_kode: kode });
   return {
     dato: v.dato,
     tekst,

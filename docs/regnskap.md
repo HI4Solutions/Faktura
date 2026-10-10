@@ -195,8 +195,13 @@ Mva-meldingen for hver termin regnes fra bilagene (Regnskap → Mva; `server/src
   posteringene på avgiftskontoene (2700–2704 og 2710–2714) i bilagene datert i terminen. For kjøp fra
   utlandet regnes grunnlaget fra den beregnede avgiften (25 %), siden kostnaden også kan ha avgiften
   uten fradrag i seg (kode 87) og et anleggsmiddel ikke har koden på balansekontoen.
-  En postering på en avgiftskonto uten mva-kode (f.eks. inngående avgift på et anleggsmiddel eller et
-  manuelt bilag) regnes med kontoens kode, og kontrollene sier fra.
+  En postering på en avgiftskonto uten mva-kode (f.eks. i et manuelt bilag) regnes med kontoens kode,
+  og kontrollene sier fra. Anskaffelsen av et anleggsmiddel har kode 1 på den inngående avgiften, og
+  salget av et anleggsmiddel med avgift koden for satsen (3, 31, 32 eller 33) på avgiften og på
+  grunnlaget (verdien som går ut og gevinsten eller tapet, til sammen salgssummen).
+- **Justeringen for kapitalvarer** (se under) står på en egen linje med kode 1 og spesifikasjonen
+  «justering», uten grunnlag og sats: negativ når det er mer fradrag, positiv når avgift betales
+  tilbake.
 - **Kontrollene**: posteringer uten kode eller med en kode som ikke passer kontoen, avgift som ikke
   er satsen av grunnlaget, negativt grunnlag (kreditnotaer; Altinn krever en merknad), fradrag ved
   kjøp fra utlandet som er større enn den beregnede avgiften, og avgift hos en organisasjon som ikke
@@ -221,6 +226,51 @@ Mva-meldingen for hver termin regnes fra bilagene (Regnskap → Mva; `server/src
   kontrollene, og kan sendes til regnskapsføreren når terminen er slutt.
 - Når terminen er levert, kan den låses (lenken under «Levert i Altinn»): det som føres senere med en
   dato i terminen, havner da i neste termin, og meldingen som er levert, endres ikke.
+
+## Mva-justering for kapitalvarer (bilagserie V)
+
+Fradraget for inngående avgift på kapitalvarer justeres når bruken endres (merverdiavgiftsloven
+kapittel 9; `server/src/mvaJustering.ts`, `0095_mva_justering.sql`), under Regnskap → Mva (kortet for
+året) og på anleggsmiddelet:
+
+- **Kapitalvarer** er anleggsmidler der den inngående avgiften på kostprisen (hele, også det som ikke
+  ble trukket fra) er minst 50 000 kr for maskiner, inventar og andre driftsmidler, og minst
+  100 000 kr for fast eiendom (bygninger og fast teknisk installasjon). Tomt, goodwill og personbiler
+  er ikke med. Et anleggsmiddel fra en utgift får avgiften og fradraget fra linjene av seg selv, og et
+  som legges inn med anskaffelsen, fra avgiften på anskaffelsen (fullt fradrag) når den er over
+  grensen; ellers fylles feltene inn under Endre → Flere valg. Anleggsmidlene fra utgifter som alt var
+  bokført, fikk feltene da modulen kom.
+- **Justeringsperioden** er fem år for løsøre, fra og med året kapitalvaren ble anskaffet, og ti år
+  for fast eiendom, fra og med året den ble tatt i bruk (når avskrivningen begynner, som regel når
+  bygget er fullført).
+- **Hvert år** sammenlignes fradragsprosenten i året med den ved anskaffelsen. Er endringen minst ti
+  prosentpoeng, justeres en femdel (fast eiendom en tidel) av avgiften ganger endringen: mer fradrag
+  når bruken i avgiftspliktig virksomhet har økt, tilbakebetaling når den har minket. Endringer under
+  ti prosentpoeng justeres ikke.
+- **Fradragsprosenten i året**: en kapitalvare til felles bruk (fradraget ved anskaffelsen var mellom
+  0 og 100 %) følger fradragsprosenten for fellesanskaffelser i året: den som er satt for året på
+  kortet under Mva, ellers andelen avgiftspliktig omsetning (med fritatt og omvendt avgiftsplikt,
+  kode 3, 31–33, 5, 51 og 52) av all omsetning (også kode 6, utenfor loven) i året etter bilagene,
+  ellers fradraget i oppsettet (Kontoer → Utgiftene). Andre kapitalvarer har egen prosent per år
+  (Endre bruken på anleggsmiddelet), som gjelder til den endres; før den første gjelder prosenten ved
+  anskaffelsen.
+- **Bokføringen** (serie V, kilde mva_justering, 31. desember): den inngående avgiften (2710, kode 1)
+  mot kostnadskontoen for justeringen (7798, kan endres under Kontoer), en linje per kapitalvare.
+  Månedsavslutningen for desember fører den av seg selv når året er over, før oppgjøret for den
+  siste terminen (så oppgjøret tar den med), og fører den på nytt når året endres etterpå; et låst år
+  røres ikke. Den kan også føres og angres på kortet, og sjekklisten for desember har punktet
+  «Mva-justeringen».
+- **Salg i perioden**: resten av perioden (med salgsåret) justeres samlet på salgsdatoen, med 100 %
+  når salget har avgift og 0 % ellers, mot gevinst (3800) eller tap (7800), siden justeringen hører
+  til gevinsten eller tapet ved salget. Den står i mva-meldingen for terminen med salget. Overtar
+  kjøperen justeringsplikten (fast eiendom), krysses det av ved salget, eller justeringen angres på
+  anleggsmiddelet; den kan også føres på nytt med en annen prosent. Reverseres salget, reverseres den
+  samlede justeringen også. Utrangering justeres ikke, og etter salg eller utrangering justeres ikke
+  salgsåret eller årene etter på andre måter.
+- Avgiften, fradraget og bruken kan ikke endres etter salg eller utrangering, og et anleggsmiddel med
+  en bokført justering slettes ikke.
+- Rapporten «Mva-justering for kapitalvarer» (Rapporter → Regnskap) har kapitalvarene for året med
+  prosentene og justeringen, og kan sendes til regnskapsføreren etter nyttår.
 
 ## Årsoppgjøret og periodelåsen (bilagserie Å)
 
@@ -272,7 +322,9 @@ regnskapsføreren kan lese inn. Versjon 1.30 for årene før 2027 og 1.40 fra 20
   satsen).
 - **Bilagene** i året, en journal per serie: linjene i debet eller kredit, kunden eller leverandøren på
   reskontrolinjene, og mva-informasjonen på grunnlagslinjene (koden, satsen, grunnlaget og avgiften,
-  for omvendt avgiftsplikt den beregnede), ikke på avgiftslinjene.
+  for omvendt avgiftsplikt den beregnede), ikke på avgiftslinjene. Har grunnlagslinjene ulikt fortegn
+  (salg av et anleggsmiddel med tap), fordeles avgiften etter fortegnet, så grunnlaget og avgiften går
+  opp i salgssummen og avgiften.
 - Filen valideres mot Skatteetatens XSD for 1.30 og 1.40 i testene (`server/test/saft`).
 
 ## Anleggsregisteret og avskrivningsplanen
@@ -294,8 +346,8 @@ regnskapsføreren kan lese inn. Versjon 1.30 for årene før 2027 og 1.40 fra 20
 
 ## Bokføringen (bilagserie A)
 
-- **Anskaffelsen** (valgfritt): kostprisen på balansekontoen og inngående mva mot leverandørgjeld
-  eller bank, på anskaffelsesdatoen.
+- **Anskaffelsen** (valgfritt): kostprisen på balansekontoen og inngående mva (kode 1) mot
+  leverandørgjeld eller bank, på anskaffelsesdatoen.
 - **Månedsavslutningen**: avskrivningene som ikke er bokført til og med en måned, et bilag per
   måned (den siste dagen i måneden), avskrivningskostnaden (6000 bygg, 6010 driftsmidler, 6020
   immaterielle og goodwill) mot balansekontoen for hvert anleggsmiddel.
@@ -304,7 +356,9 @@ regnskapsføreren kan lese inn. Versjon 1.30 for årene før 2027 og 1.40 fra 20
   ikke mer enn nedskrevet, og ikke høyere verdi enn etter planen uten nedskrivning).
 - **Salg eller utrangering**: avskrivningene til og med måneden bokføres først (den siste på
   avgangsdatoen), så vederlaget (med mva) på bank eller kundefordringer, utgående mva, den
-  bokførte verdien ut av balansekontoen og forskjellen som gevinst (3800) eller tap (7800).
+  bokførte verdien ut av balansekontoen og forskjellen som gevinst (3800) eller tap (7800). Med
+  avgift får avgiften og grunnlaget mva-koden for satsen, så salget kommer riktig med i
+  mva-meldingen; for en kapitalvare føres den samlede mva-justeringen (se over).
 - Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp, og det
   siste først. Kontoene kan endres under Regnskap → Kontoer (norsk standard kontoplan, NS 4102).
 
@@ -399,15 +453,22 @@ Under Rapporter → Regnskap, som tabell, CSV og PDF, og på e-post til regnskap
 Saldobalanse og Bilagsjournal (kan sendes hver måned), Hovedbok, Anleggsregister, Avskrivningsplan,
 Avskrivninger og avganger (kan sendes hver måned), Saldoskjema, Periodiseringer, Leverandørgjeld,
 Utgifter, Bankavstemming, Bankposter og Månedsavslutning (de fire siste kan sendes hver måned; den
-siste er sjekklisten for hver måned i perioden), Mva-melding (når terminen er slutt), og
-Resultatregnskap og Balanse (kan sendes hver måned).
+siste er sjekklisten for hver måned i perioden), Mva-melding (når terminen er slutt),
+Resultatregnskap og Balanse (kan sendes hver måned), og Mva-justering for kapitalvarer (etter
+nyttår).
 
 ## Kontroller og det som ikke er med ennå
 
 - Satsene, grensen på 15 000 kr, reglene for gevinst- og tapskontoen og behandlingen ved salg er
   lagt inn etter skatteloven slik den var kjent da modulen ble laget; kontroller dem mot
-  Skatteetatens veiledning og skattemeldingen hvert år. Mva-justering for kapitalvarer
-  (merverdiavgiftsloven kapittel 9) regnes ikke ut.
+  Skatteetatens veiledning og skattemeldingen hvert år.
+- Mva-justeringen: fradragsprosenten for fellesanskaffelser regnes fra omsetningen i bilagene når den
+  ikke er satt for året; den er bare et forslag når salget ikke er bokført i appen (sett den da for
+  året). Tilbakeføring av inngående avgift (§ 9-6 og § 9-7: personkjøretøy og fast eiendom som ikke er
+  fullført), justering ved opphør av virksomheten og avtale om at kjøperen overtar justeringsplikten
+  (§ 9-3) regnes ikke ut; den samlede justeringen kan angres og føres manuelt. Reglene er lagt inn
+  etter merverdiavgiftsloven kapittel 9 og Skatteetatens merverdiavgiftshåndbok slik de er beskrevet i
+  kildene under; kontroller dem mot håndboken.
 - Purregebyret føres på 3900 (annen driftsrelatert inntekt) uten avgift, når det er betalt; kontoen
   kan endres. Salg til utlandet (utførsel, kode 52) og omvendt avgiftsplikt (kode 51) skilles ikke
   ut: salg uten avgift er enten utenfor loven eller fritatt for hele organisasjonen. Tap på
@@ -428,8 +489,9 @@ Resultatregnskap og Balanse (kan sendes hver måned).
   utgiftene (ikke fra manuelle bilag), dimensjoner (Analysis) og kildedokumenter er ikke med, og
   filen sendes ikke fra appen (Skatteetaten ber om den).
 - Mva-meldingen leveres i Altinn av brukeren (linjene står under Regnskap → Mva); innsending
-  direkte fra appen er ikke med. Uttak, tap på krav, justering og tilbakeføring av inngående avgift
-  (spesifikasjonslinjene) regnes ikke ut, og innførsel av varer (14, 15, 81–85) kommer bare med fra
+  direkte fra appen er ikke med. Uttak, tap på krav og tilbakeføring av inngående avgift
+  (spesifikasjonslinjene) regnes ikke ut (justeringen for kapitalvarer gjør det, se over), og
+  innførsel av varer (14, 15, 81–85) kommer bare med fra
   manuelle bilag med kodene. Kompensasjonsmelding og omvendt avgiftsplikt-melding er ikke med.
 
 ## Kilder
@@ -458,6 +520,21 @@ Resultatregnskap og Balanse (kan sendes hver måned).
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/lag-kid-nar-du-er-arbeidsgiver>
 - Regnskapsloven § 4-1 (grunnleggende regnskapsprinsipper: opptjening og sammenstilling, grunnlaget
   for periodiseringene): <https://lovdata.no/lov/1998-07-17-56/§4-1>
+- Merverdiavgiftsloven kapittel 9 (justering og tilbakeføring av inngående avgift på kapitalvarer) og
+  Skatteetatens merverdiavgiftshåndbok: § 9-1 (kapitalvarer: 50 000 kr for maskiner, inventar og andre
+  driftsmidler, 100 000 kr for fast eiendom),
+  <https://www.skatteetaten.no/rettskilder/type/handboker/merverdiavgiftshandboken/merverdiavgiftshandboken-2024/M-9/M-9-1/>;
+  § 9-4 (justeringsperioden, fem år med anskaffelsesåret, ti år for fast eiendom),
+  <https://www.skatteetaten.no/rettskilder/type/handboker/merverdiavgiftshandboken/merverdiavgiftshandboken-2024/M-9/M-9-4/>;
+  § 9-5 (en femdel eller tidel per år ganger endringen i fradragsprosenten, ikke under ti
+  prosentpoeng, samlet justering for resten av perioden ved overdragelse),
+  <https://www.skatteetaten.no/rettskilder/type/handboker/merverdiavgiftshandboken/merverdiavgiftshandboken-2024/M-9/M-9-5/>
+- Skatteetaten, mva-meldingen: spesifikasjonslinjen «justering» bare på kode 1 og 81 (R040), uten
+  grunnlag og sats (R065), og uten merknad ved motsatt fortegn (R021):
+  <https://github.com/Skatteetaten/mva-meldingen> (forretningsreglene og informasjonsmodellen)
+- Revisorforeningen, «Justert merverdiavgift – regnskapsmessig behandling» (justeringen ved salg tas
+  med i gevinsten eller tapet):
+  <https://www.revisorforeningen.no/fag/nyheter/justert-merverdiavgift--regnskapsmessig-behandling/>
 - Skatteetaten, SAF-T Financial (XSD 1.30 og 1.40, eksempelfilen med mva-informasjonen på
   grunnlagslinjene, og at 1.30 gjelder fra 2025 og 1.40 fra 2027): <https://github.com/Skatteetaten/saf-t>
   (mappene «SAF-T_Financial_1.3» og «SAF-T_Financial_1.4»)

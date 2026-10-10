@@ -143,7 +143,7 @@ const SERIER: Record<string, string> = {
   L: "Lønn og refusjoner fra NAV",
   A: "Anleggsmidler",
   P: "Periodiseringer",
-  V: "Mva-oppgjør",
+  V: "Merverdiavgift: oppgjør og justering",
   Å: "Årsoppgjør",
   M: "Manuelle bilag",
 };
@@ -260,7 +260,9 @@ export async function lagSaft(db: Db, org: string, aar: number, bruker: { navn: 
   if (!bevegelse && ![...kontoer.values()].some((s) => s.ut)) throw new ApiFeil(409, `Ingen bilag i regnskapet for ${aar}`);
 
   // Mva-informasjonen for grunnlagslinjene i et bilag: avgiften per kode fordelt på grunnlagslinjene
-  // etter beløpet (den beregnede avgiften for kjøp med omvendt avgiftsplikt).
+  // etter beløpet (den beregnede avgiften for kjøp med omvendt avgiftsplikt). Har linjene ulikt
+  // fortegn (salg av et anleggsmiddel med tap: verdien som går ut, og tapet), fordeles den etter
+  // fortegnet, så grunnlaget og avgiften går opp i salgssummen og avgiften.
   const iAaret = poster.filter((p) => p.dato >= fra);
   const perBilagPoster = new Map<string, Post[]>();
   for (const p of iAaret) perBilagPoster.set(p.bilag_id, [...(perBilagPoster.get(p.bilag_id) ?? []), p]);
@@ -277,9 +279,16 @@ export async function lagSaft(db: Db, org: string, aar: number, bruker: { navn: 
         .filter((p) => (omvendt ? avgift.get(p.konto)!.art === "beregnet" : avgift.get(p.konto)!.art !== "beregnet" && avgift.get(p.konto)!.art !== "fradrag_utland"))
         .reduce((s, p) => s + ore(p.belop) * (omvendt ? -1 : 1), 0);
       const total = linjer.reduce((s, p) => s + Math.abs(ore(p.belop)), 0);
+      const netto = linjer.reduce((s, p) => s + ore(p.belop), 0);
+      const blandet = linjer.some((p) => p.belop > 0) && linjer.some((p) => p.belop < 0) && netto !== 0;
       let rest = sum;
       linjer.forEach((p, i) => {
-        const del = i === linjer.length - 1 || !total ? rest : Math.round((sum * Math.abs(ore(p.belop))) / total);
+        const del =
+          i === linjer.length - 1 || !total
+            ? rest
+            : blandet
+              ? Math.round((sum * ore(p.belop)) / netto)
+              : Math.round((sum * Math.abs(ore(p.belop))) / total);
         rest -= del;
         const sats = mvaSats(kode);
         const g = omvendt && sats ? Math.round((Math.abs(del) * 100) / sats) : Math.abs(ore(p.belop));

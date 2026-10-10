@@ -34,6 +34,7 @@ import {
   type Skatt,
 } from "./anlegg.js";
 import { maanedNavn } from "./lonnsberegning.js";
+import { bokforSalgsjustering, erKapitalvare, kanVaereKapitalvare, kapitalvarefelt, kapitalvarestatus } from "./mvaJustering.js";
 import { GRUPPER, maksSats, SALDOGRUPPER, saldoskjema } from "./saldo.js";
 import { kundefordringerVedStart } from "./salgBokforing.js";
 
@@ -128,6 +129,12 @@ const felt = {
   tidligere_til: mndS.nullable().optional(),
   tidligere_avskrevet: krS("det som er avskrevet").optional(),
   skatt_inngaende: krS("den skattemessige saldoen").nullable().optional(),
+  // Kapitalvaren for mva-justeringen (mvaJustering.ts): den inngående avgiften på kostprisen (hele),
+  // fradragsprosenten ved anskaffelsen, om bruken følger fellesprosenten, og egen prosent per år.
+  mva_inngaende: z.number({ error: "Skriv den inngående avgiften" }).finite().positive("Avgiften må være over 0").lt(1e12, "Beløpet er for stort").nullable().optional(),
+  mva_fradrag: z.number({ error: "Skriv fradragsprosenten" }).finite().min(0, "Fradraget er i prosent").max(100, "Fradraget er i prosent").nullable().optional(),
+  mva_felles: z.boolean().optional(),
+  mva_bruk: z.record(z.string().regex(/^(20\d{2}|2100)$/, "Ugyldig år"), z.number().finite().min(0, "Fradraget er i prosent").max(100, "Fradraget er i prosent")).optional(),
 };
 const nyttSkjema = z.object({
   ...felt,
@@ -159,6 +166,10 @@ function rad(b: Partial<z.infer<typeof nyttSkjema>>, naa?: Anleggsmiddel): Rad {
   if (sats != null && !["b", "e", "f", "g", "h", "i", "j"].includes(skatt)) throw new ApiFeil(400, "Egen sats gjelder bare driftsmidler med egen saldo (gruppe b og e–j)");
   if (sats != null && sats > maksSats(skatt as keyof typeof SALDOGRUPPER, true))
     throw new ApiFeil(400, `Satsen for gruppe ${skatt} kan være høyst ${maksSats(skatt as keyof typeof SALDOGRUPPER, true)} %`);
+  const mvaInn = b.mva_inngaende !== undefined ? b.mva_inngaende : (naa?.mva_inngaende ?? null);
+  const mvaFradrag = mvaInn == null ? null : b.mva_fradrag !== undefined ? b.mva_fradrag : (naa?.mva_fradrag ?? null);
+  if (mvaInn != null && mvaFradrag == null) throw new ApiFeil(400, "Skriv fradragsprosenten ved anskaffelsen");
+  if (mvaInn != null && !kanVaereKapitalvare(kategori)) throw new ApiFeil(400, "Tomt, goodwill og personbiler justeres ikke for merverdiavgift");
   return {
     navn: b.navn ?? naa!.navn,
     beskrivelse: b.beskrivelse !== undefined ? b.beskrivelse || null : (naa?.beskrivelse ?? null),
@@ -176,8 +187,15 @@ function rad(b: Partial<z.infer<typeof nyttSkjema>>, naa?: Anleggsmiddel): Rad {
     tidligere_til: tidligereTil ? sisteDag(tidligereTil) : null,
     tidligere_avskrevet: tidligere,
     skatt_inngaende: b.skatt_inngaende !== undefined ? b.skatt_inngaende : (naa?.skatt_inngaende ?? null),
+    mva_inngaende: mvaInn,
+    mva_fradrag: mvaFradrag,
+    mva_felles: b.mva_felles ?? naa?.mva_felles ?? (mvaFradrag == null || (mvaFradrag > 0 && mvaFradrag < 100)),
+    mva_bruk: b.mva_bruk ?? naa?.mva_bruk ?? {},
   };
 }
+
+// Verdien til databasen (egen prosent per år er jsonb).
+const verdi = (r: Rad, k: keyof Rad) => (k === "mva_bruk" ? JSON.stringify(r.mva_bruk) : r[k]);
 
 // Et nytt anleggsmiddel, uten anskaffelsen: feltene med standardverdiene for kategorien. Utgiftene
 // (utgifter.ts) bruker det og fører anskaffelsen selv.
@@ -188,7 +206,7 @@ export async function lagAnleggsmiddel(db: Db, org: string, b: Partial<z.infer<t
   const r = await en<{ id: string }>(
     db,
     `insert into faktura.anleggsmidler (org_id, ${kol.join(", ")}) values ($1, ${kol.map((_, i) => `$${i + 2}`).join(", ")}) returning id`,
-    [org, ...kol.map((k) => ny[k])],
+    [org, ...kol.map((k) => verdi(ny, k))],
   );
   return r!.id;
 }
@@ -217,6 +235,7 @@ async function detalj(db: Db, org: string, id: string) {
     plan: avskrivningsplan(a, hendelser),
     aar: aarsplan(a, hendelser),
     kan_reversere: a.kategori !== "goodwill" && nedskrevet > 0,
+    mva_justering: await kapitalvarestatus(db, org, a, iDag),
   };
 }
 
@@ -339,7 +358,10 @@ export function regnskapRuter() {
   );
 
   r.post("/regnskap/anleggsmidler", async (c) => {
-    const b = nyttSkjema.parse(await c.req.json().catch(() => ({})));
+    const inn = nyttSkjema.parse(await c.req.json().catch(() => ({})));
+    // Avgiften ved anskaffelsen over grensen gjør det til en kapitalvare (fullt fradrag), når
+    // avgiften på kostprisen ikke er oppgitt.
+    const b = inn.mva_inngaende === undefined && inn.anskaffelse?.mva ? { ...kapitalvarefelt(inn.kategori, inn.anskaffelse.mva, inn.anskaffelse.mva), ...inn } : inn;
     const ny = rad(b);
     if (b.anskaffelse && ny.tidligere_til) throw new ApiFeil(400, "Anskaffelsen av et anleggsmiddel som er ført i et annet system, bokføres ikke her");
     if (ny.anskaffet > osloIDag()) throw new ApiFeil(400, "Anskaffelsesdatoen kan ikke være fram i tid");
@@ -380,7 +402,7 @@ export function regnskapRuter() {
         await db.query(`update faktura.anleggsmidler set ${kol.map((k, i) => `${k} = $${i + 3}`).join(", ")} where org_id = $1 and id = $2`, [
           orgId(c),
           id,
-          ...kol.map((k) => ny[k]),
+          ...kol.map((k) => verdi(ny, k)),
         ]);
         return detalj(db, orgId(c), id);
       }),
@@ -410,6 +432,15 @@ export function regnskapRuter() {
         if (hendelser.some((h) => h.type === "anskaffelse" && !h.reversert)) throw new ApiFeil(409, "Anskaffelsen er alt bokført");
         const k = regnskapskontoer(await hentRegnskapsoppsett(db, orgId(c)));
         const bilag = await bokfor(db, orgId(c), anskaffelsesbilag(a, b.motkonto, b.mva ?? 0, k));
+        const kapital = a.mva_inngaende == null && b.mva ? kapitalvarefelt(a.kategori, b.mva, b.mva) : {};
+        if ("mva_inngaende" in kapital)
+          await db.query("update faktura.anleggsmidler set mva_inngaende = $3, mva_fradrag = $4, mva_felles = $5 where org_id = $1 and id = $2", [
+            orgId(c),
+            id,
+            kapital.mva_inngaende,
+            kapital.mva_fradrag,
+            kapital.mva_felles,
+          ]);
         return { ...(await detalj(db, orgId(c), id)), bilag };
       }),
       201,
@@ -463,6 +494,9 @@ export function regnskapRuter() {
         mva: krS("mva-en").optional(),
         motkonto: kontoS.optional(),
         tekst: z.string().trim().max(300, "Teksten kan være høyst 300 tegn").nullable().optional(),
+        // Den samlede mva-justeringen for kapitalvarer ved salg (false: ikke, f.eks. når kjøperen
+        // overtar justeringsplikten for fast eiendom).
+        mva_justering: z.boolean().optional(),
       })
       .parse(await c.req.json().catch(() => ({})));
     if (b.dato > osloIDag()) throw new ApiFeil(400, "Datoen kan ikke være fram i tid");
@@ -503,9 +537,42 @@ export function regnskapRuter() {
           )),
           sum: salg ? (b.vederlag ?? 0) : 0,
         });
+        // Den samlede mva-justeringen for resten av justeringsperioden (kapitalvarer).
+        if (salg && b.mva_justering !== false && erKapitalvare(anlegg[0]!)) {
+          const j = await bokforSalgsjustering(db, orgId(c), id);
+          if (j) bilag.push({ ...j, sum: 0 });
+        }
         return { ...(await detalj(db, orgId(c), id)), bilag };
       }),
       201,
+    );
+  });
+
+  // Den samlede mva-justeringen ved salget av en kapitalvare: føres (på nytt) med prosenten for resten
+  // av perioden (standard: 100 når salget hadde avgift, ellers 0), eller angres.
+  r.post("/regnskap/anleggsmidler/:id/mva-justering", async (c) => {
+    const id = uuid.parse(c.req.param("id"));
+    const b = z
+      .object({ fradrag: z.number().finite().min(0, "Fradraget er i prosent").max(100, "Fradraget er i prosent").optional() })
+      .parse(await c.req.json().catch(() => ({})));
+    return c.json(
+      await bruk(c, async (db) => {
+        await krev(db, orgId(c));
+        const bilag = await bokforSalgsjustering(db, orgId(c), id, b.fradrag);
+        return { ...(await detalj(db, orgId(c), id)), bilag };
+      }),
+      201,
+    );
+  });
+
+  r.delete("/regnskap/anleggsmidler/:id/mva-justering", async (c) => {
+    const id = uuid.parse(c.req.param("id"));
+    return c.json(
+      await bruk(c, async (db) => {
+        await krev(db, orgId(c));
+        await db.query("select faktura.angre_mva_justering($1, null, $2)", [orgId(c), id]);
+        return detalj(db, orgId(c), id);
+      }),
     );
   });
 

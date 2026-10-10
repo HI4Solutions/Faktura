@@ -1,8 +1,9 @@
 // Månedsavslutningen går av seg selv (0092_maanedsavslutning.sql). Når en måned er over (fra kl. 08
 // den 1., etter morgenhentingen fra banken), bokfører workeren avskrivningene og periodiseringene som
 // ikke er bokført til og med måneden (et bilag per måned i serie A og P, som når brukeren bokfører
-// dem), lagrer sjekklisten for måneden (bankpostene, utgiftene, lønnen, avskrivningene og
-// periodiseringene: det som er ført og det som gjenstår) og varsler eier, administrator og
+// dem), mva-justeringen for kapitalvarene når året er over og mva-oppgjøret for terminene som er
+// over (serie V), lagrer sjekklisten for måneden (bankpostene, utgiftene, lønnen, avskrivningene,
+// periodiseringene og merverdiavgiften: det som er ført og det som gjenstår) og varsler eier, administrator og
 // regnskapsføreren. Når alle organisasjonene er ferdige, sendes månedsrapportene til
 // regnskapsførerne (rapportmodul.ts), så de får med det som ble bokført.
 //
@@ -15,6 +16,7 @@ import { kontoavstemming } from "./bankAvstemming.js";
 import { alle, en, somSystem, type Db } from "./db.js";
 import { maanedNavn } from "./lonnsberegning.js";
 import { bokforOppgjorTil, mvaStatus, terminSomSlutter, terminType } from "./mva.js";
+import { aarsjustering, bokforJusteringTil } from "./mvaJustering.js";
 import { bokforPeriodiseringer, hentPeriodiseringer, manglerStart, periodiseringsforslag } from "./periodisering.js";
 import type { Rapportdef } from "./rapportmodul.js";
 import { bokforAvskrivninger } from "./regnskapRuter.js";
@@ -39,7 +41,7 @@ export const forrigeMaaned = (iDag: string) => plussMnd(mnd(iDag), -1);
 
 // ok: ført. venter: ikke ført, men bokføres når måneden er over (denne måneden).
 export type Punkt = {
-  nokkel: "bank" | "utgifter" | "lonn" | "avskrivninger" | "periodiseringer" | "mva" | "aarsoppgjor";
+  nokkel: "bank" | "utgifter" | "lonn" | "avskrivninger" | "periodiseringer" | "mva" | "mva_justering" | "aarsoppgjor";
   navn: string;
   ok: boolean;
   venter?: boolean;
@@ -191,6 +193,31 @@ export async function maanedsstatus(db: Db, org: string, maaned: string, iDag = 
       }
     }
   }
+  // Mva-justeringen for kapitalvarene (mvaJustering.ts) i desember, når det er kapitalvarer i
+  // justeringsperioden i året (eller en justering er bokført).
+  if (maaned.endsWith("-12")) {
+    const aar = Number(maaned.slice(0, 4));
+    const j = await aarsjustering(db, org, aar, iDag, anlegg);
+    if (j.kapitalvarer.length || j.bilag) {
+      const lenke = `/regnskap?fane=mva&aar=${aar}&termin=${t?.termin ?? 6}`;
+      const hva = j.sum > 0 ? `${kr(j.sum)} kr mer i fradrag` : `${kr(-j.sum)} kr å betale tilbake`;
+      punkter.push(
+        maaned >= mnd(iDag)
+          ? { nokkel: "mva_justering", navn: "Mva-justeringen", ok: false, venter: true, tekst: `Mva-justeringen for kapitalvarene i ${aar} føres når året er over.`, lenke }
+          : {
+              nokkel: "mva_justering",
+              navn: "Mva-justeringen",
+              ok: j.stemmer,
+              tekst: j.stemmer
+                ? j.trengs
+                  ? `Mva-justeringen for kapitalvarene i ${aar} er bokført (${j.bilag!.bilagsnummer}: ${hva}).`
+                  : `Ingen mva-justering for kapitalvarene i ${aar} (endringen i fradragsprosenten er under ti prosentpoeng).`
+                : `Mva-justeringen for kapitalvarene i ${aar} (${hva}) er ${j.bilag ? "endret etter at den ble bokført" : "ikke bokført"}${j.laast ? "; året er låst" : ""}.`,
+              lenke,
+            },
+      );
+    }
+  }
   // Årsoppgjøret (aarsoppgjor.ts) i desember, når det er bilag i året: skatten og disponeringen av
   // årsresultatet, og låsen.
   if (maaned.endsWith("-12")) {
@@ -252,8 +279,12 @@ export async function avsluttMaaned(db: Db, org: string, maaned: string, iDag = 
   if (eldste && eldste < fra)
     sperret = `Avskrivningene eller periodiseringene for ${maanedNavn(`${eldste}-01`)} er ikke bokført. Bokfør dem under Regnskap → Bilag (månedsavslutningen); da går den av seg selv igjen.`;
   else if (eldste) bilag.push(...(await bokforAvskrivninger(db, org, maaned)), ...(await bokforPeriodiseringer(db, org, maaned)));
-  // Oppgjøret for merverdiavgiften for terminene som er over (mva.ts); det som ikke går, står i
-  // sjekklisten.
+  // Mva-justeringen for kapitalvarene for året som er over (mvaJustering.ts), så oppgjøret for den
+  // siste terminen tar den med, og oppgjøret for merverdiavgiften for terminene som er over (mva.ts);
+  // det som ikke går, står i sjekklisten.
+  const justering = await bokforJusteringTil(db, org, maaned, fra, iDag);
+  bilag.push(...justering.bilag);
+  for (const f of justering.feil) logg("WARNING", "Mva-justeringen ble ikke bokført", { org_id: org, feil: f });
   const mva = await bokforOppgjorTil(db, org, maaned, fra, iDag);
   bilag.push(...mva.bilag);
   for (const f of mva.feil) logg("WARNING", "Mva-oppgjøret ble ikke bokført", { org_id: org, feil: f });

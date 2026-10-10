@@ -2625,6 +2625,19 @@ table.mva-linjer td:first-child { min-width: 180px; }
 .mva-levert > label { margin-bottom: 0; }
 table.mva-linjer tfoot td { font-weight: 650; border-bottom: 0; }
 .mva-sats-under, .mva-kort { display: none; }
+/* Mva-justeringen for kapitalvarer (RegnskapMvaJustering.tsx). */
+.mva-justering.gjenstar, .mva-salg.gjenstar { border-left: 3px solid var(--advarsel); }
+.mva-justering > p { margin: 6px 0 10px; max-width: 80ch; }
+.mva-felles { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px 20px; flex-wrap: wrap; margin: 4px 0 10px; }
+.mva-felles form { display: flex; align-items: flex-end; gap: 8px; margin: 0; }
+.mva-felles form label { display: flex; flex-direction: column; margin: 0; }
+.mva-felles input { width: 7em; }
+.mvaj-fradrag-under { display: none; }
+.mva-samlet { margin-top: 12px; border-top: 1px solid var(--kant); padding-top: 10px; }
+.mva-samlet ul { margin: 6px 0 0; padding-left: 18px; }
+.mva-salg { margin: 10px 0; }
+.mva-salg p { margin: 4px 0 8px; }
+.mva-bruk { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0 12px; }
 .mva-terminer .liste-rad.valgt { background: var(--aksent-lys); }
 .mva-terminer .liste-rad.valgt .tittel { color: var(--aksent); }
 /* På mobil: satsen under grunnlaget, så merverdiavgiften får plass. */
@@ -2636,6 +2649,8 @@ table.mva-linjer tfoot td { font-weight: 650; border-bottom: 0; }
   .mva-sats-under { display: block; }
   .mva-kort { display: inline; }
   .mva-terminer .liste-rad .tittel { white-space: normal; }
+  table.mva-linjer .mvaj-fradrag { display: none; }
+  .mvaj-fradrag-under { display: block; }
 }
 .maaned-status-hode { display: flex; justify-content: space-between; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
 .maaned-status-hode h3 { margin: 0; }

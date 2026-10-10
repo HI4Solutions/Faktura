@@ -22,6 +22,7 @@ import { Utgifter } from "./RegnskapUtgifter";
 import { Bank, visKonto, type Bankoversikt } from "./RegnskapBank";
 import { Mva } from "./RegnskapMva";
 import { Aarsoppgjor } from "./RegnskapAarsoppgjor";
+import { Kapitalvare, justeringTekst, salgsforslag, type Kapitalvarestatus } from "./RegnskapMvaJustering";
 
 type Kategori = { kode: string; navn: string; konto: string; avskrivningskonto: string | null; skatt: string; levetid_mnd: number | null };
 type Kontorad = { rolle: string; navn: string; standard: string; konto: string; endret: boolean };
@@ -65,6 +66,11 @@ type Anlegg = {
   avgang_dato: string | null;
   avgang_type: "salg" | "utrangering" | null;
   avgang_vederlag: number | null;
+  // Kapitalvaren for mva-justeringen (RegnskapMvaJustering.tsx).
+  mva_inngaende: number | null;
+  mva_fradrag: number | null;
+  mva_felles: boolean;
+  mva_bruk: Record<string, number>;
   avskrevet: number;
   nedskrevet: number;
   verdi: number;
@@ -87,7 +93,11 @@ type Hendelse = {
 };
 type Planmaaned = { maaned: string; belop: number; bokfort: boolean; bilag: string | null; verdi: number };
 type Planaar = { aar: number; inngaende: number; avskrivning: number; nedskrivning: number; avgang: number; utgaende: number; bokfort: boolean };
-type Detalj = { anleggsmiddel: Anlegg; hendelser: Hendelse[]; plan: Planmaaned[]; aar: Planaar[]; kan_reversere: boolean };
+type Detalj = { anleggsmiddel: Anlegg; hendelser: Hendelse[]; plan: Planmaaned[]; aar: Planaar[]; kan_reversere: boolean; mva_justering: Kapitalvarestatus };
+// Kategoriene som ikke er kapitalvarer for mva-justeringen, og de som er fast eiendom (grensen
+// 100 000 kr og ti år; ellers 50 000 kr og fem år).
+const IKKE_KAPITALVARE = ["tomt", "goodwill", "personbil"];
+const FAST_EIENDOM = ["bygning", "teknisk_installasjon"];
 const levetid = (m: number | null) => (m == null ? "Avskrives ikke" : m % 12 === 0 ? `${m / 12} år` : m < 12 ? `${m} mnd` : `${Math.floor(m / 12)} år og ${m % 12} mnd`);
 const skattNavn = (s: string) => (s === "lineaer" ? "Lineært" : s === "ingen" ? "Avskrives ikke" : `Gruppe ${s}`);
 const tekstTall = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
@@ -322,13 +332,20 @@ function AnleggSkjema({ oppsett, naa, bokfort, lagret, avbryt }: { oppsett: Opps
     bokfor: !naa,
     motkonto: oppsett.kontoer.find((k) => k.rolle === "leverandorgjeld")!.konto,
     mva: "",
+    mva_inngaende: tekstTall(naa?.mva_inngaende),
+    mva_fradrag: tekstTall(naa?.mva_fradrag),
+    mva_felles: naa?.mva_felles ?? true,
   });
-  const [mer, settMer] = useState(!!naa && (!!naa.avskrivningskonto || !!naa.skatt_kostpris || naa.avskrives_fra.slice(0, 7) !== naa.anskaffet.slice(0, 7)));
+  const [mer, settMer] = useState(
+    !!naa && (!!naa.avskrivningskonto || !!naa.skatt_kostpris || naa.avskrives_fra.slice(0, 7) !== naa.anskaffet.slice(0, 7) || naa.mva_inngaende != null),
+  );
   const h = useHandling();
   const k = kat(s.kategori);
   const tomt = s.kategori === "tomt";
   const fast = s.kategori === "goodwill" || tomt;
   const enkelt = ["b", "e", "f", "g", "h", "i", "j"].includes(s.skatt);
+  const kanKapitalvare = !IKKE_KAPITALVARE.includes(s.kategori);
+  const grense = FAST_EIENDOM.includes(s.kategori) ? 100000 : 50000;
   const maaneder = Math.round(tall(s.levetid || "0") * 12);
   const sett = (x: Partial<typeof s>) => settS({ ...s, ...x });
   const velgKategori = (kode: string) => {
@@ -358,6 +375,12 @@ function AnleggSkjema({ oppsett, naa, bokfort, lagret, avbryt }: { oppsett: Opps
       tidligere_avskrevet: s.tidligere && s.tidligere_avskrevet ? tall(s.tidligere_avskrevet) : 0,
       skatt_inngaende: s.tidligere && s.skatt_inngaende ? tall(s.skatt_inngaende) : null,
     };
+    // Kapitalvaren: tomt felt for en ny er avgiften på anskaffelsen (over grensen, fullt fradrag).
+    if (kanKapitalvare && s.mva_inngaende.trim()) {
+      kropp.mva_inngaende = tall(s.mva_inngaende);
+      kropp.mva_fradrag = s.mva_fradrag.trim() ? tall(s.mva_fradrag) : null;
+      kropp.mva_felles = s.mva_felles;
+    } else if (naa && naa.mva_inngaende != null) kropp.mva_inngaende = null;
     if (!naa) kropp.anskaffelse = s.bokfor && !s.tidligere ? { motkonto: s.motkonto, mva: s.mva ? tall(s.mva) : 0 } : null;
     if (naa && bokfort) for (const f of ["kategori", "anskaffet", "kostpris", "avskrives_fra", "konto", "tidligere_til", "tidligere_avskrevet"]) delete kropp[f];
     const r = await h.kjor(() => api<Detalj>(naa ? "PATCH" : "POST", naa ? `${sti}/${naa.id}` : sti, kropp));
@@ -490,7 +513,7 @@ function AnleggSkjema({ oppsett, naa, bokfort, lagret, avbryt }: { oppsett: Opps
       )}
 
       <button type="button" className="lenke" onClick={() => settMer(!mer)}>
-        {mer ? "Færre valg" : "Flere valg (kontoer, når avskrivningen begynner, skattemessig kostpris)"}
+        {mer ? "Færre valg" : "Flere valg (kontoer, når avskrivningen begynner, skattemessig kostpris, kapitalvare for mva)"}
       </button>
       {mer && (
         <>
@@ -516,6 +539,32 @@ function AnleggSkjema({ oppsett, naa, bokfort, lagret, avbryt }: { oppsett: Opps
               <span className="felt-hjelp">Når den er en annen enn i regnskapet.</span>
             </label>
           </div>
+          {kanKapitalvare && (
+            <>
+              <h4 className="lonn-under">Merverdiavgift (kapitalvare)</h4>
+              <p className="dempet liten">
+                Med inngående mva på kostprisen på minst {kr(grense)} kr er det en kapitalvare: fradraget justeres i {grense > 50000 ? "ti" : "fem"} år når bruken i
+                avgiftspliktig virksomhet endres med minst ti prosentpoeng.{!naa ? " Tomt felt: avgiften på anskaffelsen, når den er over grensen." : ""}
+              </p>
+              <div className="rad">
+                <label>
+                  Inngående mva på kostprisen (kr)
+                  <input inputMode="decimal" value={s.mva_inngaende} onChange={(e) => sett({ mva_inngaende: e.target.value })} />
+                  <span className="felt-hjelp">Hele avgiften, også det som ikke ble trukket fra.</span>
+                </label>
+                <label>
+                  Fradrag ved anskaffelsen (%)
+                  <input inputMode="decimal" required={!!s.mva_inngaende.trim()} value={s.mva_fradrag} placeholder="100" onChange={(e) => sett({ mva_fradrag: e.target.value })} />
+                </label>
+              </div>
+              {s.mva_inngaende.trim() && (
+                <label>
+                  <input type="checkbox" checked={s.mva_felles} onChange={(e) => sett({ mva_felles: e.target.checked })} /> Til felles bruk (følger fradragsprosenten for
+                  fellesanskaffelser hvert år)
+                </label>
+              )}
+            </>
+          )}
         </>
       )}
       {bokfort && <p className="liten dempet">Det er bokført noe for anleggsmiddelet: kategorien, datoene, kostprisen og kontoen kan ikke endres (bruk nedskrivning, eller reverser bilagene).</p>}
@@ -700,6 +749,8 @@ function AnleggDetalj({ id, tilbake }: { id: string; tilbake: () => void }) {
         </>
       )}
 
+      <Kapitalvare a={a} m={d.data.mva_justering} ferdig={(r, tekst) => ferdig(r, tekst)} />
+
       <h3 className="lonn-under">Bokført</h3>
       {!hendelser.length ? (
         <p className="dempet liten">Ingenting er bokført for anleggsmiddelet ennå.</p>
@@ -770,7 +821,7 @@ function AnleggDetalj({ id, tilbake }: { id: string; tilbake: () => void }) {
         />
       </Dialog>
       <Dialog apen={handling === "avgang"} lukk={() => settHandling(null)} tittel="Selg eller utranger">
-        <Avgang a={a} plan={plan} oppsett={oppsett.data} ferdig={(r) => ferdig(r, "Avgangen er bokført")} avbryt={() => settHandling(null)} />
+        <Avgang a={a} plan={plan} oppsett={oppsett.data} m={d.data.mva_justering} ferdig={(r) => ferdig(r, "Avgangen er bokført")} avbryt={() => settHandling(null)} />
       </Dialog>
       <Dialog apen={handling === "anskaffelse"} lukk={() => settHandling(null)} tittel="Bokfør anskaffelsen">
         <Anskaffelse a={a} oppsett={oppsett.data} ferdig={(r) => ferdig(r, "Anskaffelsen er bokført")} avbryt={() => settHandling(null)} />
@@ -832,10 +883,10 @@ function Nedskrivning({ a, reverser, ferdig, avbryt }: { a: Anlegg; reverser: bo
   );
 }
 
-function Avgang({ a, plan, oppsett, ferdig, avbryt }: { a: Anlegg; plan: Planmaaned[]; oppsett: Oppsett; ferdig: (r: Detalj) => void; avbryt: () => void }) {
+function Avgang({ a, plan, oppsett, m: mv, ferdig, avbryt }: { a: Anlegg; plan: Planmaaned[]; oppsett: Oppsett; m: Kapitalvarestatus; ferdig: (r: Detalj) => void; avbryt: () => void }) {
   const { org } = useKonto();
   const konto = (r: string) => oppsett.kontoer.find((k) => k.rolle === r)!.konto;
-  const [s, settS] = useState({ type: "salg" as "salg" | "utrangering", dato: iDag(), vederlag: "", mva: "", motkonto: konto("bank"), tekst: "" });
+  const [s, settS] = useState({ type: "salg" as "salg" | "utrangering", dato: iDag(), vederlag: "", mva: "", motkonto: konto("bank"), tekst: "", overtas: false });
   const h = useHandling();
   const m = s.dato.slice(0, 7);
   // Verdien etter avskrivningene til og med måneden (etter planen).
@@ -844,6 +895,8 @@ function Avgang({ a, plan, oppsett, ferdig, avbryt }: { a: Anlegg; plan: Planmaa
   const vederlag = s.type === "salg" && s.vederlag ? tall(s.vederlag) : 0;
   const diff = Math.round((vederlag - verdi) * 100) / 100;
   const ikkeBokfort = plan.filter((p) => !p.bokfort && p.maaned <= m && p.belop > 0).length;
+  // Den samlede mva-justeringen for kapitalvaren (resten av justeringsperioden).
+  const justering = s.type === "salg" ? salgsforslag(a, mv, s.dato, !!s.mva && tall(s.mva) > 0) : null;
   async function lagre(e: FormEvent) {
     e.preventDefault();
     const r = await h.kjor(() =>
@@ -854,6 +907,7 @@ function Avgang({ a, plan, oppsett, ferdig, avbryt }: { a: Anlegg; plan: Planmaa
         mva: s.type === "salg" && s.mva ? tall(s.mva) : 0,
         motkonto: s.motkonto,
         tekst: s.tekst.trim() || null,
+        mva_justering: !s.overtas,
       }),
     );
     if (r) ferdig(r);
@@ -904,6 +958,21 @@ function Avgang({ a, plan, oppsett, ferdig, avbryt }: { a: Anlegg; plan: Planmaa
         Bokført verdi som går ut: <strong>{kr(verdi)}</strong>.{" "}
         {diff > 0 ? `Gevinst: ${kr(diff)}.` : diff < 0 ? `Tap: ${kr(-diff)}.` : ""}
       </p>
+      {justering && (
+        <>
+          <p className="liten">
+            Mva-justering for {justering.fra === justering.til ? justering.fra : `${justering.fra}–${justering.til}`} (kapitalvare): fradraget blir {justering.prosent} %
+            ved salg {justering.prosent ? "med" : "uten"} mva, {justeringTekst(justering.belop)}
+            {justering.belop ? ", ført mot gevinst eller tap" : ""}.
+          </p>
+          {justering.belop !== 0 && (
+            <label>
+              <input type="checkbox" checked={s.overtas} onChange={(e) => settS({ ...s, overtas: e.target.checked })} /> Kjøperen overtar justeringsplikten (ingen justering
+              nå)
+            </label>
+          )}
+        </>
+      )}
       <Skjemaknapper h={h} tekst={s.type === "salg" ? "Selg og bokfør" : "Utranger og bokfør"} avbryt={avbryt} />
     </form>
   );

@@ -6,6 +6,8 @@
 //  - inngående avgift (1, 11, 12, 13) bare med merverdiavgiften, negativ, uten grunnlag og sats;
 //  - tjenester kjøpt fra utlandet: den beregnede avgiften med grunnlag og sats, og fradraget på egen
 //    linje med samme kode (86 og 88; 87 og 89 har ikke fradrag);
+//  - justeringen av inngående avgift for kapitalvarer (mvaJustering.ts, kilde mva_justering) på egen
+//    linje med kode 1 og spesifikasjonen «justering», uten grunnlag og sats (positiv: tilbakebetaling);
 //  - hele kroner, og summen av linjene er det som skal betales (eller er til gode).
 // Grunnlaget er grunnlagslinjene med koden (salget); for kjøp fra utlandet regnes det fra den beregnede
 // avgiften, siden kostnaden også kan ha avgiften uten fradrag i seg (og et anleggsmiddel har ikke koden
@@ -165,8 +167,20 @@ const gyldigPaa = (art: Avgiftskonto["art"], kode: string) =>
 
 // --- Meldingen -------------------------------------------------------------------------------------
 
-export type Mvalinje = { kode: string; beskrivelse: string; grunnlag: number | null; sats: number | null; merverdiavgift: number; fradrag: boolean };
-export type Postering = { konto: string; belop: number; mva_kode: string | null };
+// spesifikasjon: «justering» for justeringen for kapitalvarer (ellers null).
+export type Mvalinje = {
+  kode: string;
+  beskrivelse: string;
+  grunnlag: number | null;
+  sats: number | null;
+  merverdiavgift: number;
+  fradrag: boolean;
+  spesifikasjon: "justering" | null;
+};
+// justering: posteringen er i et justeringsbilag for kapitalvarer.
+export type Postering = { konto: string; belop: number; mva_kode: string | null; justering?: boolean };
+const JUSTERING = "Justering av merverdiavgift for kapitalvarer";
+const JUSTERINGSKODER = ["1", "81"];
 export type Mvaberegning = { linjer: Mvalinje[]; sum: number; kontoer: Record<string, number>; kontroller: string[] };
 
 // Linjene i meldingen fra posteringene i terminen (uten oppgjørsbilagene).
@@ -174,6 +188,7 @@ export function beregnMva(poster: Postering[], konti: Map<string, Avgiftskonto>)
   const grunnlag = new Map<string, number>();
   const avgift = new Map<string, number>(); // utgående og beregnet (positivt)
   const fradrag = new Map<string, number>(); // inngående (negativt)
+  const justert = new Map<string, number>(); // justeringen for kapitalvarer (negativt: mer fradrag)
   const kontoer: Record<string, number> = {}; // bevegelsen på hver avgiftskonto
   const leggTil = (m: Map<string, number>, k: string, b: number) => m.set(k, rund((m.get(k) ?? 0) + b));
   let utenKode = 0;
@@ -189,7 +204,8 @@ export function beregnMva(poster: Postering[], konti: Map<string, Avgiftskonto>)
         ugyldige.add(`kode ${kode} på ${p.konto}`);
         kode = a.kode;
       }
-      if (a.art === "utg" || a.art === "beregnet") leggTil(avgift, kode, -p.belop);
+      if (p.justering && a.art === "inn") leggTil(justert, JUSTERINGSKODER.includes(kode) ? kode : "1", -p.belop);
+      else if (a.art === "utg" || a.art === "beregnet") leggTil(avgift, kode, -p.belop);
       else leggTil(fradrag, kode, -p.belop);
     } else if (p.mva_kode) {
       if (p.mva_kode in UTGAENDE || (UTEN_AVGIFT.includes(p.mva_kode) && p.mva_kode !== "85")) leggTil(grunnlag, p.mva_kode, -p.belop);
@@ -198,15 +214,18 @@ export function beregnMva(poster: Postering[], konti: Map<string, Avgiftskonto>)
     }
   }
   const linjer: Mvalinje[] = [];
-  const koder = [...new Set([...grunnlag.keys(), ...avgift.keys(), ...fradrag.keys()])].sort((x, y) => Number(x) - Number(y));
+  const koder = [...new Set([...grunnlag.keys(), ...avgift.keys(), ...fradrag.keys(), ...justert.keys()])].sort((x, y) => Number(x) - Number(y));
   for (const kode of koder) {
     const a = avgift.get(kode) ?? 0;
     const g = kode in OMVENDT && a !== 0 ? rund((a * 100) / OMVENDT[kode]!) : (grunnlag.get(kode) ?? 0);
     const f = fradrag.get(kode) ?? 0;
+    const j = justert.get(kode) ?? 0;
     const sats = UTGAENDE[kode] ?? OMVENDT[kode] ?? (UTEN_AVGIFT.includes(kode) ? 0 : null);
+    const beskrivelse = MVA_KODER[kode] ?? `Kode ${kode}`;
     if (sats !== null && (krone(g) !== 0 || krone(a) !== 0))
-      linjer.push({ kode, beskrivelse: MVA_KODER[kode] ?? `Kode ${kode}`, grunnlag: krone(g), sats, merverdiavgift: krone(a), fradrag: false });
-    if (krone(f) !== 0) linjer.push({ kode, beskrivelse: MVA_KODER[kode] ?? `Kode ${kode}`, grunnlag: null, sats: null, merverdiavgift: krone(f), fradrag: true });
+      linjer.push({ kode, beskrivelse, grunnlag: krone(g), sats, merverdiavgift: krone(a), fradrag: false, spesifikasjon: null });
+    if (krone(f) !== 0) linjer.push({ kode, beskrivelse, grunnlag: null, sats: null, merverdiavgift: krone(f), fradrag: true, spesifikasjon: null });
+    if (krone(j) !== 0) linjer.push({ kode, beskrivelse: JUSTERING, grunnlag: null, sats: null, merverdiavgift: krone(j), fradrag: true, spesifikasjon: "justering" });
   }
   const sum = linjer.reduce((s, l) => s + l.merverdiavgift, 0);
   const kontroller: string[] = [];
@@ -223,7 +242,7 @@ export function beregnMva(poster: Postering[], konti: Map<string, Avgiftskonto>)
     kontroller.push(`Grunnlaget for kode ${l.kode} er negativt (f.eks. kreditnotaer); i Altinn må det forklares med en merknad.`);
   for (const kode of FRADRAG_OMVENDT) {
     const b = linjer.find((l) => l.kode === kode && !l.fradrag)?.merverdiavgift ?? 0;
-    const f = -(linjer.find((l) => l.kode === kode && l.fradrag)?.merverdiavgift ?? 0);
+    const f = -(linjer.find((l) => l.kode === kode && l.fradrag && !l.spesifikasjon)?.merverdiavgift ?? 0);
     if (f > b) kontroller.push(`Kode ${kode}: fradraget (${kr(f)} kr) er større enn den beregnede avgiften (${kr(b)} kr).`);
   }
   return { linjer, sum, kontoer, kontroller };
@@ -258,7 +277,7 @@ export type Mvastatus = {
 async function hentPoster(db: Db, org: string, t: Termin, konti: Map<string, Avgiftskonto>) {
   return alle<Postering>(
     db,
-    `select p.konto, p.belop::float8 as belop, p.mva_kode
+    `select p.konto, p.belop::float8 as belop, p.mva_kode, b.kilde = 'mva_justering' as justering
        from faktura.posteringer p join faktura.bilag b on b.id = p.bilag_id
       where b.org_id = $1 and b.dato between $2::date and $3::date and b.kilde <> 'mva'
         and (p.mva_kode is not null or p.konto = any($4::text[]))
@@ -556,7 +575,13 @@ export const mvaRapporter: Rapportdef[] = [
           { nokkel: "sats", navn: "Sats", type: "prosent" },
           { nokkel: "mva", navn: "Merverdiavgift", type: "kr", sum: true },
         ],
-        rader: s.linjer.map((l) => ({ kode: l.kode, hva: l.fradrag && l.kode in OMVENDT ? `${l.beskrivelse} (fradrag)` : l.beskrivelse, grunnlag: l.grunnlag ?? "", sats: l.sats ?? "", mva: l.merverdiavgift })),
+        rader: s.linjer.map((l) => ({
+          kode: l.kode,
+          hva: l.fradrag && l.kode in OMVENDT && !l.spesifikasjon ? `${l.beskrivelse} (fradrag)` : l.beskrivelse,
+          grunnlag: l.grunnlag ?? "",
+          sats: l.sats ?? "",
+          mva: l.merverdiavgift,
+        })),
       };
     },
   },

@@ -16,6 +16,7 @@ export const KILDER: Record<string, string> = {
   utgift_betaling: "Betaling av utgift",
   bank: "Bankpost",
   mva: "Mva-oppgjør",
+  mva_justering: "Mva-justering",
   aarsoppgjor: "Årsoppgjør",
   lonn: "Lønn",
   nav_refusjon: "Refusjon fra NAV",
@@ -66,6 +67,11 @@ export async function hentRegnskapsbilag(db: Db, org: string, v: { fra?: string;
               when 'bank' then '/regnskap?fane=bank&post=' || b.kilde_id
               when 'mva' then (select '/regnskap?fane=mva&aar=' || t.aar || '&termin=' || t.termin from faktura.mva_terminer t where t.id = b.kilde_id)
               when 'aarsoppgjor' then (select '/regnskap?fane=aarsoppgjor&aar=' || a.aar from faktura.aarsoppgjor a where a.id = b.kilde_id)
+              when 'mva_justering' then coalesce(
+                (select '/regnskap?fane=mva&aar=' || j.aar || '&termin='
+                        || case (select o.mva_termin from faktura.regnskap_oppsett o where o.org_id = b.org_id) when 'maaned' then 12 when 'aar' then 1 else 6 end
+                   from faktura.mva_justeringer j where j.id = b.kilde_id),
+                '/regnskap?fane=anlegg&anlegg=' || b.kilde_id)
               when 'lonn' then '/lonn?kjoring=' || b.kilde_id
             end as lenke
        from faktura.bilag b

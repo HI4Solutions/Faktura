@@ -129,6 +129,19 @@ describe("avskrivningsplanen (uten database)", () => {
       ["1240", -60000],
       ["3800", -10000],
     ]);
+    // Med avgift: avgiften og grunnlaget (verdien og gevinsten, til sammen salgssummen) får koden.
+    expect(avgangsbilag(anlegg({}), { dato: "2026-10-05", type: "salg", vederlag: 70000, mva: 17500, motkonto: "1920", verdi: 60000, tekst: null }, k).posteringer.map((p) => p.mva_kode ?? null)).toEqual([
+      null,
+      "3",
+      "3",
+      "3",
+    ]);
+    expect(avgangsbilag(anlegg({}), { dato: "2026-10-05", type: "salg", vederlag: 10000, mva: 1500, motkonto: "1920", verdi: 12000, tekst: null }, k).posteringer.map((p) => p.mva_kode ?? null)).toEqual([
+      null,
+      "31",
+      "31",
+      "31",
+    ]);
     expect(poster(avgangsbilag(anlegg({}), { dato: "2026-10-05", type: "salg", vederlag: 50000, mva: 0, motkonto: "1500", verdi: 60000, tekst: null }, k))).toEqual([
       ["1500", 50000],
       ["1240", -60000],
