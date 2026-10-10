@@ -10,7 +10,8 @@
 //     hver ansatt), forskuddstrekket (KID-en, eller Skatteetatens kontonummer og beløpet) og
 //     trekkene (mottakerens kontonummer og KID-en eller beløpet).
 //  5. Betalinger til Skatteetaten: det som står på kontoene for forskuddstrekk, arbeidsgiveravgift
-//     eller merverdiavgift, eller arbeidsgiveravgiften for den siste terminen.
+//     eller merverdiavgift, eller arbeidsgiveravgiften for den siste terminen; og merverdiavgift til
+//     gode fra Skatteetaten (det som står på oppgjørskontoen, mva.ts).
 //  6. Overføringer mellom egne kontoer: med motposten på den andre kontoen, eller mot kontoen den
 //     andre bankkontoen føres på i regnskapet.
 //  7. Det brukeren har lært reglene (motparten → kontoen).
@@ -164,6 +165,21 @@ async function bilagUtenPost(db: Db, org: string, konto: string, dato: string) {
   );
 }
 
+// Mva-oppgjørene (mva.ts) de siste åtte månedene før datoen: beløpet på oppgjørskontoen (positivt å
+// betale, negativt til gode) og teksten. Saldoen på kontoen netter terminene; hver termin betales
+// (eller kommer tilbake) for seg.
+async function mvaOppgjor(db: Db, org: string, konto: string, dato: string) {
+  return alle<{ belop: number; tekst: string }>(
+    db,
+    `select -sum(p.belop)::float8 as belop, b.tekst
+       from faktura.bilag b join faktura.posteringer p on p.bilag_id = b.id and p.konto = $2
+      where b.org_id = $1 and b.kilde = 'mva' and b.reverserer is null and b.reversert_av is null
+        and b.dato <= $3::date and b.dato > $3::date - interval '8 months'
+      group by b.id, b.tekst, b.dato order by b.dato desc`,
+    [org, konto, dato],
+  );
+}
+
 // Hva reglene sier om en bankpost (uten å endre noe).
 export async function vurder(db: Db, g: Grunnlag, p: Post): Promise<Vurdering> {
   if (p.valuta !== "NOK") return { utfall: "uavklart", regel: `Bankposten er i ${p.valuta}; bare kroner føres av seg selv. Velg kontoen.` };
@@ -216,6 +232,28 @@ export async function vurder(db: Db, g: Grunnlag, p: Post): Promise<Vurdering> {
       forslag: { type: "bilag", bilag_id: b.id, nummer: b.nummer },
       ignorer,
     };
+  }
+
+  if (p.belop > 0 && (Boolean(g.skattKonto && p.motpart_konto === g.skattKonto) || /skatteetaten|skatteoppkrev|merverdiavgift|\bmva\b/i.test(`${p.motpart ?? ""} ${p.melding ?? ""}`))) {
+    // 5b. Merverdiavgift til gode fra Skatteetaten: det som står på oppgjørskontoen (mva.ts).
+    const mvaK = g.k.oppgjor_mva;
+    const tilGode = rund(
+      (
+        await en<{ s: number }>(
+          db,
+          "select coalesce(sum(p.belop), 0)::float8 as s from faktura.posteringer p join faktura.bilag b on b.id = p.bilag_id where b.org_id = $1 and p.konto = $2 and b.dato <= $3",
+          [g.org, mvaK, p.dato],
+        )
+      )?.s ?? 0,
+    );
+    const termin = (await mvaOppgjor(db, g.org, mvaK, p.dato)).find((x) => x.belop < 0 && like(belop, -x.belop));
+    if ((tilGode > 0 && like(belop, tilGode)) || termin)
+      return {
+        utfall: "auto",
+        regel: termin ? `Merverdiavgiften til gode (${termin.tekst.replace(/^Mva-oppgjør /, "")})` : `Merverdiavgiften til gode som står på ${mvaK}`,
+        forslag: bilagFor(p, K, "Merverdiavgift til gode fra Skatteetaten", [{ konto: mvaK, belop: -belop, tekst: "Merverdiavgift til gode" }]),
+        ignorer,
+      };
   }
 
   if (p.belop < 0) {
@@ -332,6 +370,9 @@ export async function vurder(db: Db, g: Grunnlag, p: Post): Promise<Vurdering> {
         [trekk, [linje(trekkK, belop, "Forskuddstrekk")], `Forskuddstrekket som står på ${trekkK}`],
         [rund(aga + trekk), [linje(trekkK, trekk, "Forskuddstrekk"), linje(agaK, aga, "Arbeidsgiveravgift")], `Forskuddstrekket og arbeidsgiveravgiften (${trekkK} og ${agaK})`],
         [mva, [linje(mvaK, belop, "Merverdiavgift")], `Merverdiavgiften som står på ${mvaK}`],
+        ...(await mvaOppgjor(db, g.org, mvaK, p.dato)).map(
+          (x): [number, Linje[], string] => [x.belop, [linje(mvaK, belop, "Merverdiavgift")], `Merverdiavgiften for ${x.tekst.replace(/^Mva-oppgjør /, "")}`],
+        ),
       ];
       const v = valg.find(([sum]) => sum > 0 && like(belop, sum));
       if (v) return { utfall: "auto", regel: v[2], forslag: bilagFor(p, K, `Betalt til Skatteetaten: ${v[1].map((l) => l.tekst).join(" og ")}`, v[1]) };

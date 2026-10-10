@@ -14,6 +14,7 @@ import { avskrivningsforslag, hentAnlegg, hentRegnskapsoppsett, mnd, plussMnd, s
 import { kontoavstemming } from "./bankAvstemming.js";
 import { alle, en, somSystem, type Db } from "./db.js";
 import { maanedNavn } from "./lonnsberegning.js";
+import { bokforOppgjorTil, mvaStatus, terminSomSlutter, terminType } from "./mva.js";
 import { bokforPeriodiseringer, hentPeriodiseringer, manglerStart, periodiseringsforslag } from "./periodisering.js";
 import type { Rapportdef } from "./rapportmodul.js";
 import { bokforAvskrivninger } from "./regnskapRuter.js";
@@ -38,7 +39,7 @@ export const forrigeMaaned = (iDag: string) => plussMnd(mnd(iDag), -1);
 
 // ok: ført. venter: ikke ført, men bokføres når måneden er over (denne måneden).
 export type Punkt = {
-  nokkel: "bank" | "utgifter" | "lonn" | "avskrivninger" | "periodiseringer";
+  nokkel: "bank" | "utgifter" | "lonn" | "avskrivninger" | "periodiseringer" | "mva";
   navn: string;
   ok: boolean;
   venter?: boolean;
@@ -160,6 +161,36 @@ export async function maanedsstatus(db: Db, org: string, maaned: string, iDag = 
       lenke: "/regnskap?fane=periodiseringer",
     });
   }
+  // Merverdiavgiften for terminen som slutter med måneden: oppgjøret og om meldingen er levert.
+  const t = terminSomSlutter(maaned, await terminType(db, org, Number(maaned.slice(0, 4)), o.mva_termin));
+  if (t) {
+    const m = await mvaStatus(db, org, t, iDag);
+    if (m.registrert || m.linjer.length) {
+      const belop = m.sum >= 0 ? `${kr(m.sum)} kr å betale` : `${kr(-m.sum)} kr til gode`;
+      const lenke = `/regnskap?fane=mva&aar=${t.aar}&termin=${t.termin}`;
+      if (!m.over)
+        punkter.push({ nokkel: "mva", navn: "Merverdiavgiften", ok: false, venter: true, tekst: `Mva-meldingen for ${t.navn} leveres når terminen er over (fristen er ${visDato(t.frist)}).`, lenke });
+      else {
+        const deler = [
+          m.oppgjor.trengs && !m.oppgjor.stemmer ? (m.oppgjor.bilag ? "oppgjøret er ikke oppdatert etter endringene i terminen" : "oppgjøret er ikke bokført") : "",
+          m.levert
+            ? m.endret
+              ? `mva-meldingen er endret etter at den ble levert (nå ${belop}): lever en korrigert melding`
+              : ""
+            : iDag > t.frist
+              ? `mva-meldingen (${belop}) er ikke levert (fristen var ${visDato(t.frist)})`
+              : `mva-meldingen (${belop}) er ikke levert ennå (fristen er ${visDato(t.frist)})`,
+        ].filter(Boolean);
+        punkter.push({
+          nokkel: "mva",
+          navn: "Merverdiavgiften",
+          ok: !deler.length,
+          tekst: deler.length ? `${stor(liste(deler))}.` : `Mva-meldingen for ${t.navn} er levert (${belop}).`,
+          lenke,
+        });
+      }
+    }
+  }
   return punkter;
 }
 
@@ -193,6 +224,11 @@ export async function avsluttMaaned(db: Db, org: string, maaned: string, iDag = 
   if (eldste && eldste < fra)
     sperret = `Avskrivningene eller periodiseringene for ${maanedNavn(`${eldste}-01`)} er ikke bokført. Bokfør dem under Regnskap → Bilag (månedsavslutningen); da går den av seg selv igjen.`;
   else if (eldste) bilag.push(...(await bokforAvskrivninger(db, org, maaned)), ...(await bokforPeriodiseringer(db, org, maaned)));
+  // Oppgjøret for merverdiavgiften for terminene som er over (mva.ts); det som ikke går, står i
+  // sjekklisten.
+  const mva = await bokforOppgjorTil(db, org, maaned, fra, iDag);
+  bilag.push(...mva.bilag);
+  for (const f of mva.feil) logg("WARNING", "Mva-oppgjøret ble ikke bokført", { org_id: org, feil: f });
   return { maaned, bilag, sperret, punkter: await maanedsstatus(db, org, maaned, iDag) };
 }
 

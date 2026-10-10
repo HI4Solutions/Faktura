@@ -48,6 +48,7 @@ import { regnskapRuter } from "./regnskapRuter.js";
 import { regnskapBilagRuter } from "./regnskapBilagRuter.js";
 import { utgiftRuter } from "./utgifter.js";
 import { bankRegnskapRuter } from "./regnskapBank.js";
+import { mvaRuter } from "./mva.js";
 import { skattekortRuter } from "./skattekortRuter.js";
 import { rapportmodulRuter } from "./rapportmodul.js";
 import { krevFunksjoner } from "./funksjoner.js";
@@ -447,6 +448,7 @@ export function lagApi() {
   org.route("/", regnskapBilagRuter());
   org.route("/", utgiftRuter());
   org.route("/", bankRegnskapRuter());
+  org.route("/", mvaRuter());
   org.route("/", skattekortRuter());
   // Rapportmodulen: hver rapport krever sin funksjon og tilgang (rapportmodul.ts).
   org.route("/", rapportmodulRuter());

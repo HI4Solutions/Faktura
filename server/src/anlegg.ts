@@ -67,7 +67,8 @@ export type Regnskapsrolle =
   | "bankgebyr"
   | "renteinntekt"
   | "rentekostnad"
-  | "oppgjor_mva";
+  | "oppgjor_mva"
+  | "oreavrunding";
 export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: string }[] = [
   { rolle: "avskrivning_bygg", navn: "Avskrivning på bygninger og annen fast eiendom", standard: "6000" },
   { rolle: "avskrivning_driftsmidler", navn: "Avskrivning på transportmidler, maskiner og inventar", standard: "6010" },
@@ -107,6 +108,8 @@ export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: 
   { rolle: "renteinntekt", navn: "Renteinntekt fra banken", standard: "8050" },
   { rolle: "rentekostnad", navn: "Rentekostnad til banken", standard: "8150" },
   { rolle: "oppgjor_mva", navn: "Oppgjørskonto merverdiavgift", standard: "2740" },
+  // Mva-oppgjøret (mva.ts): mva-meldingen er i hele kroner, og øredifferansen føres her.
+  { rolle: "oreavrunding", navn: "Øreavrunding", standard: "7740" },
   // Periodiseringene (periodisering.ts): balansekontoene som foreslås.
   { rolle: "forskuddsbetalt_kostnad", navn: "Forskuddsbetalt kostnad", standard: "1700" },
   { rolle: "paalopt_kostnad", navn: "Påløpt kostnad", standard: "2960" },
@@ -155,13 +158,15 @@ export type Regnskapsoppsett = {
   // null: settes første gang den går).
   maaned_auto: boolean;
   maaned_fra: string | null;
+  // Mva-meldingen (0093_mva.sql): tomånedlige terminer, årstermin eller månedlig.
+  mva_termin: "tomaaneder" | "aar" | "maaned";
 };
 export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnskapsoppsett> {
   const o = await en<Regnskapsoppsett>(
     db,
     `select kontoer, saldo_fra_aar, saldo_inngaende, to_char(salg_fra, 'YYYY-MM-DD') as salg_fra, uten_mva, mva_fradrag::float8 as mva_fradrag,
             periodiser_fra::float8 as periodiser_fra, utgifter_auto, to_char(bank_fra, 'YYYY-MM-DD') as bank_fra, bank_auto, bankkontoer,
-            maaned_auto, to_char(maaned_fra, 'YYYY-MM-DD') as maaned_fra
+            maaned_auto, to_char(maaned_fra, 'YYYY-MM-DD') as maaned_fra, mva_termin
        from faktura.regnskap_oppsett where org_id = $1`,
     [org],
   );
@@ -179,6 +184,7 @@ export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnska
     bankkontoer: o?.bankkontoer ?? {},
     maaned_auto: o?.maaned_auto ?? true,
     maaned_fra: o?.maaned_fra ?? null,
+    mva_termin: o?.mva_termin ?? "tomaaneder",
   };
 }
 // Kontoene som brukes: standarden, med det organisasjonen har endret.

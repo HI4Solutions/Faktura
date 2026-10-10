@@ -410,7 +410,8 @@ async function endre(db: Db, org: string, id: string, b: z.infer<typeof utgiftS>
         belop: rund(l.belop),
         mva_sats: l.mva_sats ?? 0,
         mva: rund(l.mva ?? 0),
-        fradrag: l.fradrag ?? (l.mva_sats ? fradragFor(l.kategori ?? null, standard) : 0),
+        // Tjenester fra utlandet har ikke mva på fakturaen, men avgiften som beregnes gir fradrag.
+        fradrag: l.fradrag ?? (l.mva_sats || (b.utland ?? naa.utland) ? fradragFor(l.kategori ?? null, standard) : 0),
       })),
     );
   }

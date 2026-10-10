@@ -697,6 +697,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   lagres i raden (bare workeren skriver) og varsles (`regnskap`). `maaned_fra` settes første gang;
   forslag fra før den stopper bokføringen (`sperret`). En organisasjon som feiler, prøves igjen etter
   en time. Når ingen gjenstår, planlegges månedsrapportene (`planleggMaanedsrapporter`).
+  Mva-meldingen (`0093_mva.sql`, `server/src/mva.ts`, `web/src/sider/RegnskapMva.tsx`): `beregnMva`
+  regner linjene for en termin (`regnskap_oppsett.mva_termin`) fra posteringene i bilagene datert i
+  terminen (uten oppgjørsbilagene): grunnlaget fra grunnlagslinjene med `mva_kode` (for kjøp fra
+  utlandet fra den beregnede avgiften), avgiften fra avgiftskontoene (rollene i `REGNSKAPSKONTOER`;
+  uten kode gjelder kontoens), etter Skatteetatens forretningsregler. Terminlengden for et år er den
+  som er brukt i `mva_terminer` (bokført oppgjør eller levert), ellers innstillingen (`terminType`). Oppgjøret føres med `bokfor_mva_oppgjor` (serie V, kilde mva, `kilde_id` er
+  raden i `mva_terminer`; et gjeldende oppgjør reverseres først, så det er ett per termin) og angres
+  med `angre_mva_oppgjor`; `mva_terminer` har også når meldingen ble levert og beløpet. Workeren
+  fører oppgjøret i månedsavslutningen (`bokforOppgjorTil`), og bankreglene matcher betalingen og
+  tilbakebetalingen mot 2740 (saldoen eller oppgjøret for en termin, `mvaOppgjor`).
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen

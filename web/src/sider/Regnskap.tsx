@@ -6,8 +6,8 @@
 // (skattemessig, med goodwill i gruppe b) og kontoene. Eier, administrator og regnskap, med
 // funksjonen «Regnskap».
 //
-// Fanen står i adressen (?fane=bilag|utgifter|bank|saldobalanse|anlegg|periodiseringer|saldo|kontoer), og det
-// som er åpent, med ?anlegg=, ?periodisering=, ?utgift= eller ?post=.
+// Fanen står i adressen (?fane=bilag|utgifter|bank|mva|saldobalanse|anlegg|periodiseringer|saldo|kontoer), og
+// det som er åpent, med ?anlegg=, ?periodisering=, ?utgift=, ?post= eller ?aar= og ?termin=.
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
@@ -20,6 +20,7 @@ import { Maanedsavslutning, mndNavn, type Bilagsvar } from "./RegnskapAvslutning
 import { PeriodiseringDetalj, Periodiseringer } from "./RegnskapPeriodiseringer";
 import { Utgifter } from "./RegnskapUtgifter";
 import { Bank, visKonto, type Bankoversikt } from "./RegnskapBank";
+import { Mva } from "./RegnskapMva";
 
 type Kategori = { kode: string; navn: string; konto: string; avskrivningskonto: string | null; skatt: string; levetid_mnd: number | null };
 type Kontorad = { rolle: string; navn: string; standard: string; konto: string; endret: boolean };
@@ -37,6 +38,7 @@ type Oppsett = {
   bank_auto: boolean;
   bankkontoer: Record<string, string>;
   maaned_auto: boolean;
+  mva_termin: "tomaaneder" | "aar" | "maaned";
   kategorier: Kategori[];
   saldogrupper: { gruppe: string; navn: string; sats: number; samlet: boolean }[];
 };
@@ -112,6 +114,7 @@ export function Regnskap() {
     ["bilag", "Bilag"],
     ["utgifter", "Utgifter"],
     ["bank", "Bank"],
+    ["mva", "Mva"],
     ["saldobalanse", "Saldobalanse"],
     ["anlegg", "Anleggsmidler"],
     ["periodiseringer", "Periodiseringer"],
@@ -145,7 +148,7 @@ export function Regnskap() {
             role="tab"
             aria-selected={fane === v}
             className={fane === v ? "valgt" : undefined}
-            onClick={() => ga({ fane: v, anlegg: null, periodisering: null, utgift: null, post: null })}
+            onClick={() => ga({ fane: v, anlegg: null, periodisering: null, utgift: null, post: null, aar: null, termin: null })}
           >
             {t}
           </button>
@@ -154,6 +157,10 @@ export function Regnskap() {
       {fane === "bilag" && <Bilag />}
       {fane === "utgifter" && <Utgifter apen={sok.get("utgift")} apne={(id) => ga({ utgift: id })} />}
       {fane === "bank" && <Bank apen={sok.get("post")} apne={(id) => ga({ post: id })} />}
+      {fane === "mva" && (
+        // Ny termin, nytt skjema (meldinger og feil fra den forrige blir ikke stående).
+        <Mva key={`${sok.get("aar")}-${sok.get("termin")}`} aar={sok.get("aar")} termin={sok.get("termin")} velg={(aar, termin) => ga({ aar, termin })} />
+      )}
       {fane === "saldobalanse" && <Saldobalansen />}
       {fane === "anlegg" && <Anleggsmidler apne={(id) => ga({ anlegg: id })} />}
       {fane === "periodiseringer" && <Periodiseringer apne={(id) => ga({ periodisering: id })} />}
@@ -1167,16 +1174,16 @@ function Saldoavskrivninger() {
 function Salget({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => void }) {
   const { org } = useKonto();
   const sti = `/org/${org!.id}/regnskap/oppsett`;
-  const [skjema, settSkjema] = useState<{ fra: string; uten: Oppsett["uten_mva"] } | null>(null);
+  const [skjema, settSkjema] = useState<{ fra: string; uten: Oppsett["uten_mva"]; termin: Oppsett["mva_termin"] } | null>(null);
   const [ok, settOk] = useState(false);
   const h = useHandling();
-  const v = skjema ?? { fra: o.salg_fra ?? "", uten: o.uten_mva };
+  const v = skjema ?? { fra: o.salg_fra ?? "", uten: o.uten_mva, termin: o.mva_termin };
   const kundefordringer = o.kontoer.find((k) => k.rolle === "kundefordringer")?.konto ?? "1500";
 
   async function lagre(e: FormEvent) {
     e.preventDefault();
     settOk(false);
-    const r = await h.kjor(() => api<Oppsett>("PUT", sti, { salg_fra: v.fra || null, uten_mva: v.uten }));
+    const r = await h.kjor(() => api<Oppsett>("PUT", sti, { salg_fra: v.fra || null, uten_mva: v.uten, mva_termin: v.termin }));
     if (r) {
       lagret(r);
       settSkjema(null);
@@ -1205,6 +1212,15 @@ function Salget({ o, lagret }: { o: Oppsett; lagret: (o: Oppsett) => void }) {
             <option value="fritatt">Fritatt for mva, f.eks. bøker og aviser (3100, kode 5)</option>
           </select>
           <span className="felt-hjelp">Uten mva-registrering føres alt salg på 3200, uten mva-kode.</span>
+        </label>
+        <label>
+          Terminer for mva-meldingen
+          <select value={v.termin} onChange={(e) => settSkjema({ ...v, termin: e.target.value as Oppsett["mva_termin"] })}>
+            <option value="tomaaneder">Annenhver måned (seks terminer)</option>
+            <option value="aar">Årstermin</option>
+            <option value="maaned">Hver måned</option>
+          </select>
+          <span className="felt-hjelp">Som registrert i Merverdiavgiftsregisteret (Regnskap → Mva). Et år med bokførte oppgjør eller leverte meldinger beholder terminene sine.</span>
         </label>
       </div>
       {o.salg_fra && o.kundefordringer_ved_start !== null && (

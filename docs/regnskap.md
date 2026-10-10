@@ -1,15 +1,15 @@
-# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, anleggsmidler, periodiseringer og saldoavskrivninger
+# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, mva-meldingen, anleggsmidler, periodiseringer og saldoavskrivninger
 
 Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
 hovedboken, fakturaene og innbetalingene som bokføres av seg selv, utgiftene (leverandørfakturaer og
 kvitteringer, lest med AI og vurdert av reglene), alle transaksjonene i banken (ført og avstemt av
-reglene), anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
+reglene), mva-meldingen for hver termin med oppgjøret, anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
 avskrivninger, nedskrivning, salg og utrangering, periodiseringene over flere måneder og år,
 månedsavslutningen (som går av seg selv) og de skattemessige saldoavskrivningene.
 
 Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap» med fanene
-Bilag, Utgifter, Bank, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
+Bilag, Utgifter, Bank, Mva, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
 administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer og les ser den ikke.
 
 ## Bilagene og hovedboken
@@ -17,8 +17,8 @@ administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer o
 - Et bilag har et nummer i en serie per år, en dato, en tekst og posteringer (konto og beløp,
   positivt i debet og negativt i kredit, og mva-koden der det er avgift) som går i null. Seriene:
   **F** fakturaer og kreditnotaer, **B** innbetalinger, refusjoner og bankpostene, **U** utgifter og
-  betalingen av dem, **L** lønn og refusjoner fra NAV, **A** anleggsmidler, **P** periodiseringer og **M**
-  manuelle bilag.
+  betalingen av dem, **L** lønn og refusjoner fra NAV, **A** anleggsmidler, **P** periodiseringer, **V**
+  mva-oppgjøret og **M** manuelle bilag.
 - Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp (og de
   samme mva-kodene). Anleggsmidlene og periodiseringene reverseres det siste først. En faktura
   rettes med en kreditnota, og en innbetaling ved å ta bort betalingen på fakturaen. Et lønnsbilag
@@ -179,6 +179,46 @@ av seg selv.
   tomt felt: 1920) og det reglene har lært (kan slettes). Kontoene for gebyrene, rentene og
   oppgjøret for merverdiavgiften står med de andre kontoene.
 
+## Merverdiavgiften (mva-meldingen, bilagserie V)
+
+Mva-meldingen for hver termin regnes fra bilagene (Regnskap → Mva; `server/src/mva.ts`,
+`0093_mva.sql`), etter Skatteetatens regler for meldingen:
+
+- **Linjene** er Skatteetatens standard mva-koder (SAF-T). Utgående avgift (kode 3, 31, 32 og 33)
+  har grunnlaget, satsen og avgiften; salg uten avgift (5, 6, 51 og 52) grunnlaget med sats 0.
+  Inngående avgift (1, 11, 12 og 13) føres bare med avgiften, negativ, uten grunnlag og sats.
+  Tjenester kjøpt fra utlandet har den beregnede avgiften med grunnlag og sats, og fradraget på en
+  egen linje med samme kode (86 og 88; 87 og 89 har ikke fradrag). Beløpene er i hele kroner, og
+  summen av linjene er det som skal betales (eller er til gode).
+- **Fra bilagene**: grunnlaget er grunnlagslinjene med mva-koden (salget), og avgiften er
+  posteringene på avgiftskontoene (2700–2704 og 2710–2714) i bilagene datert i terminen. For kjøp fra
+  utlandet regnes grunnlaget fra den beregnede avgiften (25 %), siden kostnaden også kan ha avgiften
+  uten fradrag i seg (kode 87) og et anleggsmiddel ikke har koden på balansekontoen.
+  En postering på en avgiftskonto uten mva-kode (f.eks. inngående avgift på et anleggsmiddel eller et
+  manuelt bilag) regnes med kontoens kode, og kontrollene sier fra.
+- **Kontrollene**: posteringer uten kode eller med en kode som ikke passer kontoen, avgift som ikke
+  er satsen av grunnlaget, negativt grunnlag (kreditnotaer; Altinn krever en merknad), fradrag ved
+  kjøp fra utlandet som er større enn den beregnede avgiften, og avgift hos en organisasjon som ikke
+  er mva-registrert.
+- **Terminene og fristen**: annenhver måned (seks terminer), årstermin eller hver måned, som
+  registrert i Merverdiavgiftsregisteret (Regnskap → Kontoer → Fakturaene og innbetalingene). Et år
+  med bokførte oppgjør eller leverte meldinger beholder terminene sine når innstillingen byttes (f.eks.
+  til årstermin fra nyttår), så avgiften ikke gjøres opp to ganger; innstillingen gjelder for året
+  når oppgjørene og levert-merkene er angret.
+  Fristen for meldingen og betalingen er en måned og ti dager etter terminen, for mai–juni 31.
+  august og for årstermin 10. mars, flyttet til neste virkedag.
+- **Oppgjøret** (serie V, på den siste dagen i terminen): avgiftskontoene mot oppgjørskontoen (2740)
+  med det som skal betales i hele kroner, og øredifferansen på 7740. Månedsavslutningen fører det av
+  seg selv når terminen er over (fra og med måneden automatikken startet), og fører det på nytt
+  (reverserer og fører) når terminen endres etterpå; det kan også føres og angres under Mva.
+- **Banken**: betalingen til Skatteetaten føres mot 2740 når beløpet er det som står på kontoen
+  eller oppgjøret for en termin, og det som kommer tilbake (til gode), likeså (bankAvstemming.ts).
+- **Levert**: den som fører regnskapet merker terminen som levert når meldingen er levert i Altinn
+  (datoen og beløpet appen regnet). Endres terminen etterpå, sier appen fra (lever en korrigert
+  melding), også i sjekklisten i månedsavslutningen for den siste måneden i terminen.
+- Rapporten «Mva-melding» (Rapporter → Regnskap) har linjene for terminen, med fristen, oppgjøret og
+  kontrollene, og kan sendes til regnskapsføreren når terminen er slutt.
+
 ## Anleggsregisteret og avskrivningsplanen
 
 - Et anleggsmiddel har kategori (goodwill, andre immaterielle eiendeler, tomt, bygning, fast
@@ -303,7 +343,7 @@ Under Rapporter → Regnskap, som tabell, CSV og PDF, og på e-post til regnskap
 Saldobalanse og Bilagsjournal (kan sendes hver måned), Hovedbok, Anleggsregister, Avskrivningsplan,
 Avskrivninger og avganger (kan sendes hver måned), Saldoskjema, Periodiseringer, Leverandørgjeld,
 Utgifter, Bankavstemming, Bankposter og Månedsavslutning (de fire siste kan sendes hver måned; den
-siste er sjekklisten for hver måned i perioden).
+siste er sjekklisten for hver måned i perioden) og Mva-melding (når terminen er slutt).
 
 ## Kontroller og det som ikke er med ennå
 
@@ -326,7 +366,11 @@ siste er sjekklisten for hver måned i perioden).
   saldoen i banken er bare kjent når brukeren har hentet selv eller banken sender den med postene.
 - Perioder låses ikke: et bilag kan føres med en dato i en periode som er rapportert (også etter at
   månedsavslutningen har gått). Årsoppgjøret (resultatet mot egenkapitalen, skatt) føres med et
-  manuelt bilag. Merverdiavgiften for terminen er ikke med i månedsavslutningen ennå.
+  manuelt bilag.
+- Mva-meldingen leveres i Altinn av brukeren (linjene står under Regnskap → Mva); innsending
+  direkte fra appen er ikke med. Uttak, tap på krav, justering og tilbakeføring av inngående avgift
+  (spesifikasjonslinjene) regnes ikke ut, og innførsel av varer (14, 15, 81–85) kommer bare med fra
+  manuelle bilag med kodene. Kompensasjonsmelding og omvendt avgiftsplikt-melding er ikke med.
 
 ## Kilder
 
@@ -344,6 +388,12 @@ siste er sjekklisten for hver måned i perioden).
 - Skatteetaten, betaling av forskuddstrekk og arbeidsgiveravgift (fra 2026 betales
   forskuddstrekket hver måned, arbeidsgiveravgiften annenhver måned):
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/arbeidsgiveravgift/betaling-av-forskuddstrekk-og-arbeidsgiveravgift/>
+- Skatteetaten, mva-meldingen for systemleverandører (informasjonsmodellen med feltene og
+  forretningsreglene: inngående avgift uten grunnlag og sats, utgående med, hele kroner, gyldige
+  koder): <https://github.com/Skatteetaten/mva-meldingen>
+- Frister 2026 (mva-meldingen per termin, flyttet til neste virkedag):
+  <https://www.revisorforeningen.no/fag/ny-skattemelding-2023/frister-2024/> og
+  <https://www.dnb.no/bedrift/dagligbank/regnskap/tips-og-triks/frister>
 - Skatteetaten, KID for arbeidsgivere (egen KID for hver kravtype):
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/lag-kid-nar-du-er-arbeidsgiver>
 - Regnskapsloven § 4-1 (grunnleggende regnskapsprinsipper: opptjening og sammenstilling, grunnlaget

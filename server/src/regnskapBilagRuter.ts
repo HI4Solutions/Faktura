@@ -332,6 +332,7 @@ export function regnskapBilagRuter() {
         if (bilag.kilde === "utgift" || bilag.kilde === "utgift_betaling")
           throw new ApiFeil(409, "En utgift rettes under Regnskap → Utgifter (Angre bokføringen)");
         if (bilag.kilde === "bank") throw new ApiFeil(409, "En bankpost rettes under Regnskap → Bank (Angre)");
+        if (bilag.kilde === "mva") throw new ApiFeil(409, "Mva-oppgjøret rettes under Regnskap → Mva");
         if (!fn[bilag.kilde]) throw new ApiFeil(409, "Bilaget kan ikke reverseres her");
         const ny = await en<{ id: string }>(db, `select faktura.${fn[bilag.kilde]}($1, $2, $3) as id`, [orgId(c), id, b.tekst ?? null]);
         return (await hentRegnskapsbilag(db, orgId(c), { id: ny!.id }))[0]!;

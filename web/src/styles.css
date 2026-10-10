@@ -2596,7 +2596,31 @@ h5.nav-under { margin: 14px 0 6px; font-size: 0.92rem; }
    månedsavslutningen, periodevalget, bilagene, det manuelle bilaget, saldobalansen og valgene. */
 .regnskap-avslutning .knapper { margin-top: 8px; }
 .regnskap-avslutning.forfalt { border-left: 3px solid var(--advarsel); }
-.maaned-status.gjenstar { border-left: 3px solid var(--advarsel); }
+.maaned-status.gjenstar, .mva-termin.gjenstar { border-left: 3px solid var(--advarsel); }
+/* Regnskap → Mva (RegnskapMva.tsx). */
+.mva-sum { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 12px 0 8px; }
+.mva-sum strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+table.mva-linjer td:first-child { min-width: 180px; }
+.mva-termin .melding { margin: 10px 0; }
+.mva-termin .melding ul { margin: 6px 0 0; padding-left: 18px; }
+.mva-handlinger { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin-top: 14px; border-top: 1px solid var(--kant); padding-top: 12px; }
+.mva-handlinger p { margin: 4px 0 6px; }
+.mva-levert { align-items: flex-end; gap: 10px; }
+.mva-levert > label { margin-bottom: 0; }
+table.mva-linjer tfoot td { font-weight: 650; border-bottom: 0; }
+.mva-sats-under, .mva-kort { display: none; }
+.mva-terminer .liste-rad.valgt { background: var(--aksent-lys); }
+.mva-terminer .liste-rad.valgt .tittel { color: var(--aksent); }
+/* På mobil: satsen under grunnlaget, så merverdiavgiften får plass. */
+@media (max-width: 700px) {
+  .mva-handlinger { grid-template-columns: 1fr; }
+  table.mva-linjer td:first-child { min-width: 0; }
+  table.mva-linjer th, table.mva-linjer td { padding-left: 6px; padding-right: 6px; }
+  table.mva-linjer .mva-sats, .mva-lang { display: none; }
+  .mva-sats-under { display: block; }
+  .mva-kort { display: inline; }
+  .mva-terminer .liste-rad .tittel { white-space: normal; }
+}
 .maaned-status-hode { display: flex; justify-content: space-between; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
 .maaned-status-hode h3 { margin: 0; }
 .maaned-status .melding { margin: 8px 0; }
