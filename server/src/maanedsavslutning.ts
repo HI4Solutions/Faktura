@@ -39,7 +39,7 @@ export const forrigeMaaned = (iDag: string) => plussMnd(mnd(iDag), -1);
 
 // ok: ført. venter: ikke ført, men bokføres når måneden er over (denne måneden).
 export type Punkt = {
-  nokkel: "bank" | "utgifter" | "lonn" | "avskrivninger" | "periodiseringer" | "mva";
+  nokkel: "bank" | "utgifter" | "lonn" | "avskrivninger" | "periodiseringer" | "mva" | "aarsoppgjor";
   navn: string;
   ok: boolean;
   venter?: boolean;
@@ -189,6 +189,34 @@ export async function maanedsstatus(db: Db, org: string, maaned: string, iDag = 
           lenke,
         });
       }
+    }
+  }
+  // Årsoppgjøret (aarsoppgjor.ts) i desember, når det er bilag i året: skatten og disponeringen av
+  // årsresultatet, og låsen.
+  if (maaned.endsWith("-12")) {
+    const aar = Number(maaned.slice(0, 4));
+    const a = await en<{ bilag: boolean; bokfort: boolean }>(
+      db,
+      `select exists (select 1 from faktura.bilag where org_id = $1 and aar = $2) as bilag,
+              exists (select 1 from faktura.bilag b join faktura.aarsoppgjor x on x.org_id = b.org_id and x.id = b.kilde_id
+                       where b.org_id = $1 and x.aar = $2 and b.kilde = 'aarsoppgjor' and b.reverserer is null and b.reversert_av is null) as bokfort`,
+      [org, aar],
+    );
+    if (a?.bilag) {
+      const lenke = `/regnskap?fane=aarsoppgjor&aar=${aar}`;
+      punkter.push(
+        maaned >= mnd(iDag)
+          ? { nokkel: "aarsoppgjor", navn: "Årsoppgjøret", ok: false, venter: true, tekst: `Årsoppgjøret for ${aar} gjøres når året er over.`, lenke }
+          : {
+              nokkel: "aarsoppgjor",
+              navn: "Årsoppgjøret",
+              ok: Boolean(a.bokfort),
+              tekst: a.bokfort
+                ? `Årsoppgjøret for ${aar} er bokført.`
+                : `Årsoppgjøret for ${aar} er ikke bokført: skatten og disponeringen av årsresultatet, og så låses året.`,
+              lenke,
+            },
+      );
     }
   }
   return punkter;

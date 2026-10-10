@@ -442,6 +442,7 @@ export function mvaRuter() {
           type: t.type,
           ...status,
           terminer: terminer.map((x) => (x.termin === t.termin ? { ...x, sum: status.sum, levert: status.levert !== null } : x)),
+          laast_til: o.laast_til,
         };
       }),
     );

@@ -707,6 +707,14 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med `angre_mva_oppgjor`; `mva_terminer` har også når meldingen ble levert og beløpet. Workeren
   fører oppgjøret i månedsavslutningen (`bokforOppgjorTil`), og bankreglene matcher betalingen og
   tilbakebetalingen mot 2740 (saldoen eller oppgjøret for en termin, `mvaOppgjor`).
+  Årsoppgjøret og periodelåsen (`0094_aarsoppgjor.sql`, `server/src/aarsoppgjor.ts`,
+  `web/src/sider/RegnskapAarsoppgjor.tsx`): `regnskap_oppsett.laast_til` håndheves av triggeren
+  `bilag_periodelas` (før innsetting i `bilag`): et bilag med dato til og med låsen får den første åpne
+  dagen, og havner det i et nytt år, gis nummeret tilbake til serien for det gamle året og bilaget får
+  et nytt. Det gjelder alle kildene, så ingen av funksjonene som fører bilag, trenger å vite om låsen;
+  API-et avviser manuelle bilag i en låst periode (`krevAapenPeriode`). Årsoppgjøret føres med
+  `bokfor_aarsoppgjor` (serie Å, kilde aarsoppgjor, `kilde_id` er raden i `aarsoppgjor` med skatten og
+  utbyttet; ett gjeldende per år) og angres med `angre_aarsoppgjor`; begge avviser et låst år.
 - A-meldingen (`0077_amelding.sql`, `server/src/amelding.ts`, `server/src/ameldingInnsending.ts`,
   `server/src/ameldingRuter.ts`, `web/src/sider/LonnAmelding.tsx`, `docs/amelding.md`): format
   2.3, for hver måned. Grunnlaget er de godkjente kjøringene med utbetaling i måneden (lønnen

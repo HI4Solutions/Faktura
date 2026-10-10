@@ -24,6 +24,7 @@ type Status = {
   levert: { dato: string; belop: number; av: string | null } | null;
   endret: boolean;
   terminer: { termin: number; navn: string; frist: string; over: boolean; sum: number | null; levert: boolean | null }[];
+  laast_til: string | null;
 };
 
 const prosent = (n: number) => `${String(n).replace(".", ",")} %`;
@@ -220,6 +221,19 @@ export function Mva({ aar, termin, velg }: { aar: string | null; termin: string 
                     {s.levert.av ? ` (merket av ${s.levert.av})` : ""}.
                     {s.endret ? ` Meldingen er endret etterpå (nå ${belopTekst(s.sum)}): lever en korrigert melding i Altinn, og merk den på nytt.` : ""}
                   </p>
+                  {!s.endret && (!s.laast_til || s.laast_til < t.til) && (
+                    <p className="liten dempet">
+                      Lås terminen, så havner det som føres senere med en dato i terminen, i neste termin (meldingen endres ikke).{" "}
+                      <button
+                        type="button"
+                        className="lenke"
+                        disabled={h.opptatt}
+                        onClick={() => void kjor(() => api("PUT", `/org/${org!.id}/regnskap/periodelas`, { til: t.til }), () => `Regnskapet er låst til og med ${dato(t.til)}.`)}
+                      >
+                        Lås til og med {dato(t.til)}
+                      </button>
+                    </p>
+                  )}
                   <div className="knapper">
                     {s.endret && (
                       <button type="button" className="primar" disabled={h.opptatt} onClick={() => void kjor(() => api("PUT", `${sti2}/levert`, { dato: iDag() }), () => "Merket som levert.")}>

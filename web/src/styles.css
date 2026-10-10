@@ -2596,7 +2596,21 @@ h5.nav-under { margin: 14px 0 6px; font-size: 0.92rem; }
    månedsavslutningen, periodevalget, bilagene, det manuelle bilaget, saldobalansen og valgene. */
 .regnskap-avslutning .knapper { margin-top: 8px; }
 .regnskap-avslutning.forfalt { border-left: 3px solid var(--advarsel); }
-.maaned-status.gjenstar, .mva-termin.gjenstar { border-left: 3px solid var(--advarsel); }
+.maaned-status.gjenstar, .mva-termin.gjenstar, .aars-kort.gjenstar { border-left: 3px solid var(--advarsel); }
+/* Regnskap → Årsoppgjør (RegnskapAarsoppgjor.tsx): resultatet og balansen side om side. */
+.aars-tabeller { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; margin-top: 10px; }
+table.aars-tabell td, table.aars-tabell th { padding-top: 8px; padding-bottom: 8px; }
+table.aars-tabell tr.sum td { font-weight: 650; border-top: 1px solid var(--kant-sterk); }
+.aars-felt { margin-top: 8px; }
+.aars-kort .mva-levert { margin-top: 12px; }
+@media (max-width: 900px) {
+  .aars-tabeller { grid-template-columns: 1fr; }
+}
+/* På mobil: bare året (fjoråret står i rapportene). */
+@media (max-width: 700px) {
+  table.aars-tabell td, table.aars-tabell th { padding-left: 6px; padding-right: 6px; }
+  table.aars-tabell .aars-fjor { display: none; }
+}
 /* Regnskap → Mva (RegnskapMva.tsx). */
 .mva-sum { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 12px 0 8px; }
 .mva-sum strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; }

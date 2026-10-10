@@ -72,6 +72,7 @@ async function oppsett(db: Db, org: string) {
     bankkontoer: o.bankkontoer,
     maaned_auto: o.maaned_auto,
     mva_termin: o.mva_termin,
+    laast_til: o.laast_til,
     kategorier: KATEGORIKODER.map((kode) => ({
       kode,
       navn: KATEGORIER[kode].navn,

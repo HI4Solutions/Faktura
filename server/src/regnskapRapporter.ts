@@ -122,7 +122,7 @@ export const regnskapRapporter: Rapportdef[] = [
       );
       const reversert = bilag.filter((b) => b.reverserer || b.reversert_av).length;
       return {
-        merknad: `${bilag.length} bilag. Serie F: fakturaer og kreditnotaer, B: bank (innbetalinger, refusjoner og andre bankposter), U: utgifter, L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, V: mva-oppgjør, M: manuelle bilag.${reversert ? ` ${reversert} av bilagene er reversert eller reverseringer (de går mot hverandre).` : ""}`,
+        merknad: `${bilag.length} bilag. Serie F: fakturaer og kreditnotaer, B: bank (innbetalinger, refusjoner og andre bankposter), U: utgifter, L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, V: mva-oppgjør, Å: årsoppgjør, M: manuelle bilag.${reversert ? ` ${reversert} av bilagene er reversert eller reverseringer (de går mot hverandre).` : ""}`,
         kolonner: [
           { nokkel: "dato", navn: "Dato", type: "dato" },
           { nokkel: "bilag", navn: "Bilag" },

@@ -6,8 +6,8 @@
 // (skattemessig, med goodwill i gruppe b) og kontoene. Eier, administrator og regnskap, med
 // funksjonen «Regnskap».
 //
-// Fanen står i adressen (?fane=bilag|utgifter|bank|mva|saldobalanse|anlegg|periodiseringer|saldo|kontoer), og
-// det som er åpent, med ?anlegg=, ?periodisering=, ?utgift=, ?post= eller ?aar= og ?termin=.
+// Fanen står i adressen (?fane=bilag|utgifter|bank|mva|saldobalanse|aarsoppgjor|anlegg|periodiseringer|saldo|
+// kontoer), og det som er åpent, med ?anlegg=, ?periodisering=, ?utgift=, ?post= eller ?aar= (og ?termin=).
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
@@ -21,6 +21,7 @@ import { PeriodiseringDetalj, Periodiseringer } from "./RegnskapPeriodiseringer"
 import { Utgifter } from "./RegnskapUtgifter";
 import { Bank, visKonto, type Bankoversikt } from "./RegnskapBank";
 import { Mva } from "./RegnskapMva";
+import { Aarsoppgjor } from "./RegnskapAarsoppgjor";
 
 type Kategori = { kode: string; navn: string; konto: string; avskrivningskonto: string | null; skatt: string; levetid_mnd: number | null };
 type Kontorad = { rolle: string; navn: string; standard: string; konto: string; endret: boolean };
@@ -116,6 +117,7 @@ export function Regnskap() {
     ["bank", "Bank"],
     ["mva", "Mva"],
     ["saldobalanse", "Saldobalanse"],
+    ["aarsoppgjor", "Årsoppgjør"],
     ["anlegg", "Anleggsmidler"],
     ["periodiseringer", "Periodiseringer"],
     ["saldo", "Saldoavskrivninger"],
@@ -162,6 +164,7 @@ export function Regnskap() {
         <Mva key={`${sok.get("aar")}-${sok.get("termin")}`} aar={sok.get("aar")} termin={sok.get("termin")} velg={(aar, termin) => ga({ aar, termin })} />
       )}
       {fane === "saldobalanse" && <Saldobalansen />}
+      {fane === "aarsoppgjor" && <Aarsoppgjor key={sok.get("aar") ?? ""} aar={sok.get("aar")} velg={(aar) => ga({ aar })} />}
       {fane === "anlegg" && <Anleggsmidler apne={(id) => ga({ anlegg: id })} />}
       {fane === "periodiseringer" && <Periodiseringer apne={(id) => ga({ periodisering: id })} />}
       {fane === "saldo" && <Saldoavskrivninger />}

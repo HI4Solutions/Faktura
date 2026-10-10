@@ -1,15 +1,15 @@
-# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, mva-meldingen, anleggsmidler, periodiseringer og saldoavskrivninger
+# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, mva-meldingen, årsoppgjøret, anleggsmidler, periodiseringer og saldoavskrivninger
 
 Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
 hovedboken, fakturaene og innbetalingene som bokføres av seg selv, utgiftene (leverandørfakturaer og
 kvitteringer, lest med AI og vurdert av reglene), alle transaksjonene i banken (ført og avstemt av
-reglene), mva-meldingen for hver termin med oppgjøret, anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
+reglene), mva-meldingen for hver termin med oppgjøret, årsoppgjøret og periodelåsen, anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
 avskrivninger, nedskrivning, salg og utrangering, periodiseringene over flere måneder og år,
 månedsavslutningen (som går av seg selv) og de skattemessige saldoavskrivningene.
 
 Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap» med fanene
-Bilag, Utgifter, Bank, Mva, Saldobalanse, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
+Bilag, Utgifter, Bank, Mva, Saldobalanse, Årsoppgjør, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
 administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer og les ser den ikke.
 
 ## Bilagene og hovedboken
@@ -18,7 +18,7 @@ administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer o
   positivt i debet og negativt i kredit, og mva-koden der det er avgift) som går i null. Seriene:
   **F** fakturaer og kreditnotaer, **B** innbetalinger, refusjoner og bankpostene, **U** utgifter og
   betalingen av dem, **L** lønn og refusjoner fra NAV, **A** anleggsmidler, **P** periodiseringer, **V**
-  mva-oppgjøret og **M** manuelle bilag.
+  mva-oppgjøret, **Å** årsoppgjøret og **M** manuelle bilag.
 - Et bilag endres eller slettes aldri; det reverseres med et nytt bilag med motsatte beløp (og de
   samme mva-kodene). Anleggsmidlene og periodiseringene reverseres det siste først. En faktura
   rettes med en kreditnota, og en innbetaling ved å ta bort betalingen på fakturaen. Et lønnsbilag
@@ -27,7 +27,8 @@ administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer o
 - **Manuelle bilag** (Regnskap → Bilag → «Nytt bilag»): linjer med konto (norsk standard
   kontoplan, NS 4102), tekst og beløp i debet eller kredit, som må gå i null. Den inngående
   balansen fra et tidligere regnskapssystem føres som et manuelt bilag på den første dagen:
-  eiendelene i debet, egenkapitalen og gjelden i kredit. Datoen kan ikke være fram i tid.
+  eiendelene i debet, egenkapitalen og gjelden i kredit. Datoen kan ikke være fram i tid, og ikke i
+  en låst periode.
 - **Saldobalansen** for en periode: inngående saldo, debet, kredit og utgående saldo per konto,
   gruppert etter kontoklassene. Balansekontoene (klasse 1 og 2) har saldoen fra starten;
   resultatkontoene (klasse 3–8) begynner på null 1. januar. Resultatet fra tidligere år som ikke er
@@ -218,6 +219,39 @@ Mva-meldingen for hver termin regnes fra bilagene (Regnskap → Mva; `server/src
   melding), også i sjekklisten i månedsavslutningen for den siste måneden i terminen.
 - Rapporten «Mva-melding» (Rapporter → Regnskap) har linjene for terminen, med fristen, oppgjøret og
   kontrollene, og kan sendes til regnskapsføreren når terminen er slutt.
+- Når terminen er levert, kan den låses (lenken under «Levert i Altinn»): det som føres senere med en
+  dato i terminen, havner da i neste termin, og meldingen som er levert, endres ikke.
+
+## Årsoppgjøret og periodelåsen (bilagserie Å)
+
+Årsoppgjøret for hvert år står under Regnskap → Årsoppgjør (`server/src/aarsoppgjor.ts`,
+`0094_aarsoppgjor.sql`):
+
+- **Sjekklisten for året**: det som gjenstår i månedsavslutningene for månedene i året (bankpostene,
+  utgiftene, lønnen og a-meldingen, avskrivningene, periodiseringene og merverdiavgiften), samlet per
+  punkt med månedene det gjelder.
+- **Resultatregnskapet** (driftsinntekter, varekostnad, lønnskostnad, avskrivninger, andre
+  driftskostnader, driftsresultatet, finanspostene, resultatet før skatt, skattekostnaden og
+  årsresultatet) og **balansen** 31. desember (anleggsmidler, varer, fordringer, investeringer, bank,
+  egenkapital, langsiktig og kortsiktig gjeld), etter kontoklassene i NS 4102, med fjoråret.
+  Resultatet som ikke er ført mot egenkapitalen, står på en egen linje i balansen, så den går opp.
+- **Årsoppgjøret** (serie Å, 31. desember, når året er over): skattekostnaden (8300 mot 2500) og
+  utbyttet (8920 mot 2800) når de er oppgitt, og resten av årsresultatet overført til annen
+  egenkapital (8960 mot 2050), eller underskuddet dekket av den. Resultatkontoene går da i null for
+  året, og «resultat fra tidligere år» i saldobalansen forsvinner. Disponeringer som er ført i andre
+  bilag (8800–8999), trekkes fra. Endres året etterpå, sier appen fra, og årsoppgjøret føres på nytt
+  (det gamle reverseres). Kontoene kan endres under Kontoer. Skattekostnaden står i skattemeldingen
+  (regnskapsføreren regner den ofte ut), og utbyttet er det generalforsamlingen vedtar.
+- **Periodelåsen**: regnskapet kan låses til og med en dato (et år, en termin som er levert, eller en
+  annen dato som er over). Et bilag med dato i en låst periode føres på den første åpne dagen, med den
+  opprinnelige datoen i teksten; det gjelder alle bilagene, også reverseringene og det automatikken
+  fører (fakturaene, utgiftene, banken og lønnen), så automatikken stopper ikke. Havner bilaget i et
+  nytt år, får det nummer i det nye året. Manuelle bilag i en låst periode avvises, og årsoppgjøret
+  for et låst år kan verken føres eller angres før året låses opp.
+- Sjekklisten i månedsavslutningen for desember har punktet «Årsoppgjøret», så varselet etter
+  nyttår minner om det.
+- Rapportene «Resultatregnskap» og «Balanse» (Rapporter → Regnskap) gjelder en periode (balansen ved
+  slutten av den), med samme periode året før, og kan sendes til regnskapsføreren hver måned.
 
 ## Anleggsregisteret og avskrivningsplanen
 
@@ -343,7 +377,8 @@ Under Rapporter → Regnskap, som tabell, CSV og PDF, og på e-post til regnskap
 Saldobalanse og Bilagsjournal (kan sendes hver måned), Hovedbok, Anleggsregister, Avskrivningsplan,
 Avskrivninger og avganger (kan sendes hver måned), Saldoskjema, Periodiseringer, Leverandørgjeld,
 Utgifter, Bankavstemming, Bankposter og Månedsavslutning (de fire siste kan sendes hver måned; den
-siste er sjekklisten for hver måned i perioden) og Mva-melding (når terminen er slutt).
+siste er sjekklisten for hver måned i perioden), Mva-melding (når terminen er slutt), og
+Resultatregnskap og Balanse (kan sendes hver måned).
 
 ## Kontroller og det som ikke er med ennå
 
@@ -364,8 +399,8 @@ siste er sjekklisten for hver måned i perioden) og Mva-melding (når terminen e
   banken, må ha en konto i regnskapet (Kontoer → Banken) for at overføringer dit skal føres av seg
   selv. Merverdiavgiften kobles bare når beløpet er det som står på oppgjørskontoen (2740), og
   saldoen i banken er bare kjent når brukeren har hentet selv eller banken sender den med postene.
-- Perioder låses ikke: et bilag kan føres med en dato i en periode som er rapportert (også etter at
-  månedsavslutningen har gått). Årsoppgjøret (resultatet mot egenkapitalen, skatt) føres med et
+- Perioder låses ikke av seg selv: låsen settes under Årsoppgjør (eller fra Mva når terminen er
+  levert). Skattekostnaden regnes ikke ut (den står i skattemeldingen), og utsatt skatt føres med et
   manuelt bilag.
 - Mva-meldingen leveres i Altinn av brukeren (linjene står under Regnskap → Mva); innsending
   direkte fra appen er ikke med. Uttak, tap på krav, justering og tilbakeføring av inngående avgift
@@ -398,6 +433,10 @@ siste er sjekklisten for hver måned i perioden) og Mva-melding (når terminen e
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/lag-kid-nar-du-er-arbeidsgiver>
 - Regnskapsloven § 4-1 (grunnleggende regnskapsprinsipper: opptjening og sammenstilling, grunnlaget
   for periodiseringene): <https://lovdata.no/lov/1998-07-17-56/§4-1>
+- Skatteetaten, næringsspesifikasjonen (kodene for resultat og balanse som SAF-T grupperes etter, blant
+  dem 2050 egenkapital, 2500 betalbar skatt, 2800 avsatt utbytte, 8300 betalbar skatt og 8800
+  disponering av årets resultat): <https://github.com/Skatteetaten/saf-t> (mappen «Grouping Category
+  Code 2025-2026»)
 - Bokføringsloven § 5 (spesifikasjoner av pliktig regnskapsrapportering: bokføringsspesifikasjon
   og kontospesifikasjon, her bilagsjournalen og hovedboken) og § 13 (oppbevaring):
   <https://lovdata.no/lov/2004-11-19-73/§5>

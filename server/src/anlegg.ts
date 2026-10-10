@@ -68,7 +68,13 @@ export type Regnskapsrolle =
   | "renteinntekt"
   | "rentekostnad"
   | "oppgjor_mva"
-  | "oreavrunding";
+  | "oreavrunding"
+  | "skattekostnad"
+  | "betalbar_skatt"
+  | "utbytte"
+  | "avsatt_utbytte"
+  | "disponering"
+  | "annen_egenkapital";
 export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: string }[] = [
   { rolle: "avskrivning_bygg", navn: "Avskrivning på bygninger og annen fast eiendom", standard: "6000" },
   { rolle: "avskrivning_driftsmidler", navn: "Avskrivning på transportmidler, maskiner og inventar", standard: "6010" },
@@ -110,6 +116,14 @@ export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: 
   { rolle: "oppgjor_mva", navn: "Oppgjørskonto merverdiavgift", standard: "2740" },
   // Mva-oppgjøret (mva.ts): mva-meldingen er i hele kroner, og øredifferansen føres her.
   { rolle: "oreavrunding", navn: "Øreavrunding", standard: "7740" },
+  // Årsoppgjøret (aarsoppgjor.ts): skattekostnaden, utbyttet og overføringen av årsresultatet til
+  // annen egenkapital.
+  { rolle: "skattekostnad", navn: "Betalbar skatt (skattekostnad)", standard: "8300" },
+  { rolle: "betalbar_skatt", navn: "Betalbar skatt, ikke fastsatt", standard: "2500" },
+  { rolle: "utbytte", navn: "Avsatt utbytte (disponering)", standard: "8920" },
+  { rolle: "avsatt_utbytte", navn: "Avsatt utbytte (gjeld)", standard: "2800" },
+  { rolle: "disponering", navn: "Overføringer annen egenkapital", standard: "8960" },
+  { rolle: "annen_egenkapital", navn: "Annen egenkapital", standard: "2050" },
   // Periodiseringene (periodisering.ts): balansekontoene som foreslås.
   { rolle: "forskuddsbetalt_kostnad", navn: "Forskuddsbetalt kostnad", standard: "1700" },
   { rolle: "paalopt_kostnad", navn: "Påløpt kostnad", standard: "2960" },
@@ -160,13 +174,15 @@ export type Regnskapsoppsett = {
   maaned_fra: string | null;
   // Mva-meldingen (0093_mva.sql): tomånedlige terminer, årstermin eller månedlig.
   mva_termin: "tomaaneder" | "aar" | "maaned";
+  // Periodelåsen (0094_aarsoppgjor.sql): regnskapet er låst til og med datoen (null: ingenting).
+  laast_til: string | null;
 };
 export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnskapsoppsett> {
   const o = await en<Regnskapsoppsett>(
     db,
     `select kontoer, saldo_fra_aar, saldo_inngaende, to_char(salg_fra, 'YYYY-MM-DD') as salg_fra, uten_mva, mva_fradrag::float8 as mva_fradrag,
             periodiser_fra::float8 as periodiser_fra, utgifter_auto, to_char(bank_fra, 'YYYY-MM-DD') as bank_fra, bank_auto, bankkontoer,
-            maaned_auto, to_char(maaned_fra, 'YYYY-MM-DD') as maaned_fra, mva_termin
+            maaned_auto, to_char(maaned_fra, 'YYYY-MM-DD') as maaned_fra, mva_termin, to_char(laast_til, 'YYYY-MM-DD') as laast_til
        from faktura.regnskap_oppsett where org_id = $1`,
     [org],
   );
@@ -185,6 +201,7 @@ export async function hentRegnskapsoppsett(db: Db, org: string): Promise<Regnska
     maaned_auto: o?.maaned_auto ?? true,
     maaned_fra: o?.maaned_fra ?? null,
     mva_termin: o?.mva_termin ?? "tomaaneder",
+    laast_til: o?.laast_til ?? null,
   };
 }
 // Kontoene som brukes: standarden, med det organisasjonen har endret.

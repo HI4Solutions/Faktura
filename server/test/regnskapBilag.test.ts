@@ -423,7 +423,7 @@ describe.skipIf(!process.env.DATABASE_URL)("regnskapet i appen: periodiseringer,
     });
     expect(j.sum).toMatchObject({ debet: 125000, kredit: 125000 });
     expect(j.merknad).toBe(
-      "4 bilag. Serie F: fakturaer og kreditnotaer, B: bank (innbetalinger, refusjoner og andre bankposter), U: utgifter, L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, V: mva-oppgjør, M: manuelle bilag.",
+      "4 bilag. Serie F: fakturaer og kreditnotaer, B: bank (innbetalinger, refusjoner og andre bankposter), U: utgifter, L: lønn og refusjoner fra NAV, A: anleggsmidler, P: periodiseringer, V: mva-oppgjør, Å: årsoppgjør, M: manuelle bilag.",
     );
 
     const p = await rapport("regnskap.periodiseringer", "fra=2026-07-01&til=2026-09-30");
