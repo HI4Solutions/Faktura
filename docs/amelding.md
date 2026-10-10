@@ -27,7 +27,8 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    måneden (Lønn → AFP), er med i arbeidsgiveravgiften som tilskudd og premie til pensjon, også når
    det ikke er lønn i måneden. Lønn og feriepenger som er utbetalt etter at den ansatte døde, er
    «lønn etter dødsfall» (uten forskuddstrekk og arbeidsgiveravgift), og arbeidsforholdet slutter
-   på dødsdatoen med sluttårsaken «arbeidstaker har sagt opp selv».
+   på dødsdatoen med sluttårsaken «arbeidstaker har sagt opp selv». Kildeskatt på lønn (utenlandske
+   arbeidstakere) er ordinært forskuddstrekk med de vanlige beskrivelsene.
 3. **Fila.** Eier eller administrator trykker «Lag fil (XML)» (med totrinnsbekreftelse, fila har
    fødselsnumrene). Workeren lager fila (bare workeren kan lese fødselsnumrene), og den lastes ned
    og lastes opp på skatteetaten.no. Merk den som lastet opp etterpå: da erstatter en ny melding for
@@ -135,3 +136,5 @@ beskrevet i `docs/skattekort.md`; de skal aldri sendes på e-post, i chat eller 
 - Tenor testdatasøk: <https://www.skatteetaten.no/testdata/>
 - Skatteetaten, lønn etter dødsfall:
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/a-meldingen/veiledning/lonn-og-ytelser/oversikt-over-lonn-og-andre-ytelser/lonn-etter-dodsfall>
+- Skatteetaten, kildeskatt på lønn i a-meldingen:
+  <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/a-meldingen/veiledning/spesielle-grupper/kildeskatt-pa-lonn>

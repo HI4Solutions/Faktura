@@ -409,7 +409,8 @@ async function lagreSvar(orgId: string, svar: Skattekortsvar[], fnr: Map<string,
         skattekort_utstedt: s.utstedt,
         skattekort_tillegg: s.tillegg,
         skattekort_trekk: s.trekk ? JSON.stringify(s.trekk) : null,
-        ...(kort ? { ...kort, skattekort_aar: sAar, skattekort_kilde: "skatteetaten" } : {}),
+        // Kildeskatt på lønn (0100): tilleggsopplysningen på skattekortet.
+        ...(kort ? { ...kort, skattekort_aar: sAar, skattekort_kilde: "skatteetaten", kildeskatt: s.tillegg.includes("kildeskattPaaLoenn") } : {}),
       };
       const k = Object.keys(felt);
       await somSystem((db) =>

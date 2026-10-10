@@ -964,6 +964,18 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   kjøringene med utbetaling i perioden, feriepengene opptjent i fristdagens år og året før minus det
   som er utbetalt (også fra et tidligere lønnssystem), og om kravet er over 2 G (G på fristdagen);
   frilansere og oppdragstakere er ikke med. Etterlønn etter dødsfall (tariff, ikke lov) er ikke laget
+- Kildeskatt på lønn (Lønn K6, `0100_kildeskatt.sql`, `server/src/lonnsberegning.ts`,
+  `server/src/skattekort.ts`, `server/src/kildeskatt.ts`). `ansatte.kildeskatt` sier at den ansatte er
+  på kildeskatteordningen for utenlandske arbeidstakere (PAYE): workeren setter det fra skattekortet
+  fra Skatteetaten (tilleggsopplysningen `kildeskattPaaLoenn`), og det kan krysses av i skjemaet
+  sammen med et prosenttrekk som er registrert for hånd. Med prosenttrekk og flagget
+  (`erKildeskatt`) trekker `summer` satsen av all trekkpliktig lønn, også feriepengene, uten
+  fradraget for fagforeningskontingent og uten halv skatt (trekkmetoden «Kildeskatt på lønn 25 %»).
+  Når den trekkpliktige lønnen i året (`frikortBrukt`, også fra et tidligere lønnssystem) med slippen
+  er over grensen for ordningen (`kildeskattGrense`: 725 050 kr i 2026, fastsettes hvert år), får
+  slippen merknad om at den ansatte skal ha nytt skattekort. A-meldingen har ordinært forskuddstrekk
+  og de vanlige beskrivelsene (det finnes ikke egne for kildeskatt på lønn). Rapporten «Kildeskatt på
+  lønn» (`lonn.kildeskatt`, år) har satsen, lønnen og trekket i året og grensen
 - Avstemmingen av lønnen og refusjonene fra NAV (`0085_nav_refusjon.sql`, `server/src/avstemming.ts`,
   `server/src/navRefusjon.ts`, Lønn → Sykepenger i `web/src/sider/LonnSykepenger.tsx`).
   Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften

@@ -83,6 +83,8 @@ type Ansatt = {
   otp_utmeldt: string | null;
   // Dødsfall (0099): dødsdatoen (sluttdatoen er den samme).
   dodsdato: string | null;
+  // Kildeskatt på lønn (0100): på kildeskatteordningen for utenlandske arbeidstakere (med prosenttrekk).
+  kildeskatt: boolean;
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -430,6 +432,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     otp_innmeldt: ansatt.otp_innmeldt ?? "",
     otp_utmeldt: ansatt.otp_utmeldt ?? "",
     dodsdato: ansatt.dodsdato ?? "",
+    kildeskatt: ansatt.kildeskatt ?? false,
     arbeidstidsordning: ansatt.arbeidstidsordning ?? "ikkeSkift",
     aarsak_sluttdato: ansatt.aarsak_sluttdato ?? "",
     // Lønns- og stillingsendringer (Lonnsendringer.tsx): datoen endringen gjelder fra, og grunnen.
@@ -679,6 +682,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       kropp.skatt_frikort = k === "frikort" && a.skatt_frikort.trim() ? tall(a.skatt_frikort) : null;
       kropp.skattekort_aar = k && a.skattekort_aar.trim() ? Number(a.skattekort_aar) : null;
       kropp.biarbeidsgiver = a.biarbeidsgiver;
+      kropp.kildeskatt = k === "prosent" && a.kildeskatt;
       // Arbeidsforholdet i a-meldingen.
       kropp.yrkeskode = a.yrkeskode.replace(/\s/g, "") || null;
       kropp.arbeidsforhold_type = a.arbeidsforhold_type;
@@ -1130,6 +1134,17 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                 <input type="checkbox" checked={a.biarbeidsgiver} disabled={!kanEndre} onChange={(e) => sett({ biarbeidsgiver: e.target.checked })} />
                 Biarbeidsgiver (den ansatte har hovedarbeidsgiveren et annet sted)
               </label>
+              {a.skattekort === "prosent" && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={a.kildeskatt}
+                    disabled={!kanEndre}
+                    onChange={(e) => sett({ kildeskatt: e.target.checked, ...(e.target.checked && !a.skatt_prosent.trim() ? { skatt_prosent: "25" } : {}) })}
+                  />
+                  Kildeskatt på lønn (utenlandsk arbeidstaker, skattekortet er merket «kildeskatt på lønn»)
+                </label>
+              )}
               <p className="felt-hjelp tillegg-hjelp">
                 {a.skattekort === "tabell"
                   ? "Lønnen trekkes etter tabellen; prosentsatsen brukes i ekstra kjøringer, på feriepengene for den ekstra ferieuka og på honorar og styrehonorar."
@@ -1137,9 +1152,11 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                     ? a.skatt_frikort.trim()
                       ? "Ingen trekk til frikortbeløpet er brukt opp i året; deretter 50 %."
                       : "Frikort uten beløpsgrense: ingen trekk."
-                    : a.skattekort === "prosent"
-                      ? "Prosentsatsen trekkes av all lønn."
-                      : "Uten skattekort trekkes 50 %."}{" "}
+                    : a.skattekort === "prosent" && a.kildeskatt
+                      ? "Kildeskatt på lønn: satsen (25 % i 2026) trekkes av all lønn, også feriepengene, uten fradrag for fagforeningskontingent og uten halv skatt i desember, og er ordinært forskuddstrekk i a-meldingen. Ordningen gjelder ikke når lønnen i året er over 725 050 kr (2026); da sier lønnskjøringen fra."
+                      : a.skattekort === "prosent"
+                        ? "Prosentsatsen trekkes av all lønn."
+                        : "Uten skattekort trekkes 50 %."}{" "}
                 {ansatt.skattekort_kilde === "skatteetaten" || ansatt.skattekort_hentet
                   ? "Hentes fra Skatteetaten; som biarbeidsgiver brukes trekket for biarbeidsgiver."
                   : "Med koblingen til Skatteetaten (Innstillinger → Ansatte og timer) hentes skattekortet av seg selv når fødselsnummeret er registrert."}

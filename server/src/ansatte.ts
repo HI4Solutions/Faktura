@@ -124,6 +124,8 @@ const ansattSkjema = z.object({
   otp_utmeldt: valgfri(datoS),
   // Dødsdatoen (0099): arbeidsforholdet slutter den dagen (sluttdatoen og sluttårsaken settes).
   dodsdato: valgfri(datoS),
+  // Kildeskatt på lønn (0100): på kildeskatteordningen (med prosenttrekk).
+  kildeskatt: z.boolean().optional(),
   arbeidstidsordning: z
     .enum(["ikkeSkift", "andreSkift", "skift365", "doegnkontinuerligSkiftOgTurnus355", "helkontinuerligSkiftOgAndreOrdninger336", "offshore336"])
     .optional(),
@@ -240,7 +242,7 @@ const ANSATT = `
          -- Arbeidsforholdet i a-meldingen (0077_amelding.sql).
          a.yrkeskode, a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato, a.honorar_art,
          to_char(a.otp_innmeldt, 'YYYY-MM-DD') as otp_innmeldt, to_char(a.otp_utmeldt, 'YYYY-MM-DD') as otp_utmeldt,
-         to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato,
+         to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato, a.kildeskatt,
          to_char(a.siste_lonnsendring, 'YYYY-MM-DD') as siste_lonnsendring, to_char(a.siste_stillingsendring, 'YYYY-MM-DD') as siste_stillingsendring,
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,

@@ -226,7 +226,7 @@ describe.skipIf(!process.env.DATABASE_URL)("skattekort fra Skatteetaten", () => 
       en(
         db,
         `select skattekort, skatt_tabell, skatt_prosent::float8 as skatt_prosent, skatt_frikort::float8 as skatt_frikort, skattekort_aar, biarbeidsgiver,
-                skattekort_kilde, skattekort_resultat, skattekort_tillegg, skattekort_trekk, skattekort_hentet
+                skattekort_kilde, skattekort_resultat, skattekort_tillegg, skattekort_trekk, skattekort_hentet, kildeskatt
            from faktura.ansatte where id = $1`,
         [id],
       ),
@@ -389,7 +389,7 @@ describe.skipIf(!process.env.DATABASE_URL)("skattekort fra Skatteetaten", () => 
                   { trekkode: "LOENN_FRA_HOVEDARBEIDSGIVER", trekktabell: { tabellnummer: "8115", prosentsats: 43, antallMaanederForTrekk: 10.5 } },
                   { trekkode: "LOENN_FRA_BIARBEIDSGIVER", trekkprosent: { prosentsats: 36 } },
                 ],
-                { tilleggsopplysning: ["oppholdPaaSvalbard"] },
+                { tilleggsopplysning: ["kildeskattPaaLoenn"] },
               ),
             ),
           );
@@ -410,16 +410,17 @@ describe.skipIf(!process.env.DATABASE_URL)("skattekort fra Skatteetaten", () => 
     expect(b.kropp.forespoerselOmSkattekortTilArbeidsgiver.arbeidsgiver[0].arbeidstakeridentifikator.sort()).toEqual(["13830197340", "24880199664"]);
     expect(forsok).toBe(3);
 
-    expect(await ansatt(ansatte.Ola)).toMatchObject({ skattekort: "tabell", skatt_tabell: 8010, skatt_prosent: 41, skattekort_aar: iAar, skattekort_kilde: "skatteetaten", skattekort_resultat: "skattekortopplysningerOK" });
-    // Kari er biarbeidsgiverforhold: prosenttrekket for biarbeidsgiver.
-    expect(await ansatt(ansatte.Kari)).toMatchObject({ skattekort: "prosent", skatt_tabell: null, skatt_prosent: 36, skattekort_kilde: "skatteetaten", skattekort_tillegg: ["oppholdPaaSvalbard"] });
+    expect(await ansatt(ansatte.Ola)).toMatchObject({ skattekort: "tabell", skatt_tabell: 8010, skatt_prosent: 41, skattekort_aar: iAar, skattekort_kilde: "skatteetaten", skattekort_resultat: "skattekortopplysningerOK", kildeskatt: false });
+    // Kari er biarbeidsgiverforhold: prosenttrekket for biarbeidsgiver. Skattekortet er merket
+    // «kildeskatt på lønn» (0100): den ansatte er på kildeskatteordningen.
+    expect(await ansatt(ansatte.Kari)).toMatchObject({ skattekort: "prosent", skatt_tabell: null, skatt_prosent: 36, skattekort_kilde: "skatteetaten", skattekort_tillegg: ["kildeskattPaaLoenn"], kildeskatt: true });
     const s = (await api("GET", `/api/org/${org}/skattekort`)).data;
     expect(s.tilgang).toMatchObject({ status: "godkjent", godkjenn_url: null, siste_feil: null });
     expect(s.tilgang.sist_hentet).not.toBeNull();
     expect(s.antall).toEqual({ med_fnr: 2, fra_skatteetaten: 2, uten_fnr: 1 });
     // Skattekortet følger med de ansatte i appen.
     const kari = (await api("GET", `/api/org/${org}/ansatte/${ansatte.Kari}`)).data;
-    expect(kari).toMatchObject({ biarbeidsgiver: true, skattekort_kilde: "skatteetaten", skattekort_tillegg: ["oppholdPaaSvalbard"] });
+    expect(kari).toMatchObject({ biarbeidsgiver: true, skattekort_kilde: "skatteetaten", skattekort_tillegg: ["kildeskattPaaLoenn"], kildeskatt: true });
     expect(kari.skattekort_trekk).toHaveLength(2);
   });
 

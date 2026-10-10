@@ -133,7 +133,7 @@ const ANSATTE = `
          a.maanedslonn::float8 as maanedslonn, a.timelonn::float8 as timelonn, a.stillingsprosent::float8 as stillingsprosent,
          a.ukentlig_arbeidstid::float8 as ukentlig_arbeidstid, a.ferie_dager::float8 as ferie_dager, a.kontonr, a.skattekort,
          a.skatt_tabell, a.skatt_prosent::float8 as skatt_prosent, a.skatt_frikort::float8 as skatt_frikort, a.skattekort_aar,
-         a.skattekort_resultat, a.skattekort_tillegg, a.aktiv, a.arbeidsforhold_type, a.honorar_art, to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato
+         a.skattekort_resultat, a.skattekort_tillegg, a.aktiv, a.arbeidsforhold_type, a.honorar_art, to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato, a.kildeskatt
     from faktura.ansatte a`;
 
 // Regner ut kjøringen på nytt og lagrer slippene (bare et utkast). De manuelle linjene (lagt til,

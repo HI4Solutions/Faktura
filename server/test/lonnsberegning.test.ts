@@ -19,6 +19,7 @@ import {
   grunnbelop,
   honorarArt,
   honorarTimer,
+  kildeskattGrense,
   somHonorar,
   snittG,
   sykelinjer,
@@ -348,6 +349,25 @@ describe("skattetrekket og summene", () => {
     ]);
     // Før dødsfallet (samme ansatte): vanlig trekk og avgift.
     expect(summer([linje("fastlonn", 50000)], oppsett, trekk(dod), "2026-10-02", null)).toMatchObject({ skattetrekk: 15000, aga_grunnlag: 51000 });
+  });
+
+  it("kildeskatt på lønn (0100): satsen av all lønn og feriepengene, uten fradrag og halv skatt, og grensen", () => {
+    const kpl = { ...kari, skattekort: "prosent" as const, skatt_prosent: 25, kildeskatt: true };
+    const linjer = [linje("fastlonn", 50000), linje("feriepenger", 6000, { opptjeningsaar: 2025 }), linje("fagforening", -500)];
+    const s = summer(linjer, oppsett, trekk(kpl, { halvSkatt: true }), "2026-06-19", null);
+    expect(s).toMatchObject({ trekkpliktig: 56000, trekkgrunnlag: 56000, skattetrekk: 14000, trekkmetode: "Kildeskatt på lønn 25 %" });
+    expect(s.merknader).toEqual(["Kildeskatt på lønn: fagforeningskontingenten trekkes ikke fra grunnlaget for skattetrekket."]);
+    // Vanlig prosenttrekk: fagforeningskontingenten trekkes fra grunnlaget (inntil en tolvdel av 8 700 kr).
+    expect(summer(linjer, oppsett, trekk({ ...kpl, kildeskatt: false }), "2026-06-19", null)).toMatchObject({ trekkgrunnlag: 55500, skattetrekk: 13875, trekkmetode: "Prosenttrekk 25 %" });
+    // Flagget gjelder bare prosenttrekk.
+    expect(summer(linjer, oppsett, trekk({ ...kpl, skattekort: "tabell", skatt_tabell: 7100 }), "2026-06-19", null).trekkmetode).toMatch(/^Tabell 7100/);
+    // Over grensen for ordningen (725 050 kr i 2026): merknad.
+    const over = summer([linje("fastlonn", 50000)], oppsett, trekk(kpl, { frikortBrukt: 690000 }), "2026-10-20", null);
+    expect(over.skattetrekk).toBe(12500);
+    expect(over.merknader).toEqual([
+      "Lønnen i år (740 000 kr) er over grensen for kildeskatt på lønn (725 050 kr i 2026): da gjelder ikke ordningen, og den ansatte skal skattlegges etter de vanlige reglene. Be den ansatte søke om nytt skattekort hos Skatteetaten.",
+    ]);
+    expect([2025, 2026, 2027].map(kildeskattGrense)).toEqual([697150, 725050, 725050]);
   });
 
   it("tabelltrekk, halv skatt, og prosentsatsen når tabellene ikke er lastet inn", () => {

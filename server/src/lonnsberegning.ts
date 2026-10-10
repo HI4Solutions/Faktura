@@ -127,6 +127,8 @@ export type Ansatt = {
   honorar_art?: "honorar" | "styrehonorar";
   // Dødsdatoen (0099): lønn utbetalt etter den er lønn etter dødsfall.
   dodsdato?: string | null;
+  // Kildeskatt på lønn (0100): på kildeskatteordningen for utenlandske arbeidstakere (PAYE).
+  kildeskatt?: boolean;
 };
 
 // --- Frilansere, oppdragstakere og styremedlemmer (0096) ---------------------------------------
@@ -245,8 +247,20 @@ export function honorarTimer(a: Ansatt, uker: Ferieuke[]): { linjer: Linje[]; ti
 // tiltakssonen, er det alt regnet med i skattekortet).
 export const TILLEGGSOPPLYSNINGER: Record<string, string> = {
   oppholdPaaSvalbard: "Skattekortet sier at den ansatte bor på Svalbard. Lønn for arbeid på Svalbard har egne trekkregler (svalbardskatt); kontroller trekket.",
-  kildeskattPaaLoenn: "Den ansatte er på kildeskatteordningen for utenlandske arbeidstakere (PAYE). Trekket følger skattekortet; kontroller at lønnen rapporteres med kildeskatt i a-meldingen.",
 };
+
+// --- Kildeskatt på lønn (0100) -----------------------------------------------------------------
+// Utenlandske arbeidstakere på kildeskatteordningen (PAYE) har prosenttrekk merket «kildeskatt på
+// lønn» på skattekortet: satsen (25 % i 2026) trekkes av all lønn, også feriepengene, uten
+// trekkfrie måneder eller halv skatt, og grunnlaget reduseres ikke med fagforeningskontingent eller
+// pensjonsinnskudd. I a-meldingen er det ordinært forskuddstrekk med de vanlige beskrivelsene.
+// Ordningen gjelder ikke når lønnen i året er over grensen (fastsettes hvert år).
+const KILDESKATT_GRENSE: Record<number, number> = { 2025: 697150, 2026: 725050 };
+export function kildeskattGrense(aar: number): number {
+  const kjente = Object.keys(KILDESKATT_GRENSE).map(Number);
+  return KILDESKATT_GRENSE[aar] ?? KILDESKATT_GRENSE[aar < Math.min(...kjente) ? Math.min(...kjente) : Math.max(...kjente)]!;
+}
+export const erKildeskatt = (a: Pick<Ansatt, "skattekort" | "kildeskatt">) => a.skattekort === "prosent" && !!a.kildeskatt;
 
 export type Linje = {
   lonnsart: string;
@@ -598,7 +612,7 @@ export type Trekkgrunnlag = {
   ekstra: boolean; // ekstra kjøring: tabelltrekk etter prosentsatsen
   halvSkatt: boolean;
   tabell: Trekkrad[] | null; // null: tabellen for året er ikke lastet inn
-  frikortBrukt: number; // trekkpliktig lønn i år før denne kjøringen
+  frikortBrukt: number; // trekkpliktig lønn i år før denne kjøringen (frikortet og grensen for kildeskatt)
   // AFP (0098): grunnlaget i år før denne kjøringen, og andelen av en heltidsansatt måned for
   // OU-premien (stillingsprosenten ganger dagene den ansatte er ansatt; 0 i ekstra kjøringer).
   afpGrunnlagFor?: number;
@@ -647,9 +661,11 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   brutto = rund(brutto);
   trekkpliktig = rund(trekkpliktig);
 
-  // Skattetrekket. Fagforeningskontingenten trekkes fra grunnlaget (ikke i ekstra kjøringer).
+  // Skattetrekket. Fagforeningskontingenten trekkes fra grunnlaget (ikke i ekstra kjøringer, og
+  // ikke med kildeskatt på lønn).
   const a = t.ansatt;
-  const minus = t.ekstra ? 0 : rund(Math.max(0, Math.min(fradrag, fagforeningsfradrag(t.aar) / 12)));
+  const kildeskatt = erKildeskatt(a);
+  const minus = t.ekstra || kildeskatt ? 0 : rund(Math.max(0, Math.min(fradrag, fagforeningsfradrag(t.aar) / 12)));
   const prosent = (p: number, g: number) => Math.max(0, Math.floor((g * p) / 100));
   let trekk = 0;
   let metode = "";
@@ -669,7 +685,13 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
     if (trekkpliktig > 0) merknader.push(`Mangler skattekort: det trekkes ${UTEN_SKATTEKORT} %. Registrer skattekortet på den ansatte.`);
   } else if (a.skattekort === "prosent") {
     trekk = prosent(Number(a.skatt_prosent), grunnlag);
-    metode = `Prosenttrekk ${tall(Number(a.skatt_prosent))} %`;
+    metode = `${kildeskatt ? "Kildeskatt på lønn" : "Prosenttrekk"} ${tall(Number(a.skatt_prosent))} %`;
+    if (kildeskatt && fradrag > 0 && !t.ekstra) merknader.push("Kildeskatt på lønn: fagforeningskontingenten trekkes ikke fra grunnlaget for skattetrekket.");
+    const iAar = rund(t.frikortBrukt + trekkpliktig);
+    if (kildeskatt && trekkpliktig > 0 && iAar > kildeskattGrense(t.aar))
+      merknader.push(
+        `Lønnen i år (${tall(iAar)} kr) er over grensen for kildeskatt på lønn (${tall(kildeskattGrense(t.aar))} kr i ${t.aar}): da gjelder ikke ordningen, og den ansatte skal skattlegges etter de vanlige reglene. Be den ansatte søke om nytt skattekort hos Skatteetaten.`,
+      );
   } else if (a.skattekort === "frikort" && a.skatt_frikort == null) {
     // Frikort uten beløpsgrense (eller ikke trekkplikt): ingen trekk.
     grunnlag = 0;
