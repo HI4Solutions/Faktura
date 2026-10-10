@@ -11,8 +11,9 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
 
 1. **Grunnlaget.** Lønnen er med i måneden den er utbetalt (de godkjente lønnskjøringene med
    utbetalingsdato i måneden), og alle som er ansatt i måneden er med med arbeidsforholdet, også
-   uten lønn. A-meldingen skal leveres hver måned så lenge noen er ansatt, innen den 5. i måneden
-   etter (neste virkedag).
+   uten lønn. Frilansere, oppdragstakere og styremedlemmer (arbeidsforholdet «frilanser,
+   oppdragstaker eller honorar») er bare med de månedene de får honorar. A-meldingen skal leveres
+   hver måned så lenge noen er ansatt, innen den 5. i måneden etter (neste virkedag).
 2. **Kontrollen.** Under Lønn → A-melding ser eier, administrator og regnskap månedene i året med
    fristen og hva som er levert. For en måned viser appen lønnen, forskuddstrekket per
    utbetalingsdato, arbeidsgiveravgiften og inntektsmottakerne, og det som mangler: fødselsnummer,
@@ -65,6 +66,12 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
    Permitteringen har beskrivelsen «permittering»; de nye opplysningene om permittering i format
    2.3 (varslingsdato, lønnsplikt og årsak) og `loennet` på permisjonen er utsatt av Skatteetaten
    og sendes ikke.
+   Frilansere, oppdragstakere og styremedlemmer: honoraret rapporteres som «honorar, akkord-,
+   prosent- eller provisjonslønn» (`honorarAkkordProsentProvisjon`) eller «styrehonorar og
+   godtgjørelse i forbindelse med verv» (`styrehonorarOgGodtgjoerelseVerv`), etter valget på den
+   ansatte, med trekk og avgift. Arbeidsforholdet har startdatoen for oppdraget, yrket (som må
+   oppgis også for dem) og sluttdatoen, men ikke ansettelsesform, arbeidstid, stillingsprosent,
+   sluttårsak eller permisjon.
 3. **Hver måned:** godkjenn lønnskjøringen, åpne måneden under Lønn → A-melding, rett det som
    mangler, og lag fila eller send den. Endres lønnen for måneden etter at a-meldingen er levert
    (en kjøring åpnes igjen, eller en ekstra kjøring), merkes måneden «Lønnen er endret»: lag en ny

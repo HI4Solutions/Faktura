@@ -1,6 +1,6 @@
 // Bokføringen av lønnen i HI4 Fakturas eget regnskap (0078_lonn_bokforing.sql): lønnsbilaget for
 // en godkjent lønnskjøring. Bilaget står på utbetalingsdatoen og har posteringene for lønnen,
-// feriepengene, utgiftene, trekkene, nettolønnen og arbeidsgiveravgiften (og OTP når det er valgt),
+// feriepengene, honorarene, utgiftene, trekkene, nettolønnen og arbeidsgiveravgiften (og OTP når det er valgt),
 // på kontoene i kontoplanen (norsk standard, NS 4102; organisasjonen kan endre dem). Det føres i
 // bilagserien L når kjøringen godkjennes (bokforKjoring), og reverseres i databasen når kjøringen
 // åpnes igjen. Bilagene er grunnlaget for regnskapsmodulen, og rapporten «Lønnsbilag» i
@@ -19,6 +19,8 @@ import { maanedNavn } from "./lonnsberegning.js";
 
 export type Kontorolle =
   | "lonn"
+  | "honorar"
+  | "styrehonorar"
   | "feriepenger"
   | "aga"
   | "aga_feriepenger"
@@ -45,6 +47,9 @@ export type Kontorolle =
 // Kontoene i bilaget, med standardkontoen (NS 4102).
 export const KONTOROLLER: { rolle: Kontorolle; navn: string; standard: string }[] = [
   { rolle: "lonn", navn: "Lønn til ansatte", standard: "5000" },
+  // Honorar til frilansere og oppdragstakere, og styrehonorar (0096).
+  { rolle: "honorar", navn: "Annen opplysningspliktig godtgjørelse (honorar)", standard: "5390" },
+  { rolle: "styrehonorar", navn: "Godtgjørelse til styremedlemmer", standard: "5330" },
   { rolle: "feriepenger", navn: "Feriepenger", standard: "5020" },
   { rolle: "aga", navn: "Arbeidsgiveravgift", standard: "5400" },
   { rolle: "aga_feriepenger", navn: "Arbeidsgiveravgift av påløpte feriepenger", standard: "5405" },
@@ -100,6 +105,9 @@ export type Bilagsslipp = {
   // Feriepengene som utbetales på slippen (lønnsartene feriepenger og feriepenger_60).
   feriepenger: number;
   feriepenger_60: number;
+  // Honorar og styrehonorar på slippen (0096; føres på egne kontoer, ikke som lønn).
+  honorar?: number;
+  styrehonorar?: number;
   // Trekkene (0082, positive beløp): utleggstrekk, bidragstrekk og tilbakebetalt forskudd (resten av
   // trekkene etter skatt er andre trekk), og forskudd på lønn som er utbetalt.
   paaleggstrekk?: number;
@@ -128,6 +136,8 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
   const brutto = sum((s) => ore(s.brutto));
   const ferie = sum((s) => ore(s.feriepenger));
   const ferie60 = sum((s) => ore(s.feriepenger_60));
+  const honorar = sum((s) => ore(s.honorar ?? 0));
+  const styrehonorar = sum((s) => ore(s.styrehonorar ?? 0));
   const utgifter = sum((s) => ore(s.utgifter));
   const skatt = sum((s) => ore(s.skattetrekk));
   const paalegg = sum((s) => ore(s.paaleggstrekk ?? 0));
@@ -151,7 +161,9 @@ export function lagLonnsbilag(g: Bilagsgrunnlag, o: Bokforingsoppsett): Lonnsbil
   const post = (rolle: Kontorolle, belopOre: number, tekst: string) => {
     if (belopOre !== 0) p.push({ rolle, konto: konto[rolle], navn: KONTONAVN[rolle], tekst, belop: belopOre / 100 });
   };
-  post("lonn", brutto - ferie - ferie60, "Lønn");
+  post("lonn", brutto - ferie - ferie60 - honorar - styrehonorar, "Lønn");
+  post("honorar", honorar, "Honorar");
+  post("styrehonorar", styrehonorar, "Styrehonorar");
   if (avsetning) {
     post("skyldige_feriepenger", ferie, "Feriepenger utbetalt");
     post("feriepenger", ferie60, "Feriepenger for den ekstra ferieuka");
@@ -227,6 +239,8 @@ export async function hentBilagsgrunnlag(db: Db, org: string, kjoring: string): 
             s.netto::float8 as netto, s.feriepenger_opptjent::float8 as feriepenger_opptjent, s.otp::float8 as otp, s.aga::float8 as aga, s.aga_sats::float8 as aga_sats,
             coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'feriepenger'), 0)::float8 as feriepenger,
             coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'feriepenger_60'), 0)::float8 as feriepenger_60,
+            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'honorar'), 0)::float8 as honorar,
+            coalesce((select sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'styrehonorar'), 0)::float8 as styrehonorar,
             coalesce((select -sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet
                         and l.lonnsart in ('utleggstrekk_samordnet', 'utleggstrekk_skatt', 'utleggstrekk')), 0)::float8 as paaleggstrekk,
             coalesce((select -sum(l.belop) from faktura.lonnslinjer l where l.slipp_id = s.id and not l.fjernet and l.lonnsart = 'bidragstrekk'), 0)::float8 as bidragstrekk,

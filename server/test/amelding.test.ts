@@ -176,6 +176,46 @@ describe("a-meldingen (uten database)", () => {
     expect(sumAvgift(g)).toBe(1235);
   });
 
+  it("frilansere og styremedlemmer (0096): honorar og styrehonorar, arbeidsforholdet uten ansettelsesform og sluttårsak", () => {
+    const frilans = { arbeidsforhold_type: "frilanserOppdragstakerHonorarPersonerMm" };
+    const g: Grunnlag = {
+      ...GRUNNLAG,
+      pensjonsinnretning: null,
+      arbeidsforhold: [
+        fast("lege", 3, "Lise Lege", { ...frilans, ansatt_fra: "2026-11-02", ansatt_til: "2026-11-30", aarsak_sluttdato: "kontraktEngasjementEllerVikariatErUtloept", yrkeskode: "2211107" }),
+        fast("styre", 4, "Sverre Styre", { ...frilans, yrkeskode: "1120119" }),
+      ],
+      slipper: [
+        { ansatt_id: "lege", utbetalingsdato: "2026-11-20", skattetrekk: 7040, aga: 2481.6, aga_grunnlag: 17600, aga_sats: 14.1, otp: 0, linjer: [{ lonnsart: "honorar", belop: 17600, antall: 22 }] },
+        { ansatt_id: "styre", utbetalingsdato: "2026-11-20", skattetrekk: 18600, aga: 8460, aga_grunnlag: 60000, aga_sats: 14.1, otp: 0, linjer: [{ lonnsart: "styrehonorar", belop: 60000, antall: null }] },
+      ],
+    };
+    const valg = { ...VALG, fnr: (id: string) => (id === "lege" ? "13830197340" : "24880199664") };
+    const { leveranse } = byggLeveranse(g, valg) as any;
+    const [lege, styre] = leveranse.oppgave.virksomhet[0].inntektsmottaker;
+    // Arbeidsforholdet: startdatoen for oppdraget, yrket og sluttdatoen, ikke ansettelsesform,
+    // arbeidstid, stillingsprosent eller sluttårsak.
+    expect(lege.arbeidsforhold).toEqual([
+      { arbeidsforholdId: "3", typeArbeidsforhold: "frilanserOppdragstakerHonorarPersonerMm", startdato: "2026-11-02", sluttdato: "2026-11-30", yrke: "2211107" },
+    ]);
+    expect(lege.inntekt).toEqual([
+      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "17600.00", arbeidsforholdId: "3", loennsinntekt: { beskrivelse: "honorarAkkordProsentProvisjon" } },
+    ]);
+    expect(styre.inntekt).toEqual([
+      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "60000.00", arbeidsforholdId: "4", loennsinntekt: { beskrivelse: "styrehonorarOgGodtgjoerelseVerv" } },
+    ]);
+    expect(leveranse.oppgave.virksomhet[0].arbeidsgiveravgift.loennOgGodtgjoerelse).toEqual([
+      { beregningskodeForArbeidsgiveravgift: "generelleNaeringer", sone: "1", avgiftsgrunnlagBeloep: "77600.00", prosentsatsForAvgiftsberegning: "14.1" },
+    ]);
+    // Uten OTP trengs ingen pensjonsinnretning; ingen sluttårsak å velge for frilanseren.
+    expect(kontroller(g)).toEqual([]);
+    // Yrket må også oppgis for frilansere og styremedlemmer.
+    expect(kontroller({ ...g, arbeidsforhold: [g.arbeidsforhold[0]!, { ...g.arbeidsforhold[1]!, yrkeskode: null }] }).map((x) => x.tekst)).toEqual([
+      "Sverre Styre mangler yrkeskode (7 siffer, SSBs yrkeskoder).",
+    ]);
+    if (harXmllint) valider(tilXml(byggLeveranse(g, valg)));
+  });
+
   it("kontrollen: virksomheten, pensjonsinnretningen, fødselsnummer, yrkeskode, sluttdato, utkast og permisjon", () => {
     const a = kontroller({
       ...GRUNNLAG,

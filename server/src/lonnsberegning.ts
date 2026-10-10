@@ -1,6 +1,7 @@
 // Lønnsberegningen (uten database, så den kan testes for seg): linjene på en lønnsslipp
 // (fastlønn, timelønn, overtid og merarbeid, faste tillegg, sykepenger og omsorgspenger,
-// feriepenger og ferietrekk), skattetrekket, feriepengene, OTP og arbeidsgiveravgiften.
+// feriepenger og ferietrekk, og honorar til frilansere og styremedlemmer), skattetrekket,
+// feriepengene, OTP og arbeidsgiveravgiften.
 // lonn.ts henter grunnlaget og lagrer resultatet.
 //
 // Satsene (2026): arbeidsgiveravgift per sone (1a: 10,6 % til fribeløpet på 850 000 kr i spart
@@ -114,7 +115,44 @@ export type Ansatt = {
   // Fra Skatteetaten (0068): svaret og tilleggsopplysningene (Svalbard, kildeskatt, tiltakssonen).
   skattekort_resultat?: string | null;
   skattekort_tillegg?: string[] | null;
+  // Arbeidsforholdet (0077) og honoraret for frilansere og styremedlemmer (0096).
+  arbeidsforhold_type?: string;
+  honorar_art?: "honorar" | "styrehonorar";
 };
+
+// --- Frilansere, oppdragstakere og styremedlemmer (0096) ---------------------------------------
+// Arbeidsforholdet «frilanser, oppdragstaker eller honorar» gir honorar i stedet for lønn:
+// ferieloven, OTP-loven og arbeidsgiverens sykepenger gjelder arbeidstakere, så det blir ingen
+// feriepenger, OTP eller sykepenger, overtid regnes ikke, og permisjon hører ikke til. Det faste
+// honoraret (månedslønnen) og timene (med timelønn) blir honorar av typen på den ansatte.
+
+export const FRILANSER = "frilanserOppdragstakerHonorarPersonerMm";
+export const erFrilanser = (a: Pick<Ansatt, "arbeidsforhold_type">) => a.arbeidsforhold_type === FRILANSER;
+export const honorarArt = (a: Pick<Ansatt, "honorar_art">) => (a.honorar_art === "styrehonorar" ? "styrehonorar" : "honorar");
+// Lønnsartene som blir honorar for en frilanser (lønnen for tid; ikke sykdom, permisjon og ferie).
+export const SOM_HONORAR = new Set(["fastlonn", "timelonn", "merarbeid", "ekstratimer", "overtid", "fast_tillegg", "uregelmessig_tillegg", "etterbetaling", "etterbetaling_time", "etterbetaling_overtid"]);
+
+// Fastlønnslinjene som fast honorar (styrehonorar eller honorar for oppdrag).
+export const somHonorar = (a: Pick<Ansatt, "honorar_art">, l: Linje): Linje => ({
+  ...l,
+  lonnsart: honorarArt(a),
+  tekst: l.tekst.replace(/^Fastlønn/, a.honorar_art === "styrehonorar" ? "Fast styrehonorar" : "Fast honorar"),
+});
+
+// Honoraret for timene med timelønn: alle de godkjente timene i ukene som ikke er lønnet (det
+// som er godkjent i alt, minus det som er lønnet før), uten overtid og timebank. Med fast honorar
+// gir timene ikke noe i tillegg.
+export function honorarTimer(a: Ansatt, uker: Ferieuke[]): { linjer: Linje[]; timer: number } {
+  let timer = 0;
+  for (const u of uker) timer += u.alle.reduce((s, f) => s + Number(f.timer), 0) - u.betalt.reduce((s, f) => s + Number(f.timer), 0);
+  timer = rund(timer);
+  if (a.lonnstype !== "time" || timer <= 0) return { linjer: [], timer };
+  const sats = Number(a.timelonn ?? 0);
+  return {
+    linjer: [{ lonnsart: honorarArt(a), tekst: a.honorar_art === "styrehonorar" ? "Styrehonorar for timer" : "Honorar for timer", antall: timer, sats, belop: rund(timer * sats), nokkel: "honorar_timer" }],
+    timer,
+  };
+}
 
 // Tilleggsopplysningene på skattekortet som bør sjekkes i lønnskjøringen (bor den ansatte i
 // tiltakssonen, er det alt regnet med i skattekortet).
@@ -487,7 +525,7 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
   let otpGrunnlag = 0;
   let agaGrunnlag = 0;
   let unntatt = 0; // feriepenger uten tabelltrekk (utbetalt i ferieåret)
-  let ferie60 = 0;
+  let prosentdel = 0; // trekkes etter prosentsatsen med tabellkort (lønnsartene med prosenttrekk)
   let fradrag = 0; // fagforeningskontingent trukket i lønnen (positiv)
   let natural = 0; // naturalytelser (0083)
   for (const l of aktive) {
@@ -503,7 +541,7 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
     if (art.otp) otpGrunnlag += b;
     if (art.aga) agaGrunnlag += b;
     if (l.lonnsart === "feriepenger" && l.opptjeningsaar != null && l.opptjeningsaar < t.aar) unntatt += b;
-    if (l.lonnsart === "feriepenger_60") ferie60 += b;
+    if (art.prosenttrekk && art.trekk) prosentdel += b;
     if (art.fradrag) fradrag -= b;
   }
   brutto = rund(brutto);
@@ -541,18 +579,24 @@ export function summer(linjer: Linje[], o: Oppsett, t: Trekkgrunnlag, dato: stri
       trekk = prosent(p, grunnlag);
       metode = `Prosenttrekk ${tall(p)} % (tabellkort, ekstra kjøring)`;
     } else {
-      grunnlag = rund(Math.max(0, trekkpliktig - unntatt - ferie60 - minus));
-      if (t.tabell) {
-        const oppslag = tabelloppslag(t.tabell, Math.max(0, grunnlag));
-        trekk = oppslag.trekk;
-        if (oppslag.over) merknader.push(`Lønnen er over den høyeste raden i tabell ${a.skatt_tabell}; trekket er regnet videre med satsen øverst i tabellen. Kontroller trekket.`);
-      } else {
-        trekk = prosent(p, grunnlag);
-        merknader.push(`Trekktabellene for ${t.aar} er ikke lastet inn ennå: trekket er regnet med prosentsatsen på skattekortet (${tall(p)} %). Kontroller trekket mot tabell ${a.skatt_tabell}.`);
+      grunnlag = rund(Math.max(0, trekkpliktig - unntatt - prosentdel - minus));
+      // Tabelltrekk av lønnen for perioden, og prosentsatsen av ytelsene med prosenttrekk (tillegget
+      // for den ekstra ferieuka, honorar og styrehonorar). Grunnlaget som vises, er begge delene.
+      if (grunnlag > 0 || !prosentdel) {
+        if (t.tabell) {
+          const oppslag = tabelloppslag(t.tabell, Math.max(0, grunnlag));
+          trekk = oppslag.trekk;
+          if (oppslag.over) merknader.push(`Lønnen er over den høyeste raden i tabell ${a.skatt_tabell}; trekket er regnet videre med satsen øverst i tabellen. Kontroller trekket.`);
+        } else {
+          trekk = prosent(p, grunnlag);
+          merknader.push(`Trekktabellene for ${t.aar} er ikke lastet inn ennå: trekket er regnet med prosentsatsen på skattekortet (${tall(p)} %). Kontroller trekket mot tabell ${a.skatt_tabell}.`);
+        }
+        if (t.halvSkatt) trekk = Math.floor(trekk / 2);
       }
-      if (t.halvSkatt) trekk = Math.floor(trekk / 2);
-      trekk += prosent(p, ferie60);
+      trekk += prosent(p, prosentdel);
       metode = `Tabell ${a.skatt_tabell}${t.halvSkatt ? " (halv skatt)" : ""}`;
+      if (prosentdel > 0) metode = grunnlag > 0 ? `${metode} og prosenttrekk ${tall(p)} %` : `Prosenttrekk ${tall(p)} % (tabellkort)`;
+      grunnlag = rund(grunnlag + prosentdel);
     }
     if (unntatt > 0 && !t.ekstra) merknader.push("Det trekkes ikke skatt av feriepengene (tabelltrekk).");
   }

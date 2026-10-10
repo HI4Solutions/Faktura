@@ -76,6 +76,8 @@ type Ansatt = {
   arbeidsforhold_type: string;
   arbeidstidsordning: string;
   aarsak_sluttdato: string | null;
+  // Frilansere og styremedlemmer (0096): honorar for oppdrag eller styrehonorar.
+  honorar_art: "honorar" | "styrehonorar";
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
@@ -86,6 +88,7 @@ type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"
 
 const ansettelsestype: Record<string, string> = { fast: "Fast", midlertidig: "Midlertidig", tilkalling: "Tilkalling" };
 // Kodene i a-meldingen (0077_amelding.sql).
+const FRILANSER = "frilanserOppdragstakerHonorarPersonerMm";
 const ARBEIDSFORHOLD: Record<string, string> = {
   ordinaertArbeidsforhold: "Ordinært arbeidsforhold",
   maritimtArbeidsforhold: "Maritimt arbeidsforhold",
@@ -130,6 +133,11 @@ function Merker({ a }: { a: Ansatt }) {
       {a.rolle && (
         <span className={`merke ${erAnsatt(a) ? "merke-noytral" : "merke-info"}`} title={erAnsatt(a) ? undefined : "Ikke ansatt"}>
           {a.rolle}
+        </span>
+      )}
+      {a.arbeidsforhold_type === FRILANSER && erAnsatt(a) && (
+        <span className="merke merke-noytral" title="Får honorar, ikke lønn">
+          {a.honorar_art === "styrehonorar" ? "Styreverv" : "Frilanser"}
         </span>
       )}
       {sluttet(a) && <span className="merke merke-noytral">{a.aktiv ? "Sluttet" : "Ikke aktiv"}</span>}
@@ -384,6 +392,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     biarbeidsgiver: ansatt.biarbeidsgiver ?? false,
     yrkeskode: ansatt.yrkeskode ?? "",
     arbeidsforhold_type: ansatt.arbeidsforhold_type ?? "ordinaertArbeidsforhold",
+    honorar_art: ansatt.honorar_art ?? "honorar",
     arbeidstidsordning: ansatt.arbeidstidsordning ?? "ikkeSkift",
     aarsak_sluttdato: ansatt.aarsak_sluttdato ?? "",
     // Lønns- og stillingsendringer (Lonnsendringer.tsx): datoen endringen gjelder fra, og grunnen.
@@ -631,8 +640,10 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       // Arbeidsforholdet i a-meldingen.
       kropp.yrkeskode = a.yrkeskode.replace(/\s/g, "") || null;
       kropp.arbeidsforhold_type = a.arbeidsforhold_type;
+      kropp.honorar_art = a.honorar_art;
       kropp.arbeidstidsordning = a.arbeidstidsordning;
-      kropp.aarsak_sluttdato = a.ansatt_til && a.aarsak_sluttdato ? a.aarsak_sluttdato : null;
+      // Årsaken til sluttdatoen rapporteres ikke for frilansere og styremedlemmer.
+      kropp.aarsak_sluttdato = a.ansatt_til && a.aarsak_sluttdato && a.arbeidsforhold_type !== FRILANSER ? a.aarsak_sluttdato : null;
     }
     // Fødselsnummeret sendes bare når det er skrevet inn eller skal fjernes; ellers fødselsdatoen.
     if (a.fjernFnr) kropp.fnr = null;
@@ -1071,7 +1082,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
               </label>
               <p className="felt-hjelp tillegg-hjelp">
                 {a.skattekort === "tabell"
-                  ? "Lønnen trekkes etter tabellen; prosentsatsen brukes i ekstra kjøringer og på feriepengene for den ekstra ferieuka."
+                  ? "Lønnen trekkes etter tabellen; prosentsatsen brukes i ekstra kjøringer, på feriepengene for den ekstra ferieuka og på honorar og styrehonorar."
                   : a.skattekort === "frikort"
                     ? a.skatt_frikort.trim()
                       ? "Ingen trekk til frikortbeløpet er brukt opp i året; deretter 50 %."
@@ -1118,7 +1129,16 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                     ))}
                   </select>
                 </label>
-                {a.ansatt_til && (
+                {a.arbeidsforhold_type === FRILANSER && (
+                  <label>
+                    Honoraret er
+                    <select {...felt("honorar_art")}>
+                      <option value="honorar">Honorar for oppdrag</option>
+                      <option value="styrehonorar">Styrehonorar eller godtgjørelse for verv</option>
+                    </select>
+                  </label>
+                )}
+                {a.ansatt_til && a.arbeidsforhold_type !== FRILANSER && (
                   <label>
                     Årsak til sluttdatoen
                     <select {...felt("aarsak_sluttdato")}>
@@ -1132,6 +1152,13 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                   </label>
                 )}
               </div>
+              {a.arbeidsforhold_type === FRILANSER && (
+                <p className="felt-hjelp tillegg-hjelp">
+                  Frilansere, oppdragstakere og styremedlemmer får honorar, ikke lønn: ingen feriepenger, OTP eller sykepenger, og de står i a-meldingen bare de månedene de
+                  får honorar. Med fastlønn blir månedslønnen et fast honorar, og med timelønn får de honorar for timene (uten overtid). Et styrehonorar for året legges til
+                  i lønnskjøringen («Styrehonorar og godtgjørelse for verv»). Skatten trekkes etter prosentsatsen på skattekortet.
+                </p>
+              )}
             </>
           )}
           </>

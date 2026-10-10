@@ -889,6 +889,18 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   endringsårsaken «Permittering». Eier og administrator lager varselet om permittering som PDF
   (`GET /fravaer/:id/permitteringsvarsel`). Rapporten «Permisjoner og permitteringer»
   (`lonn.permisjoner`, bare eier og administrator, som fraværet)
+- Frilansere, oppdragstakere og styremedlemmer (`0096_frilans.sql`, `server/src/lonnsberegning.ts`,
+  `server/src/lonn.ts`): arbeidsforholdet `frilanserOppdragstakerHonorarPersonerMm` gir honorar i
+  stedet for lønn (`erFrilanser`). `ansatte.honorar_art` (honorar eller styrehonorar) er
+  lønnsarten honoraret får: fastlønnslinjene blir fast honorar (`somHonorar`), timene med
+  timelønn honorar for alle timene uten overtid og timebank (`honorarTimer`), og de faste
+  tilleggene og etterbetalingen honorar (`SOM_HONORAR`); sykdom, permisjon, timebank og
+  ferietrekk regnes ikke. Lønnsartene `honorar` og `styrehonorar` er trekk- og avgiftspliktige,
+  men ikke med i feriepengene og OTP, og har prosenttrekk: med tabellkort trekkes de etter
+  prosentsatsen, som tillegget for den ekstra ferieuka (`prosenttrekk` på lønnsarten). A-meldingen
+  har dem som `honorarAkkordProsentProvisjon` og `styrehonorarOgGodtgjoerelseVerv`, og
+  arbeidsforholdet bare i månedene med utbetaling, uten sluttårsak (yrket kreves). Lønnsbilaget:
+  honorar (5390) og styrehonorar (5330)
 - Avstemmingen av lønnen og refusjonene fra NAV (`0085_nav_refusjon.sql`, `server/src/avstemming.ts`,
   `server/src/navRefusjon.ts`, Lønn → Sykepenger i `web/src/sider/LonnSykepenger.tsx`).
   Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften

@@ -6,7 +6,9 @@
 // fortegn: vanlig fortegn på beløpet (trekk er negative). manuell: kan velges når en linje legges
 // til.
 // amelding: beskrivelsen i a-meldingen (steg 4). fradrag: trekket reduserer grunnlaget for
-// forskuddstrekket (fagforeningskontingent, 0082).
+// forskuddstrekket (fagforeningskontingent, 0082). prosenttrekk: med tabellkort trekkes skatten av
+// linjen etter prosentsatsen (ytelser som ikke er lønn for en bestemt periode: tillegget for den
+// ekstra ferieuka, honorar og styrehonorar).
 //
 // Feriepenger er trekkpliktige, men ved tabelltrekk trekkes det ikke skatt av feriepenger som
 // utbetales i ferieåret (opptjent året før); tillegget for den ekstra ferieuka over 60 år trekkes
@@ -25,6 +27,7 @@ export type Lonnsart = {
   manuell: boolean;
   amelding: string | null;
   fradrag?: boolean;
+  prosenttrekk?: boolean;
 };
 
 const lonn = (kode: string, navn: string, x: Partial<Lonnsart> = {}): Lonnsart => ({
@@ -112,13 +115,18 @@ export const LONNSARTER: Lonnsart[] = [
   lonn("trekk_sykdom", "Trekk for sykdom (NAV betaler sykepengene)", { fortegn: -1, manuell: false, amelding: "fastloenn" }),
   lonn("omsorgspenger", "Omsorgspenger (sykt barn)", { amelding: "timeloenn" }),
   lonn("feriepenger", "Feriepenger", { ferie: false, otp: false, amelding: "feriepenger" }),
-  lonn("feriepenger_60", "Feriepenger for den ekstra ferieuka (over 60 år)", { ferie: false, otp: false, amelding: "feriepenger" }),
+  lonn("feriepenger_60", "Feriepenger for den ekstra ferieuka (over 60 år)", { ferie: false, otp: false, amelding: "feriepenger", prosenttrekk: true }),
   lonn("ferietrekk", "Trekk i lønn for ferie", { ferie: false, otp: false, fortegn: -1, amelding: "trekkILoennForFerie" }),
   lonn("trekk_permisjon", "Trekk for permisjon uten lønn", { fortegn: -1, amelding: "fastloenn" }),
   // Permittering (0084, permisjoner.ts): fastlønnen trekkes etter lønnsplikten, og med timelønn
   // lønnes de planlagte timene i lønnspliktperioden. Regnes av fraværet.
   lonn("trekk_permittering", "Trekk for permittering", { fortegn: -1, manuell: false, amelding: "fastloenn" }),
   lonn("lonnsplikt", "Lønn i lønnspliktperioden ved permittering", { manuell: false, amelding: "timeloenn" }),
+  // Frilansere, oppdragstakere og styremedlemmer (0096): honorar i stedet for lønn, trekk- og
+  // avgiftspliktig, men ikke med i feriepengene og OTP. Det faste honoraret og timene regnes som
+  // honorar av den typen den ansatte har; de kan også legges til for hånd.
+  lonn("honorar", "Honorar (oppdrag)", { ferie: false, otp: false, amelding: "honorarAkkordProsentProvisjon", prosenttrekk: true }),
+  lonn("styrehonorar", "Styrehonorar og godtgjørelse for verv", { ferie: false, otp: false, amelding: "styrehonorarOgGodtgjoerelseVerv", prosenttrekk: true }),
   { kode: "utgift", navn: "Utgiftsgodtgjørelse (ikke skattepliktig)", type: "utgift", trekk: false, aga: false, ferie: false, otp: false, fortegn: 1, manuell: true, amelding: null },
   { kode: "trekk_etter_skatt", navn: "Trekk etter skatt", type: "trekk", trekk: false, aga: false, ferie: false, otp: false, fortegn: -1, manuell: true, amelding: null },
   // Faste trekk (0082, lonnstrekk.ts): etter pålegg (utleggstrekk og bidragstrekk, i a-meldingen
@@ -171,6 +179,8 @@ export const AMELDING_NAVN: Record<string, string> = {
   bonus: "Bonus",
   feriepenger: "Feriepenger",
   trekkILoennForFerie: "Trekk i lønn for ferie",
+  honorarAkkordProsentProvisjon: "Honorar, akkord-, prosent- eller provisjonslønn",
+  styrehonorarOgGodtgjoerelseVerv: "Styrehonorar og godtgjørelse i forbindelse med verv",
   // Naturalytelser og utgiftsgodtgjørelser (0083).
   bil: "Fri bil",
   elektroniskKommunikasjon: "Elektronisk kommunikasjon",

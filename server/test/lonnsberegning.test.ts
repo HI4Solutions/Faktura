@@ -6,11 +6,15 @@ import { AML } from "../src/arbeidstid.js";
 import {
   arbeidsgiveravgift,
   arbeidsgiverperiode,
+  erFrilanser,
   fastlonn,
   feriepengelinjer,
   ferietrekk,
   frister,
   grunnbelop,
+  honorarArt,
+  honorarTimer,
+  somHonorar,
   sykelinjer,
   summer,
   tabelloppslag,
@@ -212,6 +216,35 @@ describe("linjene", () => {
   });
 });
 
+describe("frilansere og styremedlemmer (0096)", () => {
+  const frilanser: Ansatt = { ...per, id: "a3", navn: "Lise Lege", timelonn: 800, arbeidsforhold_type: "frilanserOppdragstakerHonorarPersonerMm" };
+  const uke = (timer: number[], betalt: number[] = []) => ({ alle: dager("2026-10-05", timer).map((f) => ({ ...f, uten_overtid: false, timebank: false })), betalt: dager("2026-10-05", betalt) });
+
+  it("frilanseren kjennes igjen på arbeidsforholdet", () => {
+    expect(erFrilanser(frilanser)).toBe(true);
+    expect(erFrilanser(per)).toBe(false);
+    expect(honorarArt(frilanser)).toBe("honorar");
+    expect(honorarArt({ honorar_art: "styrehonorar" })).toBe("styrehonorar");
+  });
+
+  it("honorar for alle timene med timelønnen, uten overtid (det som er lønnet før, trekkes fra)", () => {
+    // 8 + 8 + 8 + 8 + 12 = 44 timer (for en ansatt ville 4 vært overtid), 8 lønnet før.
+    expect(honorarTimer(frilanser, [uke([8, 8, 8, 8, 12], [8])])).toEqual({
+      linjer: [{ lonnsart: "honorar", tekst: "Honorar for timer", antall: 36, sats: 800, belop: 28800, nokkel: "honorar_timer" }],
+      timer: 36,
+    });
+    expect(honorarTimer({ ...frilanser, honorar_art: "styrehonorar" }, [uke([2])]).linjer[0]).toMatchObject({ lonnsart: "styrehonorar", tekst: "Styrehonorar for timer", belop: 1600 });
+    // Med fast honorar gir timene ikke noe i tillegg.
+    expect(honorarTimer({ ...frilanser, lonnstype: "maaned", maanedslonn: 10000 }, [uke([8])])).toEqual({ linjer: [], timer: 8 });
+  });
+
+  it("det faste honoraret: fastlønnslinjen som honorar eller styrehonorar", () => {
+    const f = fastlonn({ ...kari, arbeidsforhold_type: "frilanserOppdragstakerHonorarPersonerMm" }, "2026-10-01", "2026-10-31")!;
+    expect(somHonorar({ honorar_art: "honorar" }, f)).toMatchObject({ lonnsart: "honorar", tekst: "Fast honorar", belop: 50000 });
+    expect(somHonorar({ honorar_art: "styrehonorar" }, f)).toMatchObject({ lonnsart: "styrehonorar", tekst: "Fast styrehonorar", belop: 50000 });
+  });
+});
+
 describe("skattetrekket og summene", () => {
   const tabell = [
     { grunnlag: 49800, trekk: 14000 },
@@ -277,11 +310,35 @@ describe("skattetrekket og summene", () => {
       null,
     );
     // Grunnlaget for tabelltrekket: 50 000 - 57 692,31 (ferietrekket) = under tabellen; 31 % av 10 000.
+    // Grunnlaget som vises, er det som trekkes av: bare tillegget.
     expect(s.trekkpliktig).toBe(74307.69);
-    expect(s.trekkgrunnlag).toBe(0);
+    expect(s.trekkgrunnlag).toBe(10000);
     expect(s.skattetrekk).toBe(3100);
+    expect(s.trekkmetode).toBe("Prosenttrekk 31 % (tabellkort)");
     expect(s.feriepengegrunnlag).toBe(50000);
     expect(s.merknader).toContain("Det trekkes ikke skatt av feriepengene (tabelltrekk).");
+  });
+
+  it("honorar og styrehonorar (0096): prosentsatsen på tabellkortet, ikke feriepenger og OTP", () => {
+    const a = { ...kari, skattekort: "tabell" as const, skatt_tabell: 7100, skatt_prosent: 31 };
+    // Bare styrehonorar: prosentsatsen av hele, uten tabellen (og uten merknad om tabellene).
+    const styre = summer([linje("styrehonorar", 60000)], oppsett, trekk(a), "2026-10-20", null);
+    expect(styre).toMatchObject({
+      brutto: 60000,
+      trekkpliktig: 60000,
+      trekkgrunnlag: 60000,
+      skattetrekk: 18600,
+      trekkmetode: "Prosenttrekk 31 % (tabellkort)",
+      feriepengegrunnlag: 0,
+      feriepenger_opptjent: 0,
+      otp_grunnlag: 0,
+      otp: 0,
+      aga_grunnlag: 60000,
+      merknader: [],
+    });
+    // Lønn og honorar på samme slipp: tabellen for lønnen og prosentsatsen for honoraret.
+    const begge = summer([linje("fastlonn", 49950), linje("honorar", 10000)], oppsett, trekk(a, { tabell }), "2026-10-20", null);
+    expect(begge).toMatchObject({ skattetrekk: 14040 + 3100, trekkgrunnlag: 59950, trekkmetode: "Tabell 7100 og prosenttrekk 31 %", feriepengegrunnlag: 49950, otp_grunnlag: 49950 });
   });
 
   it("frikort til beløpet er brukt opp, og 50 % uten skattekort", () => {

@@ -24,7 +24,12 @@ import {
   arbeidsgiverperiode,
   arbeidsgiveravgift,
   AGA_FULL,
+  erFrilanser,
   feriepengelinjer,
+  honorarArt,
+  honorarTimer,
+  SOM_HONORAR,
+  somHonorar,
   ferietrekk,
   frister,
   maanedNavn,
@@ -33,6 +38,7 @@ import {
   rund,
   summer,
   sykelinjer,
+  tall,
   tilleggslinjer,
   timebanklinjer,
   timelinjer,
@@ -117,7 +123,7 @@ const ANSATTE = `
          a.maanedslonn::float8 as maanedslonn, a.timelonn::float8 as timelonn, a.stillingsprosent::float8 as stillingsprosent,
          a.ukentlig_arbeidstid::float8 as ukentlig_arbeidstid, a.ferie_dager::float8 as ferie_dager, a.kontonr, a.skattekort,
          a.skatt_tabell, a.skatt_prosent::float8 as skatt_prosent, a.skatt_frikort::float8 as skatt_frikort, a.skattekort_aar,
-         a.skattekort_resultat, a.skattekort_tillegg, a.aktiv
+         a.skattekort_resultat, a.skattekort_tillegg, a.aktiv, a.arbeidsforhold_type, a.honorar_art
     from faktura.ansatte a`;
 
 // Regner ut kjøringen på nytt og lagrer slippene (bare et utkast). De manuelle linjene (lagt til,
@@ -441,8 +447,11 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
     const auto: Linje[] = [];
     let timeforinger: string[] = [];
     let timebankPoster: string[] = [];
+    // Frilanser, oppdragstaker eller styremedlem (0096): honorar i stedet for lønn (fast honorar, og
+    // timene med timelønn uten overtid), og ingen sykepenger, permisjon, timebank eller ferietrekk.
+    const frilanser = erFrilanser(a);
     if (ordinar) {
-      if (ansatt) auto.push(...fastlonnLinjer(a, historie, fra, til));
+      if (ansatt) auto.push(...fastlonnLinjer(a, historie, fra, til).map((l) => (frilanser ? somHonorar(a, l) : l)));
       // Timene: med lønnen og stillingen som gjelder for hver uke (endres de i perioden, får hver del sin linje).
       const grupper = new Map<string, { a: Ansatt; uker: Ferieuke[] }>();
       for (const [mandag, u] of ukeliste) {
@@ -454,7 +463,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       }
       const t = { linjer: [] as Linje[], timer: 0, ekstraTimer: 0 };
       [...grupper.values()].forEach((g, i, alle) => {
-        const r = timelinjer(g.a, o, g.uker);
+        const r = frilanser ? { ...honorarTimer(g.a, g.uker), ekstraTimer: 0 } : timelinjer(g.a, o, g.uker);
         const fraDato = i > 0 ? ukeDato(uke(g.uker[0]!.alle[0]!.dato).fra, fra) : null;
         for (const l of r.linjer)
           t.linjer.push(alle.length > 1 && fraDato ? { ...l, tekst: `${l.tekst} (fra ${fraDato.split("-").reverse().join(".")})`, nokkel: l.nokkel ? `${l.nokkel}:${fraDato}` : null } : l);
@@ -463,65 +472,73 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       });
       auto.push(...t.linjer);
       timeforinger = uker.flatMap((u) => u.ider);
-      // Timebanken: avspasering og permisjon med lønn (timelønn), og utbetaling; timene teller også
-      // for tilleggene per time.
-      const iPerioden = (betalt: boolean) =>
-        a.lonnstype === "time"
-          ? avspasering.filter((x) => x.ansatt_id === a.id && x.betalt === betalt).reduce((sum, x) => sum + avspasertIPerioden(x, fra, til), 0)
-          : 0;
-      const avspasert = iPerioden(false);
-      const permisjon = iPerioden(true);
-      const egneUtbetalinger = utbetalinger.filter((x) => x.ansatt_id === a.id);
-      const utbetalt = egneUtbetalinger.reduce((sum, x) => sum + Number(x.timer), 0);
-      auto.push(...timebanklinjer(aSlutt, avspasert, utbetalt, permisjon));
-      timebankPoster = egneUtbetalinger.map((x) => x.id);
       const egneTillegg = tillegg.filter((x) => x.ansatt_id === a.id && (ansatt || (x.per === "time" && a.lonnstype === "time")));
-      auto.push(...tilleggslinjer(aSlutt, egneTillegg, fra, til, t.timer + avspasert + permisjon + utbetalt, t.ekstraTimer + utbetalt));
-      // Sykdom: arbeidsgiverperioden, og sykt barn (omsorgsdagene i året).
-      const egne = fravaer.filter((x) => x.ansatt_id === a.id);
-      if (egne.length) {
-        const p = arbeidsgiverperiode(egne, a.ansatt_fra);
-        const dager: Sykedag[] = [];
-        let omsorgBrukt = 0;
-        for (const x of egne) {
-          for (let d = x.fra; d <= x.til; d = pluss(d, 1)) {
-            const timer = planlagt.get(`${a.id}|${d}`) ?? 0;
-            if (d >= fra && d <= til) dager.push({ dato: d, timer, type: x.type as Sykedag["type"], grad: Number(x.grad) });
-            else if (x.type === "sykt_barn" && d < fra && d.slice(0, 4) === fra.slice(0, 4) && virkedag(d)) omsorgBrukt++;
+      if (frilanser) {
+        // De faste tilleggene som honorar; med fast honorar gir timene ikke noe i tillegg.
+        auto.push(...tilleggslinjer(aSlutt, egneTillegg, fra, til, t.timer, 0).map((l) => ({ ...l, lonnsart: honorarArt(a) })));
+        if (t.timer > 0 && aSlutt.lonnstype !== "time")
+          merknader.push(`${tall(t.timer)} ${t.timer === 1 ? "time" : "timer"} er ført, men med fast honorar gir timene ikke honorar i tillegg (velg timelønn for honorar per time).`);
+      } else {
+        // Timebanken: avspasering og permisjon med lønn (timelønn), og utbetaling; timene teller også
+        // for tilleggene per time.
+        const iPerioden = (betalt: boolean) =>
+          a.lonnstype === "time"
+            ? avspasering.filter((x) => x.ansatt_id === a.id && x.betalt === betalt).reduce((sum, x) => sum + avspasertIPerioden(x, fra, til), 0)
+            : 0;
+        const avspasert = iPerioden(false);
+        const permisjon = iPerioden(true);
+        const egneUtbetalinger = utbetalinger.filter((x) => x.ansatt_id === a.id);
+        const utbetalt = egneUtbetalinger.reduce((sum, x) => sum + Number(x.timer), 0);
+        auto.push(...timebanklinjer(aSlutt, avspasert, utbetalt, permisjon));
+        timebankPoster = egneUtbetalinger.map((x) => x.id);
+        auto.push(...tilleggslinjer(aSlutt, egneTillegg, fra, til, t.timer + avspasert + permisjon + utbetalt, t.ekstraTimer + utbetalt));
+        // Sykdom: arbeidsgiverperioden, og sykt barn (omsorgsdagene i året).
+        const egne = fravaer.filter((x) => x.ansatt_id === a.id);
+        if (egne.length) {
+          const p = arbeidsgiverperiode(egne, a.ansatt_fra);
+          const dager: Sykedag[] = [];
+          let omsorgBrukt = 0;
+          for (const x of egne) {
+            for (let d = x.fra; d <= x.til; d = pluss(d, 1)) {
+              const timer = planlagt.get(`${a.id}|${d}`) ?? 0;
+              if (d >= fra && d <= til) dager.push({ dato: d, timer, type: x.type as Sykedag["type"], grad: Number(x.grad) });
+              else if (x.type === "sykt_barn" && d < fra && d.slice(0, 4) === fra.slice(0, 4) && virkedag(d)) omsorgBrukt++;
+            }
           }
+          const refusjon = o.sykepenger_refusjon !== false;
+          const navDager = new Set([...p.etter, ...p.utenOpptjening]);
+          const s = sykelinjer(aSlutt, dager, p.agp, omsorgBrukt, { dager: navDager, refusjon, fra, til });
+          auto.push(...s.linjer);
+          merknader.push(...s.merknader);
+          const etter = dager.filter((d) => d.type === "syk" && p.etter.has(d.dato)).length;
+          if (etter)
+            merknader.push(
+              refusjon
+                ? `Syk ${etter} ${etter === 1 ? "dag" : "dager"} etter arbeidsgiverperioden (16 dager): lønnen betales (dere forskutterer sykepengene), og refusjonen kreves i inntektsmeldingen til NAV (Lønn → Sykepenger).`
+                : `Syk ${etter} ${etter === 1 ? "dag" : "dager"} etter arbeidsgiverperioden (16 dager): NAV betaler sykepengene til den ansatte, og lønnen for de dagene er trukket.`,
+            );
+          const uten = dager.filter((d) => d.type === "syk" && p.utenOpptjening.has(d.dato)).length;
+          if (uten)
+            merknader.push(
+              `Syk ${uten} ${uten === 1 ? "dag" : "dager"} før fire uker i arbeid: arbeidsgiveren har ikke plikt til å betale sykepenger da (NAV kan).${refusjon ? " Lønnen er betalt som om dere forskutterer." : ""}`,
+            );
         }
-        const refusjon = o.sykepenger_refusjon !== false;
-        const navDager = new Set([...p.etter, ...p.utenOpptjening]);
-        const s = sykelinjer(aSlutt, dager, p.agp, omsorgBrukt, { dager: navDager, refusjon, fra, til });
-        auto.push(...s.linjer);
-        merknader.push(...s.merknader);
-        const etter = dager.filter((d) => d.type === "syk" && p.etter.has(d.dato)).length;
-        if (etter)
-          merknader.push(
-            refusjon
-              ? `Syk ${etter} ${etter === 1 ? "dag" : "dager"} etter arbeidsgiverperioden (16 dager): lønnen betales (dere forskutterer sykepengene), og refusjonen kreves i inntektsmeldingen til NAV (Lønn → Sykepenger).`
-              : `Syk ${etter} ${etter === 1 ? "dag" : "dager"} etter arbeidsgiverperioden (16 dager): NAV betaler sykepengene til den ansatte, og lønnen for de dagene er trukket.`,
-          );
-        const uten = dager.filter((d) => d.type === "syk" && p.utenOpptjening.has(d.dato)).length;
-        if (uten)
-          merknader.push(
-            `Syk ${uten} ${uten === 1 ? "dag" : "dager"} før fire uker i arbeid: arbeidsgiveren har ikke plikt til å betale sykepenger da (NAV kan).${refusjon ? " Lønnen er betalt som om dere forskutterer." : ""}`,
-          );
+        // Permisjon uten lønn og permittering: trekket i fastlønnen, og lønnen for de planlagte timene i
+        // lønnspliktperioden (timelønn). Et trekk for permisjon lagt inn for hånd erstatter det som
+        // regnes ut av permisjonen.
+        const egnePermisjoner = permisjoner.filter((x) => x.ansatt_id === a.id);
+        if (ansatt && egnePermisjoner.length) {
+          const forHand = manuelle.some((m) => !m.fjernet && m.lonnsart === "trekk_permisjon" && !m.nokkel);
+          const p = permisjonslinjer(a, historie, forHand ? egnePermisjoner.filter((x) => x.art === "permittering") : egnePermisjoner, fra, til, (d) => planlagt.get(`${a.id}|${d}`) ?? 0);
+          auto.push(...p.linjer);
+          merknader.push(...p.merknader);
+          if (forHand && egnePermisjoner.some((x) => x.art !== "permittering")) merknader.push("Trekket for permisjon er lagt inn for hånd, så det regnes ikke ut av permisjonen.");
+        }
+        if (aSlutt.lonnstype === "maaned" && !aSlutt.maanedslonn && ansatt) merknader.push("Mangler månedslønn på den ansatte.");
       }
-      // Permisjon uten lønn og permittering: trekket i fastlønnen, og lønnen for de planlagte timene i
-      // lønnspliktperioden (timelønn). Et trekk for permisjon lagt inn for hånd erstatter det som
-      // regnes ut av permisjonen.
-      const egnePermisjoner = permisjoner.filter((x) => x.ansatt_id === a.id);
-      if (ansatt && egnePermisjoner.length) {
-        const forHand = manuelle.some((m) => !m.fjernet && m.lonnsart === "trekk_permisjon" && !m.nokkel);
-        const p = permisjonslinjer(a, historie, forHand ? egnePermisjoner.filter((x) => x.art === "permittering") : egnePermisjoner, fra, til, (d) => planlagt.get(`${a.id}|${d}`) ?? 0);
-        auto.push(...p.linjer);
-        merknader.push(...p.merknader);
-        if (forHand && egnePermisjoner.some((x) => x.art !== "permittering")) merknader.push("Trekket for permisjon er lagt inn for hånd, så det regnes ikke ut av permisjonen.");
-      }
-      if (aSlutt.lonnstype === "maaned" && !aSlutt.maanedslonn && ansatt) merknader.push("Mangler månedslønn på den ansatte.");
       if (aSlutt.lonnstype === "time" && !aSlutt.timelonn && uker.length) merknader.push("Mangler timelønn på den ansatte.");
-      // Endringer i perioden, og etterbetaling (eller trekk) for tidligere måneder.
+      // Endringer i perioden, og etterbetaling (eller trekk) for tidligere måneder (som honorar for
+      // en frilanser).
       merknader.push(...endringstekster(a, historie, fra, til));
       if (tilEtterbetaling.length) {
         const e = etterbetaling(
@@ -530,7 +547,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
           godkjentFor(a.id, aSlutt.lonnstype),
           etterbetalt.filter((x) => x.ansatt_id === a.id),
         );
-        auto.push(...e.linjer);
+        auto.push(...e.linjer.map((l) => (frilanser && SOM_HONORAR.has(l.lonnsart) ? { ...l, lonnsart: honorarArt(a) } : l)));
         merknader.push(...e.merknader);
       }
     }
@@ -541,7 +558,7 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       const utbetalt = ferieUtbetalt(a.id, y, "feriepenger") + Number(inn(a.id, y)?.feriepenger_utbetalt ?? 0);
       const fp = feriepengelinjer(a, o, y, grunnlag, utbetalt, ferieUtbetalt(a.id, y, "feriepenger_60"), k.utbetalingsdato);
       auto.push(...fp);
-      if (fp.length && ordinar && ansatt) {
+      if (fp.length && ordinar && ansatt && !frilanser) {
         const t = ferietrekk(aSlutt, o);
         if (t) {
           auto.push(t);
@@ -582,7 +599,9 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
       const g = Number(iAar(a.id, y)?.feriepengegrunnlag ?? 0) + Number(inn(a.id, y)?.feriepengegrunnlag ?? 0);
       r.auto.push(...feriepengelinjer(a, o, y, g, ferieUtbetalt(a.id, y, "feriepenger") + Number(inn(a.id, y)?.feriepenger_utbetalt ?? 0), ferieUtbetalt(a.id, y, "feriepenger_60"), k.utbetalingsdato, true));
     }
-    r.merknader.push(`Slutter ${a.ansatt_til.split("-").reverse().join(".")}: feriepengene er tatt med (sluttoppgjør).`);
+    // En frilanser får ikke feriepenger (bare de som er opptjent som ansatt, om noen).
+    if (!erFrilanser(a) || r.auto.some((l) => l.lonnsart === "feriepenger" || l.lonnsart === "feriepenger_60"))
+      r.merknader.push(`Slutter ${a.ansatt_til.split("-").reverse().join(".")}: feriepengene er tatt med (sluttoppgjør).`);
   }
 
   // Summene, skattetrekket og arbeidsgiveravgiften, og lagringen.

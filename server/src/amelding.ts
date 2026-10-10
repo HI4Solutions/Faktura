@@ -1,7 +1,8 @@
 // A-meldingen (0077_amelding.sql): den månedlige rapporteringen til a-ordningen, format 2.3.
 // Grunnlaget for en måned er de godkjente lønnskjøringene med utbetaling i måneden (lønnen etter
 // beskrivelsen i a-meldingen, forskuddstrekket og arbeidsgiveravgiften) og arbeidsforholdene som er
-// aktive i den (også uten utbetaling: a-meldingen leveres hver måned så lenge noen er ansatt).
+// aktive i den (også uten utbetaling: a-meldingen leveres hver måned så lenge noen er ansatt;
+// frilansere, oppdragstakere og styremedlemmer bare i månedene de får honorar, 0096).
 //
 // byggLeveranse gir meldingen som JSON til Skatteetatens API ({"leveranse": …}; desimaltall som
 // tekst, heltall som tall), og tilXml den samme som XML til opplasting på skatteetaten.no
@@ -114,6 +115,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
        from faktura.lonnslinjer l where l.slipp_id = any($1::uuid[]) and not l.fjernet`,
     [slipper.map((s) => s.id)],
   );
+  // Arbeidsforholdene som er aktive i måneden, og dem med utbetaling i den. Frilansere,
+  // oppdragstakere og styremedlemmer (0096) rapporteres bare i månedene de får honorar.
   const arbeidsforhold = await alle<Arbeidsforholdsrad>(
     db,
     `select a.id, a.ansattnummer, a.fornavn || ' ' || a.etternavn as navn, a.har_fnr, to_char(a.ansatt_fra, 'YYYY-MM-DD') as ansatt_fra,
@@ -125,7 +128,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
        left join lateral faktura.lonn_gjeldende(a.org_id, a.id, $3::date) g on true
        left join lateral faktura.lonn_endringsdatoer(a.org_id, a.id, $3::date) e on true
       where a.org_id = $1 and a.arbeidstaker
-        and ((a.ansatt_fra <= $3::date and (a.ansatt_til is null or a.ansatt_til >= $2::date)) or a.id = any($4::uuid[]))
+        and ((a.arbeidsforhold_type <> 'frilanserOppdragstakerHonorarPersonerMm' and a.ansatt_fra <= $3::date and (a.ansatt_til is null or a.ansatt_til >= $2::date))
+             or a.id = any($4::uuid[]))
       order by a.ansattnummer`,
     [org, fra, til, [...new Set(slipper.map((s) => s.ansatt_id))]],
   );
@@ -317,9 +321,10 @@ export function kontroller(g: Grunnlag): Avvik[] {
   const iMelding = new Set(g.slipper.map((s) => s.ansatt_id));
   for (const f of g.arbeidsforhold) {
     if (!f.har_fnr) a.push({ niva: "feil", tekst: `${f.navn} mangler fødselsnummer (eller D-nummer).`, ansatt_id: f.id });
-    if (f.arbeidsforhold_type !== "frilanserOppdragstakerHonorarPersonerMm" && !f.yrkeskode)
-      a.push({ niva: "feil", tekst: `${f.navn} mangler yrkeskode (7 siffer, SSBs yrkeskoder).`, ansatt_id: f.id });
-    if (f.ansatt_til && f.ansatt_til <= siste(g.maaned) && !f.aarsak_sluttdato)
+    // Yrket må også oppgis for frilansere, oppdragstakere og styremedlemmer; årsaken til
+    // sluttdatoen bare for ordinære (og maritime) arbeidsforhold.
+    if (!f.yrkeskode) a.push({ niva: "feil", tekst: `${f.navn} mangler yrkeskode (7 siffer, SSBs yrkeskoder).`, ansatt_id: f.id });
+    if (f.arbeidsforhold_type !== "frilanserOppdragstakerHonorarPersonerMm" && f.ansatt_til && f.ansatt_til <= siste(g.maaned) && !f.aarsak_sluttdato)
       a.push({ niva: "advarsel", tekst: `${f.navn} slutter ${f.ansatt_til.split("-").reverse().join(".")}: velg årsaken til sluttdatoen.`, ansatt_id: f.id });
     iMelding.delete(f.id);
   }
@@ -423,7 +428,7 @@ function arbeidsforhold(f: Arbeidsforholdsrad, g: Grunnlag) {
       }));
     x.sisteDatoForStillingsprosentendring = f.siste_stillingsendring ?? f.ansatt_fra;
   }
-  if (f.ansatt_til && f.aarsak_sluttdato) x.aarsakTilSluttdato = f.aarsak_sluttdato;
+  if (!frilanser && f.ansatt_til && f.aarsak_sluttdato) x.aarsakTilSluttdato = f.aarsak_sluttdato;
   if (!frilanser) x.formForAnsettelse = FORM[f.ansettelsestype] ?? "fast";
   return x;
 }

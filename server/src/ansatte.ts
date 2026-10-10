@@ -116,6 +116,9 @@ const ansattSkjema = z.object({
   // arbeidstidsordningen og årsaken til sluttdatoen.
   yrkeskode: valgfri(siffer("Yrkeskoden", 7)),
   arbeidsforhold_type: z.enum(["ordinaertArbeidsforhold", "maritimtArbeidsforhold", "frilanserOppdragstakerHonorarPersonerMm"]).optional(),
+  // Frilansere, oppdragstakere og styremedlemmer (0096): honoraret er honorar for oppdrag eller
+  // styrehonorar (og godtgjørelse for verv).
+  honorar_art: z.enum(["honorar", "styrehonorar"]).optional(),
   arbeidstidsordning: z
     .enum(["ikkeSkift", "andreSkift", "skift365", "doegnkontinuerligSkiftOgTurnus355", "helkontinuerligSkiftOgAndreOrdninger336", "offshore336"])
     .optional(),
@@ -223,7 +226,7 @@ const ANSATT = `
          a.skattekort_hentet, a.skattekort_resultat, to_char(a.skattekort_utstedt, 'YYYY-MM-DD') as skattekort_utstedt, a.skattekort_tillegg,
          a.skattekort_trekk,
          -- Arbeidsforholdet i a-meldingen (0077_amelding.sql).
-         a.yrkeskode, a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato,
+         a.yrkeskode, a.arbeidsforhold_type, a.arbeidstidsordning, a.aarsak_sluttdato, a.honorar_art,
          to_char(a.siste_lonnsendring, 'YYYY-MM-DD') as siste_lonnsendring, to_char(a.siste_stillingsendring, 'YYYY-MM-DD') as siste_stillingsendring,
          -- Rollen, om personen er ansatt (følger rollen, 0056_roller.sql), og om den er med på tavla (0057).
          (select g.navn from faktura.ansattgrupper g where g.org_id = a.org_id and g.id = a.gruppe_id) as rolle, a.arbeidstaker,
