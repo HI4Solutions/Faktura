@@ -309,6 +309,21 @@ kapittel 9; `server/src/mvaJustering.ts`, `0095_mva_justering.sql`), under Regns
   næringsspesifikasjonen (inntektene og kostnadene, eiendelene, egenkapitalen og gjelden), og med
   årsresultatet og resultatet som ikke er disponert når årsoppgjøret ikke er bokført. De skattemessige saldoene og forskjellene står i
   «Saldoskjema».
+- **Grupperingen** (`gruppering` i `server/src/saft.ts`) bruker bare kodene som gjelder for
+  aksjeselskaper etter Skatteetatens oversikt over bransjespesifikke koder: ikke kodene som bare
+  gjelder petroleumsselskaper (f.eks. 6004 «Annen avskrivning» og 6350 «IT-kostnader»),
+  samvirkeforetak (2981), selskaper med deltakerfastsetting (5600) eller foretak uten full
+  regnskapsplikt (f.eks. 7350, 7400 og 7420 med fradragsrett, 5950 «Egen pensjonsordning», 3890 og
+  7890 for gevinst- og tapskontoen). Avskrivning på goodwill og andre immaterielle eiendeler går
+  til 6000, representasjon til 7370, kontingenter til 7490, gaver til 7440, OTP til 5900 og
+  avsetninger til 2980. Kontoene i standard kontoplan der den nærmeste posten under ikke er den
+  riktige, har en egen regel (f.eks. 1110 fast teknisk installasjon, 1220 skip, 1225 fly, 1235–1239
+  varebiler, 1396 depositum, 3891 og 7891 salg av finansielle anleggsmidler). Kontoene appen bruker
+  selv (1120 for fast teknisk installasjon, 1240 for varebiler, 2970 for uopptjent inntekt, 3800 og
+  7800 for gevinst og tap ved avgang) går til de riktige postene.
+- **Anleggsmidlene** havner på posten etter hva de er (kategorien, og saldogruppen der den sier mer),
+  når alle anleggsmidlene på en balansekonto hører til samme post: en varebil på kontoen for
+  personbiler går til 1238, et forretningsbygg (gruppe i) til 1105.
 
 ## SAF-T Regnskap
 
@@ -346,8 +361,10 @@ regnskapsføreren kan lese inn. Versjon 1.30 for årene før 2027 og 1.40 fra 20
   en nedskrivning, en reversering eller en ny levetid eller restverdi gjelder framover. Planen
   vises per år (verdien 1.1., avskrivningen, nedskrivningen, avgangen og verdien 31.12.) og måned
   for måned, med det som er bokført og det som er plan.
-- Goodwill avskrives som de andre over den forventede økonomiske levetiden; en nedskrivning av
-  goodwill kan ikke reverseres. Tomt avskrives ikke.
+- Goodwill avskrives som de andre over den forventede økonomiske levetiden; kan den ikke anslås
+  pålitelig, over høyst 10 år (regnskapsloven § 5-7 tredje punktum, fra 1. juli 2021). Forslaget i
+  appen er 5 år, og skjemaet sier fra når levetiden settes over 10 år. En nedskrivning av goodwill
+  kan ikke reverseres. Tomt avskrives ikke.
 - Et anleggsmiddel som er ført i et annet system før, legges inn med det som er avskrevet til og
   med en måned; HI4 avskriver resten fra måneden etter.
 
@@ -440,11 +457,17 @@ næringsspesifikasjonen (rapporten «Saldoskjema» under Rapporter → Regnskap)
 | j | Fast teknisk installasjon i bygninger | 10 % | for hver |
 
 - Det som anskaffes i året, avskrives med full sats; vederlaget for det som selges, trekkes fra
-  samlesaldoen. Er grunnlaget under 15 000 kr (a, c, d og j), fradragsføres alt. En negativ
-  samlesaldo inntektsføres med satsen (alt under 15 000 kr).
+  samlesaldoen. Er grunnlaget under grensen for lav saldo (a, c, d og j), fradragsføres alt. En
+  negativ samlesaldo inntektsføres med satsen (alt under grensen).
 - Driftsmidler med egen saldo (goodwill og e–j): ved salg eller utrangering går forskjellen
   mellom vederlaget og saldoen til gevinst- og tapskontoen, der minst 20 % av en positiv saldo
-  inntektsføres hvert år (og 20 % av en negativ fradragsføres; alt under 15 000 kr).
+  inntektsføres hvert år (og 20 % av en negativ fradragsføres; alt under grensen).
+- **Grensen** er 30 000 kr fra inntektsåret 2024 (15 000 kr før), for lav saldo og for
+  gevinst- og tapskontoen. Den ble hevet sammen med grensen for aktivering (Prop. 1 LS
+  (2023–2024)), og appen bruker grensen for året som regnes.
+- Den høyere satsen på 30 % for elektriske varebiler i gruppe c ble avviklet fra 2024; de er på
+  samlesaldo c med 24 %. Saldoene for årene før 2024 legges inn som startverdier fra
+  skattemeldingen.
 - Immaterielle rettigheter som taper seg i verdi, avskrives lineært; tomt avskrives ikke.
 - Satsen kan settes lavere for et år og en gruppe, og for et driftsmiddel med egen saldo.
 - **Startverdier**: det første året i HI4 og saldoene ved inngangen til det året fra
@@ -466,9 +489,16 @@ nyttår) og Næringsspesifikasjon (grunnlag).
 
 ## Kontroller og det som ikke er med ennå
 
-- Satsene, grensen på 15 000 kr, reglene for gevinst- og tapskontoen og behandlingen ved salg er
-  lagt inn etter skatteloven slik den var kjent da modulen ble laget; kontroller dem mot
-  Skatteetatens veiledning og skattemeldingen hvert år.
+- Kontonumrene: standardkontoene ligger i de riktige kontogruppene i NS 4102 og er kontrollert mot
+  standard kontoplan (4 siffer) og Skatteetatens gruppering i oktober 2026. Noen avviker fra de
+  firesifrede kontoene i standard kontoplan fordi de er vanlige i norske regnskapssystemer (5020
+  feriepenger, 5945 pensjon, 2785 påløpt arbeidsgiveravgift på feriepenger, 3800 og 7800 gevinst og
+  tap ved avgang, 1240 varebiler, 1120 fast teknisk installasjon, 2970 uopptjent inntekt); de går
+  til de riktige postene i næringsspesifikasjonen og SAF-T, og kan endres under Kontoer.
+- Satsene, grensen for lav saldo, reglene for gevinst- og tapskontoen og behandlingen ved salg er
+  kontrollert i oktober 2026 (grensen rettet fra 15 000 til 30 000 kr fra 2024, se kildene);
+  kontroller dem mot Skatteetatens veiledning og skattemeldingen hvert år, særlig etter
+  statsbudsjettet.
 - Mva-justeringen: fradragsprosenten for fellesanskaffelser regnes fra omsetningen i bilagene når den
   ikke er satt for året; den er bare et forslag når salget ikke er bokført i appen (sett den da for
   året). Tilbakeføring av inngående avgift (§ 9-6 og § 9-7: personkjøretøy og fast eiendom som ikke er
@@ -493,6 +523,9 @@ nyttår) og Næringsspesifikasjon (grunnlag).
   levert). Skattekostnaden regnes ikke ut (den står i skattemeldingen), og utsatt skatt føres med et
   manuelt bilag. Næringsspesifikasjonen fylles ikke ut og sendes ikke fra appen: rapporten er
   grunnlaget, og kontoer utenfor standard kontoplan havner på den nærmeste posten under.
+  Enkeltpersonforetak med begrenset regnskapsplikt som bruker postene med fradragsrett (7350, 7400,
+  7420), «egen pensjonsordning» (5950) eller gevinst- og tapskontoen (3890, 7890), fører dem over
+  selv.
 - SAF-T: kunden og leverandøren står bare på reskontrolinjer fra fakturaene, innbetalingene og
   utgiftene (ikke fra manuelle bilag), dimensjoner (Analysis) og kildedokumenter er ikke med, og
   filen sendes ikke fra appen (Skatteetaten ber om den).
@@ -511,6 +544,23 @@ nyttår) og Næringsspesifikasjon (grunnlag).
   Accounts» og «Grouping Category Code 2025-2026»)
 - Skatteloven § 14-40 (aktivering av driftsmidler med kostpris fra 30 000 kr og brukstid på minst tre
   år): <https://lovdata.no/lov/1999-03-26-14/§14-40>
+- Regnskapsloven § 5-7 (goodwill avskrives over høyst ti år når den økonomiske levetiden ikke kan
+  anslås pålitelig): <https://lovdata.no/nav/lov/1998-07-17-56/kap5>, overgangsregelen:
+  <https://www.regjeringen.no/no/dokumenter/forskrift-om-overgangsregler-til-lov-30.-april-2021-nr.-26-om-endringer-i-verdipapirhandelloven-og-regnskapsloven-mv.-periodisk-rapportering-og-direktivgjennomforing/id2863262/>
+  og Deloitte om endringene: <https://www.deloitte.com/no/no/services/financial-advisory/perspectives/endringer-i-regnskapsloven-2021.html>
+- Skatteetaten, oversikten over bransjespesifikke koder i næringsspesifikasjonen (hvilke koder som
+  gjelder for hvilke foretak) og standard kontoplan (4 siffer, Regnskap Norge) i
+  <https://github.com/Skatteetaten/saf-t> (mappene «Grouping Category Code 2025-2026/Guidance for
+  Codes in Income Statements» og «General Ledger Standard Accounts»)
+- Endringen fra inntektsåret 2024 (lov 20. desember 2023 nr. 98, Prop. 1 LS (2023–2024), Innst. 4 L):
+  <https://lovdata.no/dokument/LTI/lov/2023-12-20-98/kapV> og innstillingen fra finanskomiteen:
+  <https://www.stortinget.no/no/Saker-og-publikasjoner/Publikasjoner/Innstillinger/Stortinget/2023-2024/inns-202324-004l/?all=true>
+- Deloitte, endret nedre grense for aktivering (30 000 kr også for lav saldo og gevinst- og
+  tapskontoen): <https://www.deloitte.com/no/no/services/tax/blogs/skattekilden/endret-nedre-grense-for-aktivering.html>
+- Snapbooks, gevinst- og tapskonto (30 000 kr fra 2024, 15 000 kr før):
+  <https://hjelp.snapbooks.no/ord-og-uttrykk/gevinst-og-tapskonto>
+- Sticos, satsene for saldoavskrivning (den høyere satsen for elektriske varebiler avviklet fra
+  2024): <https://www.sticos.no/satser/saldoavskrivning>
 - Merverdiavgiftsloven § 3-30 (tjenester kjøpt fra utlandet), § 8-1 og § 8-2 (fradrag og
   forholdsmessig fradrag), § 8-3 (representasjon) og § 8-4 (personkjøretøy):
   <https://lovdata.no/lov/2009-06-19-58>

@@ -425,8 +425,13 @@ function AnleggSkjema({ oppsett, naa, bokfort, lagret, avbryt }: { oppsett: Opps
             <input inputMode="decimal" required value={s.levetid} onChange={(e) => sett({ levetid: e.target.value })} />
             <span className="felt-hjelp">
               {maaneder > 0 ? `${maaneder} måneder. ` : ""}
-              {s.kategori === "goodwill" ? "Goodwill avskrives over den forventede økonomiske levetiden." : `Forslag for kategorien: ${levetid(k.levetid_mnd)}.`}
+              {s.kategori === "goodwill"
+                ? "Goodwill avskrives over den forventede økonomiske levetiden; kan den ikke anslås pålitelig, over høyst 10 år (regnskapsloven § 5-7)."
+                : `Forslag for kategorien: ${levetid(k.levetid_mnd)}.`}
             </span>
+            {s.kategori === "goodwill" && maaneder > 120 && (
+              <span className="felt-hjelp advarsel-tekst">Over 10 år: bare når den økonomiske levetiden kan anslås pålitelig. Dokumenter grunnlaget for levetiden.</span>
+            )}
           </label>
           <label>
             Restverdi (kr)

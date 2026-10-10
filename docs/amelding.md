@@ -142,3 +142,22 @@ beskrevet i `docs/skattekort.md`; de skal aldri sendes på e-post, i chat eller 
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/a-meldingen/veiledning/lonn-og-ytelser/oversikt-over-lonn-og-andre-ytelser/lonn-etter-dodsfall>
 - Skatteetaten, kildeskatt på lønn i a-meldingen:
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/a-meldingen/veiledning/spesielle-grupper/kildeskatt-pa-lonn>
+- NAV, permittering for arbeidsgivere (lønnsplikt i 15 arbeidsdager, de permitterte timene summert
+  ved delvis permittering, fritak i 26 uker i løpet av 18 måneder):
+  <https://www.nav.no/arbeidsgiver/permittere>
+- Store norske leksikon, permitteringslønnsloven (lønnsplikten 15 dager fra 1. mars 2022):
+  <https://snl.no/permitteringsl%C3%B8nnsloven>
+- Statens særavtale om reise og kost innenlands (§ 9: satsene, og tiden ut over hele døgn etter
+  satsen for 6–12 timer eller over 12 timer uten overnatting), PM-2025-12:
+  <https://lovdata.no/dokument/SPHPM/pm-2025-12> og
+  <https://www.regjeringen.no/no/dokumenter/saravtale-om-dekning-av-utgifter-til-reise-og-kost-innenlands/id3083006/>
+- Statens særavtale om reise og kost utenfor Norge (§ 8: landets sats, 50 % for 6–12 timer, hele fra
+  12 timer, 25 % lavere fra det 29. døgnet; kompensasjonstillegget), PM-2025-18:
+  <https://lovdata.no/dokument/SPHPM/pm-2025-18> og
+  <https://arbeidsgiver.dfo.no/lonn-goder-og-reise/reiser-og-satser/statens-satser-utenlands>
+- Skatteetaten, trekkfri godtgjørelse til kost på reise med overnatting (de samme trekkfrie satsene i
+  Norge og i utlandet, påbegynt døgn på 6 timer eller mer, måltidstrekk og overskudd per døgn):
+  <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/a-meldingen/veiledning/lonn-og-ytelser/oversikt-over-lonn-og-andre-ytelser/trekkfri-godtgjorelse-til-kost-pa-reise-med-overnatting>
+- Forskuddssatsene for 2026 (forskrift 7. november 2025 nr. 2216):
+  <https://lovdata.no/dokument/SF/forskrift/2025-11-07-2216>
+- Normrenten (4,8 % januar–august og 4,7 % september–oktober 2026): <https://www.sticos.no/satser/rentesatser>

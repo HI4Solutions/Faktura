@@ -19,6 +19,15 @@ describe("permitteringen (uten database)", () => {
     expect(lonnspliktSlutt("2026-10-01", lonnspliktDager(50))).toBe("2026-11-11");
   });
 
+  it("arbeidsdagene etter den faste arbeidsplanen: dager den ansatte uansett har fri, teller ikke", () => {
+    // Mandag–onsdag fra mandag 5. oktober 2026: 15 arbeidsdager er fem uker.
+    expect(lonnspliktSlutt("2026-10-05", 15, [1, 2, 3])).toBe("2026-11-04");
+    // Tirsdag, torsdag og lørdag: lørdagene teller, men ikke 2. juledag (lørdag 26. desember).
+    expect(lonnspliktSlutt("2026-12-01", 15, [2, 4, 6])).toBe("2027-01-05");
+    // Uten plan: mandag–fredag.
+    expect(lonnspliktSlutt("2026-10-05", 15, [])).toBe(lonnspliktSlutt("2026-10-05"));
+  });
+
   it("18 måneder før (siste dag i måneden når dagen ikke finnes)", () => {
     expect(maanederFor("2026-08-31", 18)).toBe("2025-02-28");
     expect(maanederFor("2026-07-25", 18)).toBe("2025-01-25");
@@ -122,6 +131,15 @@ describe.skipIf(!process.env.DATABASE_URL)("permitteringen i appen", () => {
     const r = await permitter(gamle, "2026-10-01", "2026-12-31", { prosent: 50, varslet: "2026-09-15" });
     expect(r.status, JSON.stringify(r.data)).toBe(201);
     expect(r.data.lonnsplikt_til).toBe("2026-11-11");
+  });
+
+  it("fast arbeidsplan: lønnsplikten telles på dagene den ansatte jobber", async () => {
+    const tre = await ny({ fornavn: "Tea", etternavn: "Tredager" });
+    const plan = await kall("PUT", `/api/org/${org}/ansatte/${tre}/arbeidsplan`, { gjelder_fra: "2026-01-01", dager: [{ ukedag: 1 }, { ukedag: 2 }, { ukedag: 3 }] });
+    expect(plan.status, JSON.stringify(plan.data)).toBe(200);
+    const r = await permitter(tre, "2026-10-05", "2026-12-31", { varslet: "2026-09-15" });
+    expect(r.status, JSON.stringify(r.data)).toBe(201);
+    expect(r.data.lonnsplikt_til).toBe("2026-11-04");
   });
 
   it("minst 10 permitteres: melding til NAV (i svaret og i a-meldingen for måneden)", async () => {

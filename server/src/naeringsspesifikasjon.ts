@@ -8,7 +8,7 @@
 import { alle, type Db } from "./db.js";
 import type { Rapportdef } from "./rapportmodul.js";
 import { dato as visDato, kr } from "./regler.js";
-import { gruppering } from "./saft.js";
+import { gruppering, hentAnleggsposter } from "./saft.js";
 import { bokforSalgNaa } from "./salgBokforing.js";
 
 // Navnet på posten (koden) i næringsspesifikasjonen.
@@ -145,6 +145,7 @@ export async function naeringsspesifikasjon(db: Db, org: string, aar: number) {
       group by p.konto`,
     [org, `${aar}-01-01`, `${aar}-12-31`],
   );
+  const anlegg = await hentAnleggsposter(db, org);
   const per = new Map<string, Post>();
   let disponert = 0;
   for (const k of kontoer) {
@@ -156,7 +157,7 @@ export async function naeringsspesifikasjon(db: Db, org: string, aar: number) {
     const balanse = n < 3000;
     const verdi = balanse ? k.saldo : k.aaret;
     if (!rund(verdi)) continue;
-    const g = gruppering(k.konto);
+    const g = gruppering(k.konto, anlegg);
     const def = KATEGORIER.find((x) => x.kategori === g.kategori);
     if (!def) continue;
     const nokkel = `${g.kategori}|${g.kode}`;
@@ -198,7 +199,7 @@ export const naeringsspesifikasjonRapporter: Rapportdef[] = [
         Math.abs(s.udisponert) >= 0.005
           ? `Resultat som ikke er disponert: ${kr(s.udisponert)} kr (årsoppgjøret for ${v.aar} er ikke bokført, eller noe er ført etterpå), så egenkapitalen er ikke ferdig.`
           : "",
-        "Postene er etter Skatteetatens gruppering av standard kontoplan; kontroller kontoer som ikke er i standard kontoplan, og før de skattemessige forskjellene fra saldoskjemaet.",
+        "Postene er etter Skatteetatens gruppering av standard kontoplan, med kodene for aksjeselskaper, og anleggsmidlene etter hva de er (kategorien og saldogruppen). Enkeltpersonforetak med begrenset regnskapsplikt har egne poster (blant annet for representasjon, kontingenter og gaver med fradragsrett og egen pensjonsordning). Kontroller kontoer som ikke er i standard kontoplan, og før de skattemessige forskjellene fra saldoskjemaet.",
       ]
         .filter(Boolean)
         .join(" ");

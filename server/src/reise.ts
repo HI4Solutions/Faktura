@@ -10,15 +10,18 @@
 // rapporteres ikke.
 //
 // Kost: dagsreise (over 15 km og minst 6 timer) med satsen for 6–12 timer eller over 12 timer. Med
-// overnatting døgnsatsen per hele døgn fra avreisen; statens satser gir for tid ut over hele døgn
-// døgnsatsen når den er over 12 timer og satsen for 6–12 timer ellers, og de trekkfrie satsene
-// regner et påbegynt døgn på 6 timer eller mer som et helt døgn, med satsen for overnattingen
+// overnatting døgnsatsen per hele døgn fra avreisen. Statens særavtale innenlands (§ 9) gir for tiden
+// ut over hele døgn satsen for 6–12 timer eller satsen for over 12 timer uten overnatting (en reise
+// med overnatting som er kortere enn et døgn, får døgnsatsen når den er over 12 timer). De trekkfrie
+// satsene regner et påbegynt døgn på 6 timer eller mer som et helt døgn, med satsen for overnattingen
 // (hotell, hybel uten kokemulighet, eller hybel med kokemulighet og privat). Måltider som er dekket,
 // trekkes fra dagens sats: frokost 20 %, lunsj 30 % og middag 50 % (ikke frokost når det er
-// nattillegg); de trekkfrie satsene rundes til hele kroner. Etter 28 døgn (langvarig opphold) er
-// kosten her regnet som trekkpliktig. Utland: statens sats for landet per døgn (fra regulativet)
-// for hvert døgn som regnes, og de trekkfrie satsene som i Norge. Nattillegg (ulegitimert) per
-// natt, bare innenlands og ikke på hotell.
+// nattillegg); de trekkfrie satsene rundes til hele kroner. Det trekkfrie regnes per døgn: det som
+// betales over den trekkfrie satsen et døgn, er trekkpliktig selv om et annet døgn er under. Etter
+// 28 døgn (langvarig opphold) er kosten her regnet som trekkpliktig. Utland (statens særavtale
+// utenfor Norge, § 8): satsen for landet per døgn, 50 % av den for 6–12 timer og hele fra 12 timer
+// (dagsreisen og tiden ut over hele døgn), og 25 % lavere fra det 29. døgnet; de trekkfrie satsene
+// er de samme som i Norge. Nattillegg (ulegitimert) per natt, bare innenlands og ikke på hotell.
 //
 // Kilometergodtgjørelse: egen bil (statens sats eller den trekkfrie per km; det som er over den
 // trekkfrie, er trekkpliktig), tillegg for skogsvei og tilhenger, passasjertillegg per passasjer og
@@ -153,11 +156,17 @@ export function beregnReise(r: Reise, satser: Reisesatser, aar = Number(r.fra.sl
     // Satsen som betales.
     let sats = fri;
     if (staten) {
-      if (r.overnatting === "ingen") sats = p.timer > 12 ? st.dag12 : p.timer >= 6 ? st.dag6 : 0;
-      else if (r.utland) {
-        if (r.kostsats == null) utlandUtenSats = true;
-        sats = p.hel || p.timer >= 6 ? (r.kostsats ?? overnattingSats) : 0;
-      } else sats = p.hel || p.timer > 12 ? st.dogn : p.timer >= 6 ? st.dag6 : 0;
+      if (r.utland && r.kostsats != null) {
+        // Utenfor Norge: landets sats, 50 % for 6–12 timer, 25 % lavere fra det 29. døgnet.
+        const full = p.nr > 28 ? r.kostsats * 0.75 : r.kostsats;
+        sats = p.hel || p.timer >= 12 ? full : p.timer >= 6 ? full * 0.5 : 0;
+      } else if (r.overnatting === "ingen") {
+        if (r.utland) utlandUtenSats = true;
+        sats = p.timer > 12 ? st.dag12 : p.timer >= 6 ? st.dag6 : 0;
+      } else if (r.utland) {
+        utlandUtenSats = true;
+        sats = p.hel || p.timer >= 6 ? overnattingSats : 0;
+      } else sats = p.hel || (p.nr === 1 && p.timer > 12) ? st.dogn : p.timer > 12 ? st.dag12 : p.timer >= 6 ? st.dag6 : 0;
     } else if (p.nr > 28 && (p.hel || p.timer >= 6)) sats = overnattingSats;
     return {
       nr: p.nr,
@@ -169,11 +178,15 @@ export function beregnReise(r: Reise, satser: Reisesatser, aar = Number(r.fra.sl
       trekkfri: r.diett && r.trekkfri ? etterMaaltider(fri, maaltider, utenFrokost, true) : 0,
     };
   });
-  if (utlandUtenSats) merknader.push(`Statens sats for ${r.land || "landet"} er ikke ført; den trekkfrie satsen er brukt.`);
+  if (utlandUtenSats)
+    merknader.push(
+      `Statens sats for ${r.land || "landet"} er ikke ført; ${r.overnatting === "ingen" ? "satsene for dagsreiser i Norge er brukt" : "den trekkfrie satsen er brukt"}.`,
+    );
   if (r.overnatting !== "ingen" && perioder.length > 28 && r.diett)
     merknader.push("Reisen er over 28 døgn: kosten etter 28 døgn er regnet som trekkpliktig (langvarig opphold). Kontroller satsene.");
   const kost = rund(dogn.reduce((x, d) => x + d.sats, 0));
-  const kostFri = Math.min(kost, rund(dogn.reduce((x, d) => x + d.trekkfri, 0)));
+  // Det trekkfrie per døgn (måltidstrekket og det som er over den trekkfrie satsen regnes per døgn).
+  const kostFri = rund(dogn.reduce((x, d) => x + Math.min(d.sats, d.trekkfri), 0));
   if (r.overnatting === "ingen") {
     linje("reise_kost_dag", `kost på dagsreise (${tall(rund(timer))} t)`, kostFri, 1);
   } else {

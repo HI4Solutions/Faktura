@@ -65,20 +65,55 @@ describe("reisene (uten database)", () => {
   });
 
   it("med overnatting på hotell: døgnene fra avreisen, frokosten i romprisen og resten av tiden", () => {
-    // 34 timer: et døgn (frokost dekket: 1 012 × 80 % og 693 × 80 % = 554) og 10 timer
-    // (statens 6–12 timer, men et helt trekkfritt døgn): alt er trekkfritt.
+    // 34 timer: et døgn (frokost dekket: 1 012 × 80 % og 693 × 80 % = 554) og 10 timer (statens
+    // 6–12 timer, et helt trekkfritt døgn). Det trekkfrie regnes per døgn: 809,60 − 554 kr er
+    // trekkpliktig det første døgnet, selv om det andre er under den trekkfrie satsen.
     const kort = beregnReise(reise({ sted: "Bergen", til: "2026-10-06T18:00", overnatting: "hotell", maaltider: { "1": "F" } }), "staten");
     expect(kort.dogn.map((d) => [d.nr, d.timer, d.maaltider, d.sats, d.trekkfri])).toEqual([
       [1, 24, "F", 809.6, 554],
       [2, 10, "", 397, 693],
     ]);
-    expect(linjer(kort)).toEqual([["reise_kost_hotell", "Bergen 5.–6.10: kost 2 døgn (hotell)", 2, 1206.6]]);
-    // 60 timer med frokost begge døgnene: 2 016,20 kr, av det 1 801 kr trekkfritt.
+    expect(linjer(kort)).toEqual([
+      ["reise_kost_hotell", "Bergen 5.–6.10: kost 2 døgn (hotell)", 2, 951],
+      ["reise_kost_trekk", "Bergen 5.–6.10: kost over den trekkfrie satsen", null, 255.6],
+    ]);
+    // 60 timer med frokost begge døgnene og 12 timer til slutt (6–12 timer): 2 016,20 kr, av det
+    // 554 + 554 + 397 kr trekkfritt.
     const lang = beregnReise(reise({ sted: "Bergen", til: "2026-10-07T20:00", overnatting: "hotell", maaltider: { "1": "F", "2": "F" } }), "staten");
     expect(linjer(lang)).toEqual([
-      ["reise_kost_hotell", "Bergen 5.–7.10: kost 3 døgn (hotell)", 3, 1801],
-      ["reise_kost_trekk", "Bergen 5.–7.10: kost over den trekkfrie satsen", null, 215.2],
+      ["reise_kost_hotell", "Bergen 5.–7.10: kost 3 døgn (hotell)", 3, 1505],
+      ["reise_kost_trekk", "Bergen 5.–7.10: kost over den trekkfrie satsen", null, 511.2],
     ]);
+  });
+
+  it("statens særavtale innenlands: tiden ut over hele døgn med satsen for 6–12 timer eller over 12 timer uten overnatting", () => {
+    // 38 timer: døgnsatsen for det første døgnet og 736 kr for de 14 timene etter (ikke døgnsatsen).
+    const b = beregnReise(reise({ til: "2026-10-06T22:00", overnatting: "hotell" }), "staten");
+    expect(b.dogn.map((d) => [d.nr, d.timer, d.sats, d.trekkfri])).toEqual([
+      [1, 24, 1012, 693],
+      [2, 14, 736, 693],
+    ]);
+    expect(b).toMatchObject({ belop: 1748, trekkfritt: 1386, trekkpliktig: 362 });
+    // En reise med overnatting som er kortere enn et døgn: døgnsatsen når den er over 12 timer.
+    expect(beregnReise(reise({ fra: "2026-10-05T18:00", til: "2026-10-06T10:00", overnatting: "hotell" }), "staten").dogn.map((d) => d.sats)).toEqual([1012]);
+    expect(beregnReise(reise({ fra: "2026-10-05T22:00", til: "2026-10-06T08:00", overnatting: "hotell" }), "staten").dogn.map((d) => d.sats)).toEqual([397]);
+  });
+
+  it("statens særavtale utenfor Norge: 50 % av landets sats for 6–12 timer, hele fra 12 timer, og 25 % lavere fra det 29. døgnet", () => {
+    const utland = { sted: "Stockholm", overnatting: "hotell" as const, utland: true, land: "Sverige", kostsats: 1200 };
+    // To døgn og 8 timer: 1 200 + 1 200 + 600; to døgn og 12 timer: 1 200 × 3.
+    expect(beregnReise(reise({ ...utland, til: "2026-10-07T16:00" }), "staten").dogn.map((d) => d.sats)).toEqual([1200, 1200, 600]);
+    expect(beregnReise(reise({ ...utland, til: "2026-10-07T20:00" }), "staten").dogn.map((d) => d.sats)).toEqual([1200, 1200, 1200]);
+    // Dagsreise i utlandet: 50 % for 9 timer, og det som er over 200 kr, er trekkpliktig.
+    const dag = beregnReise(reise({ ...utland, overnatting: "ingen", fra: "2026-10-05T06:00", til: "2026-10-05T15:00" }), "staten");
+    expect(dag).toMatchObject({ belop: 600, trekkfritt: 200, trekkpliktig: 400 });
+    // Uten satsen for landet på en dagsreise: satsene for dagsreiser i Norge.
+    expect(beregnReise(reise({ ...utland, kostsats: null, overnatting: "ingen" }), "staten").merknader).toEqual([
+      "Statens sats for Sverige er ikke ført; satsene for dagsreiser i Norge er brukt.",
+    ]);
+    // Over 28 døgn: 900 kr fra det 29. døgnet.
+    const lang = beregnReise(reise({ ...utland, til: "2026-11-04T08:00" }), "staten");
+    expect(lang.dogn.slice(26).map((d) => d.sats)).toEqual([1200, 1200, 900, 900]);
   });
 
   it("privat overnatting med nattillegg (ikke frokosttrekk), og hybel", () => {
@@ -299,7 +334,7 @@ describe.skipIf(!process.env.DATABASE_URL)("reiser og naturalytelser i appen", (
   it("den ansatte fører reiseregningen, ser hva den gir, og sender den", async () => {
     const b = await kall("POST", `/api/org/${org}/reiser/beregn`, bergen, olaInn);
     expect(b.status, JSON.stringify(b.data)).toBe(200);
-    expect(b.data).toMatchObject({ belop: 4222.2, trekkfritt: 2341, trekkpliktig: 431.2, utlegg: 1450 });
+    expect(b.data).toMatchObject({ belop: 4222.2, trekkfritt: 2045, trekkpliktig: 727.2, utlegg: 1450 });
     expect((await kall("POST", `/api/org/${org}/reiser`, { ...bergen, til: "2026-10-05T07:00" }, olaInn)).data.error).toBe("Hjemkomsten er før avreisen");
     expect((await kall("POST", `/api/org/${org}/reiser`, { ...bergen, overnatting: "ingen" }, olaInn)).data.error).toBe("En dagsreise varer høyst et døgn (velg overnattingen)");
     expect((await kall("POST", `/api/org/${org}/reiser`, { ...bergen, nattillegg: true }, olaInn)).data.error).toBe(
@@ -349,14 +384,15 @@ describe.skipIf(!process.env.DATABASE_URL)("reiser og naturalytelser i appen", (
     expect(radene(o)).toEqual([
       ["fastlonn", 40000],
       ["natural_bil", 10585.83],
-      ["reise_kost_hotell", 1801],
-      ["reise_kost_trekk", 215.2],
+      ["reise_kost_hotell", 1505],
+      ["reise_kost_trekk", 511.2],
       ["km_bil", 420],
       ["km_passasjer", 120],
       ["km_bil_trekk", 216],
       ["reise_utlegg", 1450],
     ]);
-    expect(o).toMatchObject({ brutto: 40000, naturalytelser: 10585.83, trekkpliktig: 51017.03, skattetrekk: 15305, utgifter: 4222.2, netto: 28917.2, aga_grunnlag: 51017.03 });
+    expect(o).toMatchObject({ brutto: 40000, naturalytelser: 10585.83, trekkpliktig: 51313.03, utgifter: 4222.2, aga_grunnlag: 51313.03 });
+    expect([o.skattetrekk, o.netto]).toEqual([15393, 28829.2]);
     expect(radene(slipp(k.data, kari))).toEqual([
       ["fastlonn", 50000],
       ["natural_rente", 616.67],
@@ -383,8 +419,8 @@ describe.skipIf(!process.env.DATABASE_URL)("reiser og naturalytelser i appen", (
     expect(inntekt).toEqual([
       ["kontantytelse", "fastloenn", true, true, "40000.00", null],
       ["naturalytelse", "bil", true, true, "10585.83", null],
-      ["utgiftsgodtgjoerelse", "reiseKostMedOvernattingPaaHotell", false, false, "1801.00", "3"],
-      ["utgiftsgodtgjoerelse", "reiseKost", true, true, "215.20", null],
+      ["utgiftsgodtgjoerelse", "reiseKostMedOvernattingPaaHotell", false, false, "1505.00", "3"],
+      ["utgiftsgodtgjoerelse", "reiseKost", true, true, "511.20", null],
       ["utgiftsgodtgjoerelse", "kilometergodtgjoerelseBil", false, false, "420.00", "120"],
       ["utgiftsgodtgjoerelse", "kilometergodtgjoerelsePassasjertillegg", false, false, "120.00", "120"],
       ["utgiftsgodtgjoerelse", "kilometergodtgjoerelseBil", true, true, "216.00", null],
@@ -423,7 +459,7 @@ describe.skipIf(!process.env.DATABASE_URL)("reiser og naturalytelser i appen", (
     const r = await kall("GET", `/api/org/${org}/rapportmodul/lonn.reiser?fra=2026-10-01&til=2026-10-31`);
     expect(r.status, JSON.stringify(r.data)).toBe(200);
     expect(r.data.rader).toEqual([
-      { utbetalt: "2026-10-20", ansattnummer: "1", navn: "Ola Reise", reise: "Bergen – Kurs i lønn", dato: "05.10.2026–07.10.2026", km: 120, trekkfritt: 2341, trekkpliktig: 431.2, utlegg: 1450, sum: 4222.2 },
+      { utbetalt: "2026-10-20", ansattnummer: "1", navn: "Ola Reise", reise: "Bergen – Kurs i lønn", dato: "05.10.2026–07.10.2026", km: 120, trekkfritt: 2045, trekkpliktig: 727.2, utlegg: 1450, sum: 4222.2 },
     ]);
     const n = await kall("GET", `/api/org/${org}/rapportmodul/lonn.naturalytelser?fra=2026-10-01&til=2026-10-31`);
     expect(n.data.rader.map((x: any) => [x.navn, x.ytelse, x.belop])).toEqual([

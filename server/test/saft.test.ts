@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { XMLParser } from "fast-xml-parser";
 import { beforeAll, describe, expect, it } from "vitest";
 import { lagApi } from "../src/api.js";
-import { gruppering } from "../src/saft.js";
+import { anleggsposter, gruppering } from "../src/saft.js";
 import { settLokalOppgavekjorer } from "../src/tjenester.js";
 
 const her = path.dirname(fileURLToPath(import.meta.url));
@@ -49,7 +49,7 @@ describe("SAF-T: grupperingen", () => {
       "loennskostnad 5000",
       "annenDriftskostnad 6000",
       "annenDriftskostnad 6300",
-      "annenDriftskostnad 6350",
+      "annenDriftskostnad 6400",
       "annenDriftskostnad 6995",
       "annenDriftskostnad 6995",
       "annenDriftskostnad 7165",
@@ -61,6 +61,52 @@ describe("SAF-T: grupperingen", () => {
       "skattekostnad 8300",
       "resultatDisponeringForSAF-T 8800",
     ]);
+  });
+
+  it("bare koder som gjelder for aksjeselskaper (ikke petroleum, samvirke, ANS eller begrenset regnskapsplikt)", () => {
+    const kode = (k: string) => gruppering(k).kode;
+    // Goodwill og andre immaterielle eiendeler (6020, 6029) på 6000, ikke 6004 (bare petroleum); leie av
+    // datasystemer på 6400, ikke 6350 (bare petroleum); avsetninger på 2980, ikke 2981 (samvirke).
+    expect(["6020", "6029", "6420", "2983", "2989"].map(kode)).toEqual(["6000", "6000", "6400", "2980", "2980"]);
+    // Representasjon, kontingenter og gaver: kodene for foretak med full regnskapsplikt.
+    expect(["7350", "7360", "7400", "7410", "7420", "7430"].map(kode)).toEqual(["7370", "7370", "7490", "7490", "7440", "7440"]);
+    // OTP og annen personalkostnad på 5900 («egen pensjonsordning» 5950 gjelder bare enkeltpersonforetak),
+    // lærlingtilskudd på lønnen (5600 gjelder bare ANS).
+    expect(["5945", "5950", "5990", "5700", "5500"].map(kode)).toEqual(["5900", "5900", "5900", "5000", "5300"]);
+    // Gevinst og tap: varige driftsmidler og finansielle anleggsmidler (ikke gevinst- og tapskontoen).
+    expect(["3800", "3889", "3891", "7800", "7889", "7891"].map(kode)).toEqual(["3880", "3880", "3885", "7880", "7880", "7885"]);
+    const ugyldige = ["1101", "1295", "1296", "2041", "2095", "2096", "2470", "2981", "3650", "3886", "3890", "3895", "5600", "5950", "6004", "6350", "6998", "7350", "7400", "7420", "7650", "7701", "7890", "7897", "8059", "8154", "8159", "8175"];
+    const brukt = new Set<string>();
+    for (let n = 1000; n <= 8999; n++) brukt.add(kode(String(n)));
+    expect(ugyldige.filter((k) => brukt.has(k))).toEqual([]);
+  });
+
+  it("standard kontoplan for anleggsmidlene, og posten etter hva som står på kontoen", () => {
+    const kode = (k: string) => gruppering(k).kode;
+    // Fast teknisk installasjon (1110), skip og fly, varebiler (1235–1239), depositum (1396).
+    expect(["1110", "1120", "1220", "1225", "1230", "1236", "1239", "1240", "1289", "1396"].map(kode)).toEqual([
+      "1120",
+      "1120",
+      "1221",
+      "1225",
+      "1205",
+      "1238",
+      "1238",
+      "1238",
+      "1290",
+      "1390",
+    ]);
+    const poster = anleggsposter([
+      { konto: "1230", kategori: "varebil", skatt: "c" }, // varebil på kontoen for personbiler
+      { konto: "1100", kategori: "bygning", skatt: "i" }, // forretningsbygg
+      { konto: "1250", kategori: "inventar", skatt: "d" },
+      { konto: "1250", kategori: "kontormaskiner", skatt: "a" }, // to poster på samme konto
+      { konto: "1200", kategori: "maskiner", skatt: "e" }, // fartøy
+    ]);
+    expect(Object.fromEntries(poster)).toEqual({ "1230": "1238", "1100": "1105", "1200": "1221" });
+    expect(gruppering("1230", poster)).toEqual({ kategori: "balanseverdiForAnleggsmiddel", kode: "1238" });
+    expect(gruppering("1250", poster).kode).toBe("1205");
+    expect(gruppering("6010", poster).kode).toBe("6000");
   });
 });
 

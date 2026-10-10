@@ -50,24 +50,26 @@ const prosent = (n: number) => String(n);
 // --- Grupperingen (næringsspesifikasjonen) -----------------------------------------------------------
 
 // Kodene i næringsspesifikasjonen per kategori (Skatteetaten/saf-t, «Grouping Category Code 2025-2026»,
-// naeringsspesifikasjon.csv), uten kodene for bank, forsikring, IFRS og kommuner.
+// naeringsspesifikasjon.csv), uten kodene for bank, forsikring, IFRS og kommuner. Bare kodene som gjelder
+// for aksjeselskaper (og de fleste enkeltpersonforetak): ikke kodene som bare gjelder petroleumsselskaper,
+// samvirkeforetak, selskaper med deltakerfastsetting (ANS) eller foretak uten full regnskapsplikt
+// (Skatteetatens oversikt over bransjespesifikke koder, «Guidance for Codes in Income Statements»).
 const GRUPPER: Record<string, number[]> = {
-  balanseverdiForAnleggsmiddel: [1000, 1020, 1070, 1080, 1101, 1102, 1103, 1104, 1105, 1115, 1117, 1120, 1130, 1140, 1150, 1160, 1180, 1205, 1221, 1225, 1238, 1280, 1290, 1295, 1296, 1298, 1299, 1312, 1313, 1320, 1331, 1332, 1340, 1350, 1360, 1370, 1380, 1390, 1395],
-  balanseverdiForOmloepsmiddel: [1400, 1401, 1470, 1490, 1500, 1501, 1530, 1560, 1565, 1570, 1780, 1800, 1810, 1830, 1840, 1880, 1895, 1900, 1920, 1950],
-  egenkapital: [2000, 2010, 2015, 2020, 2030, 2041, 2042, 2043, 2045, 2050, 2055, 2080, 2095, 2096, 2097, 2098, 2099],
-  langsiktigGjeld: [2100, 2120, 2130, 2160, 2180, 2185, 2200, 2210, 2220, 2250, 2260, 2280, 2290],
-  kortsiktigGjeld: [2310, 2320, 2330, 2380, 2400, 2460, 2470, 2500, 2510, 2600, 2740, 2770, 2790, 2800, 2900, 2910, 2920, 2949, 2950, 2970, 2980, 2981, 2990],
-  salgsinntekt: [3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3100, 3200, 3300],
-  annenDriftsinntekt: [3400, 3500, 3600, 3650, 3695, 3700, 3710, 3850, 3870, 3880, 3885, 3886, 3890, 3895, 3900, 3910, 3911],
-  varekostnad: [4001, 4002, 4003, 4004, 4005, 4007, 4008, 4295, 4500, 4995],
-  loennskostnad: [5000, 5300, 5400, 5420, 5600, 5900, 5950],
+  balanseverdiForAnleggsmiddel: [1000, 1020, 1070, 1080, 1105, 1115, 1117, 1120, 1130, 1150, 1160, 1180, 1205, 1221, 1225, 1238, 1280, 1290, 1312, 1313, 1320, 1331, 1332, 1340, 1350, 1360, 1370, 1380, 1390, 1395],
+  balanseverdiForOmloepsmiddel: [1400, 1401, 1490, 1500, 1501, 1530, 1560, 1565, 1570, 1780, 1800, 1810, 1830, 1840, 1880, 1895, 1900, 1920, 1950],
+  egenkapital: [2000, 2010, 2015, 2020, 2030, 2043, 2045, 2050, 2055, 2080],
+  langsiktigGjeld: [2100, 2120, 2130, 2160, 2180, 2200, 2210, 2220, 2250, 2260, 2280, 2290],
+  kortsiktigGjeld: [2310, 2320, 2330, 2380, 2400, 2460, 2500, 2510, 2600, 2740, 2770, 2790, 2800, 2900, 2910, 2920, 2949, 2950, 2970, 2980, 2990],
+  salgsinntekt: [3000, 3100, 3200, 3300],
+  annenDriftsinntekt: [3400, 3500, 3600, 3695, 3700, 3710, 3850, 3870, 3880, 3885, 3900],
+  varekostnad: [4005, 4295, 4500, 4995],
+  loennskostnad: [5000, 5300, 5400, 5420, 5900],
   annenDriftskostnad: [
-    6000, 6001, 6002, 6004, 6050, 6051, 6052, 6053, 6054, 6100, 6110, 6120, 6130, 6140, 6200, 6300, 6340, 6350, 6395, 6400, 6440, 6500, 6600, 6695, 6700, 6750, 6751, 6752, 6995,
-    6998, 7000, 7020, 7040, 7080, 7099, 7155, 7165, 7295, 7330, 7350, 7370, 7400, 7420, 7440, 7490, 7500, 7501, 7502, 7503, 7565, 7600, 7650, 7651, 7700, 7701, 7830, 7860,
-    7880, 7885, 7886, 7890, 7897, 7910, 7911, 7912, 7913,
+    6000, 6050, 6100, 6200, 6300, 6340, 6395, 6400, 6440, 6500, 6600, 6695, 6700, 6995, 7000, 7020, 7040, 7080, 7099, 7155, 7165, 7295, 7330, 7370, 7440, 7490, 7500, 7565,
+    7600, 7700, 7830, 7860, 7880, 7885,
   ],
-  finansinntekt: [8005, 8030, 8050, 8054, 8059, 8060, 8074, 8075, 8079, 8080, 8090, 8091],
-  finanskostnad: [8100, 8105, 8115, 8120, 8130, 8150, 8154, 8159, 8160, 8174, 8175, 8179],
+  finansinntekt: [8005, 8030, 8050, 8060, 8074, 8079, 8080, 8090],
+  finanskostnad: [8100, 8105, 8115, 8130, 8150, 8160, 8174, 8179],
   skattekostnad: [8300, 8321, 8322, 8323, 8324],
   "resultatDisponeringForSAF-T": [8800],
 };
@@ -88,41 +90,137 @@ const KATEGORI: [number, number, string][] = [
   [8300, 8799, "skattekostnad"],
   [8800, 8999, "resultatDisponeringForSAF-T"],
 ];
-// Kontoene i standard kontoplan der den nærmeste koden under ikke er den riktige.
+// Kontoene i standard kontoplan der den nærmeste koden under ikke er den riktige (det første treffet
+// gjelder). Kontoene appen bruker selv er med: 1120 for fast teknisk installasjon, 1240 for varebiler,
+// 3800 og 7800 for gevinst og tap ved avgang, 2970 for uopptjent inntekt.
 const UNNTAK: [number, number, number][] = [
-  [1100, 1119, 1115],
-  [1200, 1239, 1205],
-  [1240, 1249, 1238],
-  [1250, 1279, 1205],
+  [1081, 1099, 1020], // andre immaterielle eiendeler
+  [1100, 1109, 1115], // bygninger
+  [1117, 1117, 1117],
+  [1110, 1129, 1120], // fast teknisk installasjon (1110 i standard kontoplan)
+  [1140, 1149, 1150], // jord- og skogbrukseiendommer
+  [1170, 1179, 1115], // annen fast eiendom
+  [1200, 1209, 1205], // maskiner og anlegg
+  [1210, 1219, 1130], // maskiner og anlegg under utførelse
+  [1220, 1224, 1221], // skip og rigger
+  [1225, 1229, 1225], // fly
+  [1230, 1234, 1205], // personbiler
+  [1235, 1249, 1238], // varebiler, lastebiler og busser
+  [1250, 1279, 1205], // inventar og verktøy
+  [1289, 1299, 1290], // andre driftsmidler
+  [1300, 1319, 1313], // aksjer og andeler i datterselskap og konsern
+  [1330, 1339, 1332], // investeringer i tilknyttet selskap
+  [1390, 1393, 1390],
+  [1394, 1394, 1395], // overfinansiering av pensjonsforpliktelser
+  [1395, 1399, 1390], // depositum, leietakerinnskudd o.l.
+  [1402, 1489, 1400],
+  [1550, 1559, 1501], // kundefordringer på selskap i samme konsern
+  [1580, 1584, 1500], // avsetning for tap på kundefordringer
+  [1820, 1829, 1800], // ikke børsnoterte aksjer
+  [1850, 1859, 1830], // markedsbaserte sertifikater
+  [1870, 1879, 1880], // opsjoner
+  [1960, 1999, 1920], // bankinnskudd i utlandet
+  [2040, 2044, 2043], // fond for vurderingsforskjeller
+  [2056, 2079, 2050], // privatkontoene i enkeltpersonforetak
+  [2090, 2099, 2050],
+  [2340, 2379, 2380], // valutalån og byggelån
   [2700, 2739, 2740],
   [2780, 2789, 2770],
   [2930, 2949, 2949],
-  [2960, 2969, 2990],
+  [2960, 2964, 2990], // påløpt kostnad
+  [2965, 2979, 2970], // forskuddsbetalt (uopptjent) inntekt
+  [2980, 2989, 2980], // avsetninger
   [3000, 3099, 3000],
+  [3610, 3699, 3695], // andre leieinntekter
+  [3700, 3799, 3700], // provisjon
   [3800, 3849, 3880],
+  [3880, 3889, 3880], // gevinst ved avgang av immaterielle eiendeler og varige driftsmidler
+  [3890, 3899, 3885], // gevinst ved avgang av finansielle anleggsmidler
   [4000, 4294, 4005],
   [4296, 4499, 4005],
-  [5800, 5899, 5000],
-  [6000, 6019, 6000],
-  [6020, 6049, 6004],
+  [4600, 4989, 4005], // annen varekostnad og periodisering
+  [4990, 4999, 4995],
+  [5430, 5499, 5400], // finansskatt
+  [5500, 5599, 5300], // annen kostnadsgodtgjørelse
+  [5600, 5899, 5000], // tilskudd og refusjoner (lærlingtilskudd, sykepenger)
+  [5900, 5999, 5900], // også OTP (5950 i standard kontoplan); «egen pensjonsordning» gjelder bare enkeltpersonforetak
+  [6000, 6049, 6000], // avskrivninger, også på goodwill og andre immaterielle eiendeler
+  [6050, 6099, 6050],
+  [6310, 6339, 6395], // renovasjon, vann og avløp
   [6360, 6394, 6395],
-  [6410, 6439, 6350],
+  [6410, 6439, 6400], // leie av datasystemer o.l.
+  [6450, 6499, 6400],
   [6610, 6694, 6695],
-  [6760, 6799, 6700],
   [6800, 6994, 6995],
+  [6995, 6999, 6995],
+  [7081, 7098, 7020], // annen kostnad transportmidler
   [7100, 7139, 7155],
   [7140, 7149, 7165],
   [7150, 7159, 7155],
   [7160, 7199, 7165],
+  [7200, 7299, 7295], // provisjon
   [7300, 7349, 7330],
-  [7360, 7369, 7370],
-  [7702, 7799, 7700],
-  [7800, 7829, 7880],
+  [7350, 7389, 7370], // representasjon
+  [7390, 7399, 7330], // annen salgskostnad
+  [7400, 7419, 7490], // kontingenter
+  [7420, 7489, 7440], // gaver
+  [7550, 7599, 7565], // garanti og service
+  [7700, 7799, 7700],
+  [7800, 7819, 7880],
+  [7820, 7859, 7830], // tap på fordringer
+  [7880, 7889, 7880],
+  [7890, 7899, 7885], // tap ved avgang av finansielle anleggsmidler
+  [7900, 7999, 7700],
+  [8040, 8049, 8050], // skattefrie renteinntekter
+  [8070, 8074, 8090], // aksjeutbytte
+  [8100, 8109, 8100],
+  [8110, 8129, 8115], // nedskrivning av finansielle eiendeler
+  [8140, 8149, 8150], // rentekostnad uten fradragsrett
 ];
 
-export function gruppering(konto: string): { kategori: string; kode: string } {
+// Posten i næringsspesifikasjonen for et anleggsmiddel: etter kategorien, og saldogruppen der den
+// sier mer (f.eks. et fartøy registrert som maskin).
+function anleggspost(a: { kategori: string; skatt: string }): number {
+  const etterGruppe: Record<string, number> = { a: 1280, c: 1238, e: 1221, f: 1225, g: 1117, h: 1115, i: 1105, j: 1120 };
+  switch (a.kategori) {
+    case "goodwill":
+      return 1080;
+    case "immateriell":
+      return 1020;
+    case "tomt":
+      return 1150;
+    case "bygning":
+      return a.skatt === "i" ? 1105 : 1115;
+    case "teknisk_installasjon":
+      return 1120;
+    case "kontormaskiner":
+      return 1280;
+    case "varebil":
+      return 1238;
+    case "annet":
+      return etterGruppe[a.skatt] ?? 1290;
+    default:
+      return etterGruppe[a.skatt] ?? 1205;
+  }
+}
+
+// Balansekontoene til anleggsmidlene med posten etter hva som står på dem, når alle anleggsmidlene på
+// kontoen hører til samme post (ellers gjelder kontonummeret).
+export function anleggsposter(anlegg: { konto: string; kategori: string; skatt: string }[]): Map<string, string> {
+  const poster = new Map<string, Set<number>>();
+  for (const a of anlegg) poster.set(a.konto, (poster.get(a.konto) ?? new Set()).add(anleggspost(a)));
+  return new Map([...poster].filter(([, p]) => p.size === 1).map(([konto, p]) => [konto, String([...p][0])]));
+}
+
+export async function hentAnleggsposter(db: Db, org: string) {
+  return anleggsposter(await alle<{ konto: string; kategori: string; skatt: string }>(db, "select konto, kategori, skatt from faktura.anleggsmidler where org_id = $1", [org]));
+}
+
+export function gruppering(konto: string, anlegg?: Map<string, string>): { kategori: string; kode: string } {
   const n = Number(konto.slice(0, 4));
   const kategori = KATEGORI.find(([fra, til]) => n >= fra && n <= til)?.[2] ?? "annenDriftskostnad";
+  const post = kategori === "balanseverdiForAnleggsmiddel" ? anlegg?.get(konto) : undefined;
+  if (post) return { kategori, kode: post };
   const unntak = UNNTAK.find(([fra, til]) => n >= fra && n <= til);
   if (unntak) return { kategori, kode: String(unntak[2]) };
   const koder = GRUPPER[kategori]!;
@@ -176,6 +274,7 @@ export async function lagSaft(db: Db, org: string, aar: number, bruker: { navn: 
   const k = regnskapskontoer(oppsett);
   const avgift = avgiftskontoer(oppsett);
   const navn = await navnPaaKonto(db, org);
+  const anlegg = await hentAnleggsposter(db, org);
 
   // Alle bilagene til og med året (saldoene trenger det som er før), med kunden (fakturaen eller
   // innbetalingen) og utgiften de kommer fra.
@@ -341,7 +440,7 @@ export async function lagSaft(db: Db, org: string, aar: number, bruker: { navn: 
   const kontoXml = kontoliste
     .filter(([konto, s]) => s.inn || s.ut || brukt.has(konto))
     .map(([konto, s]) => {
-      const g = gruppering(konto);
+      const g = gruppering(konto, anlegg);
       return el("Account", [
         t("AccountID", konto, 70),
         t("AccountDescription", navn(konto) || `Konto ${konto}`),

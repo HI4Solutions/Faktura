@@ -461,6 +461,7 @@ function ReiseSide({ id, leder, tilbake, apne }: { id: string; leder: boolean; t
               <label>
                 Statens sats per døgn (kr)
                 <input inputMode="decimal" placeholder="Fra regulativet for landet" value={s.kostsats} onChange={(e) => sett({ kostsats: e.target.value })} />
+                <span className="felt-hjelp">Hele satsen per døgn og fra 12 timer, halvparten for 6–12 timer, og 25 % lavere fra det 29. døgnet. De trekkfrie satsene er de samme som i Norge.</span>
               </label>
             </div>
           )}

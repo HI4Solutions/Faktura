@@ -69,16 +69,18 @@ export const PERMISJONSARTER: Record<PermisjonsArt, { navn: string; valg: string
   militaer: { navn: "Militærtjeneste", valg: "Militærtjeneste, sivilforsvar eller heimevern" },
   permittering: { navn: "Permittering", valg: "Permittering" },
 };
-// Lønnsplikten ved permittering: normalt de 15 første arbeidsdagene (virkedagene); den siste dagen.
-// Ved delvis permittering legges de permitterte timene sammen til 15 hele dager (30 arbeidsdager ved
-// 50 %).
+// Lønnsplikten ved permittering: de 15 første arbeidsdagene; den siste dagen. Arbeidsdagene er
+// ukedagene i den faste arbeidsplanen (ellers mandag–fredag), ikke helligdager. Ved delvis
+// permittering legges de permitterte timene sammen til 15 hele dager (30 arbeidsdager ved 50 %).
+// Som lonnspliktSlutt i server/src/permisjoner.ts.
 export const lonnspliktDager = (prosent?: number | null) => Math.ceil((15 * 100) / Math.min(100, Math.max(1, prosent || 100)) - 1e-9);
-export function lonnspliktSlutt(fra: string, dager = 15): string {
+export function lonnspliktSlutt(fra: string, dager = 15, ukedager?: number[] | null): string {
   let n = 0;
   let d = fra;
-  for (let i = 0; i < 400; i++, d = leggTilDager(d, 1)) {
+  for (let i = 0; i < 3000; i++, d = leggTilDager(d, 1)) {
     const u = new Date(`${d}T12:00:00Z`).getUTCDay();
-    if (u !== 0 && u !== 6 && !helligdag(d) && ++n === dager) return d;
+    const arbeidsdag = ukedager?.length ? ukedager.includes(((u + 6) % 7) + 1) : u !== 0 && u !== 6;
+    if (arbeidsdag && !helligdag(d) && ++n === dager) return d;
   }
   return d;
 }
@@ -102,6 +104,7 @@ export type Ansatt = {
   ansatt_til: string | null;
   aktiv: boolean;
   tavle?: boolean;
+  arbeidsdager?: number[]; // ukedagene i den faste arbeidsplanen (1 = mandag)
 };
 type BerortVakt = { id: string; dato: string; fra: string; til: string; oppgave: string | null };
 
@@ -199,8 +202,11 @@ export function FravaerSkjema({
     sluttUkjent: !!fravaer.slutt_ukjent,
     varslet: fravaer.varslet ?? iDag(),
     lonnsplikt: !fravaer.id || fravaer.permisjon_art !== "permittering" || !!fravaer.lonnsplikt_til,
-    lonnspliktTil: fravaer.lonnsplikt_til ?? lonnspliktSlutt(fravaer.fra ?? iDag(), lonnspliktDager(fravaer.prosent)),
+    lonnspliktTil:
+      fravaer.lonnsplikt_til ?? lonnspliktSlutt(fravaer.fra ?? iDag(), lonnspliktDager(fravaer.prosent), ansatte?.find((a) => a.id === fravaer.ansatt_id)?.arbeidsdager),
   }));
+  // Ukedagene i den faste arbeidsplanen til den ansatte (lønnsplikten telles på dem).
+  const planDager = (ansattId: string) => ansatte?.find((a) => a.id === ansattId)?.arbeidsdager;
   // Lønnsplikten foreslås av startdatoen, til den endres for hånd.
   const lonnspliktEndret = useRef(!!fravaer.lonnsplikt_til);
   // Avspasering og permisjon med lønn: timene foreslås av de planlagte timene, til de endres for hånd.
@@ -211,7 +217,9 @@ export function FravaerSkjema({
   const sett = (e: Partial<typeof f>) => settF({ ...f, ...e });
   // Den foreslåtte lønnsplikten følger startdatoen og prosenten ved permittering, til den endres for hånd.
   const nyLonnsplikt = (fra: string, prosent: number | null) =>
-    f.type === "permittering" && !lonnspliktEndret.current && /^\d{4}-\d{2}-\d{2}$/.test(fra) ? { lonnspliktTil: lonnspliktSlutt(fra, lonnspliktDager(prosent)) } : {};
+    f.type === "permittering" && !lonnspliktEndret.current && /^\d{4}-\d{2}-\d{2}$/.test(fra)
+      ? { lonnspliktTil: lonnspliktSlutt(fra, lonnspliktDager(prosent), planDager(f.ansatt_id)) }
+      : {};
   // Avspasering bare når timebanken er på (eller fraværet alt er avspasering); permittering etter
   // permisjon.
   const typer: Valg[] = selv
@@ -295,7 +303,19 @@ export function FravaerSkjema({
       {!selv && (
         <label>
           Ansatt
-          <select required disabled={!!fravaer.id} value={f.ansatt_id} onChange={(e) => sett({ ansatt_id: e.target.value })}>
+          <select
+            required
+            disabled={!!fravaer.id}
+            value={f.ansatt_id}
+            onChange={(e) =>
+              sett({
+                ansatt_id: e.target.value,
+                ...(!lonnspliktEndret.current && /^\d{4}-\d{2}-\d{2}$/.test(f.fra)
+                  ? { lonnspliktTil: lonnspliktSlutt(f.fra, lonnspliktDager(f.delvis ? Number(f.prosent) : null), planDager(e.target.value)) }
+                  : {}),
+              })
+            }
+          >
             <option value="">Velg ansatt</option>
             {valg.map((a) => (
               <option key={a.id} value={a.id}>
@@ -326,7 +346,7 @@ export function FravaerSkjema({
                 fra: e.target.value,
                 til: f.til < e.target.value ? e.target.value : f.til,
                 ...(!lonnspliktEndret.current && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value)
-                  ? { lonnspliktTil: lonnspliktSlutt(e.target.value, lonnspliktDager(f.delvis ? Number(f.prosent) : null)) }
+                  ? { lonnspliktTil: lonnspliktSlutt(e.target.value, lonnspliktDager(f.delvis ? Number(f.prosent) : null), planDager(f.ansatt_id)) }
                   : {}),
               })
             }
@@ -405,9 +425,10 @@ export function FravaerSkjema({
             <input type="checkbox" checked={f.lonnsplikt} onChange={(e) => sett({ lonnsplikt: e.target.checked })} />
             Lønnsplikt: arbeidsgiveren betaler lønnen de første dagene
             <span className="felt-hjelp">
-              Foreslått: de 15 første arbeidsdagene av permitteringen (ved delvis permittering summeres de permitterte timene til 15 dager, så perioden blir
-              lengre). Med fastlønn går lønnen som vanlig så lenge, og deretter trekkes den permitterte delen; med timelønn lønnes de planlagte timene. Etter 26
-              uker uten lønnsplikt i løpet av 18 måneder gjelder lønnsplikten igjen. Sjekk reglene på nav.no.
+              Foreslått: de 15 første arbeidsdagene av permitteringen, etter den faste arbeidsplanen (ved delvis permittering summeres de permitterte timene til
+              15 dager, så perioden blir lengre). Med fastlønn går lønnen som vanlig så lenge, og deretter trekkes den permitterte delen; med timelønn lønnes de
+              planlagte timene. Uten lønnsplikt bare når permitteringen skyldes brann, ulykke eller naturomstendigheter. Etter 26 uker uten lønnsplikt i løpet
+              av 18 måneder gjelder lønnsplikten igjen. Sjekk reglene på nav.no.
             </span>
           </label>
         </>

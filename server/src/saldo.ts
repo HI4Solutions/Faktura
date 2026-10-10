@@ -3,15 +3,18 @@
 //
 // - Samlesaldo for gruppe a, c og d: saldoen ved inngangen til året, pluss det som er anskaffet i
 //   året (full sats uansett når i året), minus vederlaget for det som er solgt, ganger satsen.
-//   Er grunnlaget under 15 000 kr, fradragsføres alt. Blir saldoen negativ, inntektsføres en
-//   andel lik satsen (alt når den er under 15 000 kr).
+//   Er grunnlaget under grensen for lav saldo, fradragsføres alt. Blir saldoen negativ,
+//   inntektsføres en andel lik satsen (alt når den er under grensen).
 // - Egen saldo for hvert driftsmiddel i gruppe b (goodwill) og e–j. Når det selges eller
 //   utrangeres, går forskjellen mellom vederlaget og saldoen til gevinst- og tapskontoen. Gruppe j
 //   har samme regel om lav saldo som a, c og d.
 // - Lineært: immaterielle rettigheter som taper seg i verdi, over den gjenværende levetiden.
 // - Ingen avskrivning (tomt o.l.): gevinst eller tap ved salg går til gevinst- og tapskontoen.
 // - Gevinst- og tapskontoen: minst 20 % av en positiv saldo inntektsføres hvert år, og 20 % av en
-//   negativ saldo kan fradragsføres (alt når saldoen er under 15 000 kr).
+//   negativ saldo kan fradragsføres (alt når saldoen er under grensen).
+// - Grensen for lav saldo (og for gevinst- og tapskontoen) er 30 000 kr fra inntektsåret 2024 og
+//   15 000 kr før (endret sammen med grensen for aktivering, Prop. 1 LS (2023–2024)). Den høyere
+//   satsen på 30 % for elektriske varebiler i gruppe c ble avviklet fra 2024; de er på saldo c.
 //
 // Saldoene regnes fra det første året i HI4 (oppsettet), med saldoene ved inngangen til det året.
 // Driftsmidler anskaffet før det året er med i inngående saldo (samlesaldo) eller har sin egen
@@ -34,7 +37,9 @@ export const SALDOGRUPPER: Record<Saldogruppe, { navn: string; sats: number; sam
 };
 export const GRUPPER = Object.keys(SALDOGRUPPER) as Saldogruppe[];
 export const SAMLESALDO = ["a", "c", "d"] as const;
-export const LAV_SALDO = 15000;
+// Grensen for lav saldo i et inntektsår.
+export const lavSaldo = (aar: number) => (aar >= 2024 ? 30_000 : 15_000);
+const kr = (n: number) => `${n.toLocaleString("nb-NO").replace(/[\u00a0\u202f]/g, " ")} kr`;
 export const GEVINST_TAP_SATS = 20;
 // Den høyeste satsen for ett driftsmiddel med egen saldo (bygg med kort brukstid i gruppe h).
 export const maksSats = (g: Saldogruppe, enkelt = false) => (g === "h" && enkelt ? 10 : SALDOGRUPPER[g].sats);
@@ -70,11 +75,12 @@ const aarAv = (d: string) => Number(d.slice(0, 4));
 const skattKost = (a: Anleggsmiddel) => a.skatt_kostpris ?? a.kostpris;
 const navnPaa = (a: Anleggsmiddel) => `${a.navn} (nr. ${a.nummer})`;
 
-// Avskrivning av et grunnlag: fradrag med satsen (alt under 15 000 kr der regelen gjelder), og
-// inntektsføring av en negativ saldo på samme måte.
-function avskriv(grunnlag: number, sats: number, lav: boolean) {
-  if (grunnlag >= 0) return lav && grunnlag < LAV_SALDO ? rund(grunnlag) : hel((grunnlag * sats) / 100);
-  return lav && -grunnlag < LAV_SALDO ? rund(grunnlag) : -hel((-grunnlag * sats) / 100);
+// Avskrivning av et grunnlag i et år: fradrag med satsen (alt under grensen for lav saldo der
+// regelen gjelder), og inntektsføring av en negativ saldo på samme måte.
+function avskriv(grunnlag: number, sats: number, lav: boolean, aar: number) {
+  const grense = lavSaldo(aar);
+  if (grunnlag >= 0) return lav && grunnlag < grense ? rund(grunnlag) : hel((grunnlag * sats) / 100);
+  return lav && -grunnlag < grense ? rund(grunnlag) : -hel((-grunnlag * sats) / 100);
 }
 
 // Det første året saldoene regnes: oppsettet; ellers året etter det som er ført i et annet system
@@ -124,7 +130,7 @@ export function saldoskjema(
       const vederlag = rund(solgte.reduce((s, a) => s + Number(a.avgang_vederlag ?? 0), 0));
       const grunnlag = rund(ib + tilgang - vederlag);
       const s = sats(y, g);
-      const avskr = avskriv(grunnlag, s, SALDOGRUPPER[g].lav);
+      const avskr = avskriv(grunnlag, s, SALDOGRUPPER[g].lav, y);
       ub = rund(grunnlag - avskr);
       if (y === aar && (ib || tilgang || vederlag || mine.some((a) => aarAv(a.anskaffet) <= y && (!a.avgang_dato || aarAv(a.avgang_dato) >= y))))
         rader.push({
@@ -144,8 +150,8 @@ export function saldoskjema(
           merknad: [
             nye.length ? `Tilgang: ${nye.map(navnPaa).join(", ")}.` : "",
             solgte.length ? `Solgt eller utrangert: ${solgte.map(navnPaa).join(", ")}.` : "",
-            grunnlag >= 0 && SALDOGRUPPER[g].lav && grunnlag < LAV_SALDO && grunnlag > 0 ? "Saldo under 15 000 kr: fradragsført i sin helhet." : "",
-            grunnlag < 0 ? "Negativ saldo: inntektsføres." : "",
+            SALDOGRUPPER[g].lav && grunnlag > 0 && grunnlag < lavSaldo(y) ? `Saldo under ${kr(lavSaldo(y))}: fradragsført i sin helhet.` : "",
+            grunnlag < 0 ? (-grunnlag < lavSaldo(y) ? `Negativ saldo under ${kr(lavSaldo(y))}: inntektsført i sin helhet.` : "Negativ saldo: inntektsføres.") : "",
           ]
             .filter(Boolean)
             .join(" "),
@@ -190,9 +196,9 @@ export function saldoskjema(
       } else {
         const g = a.skatt as Saldogruppe;
         s = sats(y, g, a);
-        avskr = avskriv(grunnlag, s, SALDOGRUPPER[g].lav);
+        avskr = avskriv(grunnlag, s, SALDOGRUPPER[g].lav, y);
         ub = rund(grunnlag - avskr);
-        if (SALDOGRUPPER[g].lav && grunnlag > 0 && grunnlag < LAV_SALDO) merknad = "Saldo under 15 000 kr: fradragsført i sin helhet.";
+        if (SALDOGRUPPER[g].lav && grunnlag > 0 && grunnlag < lavSaldo(y)) merknad = `Saldo under ${kr(lavSaldo(y))}: fradragsført i sin helhet.`;
         if (forFra && y === fra && a.skatt_inngaende == null) merknad = "Inngående saldo mangler: legg den inn på anleggsmiddelet.";
       }
       if (y === aar)
@@ -222,7 +228,7 @@ export function saldoskjema(
     const tillegg = gtPerAar.get(y) ?? 0;
     const grunnlag = rund(ib + tillegg);
     // Inntektsføring av en positiv saldo er negativ avskrivning; fradrag for en negativ saldo positiv.
-    const avskr = grunnlag === 0 ? 0 : -avskriv(grunnlag, GEVINST_TAP_SATS, true);
+    const avskr = grunnlag === 0 ? 0 : -avskriv(grunnlag, GEVINST_TAP_SATS, true, y);
     gevinstTap = rund(grunnlag + avskr);
     if (y === aar && (ib || tillegg))
       gtRad = {
@@ -241,9 +247,13 @@ export function saldoskjema(
         utgaende: gevinstTap,
         merknad:
           grunnlag > 0
-            ? `${grunnlag < LAV_SALDO ? "Under 15 000 kr: inntektsført i sin helhet." : "20 % inntektsføres."}`
+            ? grunnlag < lavSaldo(y)
+              ? `Under ${kr(lavSaldo(y))}: inntektsført i sin helhet.`
+              : "20 % inntektsføres."
             : grunnlag < 0
-              ? `${-grunnlag < LAV_SALDO ? "Under 15 000 kr: fradragsført i sin helhet." : "20 % fradragsføres."}`
+              ? -grunnlag < lavSaldo(y)
+                ? `Under ${kr(lavSaldo(y))}: fradragsført i sin helhet.`
+                : "20 % fradragsføres."
               : "",
       };
   }

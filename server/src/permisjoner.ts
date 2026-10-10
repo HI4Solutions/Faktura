@@ -14,6 +14,7 @@
 // <permittering> i format 2.3 er utsatt på ubestemt tid, så permitteringen rapporteres som
 // permisjon med beskrivelsen «permittering».
 
+import { helligdag } from "./helligdager.js";
 import { gjeldende, type Lonnsendring } from "./lonnsendringer.js";
 import { pluss, rund, virkedag, type Ansatt, type Linje } from "./lonnsberegning.js";
 
@@ -41,17 +42,20 @@ export const ARTER = Object.keys(PERMISJONSARTER) as [PermisjonsArt, ...Permisjo
 export const permisjonNavn = (art: string | null | undefined, betalt?: boolean | null) =>
   art && art in PERMISJONSARTER && art !== "annen" ? PERMISJONSARTER[art as PermisjonsArt].navn : betalt ? "Permisjon med lønn" : "Permisjon";
 
-// Lønnsplikten ved permittering: normalt de 15 første arbeidsdagene (permitteringslønnsloven § 3,
-// arbeidsgiverperioden). Ved delvis permittering legges de permitterte timene sammen til 15 hele
-// dager, så perioden blir lengre (30 arbeidsdager ved 50 %). Arbeidsdagene er virkedagene (ikke
-// helg og helligdager).
+// Lønnsplikten ved permittering: de 15 første arbeidsdagene (permitteringslønnsloven § 3,
+// arbeidsgiverperioden; 15 dager fra 1. mars 2022). Ved delvis permittering legges de permitterte
+// timene sammen til 15 hele dager, så perioden blir lengre (30 arbeidsdager ved 50 %). Arbeidsdagene
+// er dagene den ansatte ellers skulle ha jobbet, for perioden løper ikke på dager den ansatte uansett
+// ville hatt fri: ukedagene i den faste arbeidsplanen, ellers mandag–fredag, og ikke helligdager.
 export const LONNSPLIKT_DAGER = 15;
 export const lonnspliktDager = (prosent: number | null | undefined) => Math.ceil((LONNSPLIKT_DAGER * 100) / Math.min(100, Math.max(1, prosent ?? 100)) - 1e-9);
-export function lonnspliktSlutt(fra: string, dager = LONNSPLIKT_DAGER): string | null {
+const isoUkedag = (d: string) => ((new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7) + 1; // 1 = mandag
+export function lonnspliktSlutt(fra: string, dager = LONNSPLIKT_DAGER, ukedager?: readonly number[] | null): string | null {
   if (dager <= 0) return null;
+  const arbeidsdag = ukedager?.length ? (d: string) => ukedager.includes(isoUkedag(d)) && !helligdag(d) : virkedag;
   let n = 0;
   let d = fra;
-  for (let i = 0; i < 400; i++, d = pluss(d, 1)) if (virkedag(d) && ++n === dager) return d;
+  for (let i = 0; i < 3000; i++, d = pluss(d, 1)) if (arbeidsdag(d) && ++n === dager) return d;
   return d;
 }
 

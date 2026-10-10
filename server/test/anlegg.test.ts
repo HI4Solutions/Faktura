@@ -192,13 +192,34 @@ describe("saldoavskrivningene (uten database)", () => {
     expect(rad(s, "Gruppe a")).toEqual([35000, 0, 0, 35000, 30, 10500, 24500]);
     expect(rad(s, "Gruppe d")).toEqual([440000, 0, 0, 440000, 15, 66000, 374000]);
     expect(rad(s, "Lisens")[5]).toBe(12000);
-    // Under 15 000 kr: alt fradragsføres.
-    const lav = saldoskjema(2026, [], { saldo_fra_aar: 2026, saldo_inngaende: { a: 12000 } });
-    expect(rad(lav, "Gruppe a")).toEqual([12000, 0, 0, 12000, 30, 12000, 0]);
-    // Negativ saldo: 20 % inntektsføres (alt under 15 000 kr).
+    // Under 30 000 kr (fra 2024): alt fradragsføres.
+    const lav = saldoskjema(2026, [], { saldo_fra_aar: 2026, saldo_inngaende: { a: 25000 } });
+    expect(rad(lav, "Gruppe a")).toEqual([25000, 0, 0, 25000, 30, 25000, 0]);
+    expect(lav.rader[0]!.merknad).toBe("Saldo under 30 000 kr: fradragsført i sin helhet.");
+    // Negativ saldo: 20 % inntektsføres (alt under 30 000 kr).
     const solgt = [anlegg({ id: "m", navn: "Maskin", skatt: "d", anskaffet: "2020-01-01", avskrives_fra: "2020-01-01", avgang_dato: "2026-05-01", avgang_type: "salg", avgang_vederlag: 60000 })];
     expect(rad(saldoskjema(2026, solgt, { saldo_fra_aar: 2026, saldo_inngaende: { d: 10000 } }), "Gruppe d")).toEqual([10000, 0, 60000, -50000, 20, -10000, -40000]);
-    expect(rad(saldoskjema(2026, solgt, { saldo_fra_aar: 2026, saldo_inngaende: { d: 52000 } }), "Gruppe d")).toEqual([52000, 0, 60000, -8000, 20, -8000, 0]);
+    const negativ = saldoskjema(2026, solgt, { saldo_fra_aar: 2026, saldo_inngaende: { d: 38000 } });
+    expect(rad(negativ, "Gruppe d")).toEqual([38000, 0, 60000, -22000, 20, -22000, 0]);
+    expect(negativ.rader[0]!.merknad).toBe("Solgt eller utrangert: Maskin (nr. 1). Negativ saldo under 30 000 kr: inntektsført i sin helhet.");
+  });
+
+  it("grensen for lav saldo: 15 000 kr til og med 2023, 30 000 kr fra 2024 (også gevinst- og tapskontoen)", () => {
+    // 20 000 kr på samlesaldo a: 30 % i 2023, alt i 2024.
+    const a = { saldo_fra_aar: 2023, saldo_inngaende: { a: 28572 } };
+    expect(rad(saldoskjema(2023, [], a), "Gruppe a")).toEqual([28572, 0, 0, 28572, 30, 8572, 20000]);
+    expect(rad(saldoskjema(2024, [], a), "Gruppe a")).toEqual([20000, 0, 0, 20000, 30, 20000, 0]);
+    // Gruppe j (egen saldo) har samme grense; gruppe h ikke.
+    const inst = anlegg({ id: "j", nummer: 9, navn: "Ventilasjon", kategori: "bygning", skatt: "j", anskaffet: "2023-03-01", kostpris: 25000 });
+    expect(rad(saldoskjema(2023, [inst], { saldo_fra_aar: 2023, saldo_inngaende: {} }), "Ventilasjon")).toEqual([0, 25000, 0, 25000, 10, 2500, 22500]);
+    expect(rad(saldoskjema(2024, [inst], { saldo_fra_aar: 2023, saldo_inngaende: {} }), "Ventilasjon")).toEqual([22500, 0, 0, 22500, 10, 22500, 0]);
+    // Gevinst- og tapskontoen: 25 000 kr inntektsføres med 20 % i 2023, alt i 2024.
+    const gt = { saldo_fra_aar: 2023, saldo_inngaende: { gevinst_tap: 31250 } };
+    expect(rad(saldoskjema(2023, [], gt), "Gevinst- og tapskonto")).toEqual([31250, 0, 0, 31250, 20, -6250, 25000]);
+    const s = saldoskjema(2024, [], gt);
+    expect(rad(s, "Gevinst- og tapskonto")).toEqual([25000, 0, 0, 25000, 20, -25000, 0]);
+    expect(s.rader[0]!.merknad).toBe("Under 30 000 kr: inntektsført i sin helhet.");
+    expect(saldoskjema(2023, [], { saldo_fra_aar: 2023, saldo_inngaende: { gevinst_tap: -14000 } }).rader[0]!.merknad).toBe("Under 15 000 kr: fradragsført i sin helhet.");
   });
 
   it("goodwill selges: gevinsten til gevinst- og tapskontoen, 20 % inntektsføres", () => {

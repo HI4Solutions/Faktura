@@ -860,7 +860,17 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   kjøretøy, og utlegg etter regning, etter statens satser eller de trekkfrie
   (`lonn_oppsett.reise_satser`; `REISESATSER` per år); innenfor de trekkfrie satsene er
   trekkfri utgiftsgodtgjørelse (med antall), resten trekkpliktig, og alt når vilkårene ikke er
-  oppfylt. Hver kjøring den ansatte er med i, tar med de godkjente som ikke er utbetalt (nøkkelen
+  oppfylt. Det trekkfrie regnes per døgn (Skatteetaten: måltidstrekket og det som er over
+  satsen, regnes per døgn), så det som er over den trekkfrie satsen et døgn, er trekkpliktig
+  selv om et annet døgn er under. Statens særavtale innenlands (§ 9 d): tiden ut over hele døgn får
+  satsen for 6–12 timer (397 kr i 2026) eller for over 12 timer uten overnatting (736 kr), ikke
+  døgnsatsen; en reise med overnatting som er kortere enn et døgn, får døgnsatsen når den er over
+  12 timer. Statens særavtale utenfor Norge (§ 8): satsen for landet per døgn, 50 % av den for
+  6–12 timer og hele fra 12 timer (dagsreisen og tiden ut over hele døgn), og 25 % lavere fra det
+  29. døgnet; de trekkfrie satsene er de samme som i Norge. Kompensasjonstillegget i statens
+  avtale for reiser utenfor Norge (674 kr per døgn over 12 timer i 2026, skattepliktig) er ikke
+  med; legg det inn som et tillegg på lønnen der det avtales. Rentefordelen bruker normrenten for
+  tomånedersperioden (`NORMRENTE`), og slippen minner om det når perioden ikke er lagt inn. Hver kjøring den ansatte er med i, tar med de godkjente som ikke er utbetalt (nøkkelen
   `reise:<id>:<linje>`, `lonnsslipper.reiseregninger`), og `lonn_godkjenn` merker dem som
   utbetalt (`lonnskjoring_id`), og avviser kjøringen når en er endret, utbetalt i en annen kjøring
   eller godkjent på nytt etter at slippen ble regnet ut. A-meldingen: `fordel` naturalytelse og
@@ -873,7 +883,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   lovfestet, foreldre, utdanning lovfestet og ikke lovfestet, militær, og permittering), prosenten
   av stillingen (`prosent`, 1–99; null er 100 %), om sluttdatoen er ukjent (`slutt_ukjent`: til-datoen
   er foreløpig), og for permitteringen datoen varselet ble gitt (`varslet`) og den siste dagen med
-  lønnsplikt (`lonnsplikt_til`; standard de 15 første virkedagene, `lonnspliktSlutt`). En
+  lønnsplikt (`lonnsplikt_til`; standard de 15 første arbeidsdagene, `lonnspliktSlutt`). En
   permisjon kan vare i tre år. Delvis permisjon (`prosent` satt) gjør ikke den ansatte borte:
   `fravaer_type`, `fravaer_plan` (vaktplanen, tavla og bemanningskalenderen) og oppslagene om
   hvem som er borte, tar den ikke med, og den kan overlappe annet fravær (men ikke en annen
@@ -891,7 +901,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (`lonn.permisjoner`, bare eier og administrator, som fraværet)
 - Permittering, reglene (Lønn K4, `server/src/permisjoner.ts`, `server/src/fravaer.ts`,
   `server/src/lonn.ts`, `server/src/amelding.ts`): lønnsplikten foreslås som 15 arbeidsdager med de
-  permitterte timene summert (`lonnspliktDager`: 30 arbeidsdager ved 50 %). Fritaksperioden
+  permitterte timene summert (`lonnspliktDager`: 30 arbeidsdager ved 50 %). Arbeidsdagene er dagene
+  den ansatte ellers skulle ha jobbet, for perioden løper ikke på dager den ansatte uansett ville
+  hatt fri: ukedagene i den faste arbeidsplanen som gjelder når permitteringen begynner
+  (`planUkedager` i `fravaer.ts`; skjemaet bruker planen som gjelder i dag), ellers mandag–fredag, og
+  ikke helligdager. Uten lønnsplikt bare når permitteringen skyldes brann, ulykke eller
+  naturomstendigheter (permitteringslønnsloven § 3; da fjernes avkrysningen). Fritaksperioden
   (`fritaksperiode`): dagene etter lønnsplikten i alle permitteringene til den ansatte teller, i
   rekkefølge, til 26 uker (182 dager) i løpet av de siste 18 månedene (`maanederFor`); den første
   dagen etter er `lonnsplikt_igjen` for permitteringen. Lønnskjøringen henter permitteringene de

@@ -153,6 +153,20 @@ type Fravaer = {
 };
 const ERKLAERING = "Bekreft erklæringen for å sende egenmeldingen";
 
+// Ukedagene (1 = mandag) i den faste arbeidsplanen som gjelder på datoen; tom uten fast plan.
+async function planUkedager(db: Db, org: string, ansatt: string, dato: string): Promise<number[]> {
+  const r = await en<{ dager: number[] }>(
+    db,
+    `select coalesce(array_agg(d.ukedag order by d.ukedag), '{}') as dager
+       from faktura.arbeidsplan_dager d
+      where d.org_id = $1
+        and d.plan_id = (select p.id from faktura.arbeidsplaner p where p.org_id = $1 and p.ansatt_id = $2 and p.gjelder_fra <= $3::date
+                          order by p.gjelder_fra desc limit 1)`,
+    [org, ansatt, dato],
+  );
+  return r?.dager ?? [];
+}
+
 export function fravaerRuter() {
   const r = new Hono();
 
@@ -206,9 +220,13 @@ export function fravaerRuter() {
           b.type === "permisjon" && b.prosent != null && b.prosent < 100 ? b.prosent : null,
           b.type === "permisjon" && !!b.slutt_ukjent,
           permittering ? (b.varslet ?? null) : null,
-          // Lønnsplikten: standard de 15 første arbeidsdagene (de permitterte timene summert ved
-          // delvis permittering).
-          permittering ? (b.lonnsplikt_til === undefined ? lonnspliktSlutt(b.fra, lonnspliktDager(b.prosent)) : b.lonnsplikt_til) : null,
+          // Lønnsplikten: standard de 15 første arbeidsdagene etter arbeidsplanen (de permitterte timene
+          // summert ved delvis permittering).
+          permittering
+            ? b.lonnsplikt_til === undefined
+              ? lonnspliktSlutt(b.fra, lonnspliktDager(b.prosent), await planUkedager(db, orgId(c), ansatt, b.fra))
+              : b.lonnsplikt_til
+            : null,
         ],
       );
       const f = (await en<Fravaer>(db, `${FRAVAER} where f.id = $1`, [ny!.id]))!;
@@ -268,6 +286,7 @@ export function fravaerRuter() {
       const naa = await en<{
         dokumentasjon: string | null;
         selv: boolean;
+        ansatt_id: string;
         fra: string;
         permisjon_art: string | null;
         varslet: string | null;
@@ -275,7 +294,7 @@ export function fravaerRuter() {
         prosent: number | null;
       }>(
         db,
-        `select dokumentasjon, faktura.er_meg(org_id, ansatt_id) as selv, fra, permisjon_art, varslet, lonnsplikt_til, prosent
+        `select dokumentasjon, faktura.er_meg(org_id, ansatt_id) as selv, ansatt_id, fra, permisjon_art, varslet, lonnsplikt_til, prosent
            from faktura.fravaer where org_id = $1 and id = $2`,
         [orgId(c), id(c)],
       );
@@ -284,7 +303,11 @@ export function fravaerRuter() {
       const art = b.permisjon_art !== undefined ? b.permisjon_art : naa.permisjon_art;
       if (art === "permittering" && (b.type ?? "permisjon") === "permisjon") {
         if (b.lonnsplikt_til === undefined && naa.permisjon_art !== "permittering")
-          b.lonnsplikt_til = lonnspliktSlutt(b.fra ?? naa.fra, lonnspliktDager(b.prosent !== undefined ? b.prosent : naa.prosent));
+          b.lonnsplikt_til = lonnspliktSlutt(
+            b.fra ?? naa.fra,
+            lonnspliktDager(b.prosent !== undefined ? b.prosent : naa.prosent),
+            await planUkedager(db, orgId(c), naa.ansatt_id, b.fra ?? naa.fra),
+          );
         sjekkPermittering(
           b.fra ?? naa.fra,
           b.varslet !== undefined ? b.varslet : naa.varslet,
