@@ -299,7 +299,7 @@ describe.skipIf(!process.env.DATABASE_URL)("skattekort fra Skatteetaten", () => 
     expect((await api("GET", `/api/org/${org}/skattekort`)).data).toMatchObject({ tilgjengelig: false, tilgang: null, aar: iAar, antall: { med_fnr: 2, uten_fnr: 1, fra_skatteetaten: 0 } });
     expect((await api("POST", `/api/org/${org}/skattekort/tilgang`)).data.error).toContain("ikke satt opp");
     (config as any).maskinportenKlientId = id;
-    expect((await api("GET", `/api/org/${org}/skattekort`)).data).toMatchObject({ tilgjengelig: true, miljo: "test", systemnavn: "HI4 Faktura" });
+    expect((await api("GET", `/api/org/${org}/skattekort`)).data).toMatchObject({ tilgjengelig: true, miljo: "test", systemnavn: "Admin Konsoll" });
   });
 
   it("plattformadministratoren registrerer systemet i Altinn, og oppdaterer det etterpå", async () => {
@@ -316,7 +316,7 @@ describe.skipIf(!process.env.DATABASE_URL)("skattekort fra Skatteetaten", () => 
     expect(def.kropp).toEqual({
       id: "936564046_lonn",
       vendor: { authority: "iso6523-actorid-upis", ID: "0192:936564046" },
-      name: { nb: "HI4 Faktura", nn: "HI4 Faktura", en: "HI4 Faktura" },
+      name: { nb: "Admin Konsoll", nn: "Admin Konsoll", en: "Admin Konsoll" },
       description: expect.objectContaining({ nb: expect.stringContaining("skattekortene") }),
       accessPackages: [{ urn: "urn:altinn:accesspackage:lonn" }],
       clientId: ["klient-1"],

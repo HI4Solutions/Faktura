@@ -58,7 +58,7 @@ deretter i produksjon.
 
    Den offentlige nøkkelen (JWK-en som skrives ut) er ikke hemmelig.
 4. **Maskinporten-klienten.** I Samarbeidsportalen: **Klienter → Opprett klient**, velg
-   Maskinporten, visningsnavn «HI4 Faktura» og en beskrivelse, og legg til scopene over (de som er
+   Maskinporten, visningsnavn «Admin Konsoll» og en beskrivelse, og legg til scopene over (de som er
    godkjent; resten legges på den samme klienten senere). Legg inn den offentlige nøkkelen (JWK-en
    fra punkt 3) under nøklene på klienten. Noter klient-ID-en og nøkkel-ID-en (`kid`). «Scopes» i
    menyen er for dem som lager egne API-er, og «Tilganger» viser tilgangene Medinnova har fått.
@@ -66,7 +66,7 @@ deretter i produksjon.
    - `MASKINPORTEN_KLIENT_ID`: klient-ID-en;
    - `MASKINPORTEN_NOKKEL_ID`: nøkkel-ID-en (kid);
    - `SKATTEETATEN_MILJO`: `test` (standard) eller `prod`;
-   - valgfritt `ALTINN_SYSTEMNAVN` (navnet kundene ser i Altinn, standard «HI4 Faktura») og
+   - valgfritt `ALTINN_SYSTEMNAVN` (navnet kundene ser i Altinn, standard «Admin Konsoll») og
      `LEVERANDOR_ORGNR` (standard 936564046).
 
    Kjør så workflowen «Infrastruktur» (Actions → Infrastruktur → Run workflow).

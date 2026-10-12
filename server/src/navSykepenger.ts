@@ -537,7 +537,7 @@ export async function sendInntektsmelding(org: string, id: string) {
     if (f.status === "FORKASTET") return feil("NAV har trukket tilbake forespørselen (det kommer som regel en ny for sykefraværet).");
     if (f.fnr && f.fnr !== fnr) return feil("Fødselsnummeret til den ansatte er ikke det samme som i forespørselen fra NAV.");
     const aarsak = f.status === "BESVART" ? "Endring" : "Ny";
-    const avsender = { systemNavn: fritekst(config.altinnSystemnavn) ?? "HI4 Faktura", systemVersjon: fritekst(process.env.K_REVISION) ?? "1.0" };
+    const avsender = { systemNavn: fritekst(config.altinnSystemnavn) ?? "Admin Konsoll", systemVersjon: fritekst(process.env.K_REVISION) ?? "1.0" };
     await settInntektsmelding(m.id, { forsok_at: new Date(), aarsak });
     const r = await etatKall(`${adresser().nav}/v1/inntektsmelding`, token, { metode: "POST", kropp: tilNav(innhold.data, m.nav_referanse_id, fnr, aarsak, avsender), hvem: "NAV" });
     let innsendingId: string | null = null;

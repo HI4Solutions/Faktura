@@ -13,7 +13,7 @@ import { IkonGnist, IkonKlokke, IkonKroner } from "../ikoner";
 import { HemmeligFelt, HemmeligTekst } from "../hemmelig";
 import { Fakturafaner } from "../fakturameny";
 
-// En konto i banken som er lagt inn i HI4 Faktura (bare de leses), med navnet derfra.
+// En konto i banken som er lagt inn i Admin Konsoll (bare de leses), med navnet derfra.
 export interface BankKonto {
   kontonr: string;
   navn: string | null;
@@ -27,7 +27,7 @@ export interface Bankkobling {
   status: "venter" | "aktiv" | "feil";
   tilkoblet: boolean;
   kontoer: BankKonto[];
-  andre_kontoer: number; // kontoer i banken som ikke er lagt inn i HI4 Faktura
+  andre_kontoer: number; // kontoer i banken som ikke er lagt inn i Admin Konsoll
   gyldig_til: string | null;
   fullfort: string | null;
   sist_hentet: string | null;
@@ -439,7 +439,7 @@ export function BankKobling() {
     <div className="kort">
       <h2 style={{ marginTop: 0 }}>Innbetalinger fra banken</h2>
       <p className="dempet liten">
-        Appen leser innbetalingene på kontoene du har lagt inn i HI4 Faktura (kontonummeret og Flere kontonumre over), og registrerer
+        Appen leser innbetalingene på kontoene du har lagt inn i Admin Konsoll (kontonummeret og Flere kontonumre over), og registrerer
         betalinger på fakturaene av seg selv, uten KID-avtale med banken. Står fakturanummeret i meldingen, eller stemmer beløpet med det
         kunden skylder, kobles betalingen til fakturaen. Det du må se over, får du under Innbetalinger. Appen kan bare lese kontoene, ikke
         flytte penger.
@@ -465,7 +465,7 @@ export function BankKobling() {
           {endreFra === null && data.fra && (
             <p className="dempet liten">
               Henter innbetalinger fra og med {dato(data.fra)}
-              {data.fra_satt ? "" : ", dagen dere begynte med HI4 Faktura"}. Eldre innbetalinger hentes ikke.{" "}
+              {data.fra_satt ? "" : ", dagen dere begynte med Admin Konsoll"}. Eldre innbetalinger hentes ikke.{" "}
               {admin && !nyBank && (
                 <button type="button" className="lenke" onClick={() => (h.settFeil(null), settMelding(null), settEndreFra(data.fra ?? iDag()))}>
                   Endre
@@ -573,7 +573,7 @@ export function BankKobling() {
               og åpne Control Panel. Det er enklest fra en PC.
             </li>
             <li>
-              Velg <strong>Register new application</strong> med miljøet <strong>Production</strong>. Kall den f.eks. «HI4 Faktura», og legg
+              Velg <strong>Register new application</strong> med miljøet <strong>Production</strong>. Kall den f.eks. «Admin Konsoll», og legg
               inn denne adressen under <strong>Allowed redirect URLs</strong>:
               <span className="kopier-felt">
                 <code>{data.tilbake_url}</code>
@@ -728,7 +728,7 @@ function BankRad({
       )}
       {k.tilkoblet && k.kontoer.length === 0 && k.andre_kontoer > 0 && (
         <p className="liten advarsel-tekst">
-          Ingen av kontoene i {k.bank} er lagt inn i HI4 Faktura ennå. Legg inn kontonummeret under Kontonummer eller Flere kontonumre, så
+          Ingen av kontoene i {k.bank} er lagt inn i Admin Konsoll ennå. Legg inn kontonummeret under Kontonummer eller Flere kontonumre, så
           hentes innbetalingene derfra.
         </p>
       )}

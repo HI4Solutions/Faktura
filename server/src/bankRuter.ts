@@ -14,6 +14,7 @@ import { ApiFeil } from "./feil.js";
 import { krevMfa } from "./auth.js";
 import { krypter } from "./kryptering.js";
 import { BankFeil, gyldigTil, hentApplikasjon, hentBanker, nokkelFeil, normaliserPem, startAutorisering, velgBank, type BankNokkel } from "./enableBanking.js";
+import { appUrlFra } from "./appadresse.js";
 import { egneKontoer, HENTETIDER, nyState, tilbakeUrl, type BankAppKonfig, type Bankkobling } from "./bank.js";
 import { leggIKo } from "./tjenester.js";
 import { aiPaa } from "./ai.js";
@@ -30,7 +31,7 @@ const hentKoblinger = (db: Db, org: string) =>
   alle<Bankkobling>(db, "select * from faktura.bankkoblinger where org_id = $1 order by opprettet", [org]);
 const tekst = (d: unknown) => (d instanceof Date ? d.toISOString() : d == null ? null : String(d));
 
-// Det appen viser om en bank (aldri nøkkelen). Bare kontoene som er lagt inn i HI4 Faktura
+// Det appen viser om en bank (aldri nøkkelen). Bare kontoene som er lagt inn i Admin Konsoll
 // vises (og leses), med navnet brukeren har gitt dem.
 function koblingStatus(k: Bankkobling, egne: Map<string, string | null>) {
   // Adressen workeren lagde til BankID, så lenge den er fersk.
@@ -44,7 +45,7 @@ function koblingStatus(k: Bankkobling, egne: Map<string, string | null>) {
     status: k.status, // venter (BankID ikke fullført), aktiv, feil (må kobles til på nytt)
     tilkoblet: k.status === "aktiv" && Boolean(k.okt_id),
     kontoer: leses.map((x) => ({ kontonr: x.kontonr, navn: egne.get(x.kontonr) ?? x.navn })),
-    andre_kontoer: kontoer.length - leses.length, // i banken, men ikke lagt inn i HI4 Faktura
+    andre_kontoer: kontoer.length - leses.length, // i banken, men ikke lagt inn i Admin Konsoll
     gyldig_til: tekst(k.gyldig_til),
     fullfort: tekst(k.fullfort), // når BankID sist ble fullført
     sist_hentet: tekst(k.sist_hentet),
@@ -57,10 +58,10 @@ function koblingStatus(k: Bankkobling, egne: Map<string, string | null>) {
 // Brukeren er til stede: IP-adressen og nettleseren sendes til banken (PSD2).
 const psu = (c: Context) => ({
   ip: (c.req.header("x-forwarded-for") ?? "").split(",")[0]!.trim() || "0.0.0.0",
-  agent: (c.req.header("user-agent") ?? "HI4 Faktura").slice(0, 500),
+  agent: (c.req.header("user-agent") ?? "Admin Konsoll").slice(0, 500),
 });
 
-async function status(db: Db, org: string) {
+async function status(db: Db, org: string, appUrl: string) {
   const app = await hentApp(db, org);
   const egne = app ? await egneKontoer(db, org) : new Map<string, string | null>();
   const koblinger = app ? (await hentKoblinger(db, org)).map((k) => koblingStatus(k, egne)) : [];
@@ -78,7 +79,7 @@ async function status(db: Db, org: string) {
     fra_satt: start?.satt ?? false,
     tilkoblet: koblinger.some((k) => k.tilkoblet),
     hentetider: HENTETIDER, // når workeren henter av seg selv hver dag (norsk tid)
-    tilbake_url: tilbakeUrl(),
+    tilbake_url: tilbakeUrl(appUrl),
     antall: await antall(db, org),
     // Innbetalingene som er reservert i banken (ikke bokført ennå), med fakturaen de trolig gjelder.
     reserverte: await alle(
@@ -130,7 +131,7 @@ export function bankRuter() {
     c.json(
       await bruk(c, async (db) => {
         await krev(c, db, "les");
-        return status(db, orgId(c));
+        return status(db, orgId(c), appUrlFra(c));
       }),
     ),
   );
@@ -151,6 +152,7 @@ export function bankRuter() {
     const feil = nokkelFeil(pem);
     if (feil) throw new ApiFeil(400, feil);
     const n: BankNokkel = { appId: b.app_id, privatNokkel: pem };
+    const tilbake = tilbakeUrl(appUrlFra(c));
 
     let app: any;
     let bank;
@@ -158,8 +160,8 @@ export function bankRuter() {
       app = await hentApplikasjon(n);
       // Adressen brukeren sendes tilbake til, må være lagt inn i applikasjonen.
       const adresser: unknown = app?.redirect_urls;
-      if (Array.isArray(adresser) && adresser.length && !adresser.includes(tilbakeUrl()))
-        throw new ApiFeil(400, `Legg inn ${tilbakeUrl()} som «Allowed redirect URL» i applikasjonen hos Enable Banking, og prøv igjen.`);
+      if (Array.isArray(adresser) && adresser.length && !adresser.includes(tilbake))
+        throw new ApiFeil(400, `Legg inn ${tilbake} som «Allowed redirect URL» i applikasjonen hos Enable Banking, og prøv igjen.`);
       bank = velgBank(await hentBanker(n, "NO"), b.bank, b.psu_type);
     } catch (e) {
       throw e instanceof ApiFeil ? e : fraEnableBanking(e);
@@ -169,7 +171,7 @@ export function bankRuter() {
     const gyldig = gyldigTil(bank.maximum_consent_validity);
     let url: string;
     try {
-      url = await startAutorisering(n, { bank: bank.name, land: "NO", psuType: b.psu_type, gyldigTil: gyldig, state, redirect: tilbakeUrl() });
+      url = await startAutorisering(n, { bank: bank.name, land: "NO", psuType: b.psu_type, gyldigTil: gyldig, state, redirect: tilbake });
     } catch (e) {
       throw fraEnableBanking(e);
     }
@@ -204,7 +206,7 @@ export function bankRuter() {
          returning id`,
         [orgId(c), bank.name, b.psu_type, bank.maximum_consent_validity ?? null, state, gyldig.toISOString()],
       );
-      return { ...(await status(db, orgId(c))), kobling_id: k!.id };
+      return { ...(await status(db, orgId(c), appUrlFra(c))), kobling_id: k!.id };
     });
     return c.json({ ...svar, url });
   });
@@ -234,7 +236,7 @@ export function bankRuter() {
       );
       return { id: k!.id, ny: true };
     });
-    await leggIKo({ type: "bank-auth", org_id: orgId(c), kobling_id: id });
+    await leggIKo({ type: "bank-auth", org_id: orgId(c), kobling_id: id, app_url: appUrlFra(c) });
     return c.json({ ok: true, kobling_id: id, ny }, 202);
   });
 
@@ -248,7 +250,7 @@ export function bankRuter() {
       ]);
       if (!u.rowCount) throw new ApiFeil(404, "Fant ikke banken");
     });
-    await leggIKo({ type: "bank-auth", org_id: orgId(c), kobling_id: koblingId(c) });
+    await leggIKo({ type: "bank-auth", org_id: orgId(c), kobling_id: koblingId(c), app_url: appUrlFra(c) });
     return c.json({ ok: true, kobling_id: koblingId(c) }, 202);
   });
 
@@ -280,7 +282,7 @@ export function bankRuter() {
     return c.json(
       await bruk(c, async (db) => {
         const r = await en<{ fjernet: number }>(db, "select faktura.sett_bank_fra($1, $2) as fjernet", [orgId(c), b.fra]);
-        return { ...(await status(db, orgId(c))), fjernet: r!.fjernet };
+        return { ...(await status(db, orgId(c), appUrlFra(c))), fjernet: r!.fjernet };
       }),
     );
   });
@@ -297,7 +299,7 @@ export function bankRuter() {
         const k = await en(db, "select 1 from faktura.bankkoblinger where org_id = $1 and status = 'aktiv' and okt_id is not null limit 1", [orgId(c)]);
         if (!k) throw new ApiFeil(409, "Ingen bank er koblet til");
       }
-      // banker: bankene som har en konto som er lagt inn i HI4 Faktura (de som hentes fra).
+      // banker: bankene som har en konto som er lagt inn i Admin Konsoll (de som hentes fra).
       // siste: den siste hentingen som er lagret nå.
       return en<{ kan: boolean; banker: number; nylig: boolean; siste: number }>(
         db,

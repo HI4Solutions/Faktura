@@ -19,7 +19,7 @@ const FAKTURA = `urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice
 // Dokumenttypen slik avsenderne spør etter den (med UBL-versjonen).
 const DOKUMENTTYPE = `busdox-docid-qns::${FAKTURA}::2.1`;
 const deltaker = (orgnr: string) => `iso6523-actorid-upis::0192:${orgnr}`;
-const HODER = { "User-Agent": "HI4 Faktura (+https://faktura.hi4.no)", Accept: "application/xml, text/xml;q=0.9, */*;q=0.5" };
+const HODER = { "User-Agent": "Admin Konsoll (+https://adminkonsoll.no)", Accept: "application/xml, text/xml;q=0.9, */*;q=0.5" };
 
 // Base32 (RFC 4648) uten utfylling, som SML-en bruker for SHA-256 av deltaker-id-en.
 function base32(data: Uint8Array) {

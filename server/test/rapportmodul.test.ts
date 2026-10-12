@@ -463,7 +463,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     const e = sendt.find((m) => m.emne.includes("Lønnsjournal"))!;
     expect(e.emne).toBe("Rapport Test AS: Lønnsjournal, Sum per lønnsart, Lønnsbilag (lønnskjøring oktober 2026, utbetalt 20.10.2026)");
     expect(e.tekst).toContain("(lønnskjøringen er godkjent)");
-    expect(e.tekst).toContain("Sendt fra HI4 Faktura av seg selv.");
+    expect(e.tekst).toContain("Sendt fra Admin Konsoll av seg selv.");
     expect(e.vedlegg).toHaveLength(6);
 
     const j = (await kall("GET", `/api/org/${org}/rapportmodul/lonn.journal?kjoring=${kjoring}`)).data;

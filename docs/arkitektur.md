@@ -130,7 +130,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   og `rydd_banktransaksjoner` fjerner de som er hentet (automatisk registrerte angres)
 - `bankkoblinger`: én rad per bank (f.eks. DNB og Storebrand) på samme applikasjon, med egen
   BankID-innlogging, eget samtykke (økt og utløpsdato) og egen henting. Alle kontoene i økten
-  lagres, men bare de som er lagt inn i HI4 Faktura (organisasjonens kontonummer og
+  lagres, men bare de som er lagt inn i Admin Konsoll (organisasjonens kontonummer og
   `kontoer`) vises og leses, hver fra sin egen dato. Appen legger til og fjerner banker;
   workeren lager BankID-adressen, fullfører økten og henter, og appen venter på svaret ved
   å spørre etter statusen

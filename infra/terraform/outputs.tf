@@ -10,9 +10,19 @@ output "app_url" {
   value = "https://${var.app_domain}"
 }
 
-output "dns_for_app_domain" {
-  description = "DNS-oppføringer som må legges inn hos domeneleverandøren for app_domain."
-  value       = google_firebase_hosting_custom_domain.app.required_dns_updates
+output "dns_for_domener" {
+  description = "DNS-oppføringene som må legges inn hos domeneleverandøren, per domene (docs/domene.md)."
+  value       = { for d, r in merge(google_firebase_hosting_custom_domain.domene, google_firebase_hosting_custom_domain.omdirigering) : d => r.required_dns_updates }
+}
+
+output "domenestatus" {
+  description = "Om domenene peker til Firebase (host_state), er bekreftet (ownership_state) og har sertifikat."
+  value = { for d, r in merge(google_firebase_hosting_custom_domain.domene, google_firebase_hosting_custom_domain.omdirigering) : d => {
+    vert        = r.host_state
+    eierskap    = r.ownership_state
+    sertifikat  = try(r.cert[0].state, null)
+    omdirigerer = r.redirect_target
+  } }
 }
 
 output "db_connection_name" {

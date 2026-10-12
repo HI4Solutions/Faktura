@@ -114,7 +114,7 @@ export const datoOgSelger = (g: Grunnlag, naa = new Date()) => {
 
 export function systemtekst(g: Grunnlag, naa = new Date()): string {
   return [
-    "Du lager utkast til fakturaer i fakturaprogrammet HI4 Faktura ut fra det brukeren skriver. Svar bare med JSON etter skjemaet.",
+    "Du lager utkast til fakturaer i Admin Konsoll ut fra det brukeren skriver. Svar bare med JSON etter skjemaet.",
     "",
     datoOgSelger(g, naa),
     "",

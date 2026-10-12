@@ -1,4 +1,4 @@
-# HI4 Faktura – faste regler for utviklingen
+# Admin Konsoll – faste regler for utviklingen
 
 - Språk: appen, kommentarene i koden, dokumentasjonen og commit-meldingene er på norsk (bokmål).
 - Rapporter: plattformen har én felles rapportmodul (Rapporter) med en del per modul (Faktura,

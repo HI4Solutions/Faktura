@@ -177,7 +177,7 @@ export const regnskapRapporter: Rapportdef[] = [
       return {
         merknad: mangler.length
           ? `Avskrivningene er ikke bokført for alle månedene til og med ${maanedNavn(`${sisteMnd}-01`)} for: ${mangler.join(", ")}. Bokfør dem med månedsavslutningen under Regnskap → Anleggsmidler.`
-          : "Verdiene er det som er bokført (avskrivningene måned for måned, nedskrivninger og avganger), og det som er avskrevet før anleggsmiddelet kom inn i HI4.",
+          : "Verdiene er det som er bokført (avskrivningene måned for måned, nedskrivninger og avganger), og det som er avskrevet før anleggsmiddelet kom inn i Admin Konsoll.",
         kolonner: [
           { nokkel: "nummer", navn: "Nr", type: "tekst" },
           { nokkel: "navn", navn: "Anleggsmiddel" },

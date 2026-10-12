@@ -297,7 +297,7 @@ export async function rapportPdf(alt: Rapportresultat, orgNavn: string): Promise
   sider.forEach((s, i) => {
     const t = `Side ${i + 1} av ${sider.length}`;
     s.drawText(t, { x: B - M - font.widthOfTextAtSize(t, 7.5), y: 22, size: 7.5, font, color: grå });
-    s.drawText(rensTekst(`Laget ${laget} i HI4 Faktura`, font), { x: M, y: 22, size: 7.5, font, color: grå });
+    s.drawText(rensTekst(`Laget ${laget} i Admin Konsoll`, font), { x: M, y: 22, size: 7.5, font, color: grå });
   });
   return { filnavn: `${filnavn(r)}.pdf`, data: await doc.save() };
 }
@@ -359,7 +359,7 @@ export async function sendRapporter(o: Utsending) {
     ...(mangler.length ? ["Kunne ikke lages:", ...mangler.map((m) => `- ${m}`), ""] : []),
     "Rapportene ligger vedlagt som PDF og CSV (CSV-filene åpnes i Excel).",
     "",
-    `Sendt fra HI4 Faktura${avsender ? ` av ${avsender.navn ?? avsender.epost}` : " av seg selv"}.`,
+    `Sendt fra Admin Konsoll${avsender ? ` av ${avsender.navn ?? avsender.epost}` : " av seg selv"}.`,
   ].join("\n");
   const esc = tekst.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
   try {

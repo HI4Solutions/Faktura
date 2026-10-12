@@ -78,8 +78,8 @@ export function slettAdminRuter() {
       await leggIKo({
         type: "epost",
         til: eiere,
-        emne: `${s.navn} er slettet fra HI4 Faktura`,
-        tekst: [`Hei,`, ``, `${hvem(s)} er slettet fra HI4 Faktura.`, ``, `Grunn: ${s.grunn}`, ``, utfall(s), ``, `Ta kontakt med HI4 Faktura hvis du har spørsmål.`].join("\n"),
+        emne: `${s.navn} er slettet fra Admin Konsoll`,
+        tekst: [`Hei,`, ``, `${hvem(s)} er slettet fra Admin Konsoll.`, ``, `Grunn: ${s.grunn}`, ``, utfall(s), ``, `Ta kontakt med Admin Konsoll hvis du har spørsmål.`].join("\n"),
       }).catch((e) => console.warn("Kunne ikke varsle eierne om slettingen", e));
     return c.json(s);
   });

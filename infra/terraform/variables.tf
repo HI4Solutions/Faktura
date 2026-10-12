@@ -40,9 +40,21 @@ variable "faktura_retention_locked" {
 }
 
 variable "app_domains" {
-  description = "Domener som får logge inn via Identity Platform (i tillegg til Firebase-domenene)."
+  description = "Andre domener den samme appen svarer på fullt ut (innlogging, passkeys og tilbakeadressene fra banken, Altinn og Google), f.eks. det nye domenet før det blir hoveddomenet. Se docs/domene.md."
+  type        = list(string)
+  default     = ["adminkonsoll.no"]
+}
+
+variable "gamle_domener" {
+  description = "Domener appen er flyttet fra. De virker fortsatt, men appen viser en melding om den nye adressen (hoveddomenet)."
   type        = list(string)
   default     = []
+}
+
+variable "domene_omdirigeringer" {
+  description = "Domener som bare sender videre (301) til et annet domene, med samme sti: { fra = til }."
+  type        = map(string)
+  default     = { "www.adminkonsoll.no" = "adminkonsoll.no" }
 }
 
 variable "alert_email" {
@@ -64,7 +76,7 @@ variable "jobs_region" {
 }
 
 variable "app_domain" {
-  description = "Domenet nettappen og API-et (/api/**) svarer på."
+  description = "Hoveddomenet: nettappen og API-et (/api/**) svarer her, og lenkene i e-post og varsler peker hit. Se docs/domene.md."
   type        = string
   default     = "faktura.hi4.no"
 }
@@ -156,7 +168,7 @@ variable "leverandor_orgnr" {
 variable "altinn_systemnavn" {
   description = "Navnet kundene ser i Altinn når de godkjenner tilgangen. Settes med GitHub-variabelen ALTINN_SYSTEMNAVN."
   type        = string
-  default     = "HI4 Faktura"
+  default     = "Admin Konsoll"
 }
 
 variable "altinn_system_id" {

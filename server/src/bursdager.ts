@@ -42,7 +42,7 @@ export async function sendBursdager(naa = new Date()): Promise<{ varslet: number
                 ``,
                 `${b.navn} i ${org} har bursdag i dag.`,
                 ``,
-                `Du får denne e-posten fordi ${org} har slått på bursdagsvarsler i HI4 Faktura.`,
+                `Du får denne e-posten fordi ${org} har slått på bursdagsvarsler i Admin Konsoll.`,
               ].join("\n"),
             });
       varslet++;

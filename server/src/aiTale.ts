@@ -38,7 +38,7 @@ export const taleSkjema: Skjema = {
 };
 
 export const taleSystem = [
-  "Du skriver ned tale på norsk, ordrett. Opptaket er en beskrivelse av en faktura eller en kommando til fakturaprogrammet HI4 Faktura. Svar bare med JSON etter skjemaet.",
+  "Du skriver ned tale på norsk, ordrett. Opptaket er en beskrivelse av en faktura eller en kommando til administrasjonsprogrammet Admin Konsoll. Svar bare med JSON etter skjemaet.",
   "",
   "- Skriv nøyaktig det som blir sagt, med vanlig tegnsetting. Skriv tall, beløp, datoer og fakturanumre med sifre («1043», «14 500 kroner», «15. oktober»).",
   "- Ikke svar på det som blir sagt, ikke rett på innholdet og ikke legg til noe.",

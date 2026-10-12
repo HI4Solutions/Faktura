@@ -26,7 +26,7 @@ export function Totrinn({ ferdig }: { ferdig?: () => void }) {
       const u = a.currentUser!;
       const s = await TotpMultiFactorGenerator.generateSecret(await multiFactor(u).getSession());
       settHemmelighet(s);
-      settQr(await QRCode.toDataURL(s.generateQrCodeUrl(u.email ?? "", "HI4 Faktura"), { margin: 1, width: 200 }));
+      settQr(await QRCode.toDataURL(s.generateQrCodeUrl(u.email ?? "", "Admin Konsoll"), { margin: 1, width: 200 }));
     } catch (e) {
       settFeil(
         (e as { code?: string }).code === "auth/requires-recent-login"

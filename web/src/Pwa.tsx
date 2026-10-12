@@ -25,11 +25,43 @@ function usePaNett() {
   return paNett;
 }
 
+// Den nye adressen når appen er åpnet på et domene den er flyttet fra (server/src/appadresse.ts).
+function useNyAdresse(): string | null {
+  const [ny, settNy] = useState<string | null>(null);
+  useEffect(() => {
+    let aktiv = true;
+    fetch("/api/offentlig/adresse")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { hovedadresse?: unknown; gamle?: unknown } | null) => {
+        const her = window.location.origin;
+        if (aktiv && d && typeof d.hovedadresse === "string" && d.hovedadresse !== her && Array.isArray(d.gamle) && d.gamle.includes(her))
+          settNy(d.hovedadresse);
+      })
+      .catch(() => {});
+    return () => {
+      aktiv = false;
+    };
+  }, []);
+  return ny;
+}
+
 export function PwaBannere() {
   const { nyVersjon } = usePwa();
   const paNett = usePaNett();
+  const nyAdresse = useNyAdresse();
   return (
     <div className="bannere" aria-live="polite">
+      {nyAdresse && (
+        <div className="banner">
+          <span>
+            Admin Konsoll har ny adresse: <strong>{new URL(nyAdresse).host}</strong>. Logg inn der, og legg til passkey og appen på
+            nytt.
+          </span>
+          <button className="primar" onClick={() => window.location.assign(nyAdresse)}>
+            Gå dit
+          </button>
+        </div>
+      )}
       {!paNett && (
         <div className="banner frakoblet">
           <span className="prikk" /> Du er frakoblet. Endringer kan ikke lagres før du er på nett igjen.
@@ -37,7 +69,7 @@ export function PwaBannere() {
       )}
       {nyVersjon && (
         <div className="banner">
-          En ny versjon av HI4 Faktura er klar.
+          En ny versjon av Admin Konsoll er klar.
           <button className="primar" onClick={oppdaterApp}>
             Oppdater
           </button>

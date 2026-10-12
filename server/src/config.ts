@@ -5,6 +5,14 @@ function valgfri(navn: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
+// Kommaseparerte adresser, uten skråstrek til slutt.
+function adresser(v: string | undefined): string[] {
+  return (v ?? "")
+    .split(",")
+    .map((a) => a.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+}
+
 // I produksjon må APP_URL være satt: den bestemmer passkey-domenet og lenkene i e-post.
 // Mangler den, starter ikke tjenesten, og Cloud Run beholder forrige revisjon.
 if (process.env.NODE_ENV === "production" && !valgfri("APP_URL")) {
@@ -33,6 +41,12 @@ export const config = {
   pubsubTopic: valgfri("PUBSUB_TOPIC"),
 
   appUrl: valgfri("APP_URL") ?? "http://localhost:5173",
+  // Andre adresser den samme appen svarer på (kommaseparert), f.eks. det nye domenet før det blir
+  // hoveddomenet, eller det gamle etter flyttingen. Det brukeren gjør i nettleseren (passkeys,
+  // tilbakeadressene fra banken, Altinn og Google) følger adressen brukeren er på (appadresse.ts).
+  andreAppUrler: adresser(valgfri("ANDRE_APP_URLER")),
+  // De av dem appen er flyttet fra: der vises en melding om den nye adressen.
+  gamleAppUrler: adresser(valgfri("GAMLE_APP_URLER")),
   epostAvsender: valgfri("EPOST_AVSENDER") ?? "faktura@hi4.no",
   resendNokkel: valgfri("RESEND_API_KEY"),
   resendWebhookHemmelighet: valgfri("RESEND_WEBHOOK_SECRET"),
@@ -62,7 +76,7 @@ export const config = {
   leverandorOrgnr: valgfri("LEVERANDOR_ORGNR") ?? "936564046", // Medinnova AS
   altinnSystemId: valgfri("ALTINN_SYSTEM_ID"),
   // Navnet kunden ser i Altinn når tilgangen godkjennes.
-  altinnSystemnavn: valgfri("ALTINN_SYSTEMNAVN") ?? "HI4 Faktura",
+  altinnSystemnavn: valgfri("ALTINN_SYSTEMNAVN") ?? "Admin Konsoll",
   // A-meldingen til Skatteetatens API (docs/amelding.md): på når Medinnova AS har fått scopet
   // skatteetaten:innrapporteringamelding. Da ber systemet også om tilgangspakken «A-ordningen».
   // Uten: a-meldingen lastes ned som XML og lastes opp på skatteetaten.no.

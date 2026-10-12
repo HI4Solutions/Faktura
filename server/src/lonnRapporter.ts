@@ -149,7 +149,7 @@ export const lonnRapporter: Rapportdef[] = [
     modul: "lonn",
     navn: "Lønnsbilag",
     beskrivelse:
-      "Lønnsbilagene i HI4 Fakturas regnskap (serie L) med dato i perioden: lønn, feriepenger, trekk, nettolønn og arbeidsgiveravgift på kontoene, og bilagene som er reversert fordi kjøringen ble åpnet igjen.",
+      "Lønnsbilagene i regnskapet i Admin Konsoll (serie L) med dato i perioden: lønn, feriepenger, trekk, nettolønn og arbeidsgiveravgift på kontoene, og bilagene som er reversert fordi kjøringen ble åpnet igjen.",
     funksjon: "lonn",
     tilgang: "personal_les",
     parameter: "periode",

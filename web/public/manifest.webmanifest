@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "HI4 Faktura",
-  "short_name": "Faktura",
-  "description": "Fakturering for norske bedrifter: send fakturaer, følg opp betalinger og få varsler.",
+  "name": "Admin Konsoll",
+  "short_name": "Admin Konsoll",
+  "description": "Faktura, lønn, personal og regnskap for norske bedrifter, samlet i én konsoll.",
   "lang": "nb",
   "dir": "ltr",
   "start_url": "/",

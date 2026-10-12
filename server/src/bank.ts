@@ -1,5 +1,5 @@
 // Innbetalinger fra organisasjonens bankkontoer (Enable Banking): bare kontoene som er lagt
-// inn i HI4 Faktura. Workeren henter nye transaksjoner på faste tider (HENTETIDER), lagrer
+// inn i Admin Konsoll. Workeren henter nye transaksjoner på faste tider (HENTETIDER), lagrer
 // innbetalingene og kobler dem til fakturaene:
 //
 //   KID, eller fakturanummeret i meldingen sammen med riktig beløp, riktig betaler eller
@@ -13,6 +13,7 @@
 // (type 'bank'); bare workeren kan dekryptere nøkkelen. Hver bank (DNB, Storebrand …) har
 // sin egen kobling i faktura.bankkoblinger med egen BankID-innlogging, økt og kontoer.
 import { randomBytes } from "node:crypto";
+import { appUrler } from "./appadresse.js";
 import { config } from "./config.js";
 import { alle, en, somSystem, type Db } from "./db.js";
 import { dekrypter } from "./kryptering.js";
@@ -45,7 +46,7 @@ import { foreslaFaktura } from "./aiInnbetaling.js";
 const logg = (severity: string, message: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ severity, message, ...data }));
 
 // En konto i banken. hent_fra: neste henting starter her. valgt: kontoen ble lest før appen
-// begynte å lese kontoene som er lagt inn i HI4 Faktura (da gjaldt koblingens hent_fra).
+// begynte å lese kontoene som er lagt inn i Admin Konsoll (da gjaldt koblingens hent_fra).
 export type BankKonto = { uid: string; kontonr: string; navn: string | null; hent_fra?: string; valgt?: boolean };
 export type Bankkobling = {
   id: string;
@@ -71,7 +72,8 @@ export type Bankkobling = {
 // Det som ligger i integrasjonens konfig (applikasjonen).
 export type BankAppKonfig = { leverandor: "enablebanking"; app_id: string; app_navn?: string | null };
 
-export const tilbakeUrl = () => `${config.appUrl}/bank/tilbake`;
+// Adressen banken sender brukeren tilbake til: på domenet brukeren startet fra (appadresse.ts).
+export const tilbakeUrl = (appUrl = config.appUrl) => `${appUrl}/bank/tilbake`;
 export const nyState = (orgId: string) => `${orgId}.${randomBytes(18).toString("base64url")}`;
 
 const iDag = (dager = 0) => {
@@ -120,7 +122,7 @@ export async function bankApp(db: Db, orgId: string): Promise<{ appId: string; n
   return { appId: k.konfig.app_id, nokkel: { appId: k.konfig.app_id, privatNokkel: await dekrypter(k.hemmelighet_kryptert) } };
 }
 
-// Kontonumrene som er lagt inn i HI4 Faktura (organisasjonens kontonummer og Flere
+// Kontonumrene som er lagt inn i Admin Konsoll (organisasjonens kontonummer og Flere
 // kontonumre), med navnet brukeren har gitt kontoen. Bare disse kontoene i bankene leses.
 export async function egneKontoer(db: Db, orgId: string): Promise<Map<string, string | null>> {
   const rader = await alle<{ kontonr: string; navn: string | null }>(
@@ -155,8 +157,9 @@ async function oppdater(id: string, felt: Partial<Bankkobling>) {
 // ---------------------------------------------------------------------------
 
 // Ny BankID-adresse for koblingen: for en ny bank (navnet sjekkes mot Enable Banking
-// først), eller for å fornye samtykket. Appen venter på auth_url.
-export async function lagBankAdresse(orgId: string, koblingId: string) {
+// først), eller for å fornye samtykket. Appen venter på auth_url. Banken sender brukeren tilbake
+// til domenet brukeren startet fra (appUrl, når det er et av appens), ellers til hoveddomenet.
+export async function lagBankAdresse(orgId: string, koblingId: string, appUrl?: string) {
   const [app, k] = await somSystem(async (db) => [await bankApp(db, orgId), await hentKobling(db, orgId, koblingId)] as const);
   if (!app || !k) return;
   const naa = new Date().toISOString();
@@ -170,7 +173,8 @@ export async function lagBankAdresse(orgId: string, koblingId: string) {
     }
     const state = nyState(orgId);
     const gyldig = gyldigTil(maks);
-    const url = await startAutorisering(app.nokkel, { bank, land: k.land, psuType: k.psu_type, gyldigTil: gyldig, state, redirect: tilbakeUrl() });
+    const tilbake = tilbakeUrl(appUrl && appUrler().includes(appUrl) ? appUrl : config.appUrl);
+    const url = await startAutorisering(app.nokkel, { bank, land: k.land, psuType: k.psu_type, gyldigTil: gyldig, state, redirect: tilbake });
     await oppdater(k.id, { bank, maks_sek: maks, state, auth_url: url, auth_tid: naa, auth_gyldig_til: gyldig.toISOString(), siste_feil: null });
   } catch (e) {
     // 23505: banken (med det nøyaktige navnet) er lagt til fra før.
@@ -180,7 +184,7 @@ export async function lagBankAdresse(orgId: string, koblingId: string) {
 }
 
 // Koden fra banken (etter BankID) byttes mot en økt med lesetilgang til kontoene. Alle
-// kontoene i økten lagres, men bare de som er lagt inn i HI4 Faktura leses (også de som
+// kontoene i økten lagres, men bare de som er lagt inn i Admin Konsoll leses (også de som
 // legges inn senere). Hvor langt hver konto er hentet, følger kontonummeret fra forrige økt.
 export async function fullforBankOkt(orgId: string, koblingId: string, kode: string, psu?: Psu) {
   const [app, k] = await somSystem(async (db) => [await bankApp(db, orgId), await hentKobling(db, orgId, koblingId)] as const);
@@ -478,7 +482,7 @@ async function lagreBankposter(orgId: string, kontonummer: string, poster: Bankp
   });
 }
 
-// Henter nye innbetalinger fra kontoene som er lagt inn i HI4 Faktura, i én eller alle
+// Henter nye innbetalinger fra kontoene som er lagt inn i Admin Konsoll, i én eller alle
 // bankene, og kobler dem til fakturaene.
 export async function hentInnbetalinger(orgId: string, valg: { koblingId?: string; psu?: Psu; kilde?: Hentekilde } = {}): Promise<Resultat> {
   const resultat: Resultat = { nye: 0, koblet: 0, forslag: 0 };
@@ -510,8 +514,8 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
   );
   if (!app) return resultat;
   const ai: AiBudsjett = { igjen: aiPaa() && aiAktiv ? AI_PER_HENTING : 0, feil: 0 };
-  // Innbetalinger fra før startdatoen (som standard dagen organisasjonen begynte med HI4
-  // Faktura) hentes ikke, og de som er hentet fra før, ryddes bort.
+  // Innbetalinger fra før startdatoen (som standard dagen organisasjonen begynte med Admin
+  // Konsoll) hentes ikke, og de som er hentet fra før, ryddes bort.
   const startdato = start ?? iDag(-60);
   try {
     await somSystem(async (db) => {
@@ -663,7 +667,7 @@ export async function planleggBankhenting(naa = new Date()): Promise<number> {
   );
   let antall = 0;
   for (const k of rader) {
-    // Banker uten noen konto som er lagt inn i HI4 Faktura, har ingenting å hente. Bare én
+    // Banker uten noen konto som er lagt inn i Admin Konsoll, har ingenting å hente. Bare én
     // kjøring får ta hentetiden (de andre ser at banken alt er merket som hentet).
     if (k.skal_hentes && (await taHentetid(k.id, naa, hentetid!))) {
       await leggIKo({ type: "bank-hent", org_id: k.org_id, kobling_id: k.id });

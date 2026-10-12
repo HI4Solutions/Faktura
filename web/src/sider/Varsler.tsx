@@ -120,7 +120,7 @@ function AppLaasValg() {
       ) : (
         <>
           <p className="dempet liten">
-            Krev {navn} for å åpne HI4 Faktura på denne enheten, så ingen andre ser fakturaene om de får tak i telefonen eller PC-en din.
+            Krev {navn} for å åpne Admin Konsoll på denne enheten, så ingen andre ser fakturaene om de får tak i telefonen eller PC-en din.
             {navn} starter av seg selv når appen åpnes. Låsen bruker passkeyen din på enheten.
           </p>
           <label>
@@ -230,10 +230,10 @@ export function AppOgVarsler() {
       <div className="kort">
         <h2 style={{ marginTop: 0 }}>App</h2>
         {erInstallert() ? (
-          <p className="dempet liten">HI4 Faktura er installert som app på denne enheten.</p>
+          <p className="dempet liten">Admin Konsoll er installert som app på denne enheten.</p>
         ) : kanInstallere ? (
           <>
-            <p className="dempet liten">Installer HI4 Faktura som en app på denne enheten, med eget ikon og vindu.</p>
+            <p className="dempet liten">Installer Admin Konsoll som en app på denne enheten, med eget ikon og vindu.</p>
             <button onClick={() => void installer()}>
               <IkonInstaller storrelse={16} /> Installer appen
             </button>
@@ -241,11 +241,11 @@ export function AppOgVarsler() {
         ) : erIos() ? (
           <p className="dempet liten">
             Trykk på Del-knappen <span aria-hidden="true">⎋</span> i Safari og velg <strong>«Legg til på Hjem-skjerm»</strong> for å
-            bruke HI4 Faktura som en app. Da kan du også få push-varsler.
+            bruke Admin Konsoll som en app. Da kan du også få push-varsler.
           </p>
         ) : (
           <p className="dempet liten">
-            Du kan installere HI4 Faktura som en app fra nettleserens meny («Installer app» eller «Legg til på startskjermen»).
+            Du kan installere Admin Konsoll som en app fra nettleserens meny («Installer app» eller «Legg til på startskjermen»).
           </p>
         )}
         <UtseendeValg />

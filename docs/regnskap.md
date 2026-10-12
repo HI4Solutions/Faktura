@@ -1,6 +1,6 @@
 # Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, mva-meldingen, årsoppgjøret og SAF-T, anleggsmidler, periodiseringer og saldoavskrivninger
 
-Regnskapsmodulen er HI4 Fakturas eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
+Regnskapsmodulen er Admin Konsolls eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
 hovedboken, fakturaene og innbetalingene som bokføres av seg selv, utgiftene (leverandørfakturaer og
 kvitteringer, lest med AI og vurdert av reglene), alle transaksjonene i banken (ført og avstemt av
@@ -124,7 +124,7 @@ av seg selv.
 
 - **Bankpostene** kommer fra banken (open banking gjennom Enable Banking) i de samme hentingene som
   innbetalingene: på de faste hentetidene og når noen henter selv. Hver bokførte transaksjon på
-  kontoene som er lagt inn i HI4 Faktura, blir en bankpost med datoen, beløpet, motparten og
+  kontoene som er lagt inn i Admin Konsoll, blir en bankpost med datoen, beløpet, motparten og
   kontonummeret, meldingen og KID-en. Første gang hentes de fra startdatoen (høyst 89 dager
   tilbake, som bankene tillater uten BankID). Saldoen i banken hentes når brukeren henter selv
   («Hent nå», når appen åpnes eller etter BankID), eller kommer med postene når banken sender
@@ -366,7 +366,7 @@ regnskapsføreren kan lese inn. Versjon 1.30 for årene før 2027 og 1.40 fra 20
   appen er 5 år, og skjemaet sier fra når levetiden settes over 10 år. En nedskrivning av goodwill
   kan ikke reverseres. Tomt avskrives ikke.
 - Et anleggsmiddel som er ført i et annet system før, legges inn med det som er avskrevet til og
-  med en måned; HI4 avskriver resten fra måneden etter.
+  med en måned; Admin Konsoll avskriver resten fra måneden etter.
 
 ## Bokføringen (bilagserie A)
 
@@ -470,7 +470,7 @@ næringsspesifikasjonen (rapporten «Saldoskjema» under Rapporter → Regnskap)
   skattemeldingen.
 - Immaterielle rettigheter som taper seg i verdi, avskrives lineært; tomt avskrives ikke.
 - Satsen kan settes lavere for et år og en gruppe, og for et driftsmiddel med egen saldo.
-- **Startverdier**: det første året i HI4 og saldoene ved inngangen til det året fra
+- **Startverdier**: det første året i Admin Konsoll og saldoene ved inngangen til det året fra
   skattemeldingen (samlesaldoene a, c og d og gevinst- og tapskontoen), og den skattemessige
   saldoen på hvert driftsmiddel med egen saldo som er ført før. Uten startverdier regnes saldoene
   fra registeret.

@@ -485,7 +485,7 @@ function AnleggSkjema({ oppsett, naa, bokfort, lagret, avbryt }: { oppsett: Opps
           </label>
           {(enkelt || s.skatt === "lineaer") && (
             <label>
-              Skattemessig saldo ved inngangen til det første året i HI4 (kr)
+              Skattemessig saldo ved inngangen til det første året i Admin Konsoll (kr)
               <input inputMode="decimal" value={s.skatt_inngaende} onChange={(e) => sett({ skatt_inngaende: e.target.value })} />
             </label>
           )}
@@ -663,7 +663,7 @@ function AnleggDetalj({ id, tilbake }: { id: string; tilbake: () => void }) {
         <div className="kort">
           <div className="etikett">Kostpris</div>
           <div className="verdi">{kr(a.kostpris)}</div>
-          <div className="under">{a.restverdi ? `Restverdi ${kr(a.restverdi)}` : a.tidligere_til ? `Avskrevet ${kr(a.tidligere_avskrevet)} før HI4` : "Uten restverdi"}</div>
+          <div className="under">{a.restverdi ? `Restverdi ${kr(a.restverdi)}` : a.tidligere_til ? `Avskrevet ${kr(a.tidligere_avskrevet)} før Admin Konsoll` : "Uten restverdi"}</div>
         </div>
         <div className="kort">
           <div className="etikett">Bokført verdi</div>
@@ -1202,7 +1202,7 @@ function Saldoavskrivninger() {
       <form className="kort" onSubmit={lagreStart}>
         <h3 style={{ marginTop: 0 }}>Startverdier</h3>
         <p className="liten dempet">
-          Det første året saldoene regnes i HI4 ({d.oppsett.saldo_fra_aar ?? `nå ${d.fra_aar}, regnet fra anleggsmidlene`}), og saldoene ved inngangen til det året fra
+          Det første året saldoene regnes i Admin Konsoll ({d.oppsett.saldo_fra_aar ?? `nå ${d.fra_aar}, regnet fra anleggsmidlene`}), og saldoene ved inngangen til det året fra
           skattemeldingen (samlesaldoene og gevinst- og tapskontoen). Driftsmidler med egen saldo har inngående saldo på anleggsmiddelet.
         </p>
         {!start ? (
@@ -1221,7 +1221,7 @@ function Saldoavskrivninger() {
           <>
             <div className="bokforing-kontoer">
               <label>
-                Første år i HI4
+                Første år i Admin Konsoll
                 <input inputMode="numeric" placeholder={String(d.fra_aar)} value={start.fra} onChange={(e) => settStart({ ...start, fra: e.target.value })} />
               </label>
               {(["a", "c", "d"] as const).map((g) => (

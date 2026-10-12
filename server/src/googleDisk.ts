@@ -1,10 +1,11 @@
 // Google Disk: OAuth med scope drive.file (bare filer appen selv lager, og mapper
 // brukeren velger i Google Picker), kryptert refresh token (Cloud KMS) og kopi av
-// fakturaer rett i mappen brukeren har valgt, eller i «HI4 Faktura/<organisasjon>/<år>/».
+// fakturaer rett i mappen brukeren har valgt, eller i «Admin Konsoll/<organisasjon>/<år>/».
 import { Hono, type Context } from "hono";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { dekrypter, krypter } from "./kryptering.js";
 import { z } from "zod";
+import { appUrler, appUrlFra } from "./appadresse.js";
 import { config } from "./config.js";
 import { alle, en, somBruker, somSystem, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
@@ -13,20 +14,23 @@ import { leggIKo } from "./tjenester.js";
 
 // drive.file gir bare tilgang til filer appen selv lager; e-post viser hvilken konto som er koblet.
 const SCOPE = "openid email https://www.googleapis.com/auth/drive.file";
-const ROTMAPPE = "HI4 Faktura";
-const redirectUri = () => `${config.appUrl}/api/offentlig/google/callback`;
+const ROTMAPPE = "Admin Konsoll";
+// Google sender brukeren tilbake til domenet brukeren startet fra (appadresse.ts). Adressen må stå
+// under «Authorized redirect URIs» på OAuth-klienten, for hvert av appens domener.
+const redirectUri = (appUrl: string) => `${appUrl}/api/offentlig/google/callback`;
 
 export const diskKonfigurert = () =>
   Boolean(config.googleClientId && config.googleClientSecret && config.googleClientSecret !== "ikke-satt");
 
 // --- Signert state, så callbacken vet hvilken organisasjon og bruker det gjelder ---
-export function signerState(data: { bruker: string }, naa = Date.now()): string {
+export function signerState(data: { bruker: string; adresse?: string }, naa = Date.now()): string {
   const kropp = Buffer.from(JSON.stringify({ ...data, n: randomBytes(8).toString("hex"), exp: naa + 10 * 60_000 })).toString("base64url");
   const sig = createHmac("sha256", config.googleClientSecret ?? "").update(kropp).digest("base64url");
   return `${kropp}.${sig}`;
 }
 
-export function lesState(state: string, naa = Date.now()): { bruker: string } {
+// adresse: domenet brukeren startet fra, når det er et av appens; ellers hoveddomenet.
+export function lesState(state: string, naa = Date.now()): { bruker: string; adresse: string } {
   const [kropp, sig] = state.split(".");
   if (!kropp || !sig) throw new ApiFeil(400, "Ugyldig state");
   const forventet = createHmac("sha256", config.googleClientSecret ?? "").update(kropp).digest();
@@ -34,7 +38,7 @@ export function lesState(state: string, naa = Date.now()): { bruker: string } {
   if (mottatt.length !== forventet.length || !timingSafeEqual(mottatt, forventet)) throw new ApiFeil(400, "Ugyldig state");
   const d = JSON.parse(Buffer.from(kropp, "base64url").toString());
   if (d.exp < naa) throw new ApiFeil(400, "Koblingen tok for lang tid. Prøv igjen.");
-  return { bruker: d.bruker };
+  return { bruker: d.bruker, adresse: typeof d.adresse === "string" && appUrler().includes(d.adresse) ? d.adresse : config.appUrl };
 }
 
 // Kryptering med Cloud KMS ligger i kryptering.ts (felles med push-varsler).
@@ -140,21 +144,22 @@ export function diskRuter() {
   r.post("/start", async (c) => {
     if (!diskKonfigurert()) throw new ApiFeil(503, "Google Disk er ikke satt opp på plattformen ennå");
     const b = c.get("bruker");
+    const adresse = appUrlFra(c);
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     url.search = new URLSearchParams({
       client_id: config.googleClientId!,
-      redirect_uri: redirectUri(),
+      redirect_uri: redirectUri(adresse),
       response_type: "code",
       scope: SCOPE,
       access_type: "offline",
       prompt: "consent select_account",
-      state: signerState({ bruker: b.id }),
+      state: signerState({ bruker: b.id, adresse }),
     }).toString();
     return c.json({ url: url.toString() });
   });
 
   // Bytt mappe: { id, navn } fra Google Picker i nettleseren (fakturaene legges rett i
-  // mappen), eller { standard: true } for en ny «HI4 Faktura» med undermapper. Picker gir appen tilgang til mappen selv med drive.file.
+  // mappen), eller { standard: true } for en ny «Admin Konsoll» med undermapper. Picker gir appen tilgang til mappen selv med drive.file.
   // API-et kan ikke dekryptere Google-tilgangen, så workeren oppdager en ugyldig mappe
   // ved neste kopiering og markerer koblingen med feil. Valgte organisasjoner kopieres
   // på nytt til den nye mappen.
@@ -215,13 +220,19 @@ export function diskRuter() {
 export function googleCallback() {
   const r = new Hono();
   r.get("/callback", async (c) => {
-    const tilbake = (status: string) => c.redirect(`${config.appUrl}/innstillinger?disk=${status}`);
-    if (c.req.query("error")) return tilbake("avbrutt");
-    const { bruker } = lesState(c.req.query("state") ?? "");
+    let state: ReturnType<typeof lesState> | null = null;
+    try {
+      state = lesState(c.req.query("state") ?? "");
+    } catch (e) {
+      if (!c.req.query("error")) throw e;
+    }
+    const tilbake = (status: string) => c.redirect(`${state?.adresse ?? config.appUrl}/innstillinger?disk=${status}`);
+    if (c.req.query("error") || !state) return tilbake("avbrutt");
+    const { bruker, adresse } = state;
     const kode = c.req.query("code");
     if (!kode) return tilbake("feil");
     try {
-      const t = await tokenKall({ code: kode, grant_type: "authorization_code", redirect_uri: redirectUri() });
+      const t = await tokenKall({ code: kode, grant_type: "authorization_code", redirect_uri: redirectUri(adresse) });
       if (!t.refresh_token) return tilbake("mangler-tilgang");
       let googleEpost: string | null = null;
       try {
@@ -274,7 +285,7 @@ async function tokenFor(db: Db, brukerId: string): Promise<Tilgang | null> {
   const k = await en(db, "select rotmappe, undermapper, hemmelighet_kryptert from faktura.disk_koblinger where bruker_id = $1 and status = 'aktiv'", [brukerId]);
   if (!k) return null;
   const { access_token } = await tokenKall({ refresh_token: await dekrypter(k.hemmelighet_kryptert), grant_type: "refresh_token" });
-  // Ingen mappe valgt (brukeren gikk tilbake til standard): lag «HI4 Faktura».
+  // Ingen mappe valgt (brukeren gikk tilbake til standard): lag «Admin Konsoll».
   let rotmappe: string = k.rotmappe;
   if (!rotmappe) {
     const ny = await lagMappe(access_token, ROTMAPPE);

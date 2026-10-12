@@ -88,7 +88,9 @@ export function oppdaterLegitimasjon(id: string, passkeys: string[]) {
   lagreLaas({ ...l, legitimasjon: passkeys });
 }
 
-export const hentPasskeyIder = async () => (await api<{ id: string }[]>("GET", "/passkeys")).map((p) => p.id);
+// Passkeyene som virker her: en passkey hører til domenet den er laget på (rp_id).
+export const passkeyHer = (p: { rp_id?: string | null }) => !p.rp_id || p.rp_id === window.location.hostname;
+export const hentPasskeyIder = async () => (await api<{ id: string; rp_id?: string | null }[]>("GET", "/passkeys")).filter(passkeyHer).map((p) => p.id);
 
 export async function stotterApplaas(): Promise<boolean> {
   try {

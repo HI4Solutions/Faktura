@@ -189,7 +189,7 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
     <div className="laas" role="dialog" aria-modal="true" aria-label="Appen er låst" onClick={() => lasOpp(false)}>
       <div className="laas-innhold">
         <LogoIkon storrelse={72} animert={false} />
-        <h1>HI4 Faktura er låst</h1>
+        <h1>Admin Konsoll er låst</h1>
         <p className="laas-hvem">{navn || " "}</p>
         <button type="button" className="primar laas-knapp" autoFocus>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

@@ -46,7 +46,7 @@ const APNE: [string, string][] = [
 export const krevGodkjentKonto: MiddlewareHandler = async (c, next) => {
   const b = c.get("bruker");
   if (c.req.path.startsWith("/api/offentlig/") || b.status === "godkjent" || APNE.some(([m, sti]) => m === c.req.method && sti === c.req.path)) return next();
-  throw new ApiFeil(403, b.status === "avvist" ? "Kontoen er ikke godkjent" : "Kontoen venter på godkjenning fra HI4 Faktura");
+  throw new ApiFeil(403, b.status === "avvist" ? "Kontoen er ikke godkjent" : "Kontoen venter på godkjenning fra Admin Konsoll");
 };
 
 // Når kontoen venter, e-postadressen er bekreftet, navnet skrevet inn og modulene valgt: e-post
@@ -65,7 +65,7 @@ export async function meldNyKonto(c: Context) {
     til: config.adminEposter,
     emne: `Ny konto venter på godkjenning: ${ny.navn}`,
     tekst: [
-      `${ny.navn} (${ny.epost}) har laget en konto i HI4 Faktura og bekreftet e-postadressen.`,
+      `${ny.navn} (${ny.epost}) har laget en konto i Admin Konsoll og bekreftet e-postadressen.`,
       ``,
       `Moduler: ${opplisting(ny.moduler)}`,
       ``,
@@ -103,17 +103,17 @@ export function kontoAdminRuter() {
       til: [b.epost],
       ...(k.godkjent
         ? {
-            emne: "Kontoen din i HI4 Faktura er godkjent",
+            emne: "Kontoen din i Admin Konsoll er godkjent",
             tekst: [
               hei,
               ``,
-              `Kontoen din i HI4 Faktura er godkjent${b.moduler.length ? ` med ${opplisting(b.moduler)}` : ""}, og du kan logge inn nå:`,
+              `Kontoen din i Admin Konsoll er godkjent${b.moduler.length ? ` med ${opplisting(b.moduler)}` : ""}, og du kan logge inn nå:`,
               config.appUrl,
             ].join("\n"),
           }
         : {
-            emne: "Kontoen din i HI4 Faktura er ikke godkjent",
-            tekst: [hei, ``, `Kontoen din i HI4 Faktura ble ikke godkjent.${b.avvist_grunn ? ` Begrunnelse: ${b.avvist_grunn}` : ""}`, ``, `Ta kontakt med HI4 Faktura hvis du mener dette er feil.`].join(
+            emne: "Kontoen din i Admin Konsoll er ikke godkjent",
+            tekst: [hei, ``, `Kontoen din i Admin Konsoll ble ikke godkjent.${b.avvist_grunn ? ` Begrunnelse: ${b.avvist_grunn}` : ""}`, ``, `Ta kontakt med Admin Konsoll hvis du mener dette er feil.`].join(
               "\n",
             ),
           }),

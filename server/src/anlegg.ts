@@ -307,7 +307,7 @@ export type Planmaaned = { maaned: string; belop: number; bokfort: boolean; bila
 const gjelder = (a: Anleggsmiddel, hendelser: Hendelse[]) => hendelser.filter((h) => h.anleggsmiddel_id === a.id && !h.reversert);
 const endring = (h: Hendelse) => (h.type === "nedskrivning" ? -ore(h.belop) : h.type === "reversering" ? ore(h.belop) : 0);
 
-// Den første måneden som avskrives i HI4 (etter det som er ført i et annet system), og den siste i
+// Den første måneden som avskrives i Admin Konsoll (etter det som er ført i et annet system), og den siste i
 // levetiden.
 export function forsteMaaned(a: Anleggsmiddel) {
   const start = mnd(a.avskrives_fra);
@@ -352,7 +352,7 @@ export function avskrivningsplan(a: Anleggsmiddel, hendelser: Hendelse[]): Planm
 }
 
 // Den bokførte verdien per dato (det som er bokført til og med datoen): kostprisen minus det som er
-// avskrevet før HI4, avskrivningene, nedskrivningene og reverseringene; null etter avgangen.
+// avskrevet før Admin Konsoll, avskrivningene, nedskrivningene og reverseringene; null etter avgangen.
 export function bokfortVerdi(a: Anleggsmiddel, hendelser: Hendelse[], dato: string) {
   const mine = gjelder(a, hendelser).filter((h) => h.dato <= dato);
   if (mine.some((h) => h.type === "avgang")) return 0;
@@ -364,7 +364,7 @@ export function bokfortVerdi(a: Anleggsmiddel, hendelser: Hendelse[], dato: stri
   return kr(o);
 }
 
-// Summene for registeret: det som er avskrevet (før HI4 og bokført) og nedskrevet (netto) til og
+// Summene for registeret: det som er avskrevet (før Admin Konsoll og bokført) og nedskrevet (netto) til og
 // med datoen, og verdien.
 export function status(a: Anleggsmiddel, hendelser: Hendelse[], dato: string) {
   const mine = gjelder(a, hendelser).filter((h) => h.dato <= dato);

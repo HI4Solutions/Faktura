@@ -60,7 +60,7 @@ function Krever({ kode, navn, children }: { kode: Funksjon | Funksjon[]; navn: s
       <h1>{navn}</h1>
       <div className="kort">
         <Tom ikon={<IkonSkjold storrelse={22} />} tittel={`${navn} er ikke slått på`}>
-          <p>Funksjonen er ikke slått på for {org?.navn}. Ta kontakt med HI4 Faktura hvis dere vil ha den.</p>
+          <p>Funksjonen er ikke slått på for {org?.navn}. Ta kontakt med Admin Konsoll hvis dere vil ha den.</p>
         </Tom>
       </div>
     </>
@@ -211,7 +211,7 @@ function Ramme() {
   if (ny || orgs.length === 0) {
     return (
       <div className="innhold frittstaende" style={{ margin: "0 auto" }}>
-        <h1>{orgs.length === 0 ? "Velkommen til HI4 Faktura" : "Ny organisasjon"}</h1>
+        <h1>{orgs.length === 0 ? "Velkommen til Admin Konsoll" : "Ny organisasjon"}</h1>
         {orgs.length === 0 && (
           <p className="dempet">
             {/* Uten Faktura blant modulene (bare Bemanning) er det ikke fakturering det handler om. */}
@@ -243,7 +243,7 @@ function Ramme() {
             className="ikon"
             aria-label="Logg ut"
             title="Logg ut"
-            onClick={() => confirm("Logge ut av HI4 Faktura?") && void loggUt()}
+            onClick={() => confirm("Logge ut av Admin Konsoll?") && void loggUt()}
           >
             <IkonLoggUt storrelse={20} />
           </button>
@@ -578,7 +578,7 @@ function Sider() {
   if (!bruker.emailVerified) return <BekreftEpost epost={bruker.email ?? ""} loggUt={loggUt} />;
   if (!meg) return <div className="sentrert"><Laster /></div>;
   if (!meg.bruker.navn || meg.bruker.navn.trim().length < 2) return <OppgiNavn />;
-  // Nye kontoer venter på godkjenning fra HI4 Faktura (en invitasjon godkjenner kontoen).
+  // Nye kontoer venter på godkjenning fra Admin Konsoll (en invitasjon godkjenner kontoen).
   if ((meg.bruker.status ?? "godkjent") !== "godkjent")
     return (
       <Routes>

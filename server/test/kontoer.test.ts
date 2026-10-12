@@ -54,7 +54,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     expect(meg.organisasjoner).toEqual([]);
     const r = await kall("POST", "/api/organisasjoner", nina, { navn: "Ninas firma AS" });
     expect(r.status).toBe(403);
-    expect(r.data.error).toBe("Kontoen venter på godkjenning fra HI4 Faktura");
+    expect(r.data.error).toBe("Kontoen venter på godkjenning fra Admin Konsoll");
     expect((await kall("GET", "/api/kpi", nina)).status).toBe(403);
     expect(tilAdmin("nina.konto@server.test")).toHaveLength(0);
   });
@@ -102,7 +102,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     const r = await kall("POST", `/api/admin/brukere/${id}/godkjenning`, admin, { godkjent: true, moduler: ["faktura"] });
     expect(r.data).toMatchObject({ status: "godkjent", moduler: ["Faktura"] });
     const e = eposter("nina.konto@server.test").at(-1)!;
-    expect(e.emne).toBe("Kontoen din i HI4 Faktura er godkjent");
+    expect(e.emne).toBe("Kontoen din i Admin Konsoll er godkjent");
     expect(e.tekst).toContain("Hei Nina,");
     expect(e.tekst).toContain("godkjent med Faktura");
     expect((await kall("GET", "/api/admin/brukere", admin)).data.find((b: any) => b.id === id)).toMatchObject({ status: "godkjent", moduler: ["faktura"] });

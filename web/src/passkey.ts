@@ -41,13 +41,13 @@ export function passkeyFeil(e: unknown): string {
   const navn = (e as Error)?.name;
   const melding = (e as Error)?.message ?? "";
   if (navn === "NotAllowedError")
-    return "Passkey ble avbrutt eller ikke tillatt. Fikk du ikke opp noe vindu, sjekk at adresselinjen viser hengelås og ikke «Ikke sikker» (start nettleseren på nytt om nødvendig), og at enheten har skjermlås, Face ID, Touch ID eller Windows Hello slått på.";
+    return "Passkey ble avbrutt eller ikke tillatt. Fikk du ikke opp noe vindu, sjekk at adresselinjen viser hengelås og ikke «Ikke sikker» (start nettleseren på nytt om nødvendig), og at enheten har skjermlås, Face ID, Touch ID eller Windows Hello slått på. En passkey virker bare på adressen den ble laget på.";
   if (navn === "InvalidStateError") return "Denne enheten har allerede en passkey for kontoen din.";
-  if (navn === "SecurityError") return `Nettleseren godtok ikke domenet for passkey (${melding}). Bruk https://faktura.hi4.no.`;
+  if (navn === "SecurityError") return `Nettleseren godtok ikke domenet for passkey (${melding}). Bruk https://adminkonsoll.no.`;
   if (navn === "NotSupportedError") return "Enheten eller nettleseren støtter ikke passkeys.";
   if (navn === "AbortError") return "Passkey ble avbrutt. Trykk på knappen for å prøve igjen.";
-  if (navn === "TimeoutError") return "Fikk ikke svar fra HI4 Faktura i tide. Sjekk nettet og prøv igjen.";
-  if (navn === "TypeError" && /fetch|load failed|network/i.test(melding)) return "Fikk ikke kontakt med HI4 Faktura. Sjekk nettet og prøv igjen.";
+  if (navn === "TimeoutError") return "Fikk ikke svar fra Admin Konsoll i tide. Sjekk nettet og prøv igjen.";
+  if (navn === "TypeError" && /fetch|load failed|network/i.test(melding)) return "Fikk ikke kontakt med Admin Konsoll. Sjekk nettet og prøv igjen.";
   return melding || "Noe gikk galt med passkey.";
 }
 

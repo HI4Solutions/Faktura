@@ -418,7 +418,7 @@ export async function lagSaft(db: Db, org: string, aar: number, bruker: { navn: 
     t("AuditFileCountry", "NO"),
     t("AuditFileDateCreated", naa.dato),
     t("SoftwareCompanyName", "HI4 Solutions"),
-    t("SoftwareID", "HI4 Faktura"),
+    t("SoftwareID", "Admin Konsoll"),
     t("SoftwareVersion", "1.0"),
     el("Company", [
       t("RegistrationNumber", o.orgnr, 35),
@@ -434,7 +434,7 @@ export async function lagSaft(db: Db, org: string, aar: number, bruker: { navn: 
     ]),
     t("DefaultCurrencyCode", "NOK"),
     el("SelectionCriteria", [t("PeriodStart", 1), t("PeriodStartYear", aar), t("PeriodEnd", 12), t("PeriodEndYear", aar)]),
-    t("HeaderComment", `Regnskapet for ${aar} fra HI4 Faktura: kontoene, kundene, leverandørene, mva-kodene og alle bilagene.`),
+    t("HeaderComment", `Regnskapet for ${aar} fra Admin Konsoll: kontoene, kundene, leverandørene, mva-kodene og alle bilagene.`),
     t("TaxAccountingBasis", "A"),
   ]);
   const kontoXml = kontoliste

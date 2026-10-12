@@ -100,7 +100,7 @@ describe("a-meldingen (uten database)", () => {
     const { leveranse } = byggLeveranse(GRUNNLAG, VALG) as any;
     expect(leveranse).toMatchObject({
       kalendermaaned: "2026-11",
-      kildesystem: "HI4 Faktura",
+      kildesystem: "Admin Konsoll",
       meldingsId: VALG.meldingsId,
       opplysningspliktig: { norskIdentifikator: "915000177" },
       spraakForTilbakemelding: "bokmaal",

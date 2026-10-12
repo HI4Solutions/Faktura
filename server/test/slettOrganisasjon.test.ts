@@ -67,7 +67,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sletting av organisasjoner", () => {
     expect(r.data).toMatchObject({ navn: "Ferdig Drift AS", antall_fakturaer: 1, oppbevares_til: `${aar}-12-31` });
     expect((await kall("GET", "/api/meg")).data.organisasjoner.map((o: any) => o.id)).not.toContain(b);
     const e = eposter("slettorg-eier@server.test").at(-1)!;
-    expect(e.emne).toBe("Ferdig Drift AS er slettet fra HI4 Faktura");
+    expect(e.emne).toBe("Ferdig Drift AS er slettet fra Admin Konsoll");
     expect(e.tekst).toContain("Grunn: Konkurs");
     expect(e.tekst).toContain(`1 utstedt faktura oppbevares til 31.12.${aar}`);
     // Ikke i administrasjonens liste, men blant de slettede, med grunnen.

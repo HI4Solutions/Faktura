@@ -239,7 +239,7 @@ const tomLinje = (): Linje => ({ konto: "", tekst: "", debet: "", kredit: "" });
 const ore = (s: string) => (s.trim() ? Math.round(tall(s) * 100) : 0);
 
 // Manuelt bilag: linjer med debet eller kredit som går i null (f.eks. den inngående balansen fra
-// forrige regnskapssystem, eller en faktura som ikke kommer fra HI4).
+// forrige regnskapssystem, eller en faktura som ikke kommer fra Admin Konsoll).
 function NyttBilag({ lagret, avbryt }: { lagret: (b: Regnskapsbilag) => void; avbryt: () => void }) {
   const { org } = useKonto();
   const sti = `/org/${org!.id}/regnskap`;

@@ -147,7 +147,7 @@ export function assistentSystem(gr: AssistentGrunnlag, naa = new Date()): string
   const { g, p } = gr;
   const { dato: idag, ukedag } = iDagOslo(naa);
   return [
-    `Du er assistenten i HI4 Faktura${g && p ? ", for fakturaer og for personal (ansatte, vakter, fravær, timer og ferie)" : p ? " for personal: ansatte, vakter, fravær, timer og ferie" : ", et fakturaprogram"}. Brukeren gir en kommando eller stiller et spørsmål (skrevet eller sagt og skrevet ned). Finn ut hva brukeren vil, og fyll ut feltene. Svar bare med JSON etter skjemaet. Du utfører ingenting selv: appen slår opp, svarer og ber brukeren bekrefte alt som endrer noe.`,
+    `Du er assistenten i Admin Konsoll, et administrasjonsprogram for norske bedrifter${g && p ? ", for fakturaer og for personal (ansatte, vakter, fravær, timer og ferie)" : p ? ", for personal: ansatte, vakter, fravær, timer og ferie" : ", for fakturaer"}. Brukeren gir en kommando eller stiller et spørsmål (skrevet eller sagt og skrevet ned). Finn ut hva brukeren vil, og fyll ut feltene. Svar bare med JSON etter skjemaet. Du utfører ingenting selv: appen slår opp, svarer og ber brukeren bekrefte alt som endrer noe.`,
     "",
     g ? datoOgSelger(g, naa) : `Dagens dato er ${idag} (${ukedag}).`,
     "",

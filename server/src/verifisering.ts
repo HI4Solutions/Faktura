@@ -161,11 +161,11 @@ export function verifiseringRuter() {
       await leggIKo({
         type: "epost",
         til: [enhet.epost],
-        emne: `Bekreftelseskode for ${enhet.navn} i HI4 Faktura`,
+        emne: `Bekreftelseskode for ${enhet.navn} i Admin Konsoll`,
         tekst: [
           `Hei,`,
           ``,
-          `${b.epost} vil bruke HI4 Faktura til å fakturere på vegne av ${enhet.navn} (org.nr. ${enhet.orgnr}).`,
+          `${b.epost} vil bruke Admin Konsoll til å fakturere på vegne av ${enhet.navn} (org.nr. ${enhet.orgnr}).`,
           `Denne adressen står som foretakets e-post i Enhetsregisteret.`,
           ``,
           `Bekreftelseskode: ${kode}`,

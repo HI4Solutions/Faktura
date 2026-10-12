@@ -257,12 +257,12 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     svar["GET /application"] = () => json(401, { message: "Invalid JWT", error: "UNAUTHORIZED" });
     expect((await api("PUT", `/api/org/${org}/bank`, kropp)).data.error).toContain("Enable Banking godtok ikke nøkkelen");
 
-    svar["GET /application"] = () => json(200, { name: "HI4 Faktura", redirect_urls: ["https://annen.no/tilbake"] });
+    svar["GET /application"] = () => json(200, { name: "Admin Konsoll", redirect_urls: ["https://annen.no/tilbake"] });
     svar["GET /aspsps"] = () => json(200, { aspsps: [dnb, storebrand, { name: "Nordea", country: "NO" }] });
     expect((await api("PUT", `/api/org/${org}/bank`, kropp)).data.error).toBe(
       "Legg inn http://localhost:5173/bank/tilbake som «Allowed redirect URL» i applikasjonen hos Enable Banking, og prøv igjen.",
     );
-    svar["GET /application"] = () => json(200, { name: "HI4 Faktura", redirect_urls: ["http://localhost:5173/bank/tilbake"] });
+    svar["GET /application"] = () => json(200, { name: "Admin Konsoll", redirect_urls: ["http://localhost:5173/bank/tilbake"] });
     expect((await api("PUT", `/api/org/${org}/bank`, { ...kropp, bank: "Sbanken" })).data.error).toBe("Fant ikke banken «Sbanken» hos Enable Banking.");
     expect((await api("PUT", `/api/org/${org}/bank`, kropp, fremmed)).status).toBe(403);
     expect(await integrasjon()).toBeUndefined();
@@ -271,7 +271,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     // Nøkkelen limt inn i det skjulte feltet (én linje): lagres som vanlig PEM.
     const r = await api("PUT", `/api/org/${org}/bank`, { ...kropp, privat_nokkel: privat.replace(/\n/g, "") });
     expect(r.status).toBe(200);
-    expect(r.data).toMatchObject({ url: "https://bank.test/bankid?x=1", tilkoblet: false, app: { app_id: APP, app_navn: "HI4 Faktura" } });
+    expect(r.data).toMatchObject({ url: "https://bank.test/bankid?x=1", tilkoblet: false, app: { app_id: APP, app_navn: "Admin Konsoll" } });
     expect(r.data.koblinger).toHaveLength(1);
     expect(r.data.koblinger[0]).toMatchObject({ id: r.data.kobling_id, bank: "DNB", psu_type: "business", status: "venter", tilkoblet: false, kontoer: [] });
     dnbId = r.data.kobling_id;
@@ -286,11 +286,11 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     expect(JSON.parse(Buffer.from(auth.auth!.split(" ")[1].split(".")[0], "base64url").toString()).kid).toBe(APP);
     const i = await integrasjon();
     expect(i!.hemmelighet_kryptert.toString()).toBe(`kryptert:${privat.trim()}`);
-    expect(i!.konfig).toEqual({ leverandor: "enablebanking", app_id: APP, app_navn: "HI4 Faktura" });
+    expect(i!.konfig).toEqual({ leverandor: "enablebanking", app_id: APP, app_navn: "Admin Konsoll" });
     expect((await kobling(dnbId))!.state).toBe(auth.kropp.state);
   });
 
-  it("fullfører etter BankID: viser bare kontoen som er lagt inn i HI4 Faktura", async () => {
+  it("fullfører etter BankID: viser bare kontoen som er lagt inn i Admin Konsoll", async () => {
     expect((await api("POST", `/api/org/${org}/bank/fullfor`, { code: "kode-1", state: `${org}.feil-tilstand` })).status).toBe(400);
     const state = (await kobling(dnbId))!.state;
     const r = await api("POST", `/api/org/${org}/bank/fullfor`, { code: "kode-1", state });
@@ -457,7 +457,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
       ["Storebrand Bank", "aktiv", true],
     ]);
     expect(ko.at(-1)).toMatchObject({ type: "bank-hent", org_id: org, kobling_id: sbId });
-    // Husleiekontoen er ikke lagt inn i HI4 Faktura ennå: den vises ikke, og ingenting hentes.
+    // Husleiekontoen er ikke lagt inn i Admin Konsoll ennå: den vises ikke, og ingenting hentes.
     expect(s.koblinger[1]).toMatchObject({ kontoer: [], andre_kontoer: 1 });
     svar["GET /accounts/:uid/transactions"] = (k) =>
       k.sti.startsWith("/accounts/k-husleie/") ? json(200, { transactions: [inn("sb1", 1000, "KARI HANSEN", "Husleie faktura 3")] }) : json(200, { transactions: [] });
@@ -587,7 +587,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     const kveld = new Date("2026-10-06T16:00:00Z"); // 18:00 i Oslo
     const lagt = (fra: number) => ko.slice(fra).filter((o: any) => o.type === "bank-hent" && o.org_id === org).map((o: any) => o.kobling_id).sort();
     const nullstill = () => somSystem((db) => db.query("update faktura.bankkoblinger set sist_hentet = '2026-01-01T00:00:00Z' where org_id = $1", [org]));
-    // En bank uten noen konto som er lagt inn i HI4 Faktura, har ingenting å hente.
+    // En bank uten noen konto som er lagt inn i Admin Konsoll, har ingenting å hente.
     expect((await api("DELETE", `/api/org/${org}/kontoer/${husleie}`)).status).toBe(204);
     await nullstill();
     let fra = ko.length;

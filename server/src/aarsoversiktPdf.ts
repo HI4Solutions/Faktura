@@ -231,6 +231,6 @@ export async function lagAarsoversiktPdf(
   const en = oversikter.length === 1 ? oversikter[0] : null;
   doc.setTitle(en ? `Årsoversikt ${en.aar} – ${en.navn}` : `Årsoversikter ${oversikter[0]?.aar ?? ""}`.trim());
   doc.setAuthor(org.navn);
-  doc.setCreator("HI4 Faktura");
+  doc.setCreator("Admin Konsoll");
   return doc.save({ useObjectStreams: false });
 }

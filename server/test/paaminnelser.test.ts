@@ -169,7 +169,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
     const eposter = ko.filter((o): o is Extract<Oppgave, { type: "epost" }> => o.type === "epost");
     expect(eposter.map((e) => e.til).sort()).toEqual([["paam-eier@server.test"], ["paam-fakt@server.test"]]);
     expect(eposter[0].emne).toBe("Påminnelse: Fakturer strøm for oktober");
-    expect(eposter[0].tekst).toContain("Dette er en påminnelse du har satt opp i HI4 Faktura for Påminnelse Utleie AS:");
+    expect(eposter[0].tekst).toContain("Dette er en påminnelse du har satt opp i Admin Konsoll for Påminnelse Utleie AS:");
     expect(eposter[0].tekst).toContain(`/paaminnelser/${p.id}?org=${org}`);
     expect(eposter[0].tekst).toContain("Dette var den siste påminnelsen.");
 

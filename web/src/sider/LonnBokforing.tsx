@@ -1,4 +1,4 @@
-// Bokføringen av lønnen i HI4 Fakturas eget regnskap (server/src/lonnBokforingRuter.ts):
+// Bokføringen av lønnen i regnskapet i Admin Konsoll (server/src/lonnBokforingRuter.ts):
 // kontoene og valgene under Innstillinger → Ansatte og timer, og lønnsbilaget på lønnskjøringen
 // (bilagserien L: det gjeldende bilaget, og de som er reversert fordi kjøringen ble åpnet igjen).
 import { useEffect, useState, type FormEvent } from "react";
@@ -67,7 +67,7 @@ export function BokforingOppsett() {
     <form className="kort" id="bokforing" onSubmit={lagre}>
       <h2 style={{ marginTop: 0 }}>Bokføring av lønn</h2>
       <p className="dempet liten">
-        Når en lønnskjøring godkjennes, føres lønnsbilaget i HI4 Fakturas regnskap (bilagserie L): lønnen, feriepengene, trekkene, nettolønnen og
+        Når en lønnskjøring godkjennes, føres lønnsbilaget i regnskapet i Admin Konsoll (bilagserie L): lønnen, feriepengene, trekkene, nettolønnen og
         arbeidsgiveravgiften på kontoene under. Åpnes kjøringen igjen, reverseres bilaget, og et nytt føres når den godkjennes på nytt. Bilagene står på
         lønnskjøringen og under <Link to="/rapporter?fane=lonn&rapport=lonn.bokforing">Rapporter → Lønn → Lønnsbilag</Link> (CSV og PDF, og til
         regnskapsføreren med de andre lønnsrapportene). De blir en del av regnskapsmodulen.
@@ -234,7 +234,7 @@ export function KjoringBokforing({ kjoringId, godkjent, godkjentAt }: { kjoringI
         </p>
       )}
       {!gjeldende && godkjent && forslag && (
-        <p className="liten">Kjøringen ble godkjent før lønnen ble bokført i HI4 Faktura. Bokfør den, så får den lønnsbilaget under.</p>
+        <p className="liten">Kjøringen ble godkjent før lønnen ble bokført i Admin Konsoll. Bokfør den, så får den lønnsbilaget under.</p>
       )}
       {reverserte.map((b) => (
         <p key={b.id} className="liten dempet">

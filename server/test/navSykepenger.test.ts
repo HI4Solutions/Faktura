@@ -131,7 +131,7 @@ describe("sykepenger fra NAV (uten database)", () => {
     expect(kontrollerMotForespoersel({ ...IM, agp: null }, { arbeidsgiverperiodePaakrevd: true })).toEqual(["NAV ber om arbeidsgiverperioden."]);
     expect(kontrollerMotForespoersel({ ...IM, inntekt: null }, { inntektPaakrevd: true })).toEqual(["NAV ber om inntekten."]);
     expect(kontrollerMotForespoersel(IM, { inntektPaakrevd: false })[0]).toContain("ber ikke om inntekten");
-    const m = tilNav({ ...IM, inntekt: null, refusjon: null }, "ref-1", "13830197340", "Ny", { systemNavn: "HI4 Faktura", systemVersjon: "1.0" });
+    const m = tilNav({ ...IM, inntekt: null, refusjon: null }, "ref-1", "13830197340", "Ny", { systemNavn: "Admin Konsoll", systemVersjon: "1.0" });
     expect(Object.keys(m).sort()).toEqual(
       ["agp", "aarsakInnsending", "arbeidsgiverTlf", "avsender", "inntekt", "kontaktinformasjon", "navReferanseId", "naturalytelser", "refusjon", "sykmeldtFnr"].sort(),
     );
@@ -365,7 +365,7 @@ describe.skipIf(!process.env.DATABASE_URL)("sykepenger fra NAV i appen", () => {
       aarsakInnsending: "Ny",
       kontaktinformasjon: "nav-eier",
       arbeidsgiverTlf: "22225555",
-      avsender: { systemNavn: "HI4 Faktura", systemVersjon: expect.any(String) },
+      avsender: { systemNavn: "Admin Konsoll", systemVersjon: expect.any(String) },
     });
     let d = (await api("GET", `/api/org/${org}/nav/forespoersler/${foresporsel}`)).data;
     expect(d.inntektsmeldinger[0]).toMatchObject({ status: "sendt", innsending_id: "inn-1", feil: null });

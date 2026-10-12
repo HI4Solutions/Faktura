@@ -14,7 +14,7 @@ describe("Google Disk – state", () => {
   });
   it("signert state kan leses, men ikke forfalskes eller brukes etter utløp", () => {
     const s = signerState({ bruker: "b1" });
-    expect(lesState(s)).toEqual({ bruker: "b1" });
+    expect(lesState(s)).toEqual({ bruker: "b1", adresse: config.appUrl });
     const falsk = Buffer.from(JSON.stringify({ bruker: "annen", exp: Date.now() + 60000 })).toString("base64url");
     expect(() => lesState(`${falsk}.${s.split(".")[1]}`)).toThrow();
     expect(() => lesState(`${s.split(".")[0]}.feil`)).toThrow();
@@ -77,7 +77,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Google Disk – kobling per bruker",
     c.googleProsjektnummer = "123";
     expect((await kall("GET", "/api/disk", token)).data).toMatchObject({
       velger: { klientId: "klient", nokkel: "nokkel", appId: "123" },
-      kobling: { rotmappe_navn: "HI4 Faktura" },
+      kobling: { rotmappe_navn: "Admin Konsoll" },
     });
     expect((await kall("PUT", "/api/disk/mappe", token, { id: "../../ugyldig", navn: "x" })).status).toBe(400);
     expect((await kall("PUT", "/api/disk/mappe", annen, { id: "mappe-fra-picker1", navn: "Regnskap" })).status).toBe(409);
@@ -86,7 +86,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Google Disk – kobling per bruker",
     expect((await kall("GET", "/api/disk", token)).data.kobling).toMatchObject({ rotmappe_navn: "Regnskap", undermapper: false });
     // Bare aktive organisasjoner kopieres på nytt til den nye mappen.
     expect(ko).toEqual([expect.objectContaining({ type: "disk-synk", org_id: org1 })]);
-    expect((await kall("PUT", "/api/disk/mappe", token, { standard: true })).data).toEqual({ rotmappe_navn: "HI4 Faktura" });
+    expect((await kall("PUT", "/api/disk/mappe", token, { standard: true })).data).toEqual({ rotmappe_navn: "Admin Konsoll" });
 
     // Den andre brukeren ser ikke koblingen.
     expect((await kall("GET", "/api/disk", annen)).data.kobling).toBeUndefined();

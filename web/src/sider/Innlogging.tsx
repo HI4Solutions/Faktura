@@ -24,17 +24,20 @@ function Merkevarepanel() {
     <aside className="inngang-merke">
       <Logo storrelse={40} />
       <div>
-        <h2>Fakturering som bare fungerer.</h2>
-        <p>Send fakturaer, følg opp betalinger og gi regnskapsføreren tilgang, alt på ett sted.</p>
+        <h2>Hele administrasjonen i én konsoll.</h2>
+        <p>Faktura, lønn, personal og regnskap for norske bedrifter, med banken og regnskapsføreren koblet på.</p>
         <ul className="fordeler">
           <li>
-            <IkonHake /> PDF-faktura med KID og logo, sendt på e-post med sporing
+            <IkonHake /> Fakturaer med KID og EHF, purring og innbetalinger rett fra banken
           </li>
           <li>
-            <IkonHake /> Gjentakende fakturaer, purring og indeksregulering etter KPI
+            <IkonHake /> Lønn med skattekort, a-melding og lønnsslipper
           </li>
           <li>
-            <IkonHake /> Kreditnota, delbetaling og refusjon med full revisjonslogg
+            <IkonHake /> Vaktplan, timer, fravær og ferie for de ansatte
+          </li>
+          <li>
+            <IkonHake /> Regnskap, mva-melding og rapporter til regnskapsføreren
           </li>
           <li>
             <IkonHake /> Passkey og totrinnsinnlogging, data lagret i EU
@@ -294,7 +297,7 @@ export function BekreftEpost({ epost, loggUt }: { epost: string; loggUt: () => v
   );
 }
 
-// En ny konto som venter på godkjenning fra HI4 Faktura (eller er avvist). Har brukeren ikke valgt
+// En ny konto som venter på godkjenning fra Admin Konsoll (eller er avvist). Har brukeren ikke valgt
 // moduler ennå (f.eks. når kontoen ble laget på en annen enhet), velges de her, og først da går
 // forespørselen. Modulene kan endres til kontoen er godkjent.
 export function VenterPaaGodkjenning() {
@@ -351,15 +354,15 @@ export function VenterPaaGodkjenning() {
         <h1>{avvist ? "Kontoen er ikke godkjent" : velger && !mine.length ? "Hva trenger du?" : "Kontoen venter på godkjenning"}</h1>
         {avvist ? (
           <>
-            <p>Kontoen din i HI4 Faktura ({meg?.bruker.epost}) ble ikke godkjent.</p>
+            <p>Kontoen din i Admin Konsoll ({meg?.bruker.epost}) ble ikke godkjent.</p>
             {meg?.bruker.avvist_grunn && <p className="dempet">Begrunnelse: {meg.bruker.avvist_grunn}</p>}
-            <p className="dempet">Ta kontakt med HI4 Faktura hvis du mener dette er feil.</p>
+            <p className="dempet">Ta kontakt med Admin Konsoll hvis du mener dette er feil.</p>
           </>
         ) : velger ? (
           <form onSubmit={lagre}>
             {!mine.length && (
               <p>
-                Takk, {fornavn}! E-postadressen er bekreftet. Kryss av for det du skal bruke HI4 Faktura til, så sendes kontoen til HI4 Faktura for godkjenning.
+                Takk, {fornavn}! E-postadressen er bekreftet. Kryss av for det du skal bruke Admin Konsoll til, så sendes kontoen til Admin Konsoll for godkjenning.
               </p>
             )}
             <ModulValg moduler={moduler} valgt={valgte} endre={settValgte} tittel={mine.length ? "Endre hva du trenger" : "Hva trenger du?"} />
@@ -388,7 +391,7 @@ export function VenterPaaGodkjenning() {
         ) : (
           <>
             <p>
-              Takk, {fornavn}! E-postadressen er bekreftet, og kontoen din er sendt til HI4 Faktura for godkjenning. Du får e-post til{" "}
+              Takk, {fornavn}! E-postadressen er bekreftet, og kontoen din er sendt til Admin Konsoll for godkjenning. Du får e-post til{" "}
               <strong>{meg?.bruker.epost}</strong> når den er godkjent.
             </p>
             {!!mine.length && (

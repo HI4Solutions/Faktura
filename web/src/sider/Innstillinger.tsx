@@ -10,7 +10,7 @@ import { EhfSending } from "./Ehf";
 import { BankKobling, kontoerEndret } from "./Bank";
 import { SkattekortKobling } from "./Skattekort";
 import { BokforingOppsett } from "./LonnBokforing";
-import { oppdaterLegitimasjon } from "../applaas";
+import { oppdaterLegitimasjon, passkeyHer } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 import { SlettOrganisasjon } from "../slettOrg";
@@ -127,7 +127,7 @@ function SlettOrg() {
     <div className="kort fare-sone">
       <h2>Slett organisasjonen</h2>
       <p className="dempet">
-        Sletter {org.navn} fra HI4 Faktura for alle brukerne. Du må skrive hvorfor. Har organisasjonen utstedte fakturaer, stenges den i stedet, og fakturaene
+        Sletter {org.navn} fra Admin Konsoll for alle brukerne. Du må skrive hvorfor. Har organisasjonen utstedte fakturaer, stenges den i stedet, og fakturaene
         oppbevares så lenge bokføringsloven krever.
       </p>
       <div className="knapper">
@@ -1100,7 +1100,7 @@ function Passkeys() {
     try {
       const ny = await leggTilPasskey(foreslattNavn());
       // Den nye passkeyen kan også låse opp appen.
-      if (meg) oppdaterLegitimasjon(meg.bruker.id, [...(data ?? []).map((q) => q.id), ny.id]);
+      if (meg) oppdaterLegitimasjon(meg.bruker.id, [...(data ?? []).filter(passkeyHer).map((q) => q.id), ny.id]);
       settLagt(true);
       last();
     } catch (e) {
@@ -1127,6 +1127,7 @@ function Passkeys() {
                 <td className="dempet liten">
                   {p.sikkerhetskopiert ? "Synkronisert" : "Bare på denne enheten"} · lagt til {dato(p.opprettet)}
                   {p.sist_brukt ? ` · sist brukt ${dato(p.sist_brukt)}` : ""}
+                  {!passkeyHer(p) && ` · virker bare på ${p.rp_id}`}
                 </td>
                 <td className="hoyre">
                   <button
@@ -1137,7 +1138,7 @@ function Passkeys() {
                         .kjor(async () => {
                           await api("DELETE", `/passkeys/${encodeURIComponent(p.id)}`);
                           // Fjernede passkeys skal ikke låse opp appen (uten passkeys slås låsen av).
-                          if (meg) oppdaterLegitimasjon(meg.bruker.id, (data ?? []).filter((q) => q.id !== p.id).map((q) => q.id));
+                          if (meg) oppdaterLegitimasjon(meg.bruker.id, (data ?? []).filter((q) => q.id !== p.id && passkeyHer(q)).map((q) => q.id));
                           return true;
                         })
                         .then(last)
@@ -1150,6 +1151,12 @@ function Passkeys() {
             ))}
           </tbody>
         </table>
+      )}
+      {(data ?? []).length > 0 && !(data ?? []).some(passkeyHer) && (
+        <div className="melding info">
+          Passkeyene dine virker på {[...new Set((data ?? []).map((p) => p.rp_id))].join(" og ")}, ikke her på {window.location.hostname}. Legg til en
+          passkey for denne adressen for å logge inn med den her.
+        </div>
       )}
       {stotterPasskey() ? (
         <button className="primar" data-passkey onClick={leggTil} disabled={h.opptatt || venter}>
@@ -1190,14 +1197,14 @@ function GoogleDisk() {
       })
       .then(last);
   const standardMappe = () =>
-    confirm("Bruke en ny mappe «HI4 Faktura» øverst i Disk? Fakturaene kopieres dit på nytt.") &&
+    confirm("Bruke en ny mappe «Admin Konsoll» øverst i Disk? Fakturaene kopieres dit på nytt.") &&
     h.kjor(() => api("PUT", "/disk/mappe", { standard: true })).then(last);
 
   const meldinger: Record<string, [string, string]> = {
     ok: ["ok", "Google Disk er koblet til. Fakturaene kopieres nå, også de som er sendt tidligere."],
     avbrutt: ["info", "Koblingen ble avbrutt."],
     feil: ["feil", "Koblingen mot Google Disk feilet. Prøv igjen."],
-    "mangler-tilgang": ["feil", "Google ga ikke varig tilgang. Fjern HI4 Faktura under myaccount.google.com/permissions og prøv igjen."],
+    "mangler-tilgang": ["feil", "Google ga ikke varig tilgang. Fjern Admin Konsoll under myaccount.google.com/permissions og prøv igjen."],
   };
   const koble = () => h.kjor(async () => (window.location.href = (await api("POST", "/disk/start")).url));
 
@@ -1206,7 +1213,7 @@ function GoogleDisk() {
       <h2 style={{ marginTop: 0 }}>Google Disk</h2>
       <p className="dempet liten">
         Få en kopi av fakturaer og kreditnotaer i din egen Google Disk, privat eller jobb. Velger du en egen mappe, legges fakturaene rett i
-        den; ellers i «HI4 Faktura» med undermapper per organisasjon og år. Appen får bare tilgang til mappen du velger og filene den selv lager.
+        den; ellers i «Admin Konsoll» med undermapper per organisasjon og år. Appen får bare tilgang til mappen du velger og filene den selv lager.
       </p>
       {resultat && meldinger[resultat] && <div className={`melding ${meldinger[resultat][0]}`}>{meldinger[resultat][1]}</div>}
       {!k ? (
@@ -1221,7 +1228,7 @@ function GoogleDisk() {
             {k.siste_feil && <span className="dempet liten"> · {k.siste_feil}</span>}
           </p>
           <p>
-            Mappe: <strong>{k.rotmappe_navn ?? "HI4 Faktura"}</strong>
+            Mappe: <strong>{k.rotmappe_navn ?? "Admin Konsoll"}</strong>
             {k.undermapper ? (
               <span className="dempet liten"> / organisasjon / år</span>
             ) : (
@@ -1233,7 +1240,7 @@ function GoogleDisk() {
               <button disabled={h.opptatt || Boolean(velgerFeil)} onClick={byttMappe}>
                 Velg mappe …
               </button>
-              {k.rotmappe_navn !== "HI4 Faktura" && (
+              {!k.undermapper && (
                 <button className="lenke" disabled={h.opptatt} onClick={standardMappe}>
                   Bruk standardmappe
                 </button>

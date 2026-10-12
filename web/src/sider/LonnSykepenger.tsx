@@ -189,7 +189,7 @@ function Oversikt({ apne }: { apne: (id: string) => void }) {
           </p>
         ) : !s.tilgang ? (
           <p className="liten">
-            Gi HI4 Faktura tilgang hos NAV i Altinn: tilgangspakken «{s.pakke}». Trykk «Utvid tilgangen i Altinn» under{" "}
+            Gi Admin Konsoll tilgang hos NAV i Altinn: tilgangspakken «{s.pakke}». Trykk «Utvid tilgangen i Altinn» under{" "}
             <Link to="/innstillinger?fane=personal#skattekort">Innstillinger → Ansatte og timer</Link>, og la daglig leder godkjenne i Altinn.
           </p>
         ) : !s.virksomhet ? (

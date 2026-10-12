@@ -30,7 +30,7 @@ export async function varsleTrekktabeller(iDag = osloIDag()): Promise<number | n
     til: config.adminEposter,
     emne: `Trekktabellene for ${aar} er ikke lastet inn`,
     tekst: [
-      `Skatteetatens trekktabeller for ${aar} er ikke lastet inn i HI4 Faktura, og noen organisasjoner har ansatte med tabelltrekk.`,
+      `Skatteetatens trekktabeller for ${aar} er ikke lastet inn i Admin Konsoll, og noen organisasjoner har ansatte med tabelltrekk.`,
       ``,
       `Last ned «Trekktabeller i tekstformat» for ${aar} fra skatteetaten.no (de kommer i desember), og last dem inn under`,
       `Administrasjon → Drift → Trekktabeller: ${config.appUrl}/admin?fane=drift`,

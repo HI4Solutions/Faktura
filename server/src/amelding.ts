@@ -17,7 +17,7 @@ import { otpMedlemskap, pluss, rund, virkedag } from "./lonnsberegning.js";
 import { PERMISJONSARTER, permisjonNavn, rapporteres, sluttdatoKjent, type PermisjonsArt } from "./permisjoner.js";
 
 export const NAVNEROM = "urn:ske:fastsetting:innsamling:a-meldingen:v2_3";
-export const KILDESYSTEM = "HI4 Faktura";
+export const KILDESYSTEM = "Admin Konsoll";
 
 export type Arbeidsforholdsrad = {
   id: string;

@@ -256,6 +256,6 @@ export async function lagLonnsslippPdf(s: PdfLonnsslipp): Promise<Uint8Array> {
 
   doc.setTitle(`Lønnsslipp ${maanedNavn(s.periode)} – ${s.navn}`);
   doc.setAuthor(s.org.navn);
-  doc.setCreator("HI4 Faktura");
+  doc.setCreator("Admin Konsoll");
   return doc.save({ useObjectStreams: false });
 }

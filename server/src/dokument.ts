@@ -149,7 +149,7 @@ export function fakturaEpost(f: any, ehf = false) {
   const tekst = linjer.join("\n");
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">${linjer
     .map((l) => (l ? `<p style="margin:0">${esc(l)}</p>` : "<br>"))
-    .join("")}<p style="margin-top:24px;font-size:12px;color:#888">Sendt med HI4 Faktura</p></div>`;
+    .join("")}<p style="margin-top:24px;font-size:12px;color:#888">Sendt med Admin Konsoll</p></div>`;
   return { emne, tekst, html };
 }
 
@@ -187,6 +187,6 @@ export function purringEpost(f: any, p: any) {
   const tekst = linjer.join("\n");
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">${linjer
     .map((l) => (l ? `<p style="margin:0">${esc(l)}</p>` : "<br>"))
-    .join("")}<p style="margin-top:24px;font-size:12px;color:#888">Sendt med HI4 Faktura</p></div>`;
+    .join("")}<p style="margin-top:24px;font-size:12px;color:#888">Sendt med Admin Konsoll</p></div>`;
   return { emne, tekst, html };
 }

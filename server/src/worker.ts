@@ -107,7 +107,7 @@ export async function sendFaktura(o: { faktura_id: string; send_epost: boolean; 
 export async function sendEpost(o: { til: string[]; emne: string; tekst: string; fra_navn?: string; svar_til?: string; oppgave_id: string }) {
   const esc = o.tekst.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
   await epost().send({
-    fraNavn: o.fra_navn ?? "HI4 Faktura",
+    fraNavn: o.fra_navn ?? "Admin Konsoll",
     til: o.til,
     svarTil: o.svar_til,
     emne: o.emne,
@@ -155,7 +155,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "disk-synk") return synkOrganisasjon(o.bruker_id, o.org_id, sikrePdf, pdfFilnavn);
   if (o.type === "disk-slett") return slettFraDisk(o.org_id, o.faktura_ider, pdfFilnavn);
   if (o.type === "varsel") return void (await sendVarsel(o.varsel));
-  if (o.type === "bank-auth") return lagBankAdresse(o.org_id, o.kobling_id);
+  if (o.type === "bank-auth") return lagBankAdresse(o.org_id, o.kobling_id, o.app_url);
   if (o.type === "bank-okt") return fullforBankOkt(o.org_id, o.kobling_id, o.kode, o.psu);
   if (o.type === "bank-hent") {
     await hentInnbetalinger(o.org_id, { koblingId: o.kobling_id, psu: o.psu, kilde: o.kilde });
@@ -396,7 +396,7 @@ async function varsleEiere(db: SystemDb, orgId: string, emne: (navn: string) => 
   if (!eiere.length) return;
   const t = tekst(o?.navn ?? "");
   await epost().send({
-    fraNavn: "HI4 Faktura",
+    fraNavn: "Admin Konsoll",
     til: eiere.map((e) => e.epost),
     emne: emne(o?.navn ?? ""),
     tekst: t,
@@ -536,8 +536,8 @@ export function lagWorker() {
   // av innbetalinger og frakobling.
   const bankOppgave = z.object({ org_id: z.string().uuid(), oppgave_id: z.string() });
   app.post("/oppgaver/bank-auth", async (c) => {
-    const o = bankOppgave.extend({ kobling_id: z.string().uuid() }).parse(await c.req.json());
-    await lagBankAdresse(o.org_id, o.kobling_id);
+    const o = bankOppgave.extend({ kobling_id: z.string().uuid(), app_url: z.string().max(300).optional() }).parse(await c.req.json());
+    await lagBankAdresse(o.org_id, o.kobling_id, o.app_url);
     return c.json({ ok: true });
   });
   const psuSkjema = z.object({ ip: z.string().max(100), agent: z.string().max(500) }).optional();

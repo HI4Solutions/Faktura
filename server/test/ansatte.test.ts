@@ -191,7 +191,7 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
     const inv = await kall("POST", `/api/org/${org}/ansatte/${olaId}/inviter`);
     expect(inv.data).toMatchObject({ koblet: false, sendt_til: "ola.ansatt@server.test" });
     const epost = ko.find((o) => o.type === "epost") as Extract<Oppgave, { type: "epost" }>;
-    expect(epost).toMatchObject({ til: ["ola.ansatt@server.test"], emne: "Du er invitert til Bemanning Test AS i HI4 Faktura" });
+    expect(epost).toMatchObject({ til: ["ola.ansatt@server.test"], emne: "Du er invitert til Bemanning Test AS i Admin Konsoll" });
     expect(epost.tekst).toContain(inv.data.lenke);
     expect((await kall("GET", `/api/org/${org}/ansatte/${olaId}`)).data.tilgang).toBe("invitert");
 

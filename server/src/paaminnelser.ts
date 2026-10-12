@@ -193,7 +193,7 @@ async function varsle(p: Tatt) {
         tekst: [
           "Hei,",
           "",
-          `Dette er en påminnelse du har satt opp i HI4 Faktura for ${info.org}:`,
+          `Dette er en påminnelse du har satt opp i Admin Konsoll for ${info.org}:`,
           "",
           p.tekst,
           "",

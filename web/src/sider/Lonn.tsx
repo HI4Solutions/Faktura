@@ -543,7 +543,7 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
       <Feil melding={h.feil} />
       {manglerTabell && (
         <div className="melding info">
-          Trekktabellene for {d.trekktabeller.aar} er ikke lastet inn i HI4 Faktura ennå. Tabelltrekket er regnet med prosentsatsen på skattekortet; kontroller trekket, eller sett det
+          Trekktabellene for {d.trekktabeller.aar} er ikke lastet inn i Admin Konsoll ennå. Tabelltrekket er regnet med prosentsatsen på skattekortet; kontroller trekket, eller sett det
           for hånd.
         </div>
       )}

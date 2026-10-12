@@ -16,7 +16,7 @@
 //   15 000 kr før (endret sammen med grensen for aktivering, Prop. 1 LS (2023–2024)). Den høyere
 //   satsen på 30 % for elektriske varebiler i gruppe c ble avviklet fra 2024; de er på saldo c.
 //
-// Saldoene regnes fra det første året i HI4 (oppsettet), med saldoene ved inngangen til det året.
+// Saldoene regnes fra det første året i Admin Konsoll (oppsettet), med saldoene ved inngangen til det året.
 // Driftsmidler anskaffet før det året er med i inngående saldo (samlesaldo) eller har sin egen
 // inngående saldo. Satsen kan settes lavere for et år og en gruppe (saldo_satser), og for det
 // enkelte driftsmiddelet med egen saldo (f.eks. bygg med kort brukstid, høyst 10 %).

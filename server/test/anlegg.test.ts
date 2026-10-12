@@ -1,6 +1,6 @@
 // Regnskapsmodulen, anleggsmidlene (anlegg.ts, saldo.ts, regnskapRuter.ts, regnskapRapporter.ts):
 // avskrivningsplanen (lineær ned til restverdien, avrunding, nedskrivning og ny levetid framover,
-// det som er ført før HI4, avgang), planen per år, bilagene (salg med gevinst og tap, utrangering),
+// det som er ført før Admin Konsoll, avgang), planen per år, bilagene (salg med gevinst og tap, utrangering),
 // saldoavskrivningene (samlesaldo med tilgang og vederlag, lav og negativ saldo, goodwill i gruppe
 // b, lineært, tomt, gevinst- og tapskontoen), og i appen: registrering med bokført anskaffelse,
 // månedsavslutningen, nedskrivning og reversering (ikke for goodwill), salg, reversering av bilag,

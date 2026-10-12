@@ -2,7 +2,7 @@
 // utkastene der noe i grunnlaget er endret (timer, fravær, vakter, faste planer, tillegg, trekk,
 // naturalytelser, reiser, timebanken, lønnsendringer, de ansatte, oppsettet og trekktabellene, eller
 // en annen kjøring som er godkjent eller åpnet igjen). Hver morgen lager den den ordinære kjøringen
-// for måneden (når organisasjonen har kjørt lønn i HI4 de siste tre månedene og ikke har slått det av
+// for måneden (når organisasjonen har kjørt lønn i Admin Konsoll de siste tre månedene og ikke har slått det av
 // under Innstillinger → Ansatte og timer), regner ut utkastene som ikke er regnet ut det siste døgnet,
 // minner eier og administrator på en kjøring som ikke er godkjent tre dager før lønnsdagen, og
 // rydder bort endringene alle utkastene har sett.
@@ -60,7 +60,7 @@ export async function oppdaterLonnsutkast(maks = 25, org: string | null = null):
 export async function lonnHverMorgen(iDag = osloIDag(), org: string | null = null) {
   const periode = `${iDag.slice(0, 7)}-01`;
 
-  // Den ordinære kjøringen for måneden: organisasjonene med lønn som har kjørt lønn i HI4 de siste tre
+  // Den ordinære kjøringen for måneden: organisasjonene med lønn som har kjørt lønn i Admin Konsoll de siste tre
   // månedene (ikke de som har sluttet med det), har ansatte i arbeid og ikke har slått det av.
   const nye = await somSystem((db) =>
     alle<{ id: string }>(

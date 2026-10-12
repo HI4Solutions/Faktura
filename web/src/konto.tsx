@@ -33,7 +33,7 @@ export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paamin
 export const harFunksjon = (org: Pick<MinOrg, "funksjoner"> | null | undefined, kode: Funksjon) => !!org && (!org.funksjoner || org.funksjoner.includes(kode));
 
 interface Meg {
-  // status: kontoen er godkjent av HI4 Faktura, venter på godkjenning eller er avvist.
+  // status: kontoen er godkjent av Admin Konsoll, venter på godkjenning eller er avvist.
   // moduler: modulene brukeren har bedt om (eller fått godkjent), f.eks. ["faktura", "bemanning"].
   bruker: { id: string; epost: string; navn: string | null; status?: "venter" | "godkjent" | "avvist"; avvist_grunn?: string | null; moduler?: string[] };
   mfa: boolean;

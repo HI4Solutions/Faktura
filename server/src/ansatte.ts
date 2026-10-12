@@ -981,12 +981,12 @@ export function ansattRuter() {
     await leggIKo({
       type: "epost",
       til: [svar.ansatt.epost],
-      emne: `Du er invitert til ${svar.org} i HI4 Faktura`,
+      emne: `Du er invitert til ${svar.org} i Admin Konsoll`,
       fra_navn: svar.org,
       tekst: [
         `Hei ${svar.ansatt.fornavn},`,
         "",
-        `${svar.org} har gitt deg tilgang til HI4 Faktura, der du fører timene dine.`,
+        `${svar.org} har gitt deg tilgang til Admin Konsoll, der du fører timene dine.`,
         "",
         `Åpne lenken for å logge inn (bruk denne e-postadressen): ${lenke}`,
         "",

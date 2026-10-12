@@ -739,7 +739,7 @@ function SlettedeOrganisasjoner() {
                 Grunn: {s.grunn}
               </span>
               <span className="dempet liten" style={{ display: "block" }}>
-                {dato(s.slettet_at)} av {s.av_plattformen ? "HI4 Faktura" : "eieren"}
+                {dato(s.slettet_at)} av {s.av_plattformen ? "Admin Konsoll" : "eieren"}
                 {s.slettet_av_navn || s.slettet_av_epost ? ` (${s.slettet_av_navn ?? s.slettet_av_epost})` : ""}
               </span>
             </span>

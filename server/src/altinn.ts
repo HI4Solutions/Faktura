@@ -5,6 +5,7 @@
 // brukeren tilbake til appen. Deretter kan workeren hente token for organisasjonen.
 // https://docs.altinn.studio/nb/api/authentication/systemuserapi/systemregister/create/
 // https://docs.altinn.studio/nb/api/authentication/systemuserapi/systemuserrequest/external/
+import { appUrler } from "./appadresse.js";
 import { config } from "./config.js";
 import { adresser, EtatFeil, etatKall, hentToken, SCOPE, systemId } from "./maskinporten.js";
 
@@ -27,8 +28,10 @@ export const PAKKEBRUK: Record<string, string> = {
   [A_ORDNING]: "a-meldingen",
   [NAV_SYKEPENGER]: "sykmeldinger og inntektsmeldinger hos NAV",
 };
-// Adressen Altinn sender brukeren tilbake til (må stå i systemregisteret, nøyaktig slik).
-export const godkjentUrl = () => `${config.appUrl}/skattekort/godkjent`;
+// Adressen Altinn sender brukeren tilbake til (må stå i systemregisteret, nøyaktig slik). Forespørslene
+// lages i bakgrunnen og bruker hoveddomenet; systemregisteret har adressen på alle appens domener, så
+// hoveddomenet kan byttes uten at systemet må registreres på nytt først (appadresse.ts).
+export const godkjentUrl = (appUrl = config.appUrl) => `${appUrl}/skattekort/godkjent`;
 
 const api = () => `${adresser().altinn}/authentication/api/v1`;
 
@@ -64,7 +67,7 @@ export function systemdefinisjon() {
         },
     accessPackages: tilgangspakker().map((urn) => ({ urn })),
     clientId: config.maskinportenKlientId ? [config.maskinportenKlientId] : [],
-    allowedRedirectUrls: [godkjentUrl()],
+    allowedRedirectUrls: appUrler().map((u) => godkjentUrl(u)),
     // Bare leverandøren lager forespørsler (fra appen); systemet vises ikke i Altinn-portalen.
     isVisible: false,
   };

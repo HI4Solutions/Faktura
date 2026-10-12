@@ -274,6 +274,11 @@ export function lagApi() {
   app.route("/api/offentlig/passkey", passkeyInnlogging());
   app.route("/api/offentlig/resend", resendWebhook());
   app.route("/api/offentlig/google", googleCallback());
+  // Hoveddomenet, og domenene appen er flyttet fra (der viser appen en melding om den nye adressen).
+  app.get("/api/offentlig/adresse", (c) => {
+    c.header("cache-control", "public, max-age=300");
+    return c.json({ hovedadresse: config.appUrl, gamle: config.gamleAppUrler });
+  });
   // Modulene man kan velge når man lager en konto (Faktura, Bemanning og de som kommer).
   app.get("/api/offentlig/moduler", async (c) => {
     c.header("cache-control", "public, max-age=300");

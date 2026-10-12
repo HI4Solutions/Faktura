@@ -572,7 +572,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
       settLokalOppgavekjorer(async () => undefined);
       settBankFetch(async (url) => {
         const u = new URL(String(url));
-        if (u.pathname === "/application") return json(200, { name: "HI4 Faktura", redirect_urls: ["http://localhost:5173/bank/tilbake"] });
+        if (u.pathname === "/application") return json(200, { name: "Admin Konsoll", redirect_urls: ["http://localhost:5173/bank/tilbake"] });
         if (u.pathname === "/aspsps") return json(200, { aspsps: [{ name: "DNB", country: "NO", psu_types: ["business"], maximum_consent_validity: 15552000 }] });
         if (u.pathname === "/auth") return json(200, { url: "https://bank.test/bankid" });
         if (u.pathname === "/sessions") return json(200, { session_id: "s-ai", access: { valid_until: "2027-04-04T10:00:00Z" }, accounts: [{ uid: "k-drift", account_id: { iban: "NO9386011117947" }, name: "Drift" }] });

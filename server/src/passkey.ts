@@ -1,5 +1,6 @@
 // Passkeys med WebAuthn. Registrering krever innlogging; innlogging gir et Firebase
-// custom token med kravet «passkey», som regnes som totrinnsbekreftelse.
+// custom token med kravet «passkey», som regnes som totrinnsbekreftelse. En passkey hører til
+// domenet den er laget på (rp_id); appen kan svare på flere domener (appadresse.ts).
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import {
@@ -10,14 +11,20 @@ import {
 } from "@simplewebauthn/server";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { appUrler, appUrlFra, domene } from "./appadresse.js";
 import { config } from "./config.js";
 import { alle, en, somBruker, somSystem } from "./db.js";
 import { ApiFeil } from "./feil.js";
 
-const rp = () => {
-  const url = new URL(config.appUrl);
-  return { id: url.hostname, origin: url.origin, navn: "HI4 Faktura" };
+// Domenet passkeyen lages og brukes på: det av appens domener brukeren er på. Navnet vises i
+// nettleserens passkey-vindu.
+const rp = (c: Context) => {
+  const origin = appUrlFra(c);
+  return { id: domene(origin), origin, navn: "Admin Konsoll" };
 };
+// Svaret fra nettleseren godtas fra alle appens domener (nettleseren har allerede sjekket at
+// passkeyen hører til domenet brukeren er på), og rp_id sier hvilket det var.
+const godkjenteDomener = () => ({ expectedOrigin: appUrler(), expectedRPID: appUrler().map(domene) });
 
 // Enkel hastighetsgrense per IP for innlogging (per instans).
 const forsok = new Map<string, { n: number; tid: number }>();
@@ -46,7 +53,7 @@ export function passkeyRuter() {
   r.get("/", async (c) =>
     c.json(
       await somBruker(c.get("bruker").id, (db) =>
-        alle(db, "select id, navn, enhetstype, sikkerhetskopiert, opprettet, sist_brukt from faktura.passkeys order by opprettet"),
+        alle(db, "select id, navn, enhetstype, sikkerhetskopiert, opprettet, sist_brukt, rp_id from faktura.passkeys order by opprettet"),
       ),
     ),
   );
@@ -55,10 +62,11 @@ export function passkeyRuter() {
     const b = c.get("bruker");
     return c.json(
       await somBruker(b.id, async (db) => {
-        const eksisterende = await alle<{ id: string; transporter: string[] }>(db, "select id, transporter from faktura.passkeys");
+        const r = rp(c);
+        const eksisterende = await alle<{ id: string; transporter: string[] }>(db, "select id, transporter from faktura.passkeys where rp_id = $1", [r.id]);
         const valg = await generateRegistrationOptions({
-          rpName: rp().navn,
-          rpID: rp().id,
+          rpName: r.navn,
+          rpID: r.id,
           userName: b.epost,
           userID: new Uint8Array(Buffer.from(b.id.replace(/-/g, ""), "hex")),
           attestationType: "none",
@@ -85,8 +93,7 @@ export function passkeyRuter() {
         v = await verifyRegistrationResponse({
           response: k.svar,
           expectedChallenge: u.utfordring,
-          expectedOrigin: rp().origin,
-          expectedRPID: rp().id,
+          ...godkjenteDomener(),
           requireUserVerification: true,
         });
       } catch (e) {
@@ -96,11 +103,11 @@ export function passkeyRuter() {
       const cred = v.registrationInfo.credential;
       return en(
         db,
-        `insert into faktura.passkeys (id, bruker_id, offentlig_nokkel, teller, transporter, enhetstype, sikkerhetskopiert, navn)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)
-         returning id, navn, enhetstype, sikkerhetskopiert, opprettet`,
+        `insert into faktura.passkeys (id, bruker_id, offentlig_nokkel, teller, transporter, enhetstype, sikkerhetskopiert, navn, rp_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         returning id, navn, enhetstype, sikkerhetskopiert, opprettet, rp_id`,
         [cred.id, b.id, Buffer.from(cred.publicKey), cred.counter, cred.transports ?? [], v.registrationInfo.credentialDeviceType,
-         v.registrationInfo.credentialBackedUp, k.navn || "Passkey"],
+         v.registrationInfo.credentialBackedUp, k.navn || "Passkey", v.registrationInfo.rpID ?? domene(v.registrationInfo.origin)],
       );
     });
     return c.json(p, 201);
@@ -111,10 +118,12 @@ export function passkeyRuter() {
     const b = c.get("bruker");
     return c.json(
       await somBruker(b.id, async (db) => {
-        const egne = await alle<{ id: string; transporter: string[] }>(db, "select id, transporter from faktura.passkeys");
-        if (!egne.length) throw new ApiFeil(409, "Du har ingen passkey ennå. Legg til en passkey på denne enheten først.");
+        const r = rp(c);
+        const egne = await alle<{ id: string; transporter: string[] }>(db, "select id, transporter from faktura.passkeys where rp_id = $1", [r.id]);
+        if (!egne.length)
+          throw new ApiFeil(409, `Du har ingen passkey for ${r.id} ennå. Legg til en passkey på denne enheten først.`);
         const valg = await generateAuthenticationOptions({
-          rpID: rp().id,
+          rpID: r.id,
           userVerification: "required",
           allowCredentials: egne.map((p) => ({ id: p.id, transports: p.transporter as any })),
         });
@@ -140,8 +149,7 @@ export function passkeyRuter() {
         v = await verifyAuthenticationResponse({
           response: k.svar as any,
           expectedChallenge: u.utfordring,
-          expectedOrigin: rp().origin,
-          expectedRPID: rp().id,
+          ...godkjenteDomener(),
           credential: { id: p.id, publicKey: new Uint8Array(p.offentlig_nokkel), counter: Number(p.teller), transports: p.transporter },
           requireUserVerification: true,
         });
@@ -176,7 +184,7 @@ export function passkeyInnlogging() {
 
   r.post("/start", async (c) => {
     begrens(c);
-    const valg = await generateAuthenticationOptions({ rpID: rp().id, userVerification: "required" });
+    const valg = await generateAuthenticationOptions({ rpID: rp(c).id, userVerification: "required" });
     const u = await somSystem((db) =>
       en(db, "insert into faktura.passkey_utfordringer (type, utfordring) values ('innlogging', $1) returning id", [valg.challenge]),
     );
@@ -195,8 +203,7 @@ export function passkeyInnlogging() {
         v = await verifyAuthenticationResponse({
           response: k.svar as any,
           expectedChallenge: u.utfordring,
-          expectedOrigin: rp().origin,
-          expectedRPID: rp().id,
+          ...godkjenteDomener(),
           credential: { id: p.id, publicKey: new Uint8Array(p.offentlig_nokkel), counter: Number(p.teller), transports: p.transporter },
           requireUserVerification: true,
         });

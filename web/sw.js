@@ -1,4 +1,4 @@
-/* HI4 Faktura – service worker.
+/* Admin Konsoll – service worker.
  *
  * Bygges av vite.config.ts, som setter inn VERSJON og FILER (app-skallet i dette bygget).
  * - App-skallet lagres ved installasjon, så appen starter også uten nett.
@@ -100,7 +100,7 @@ self.addEventListener("push", (e) => {
     valg.tag = d.tag;
     valg.renotify = true;
   }
-  e.waitUntil(self.registration.showNotification(d.tittel || "HI4 Faktura", valg));
+  e.waitUntil(self.registration.showNotification(d.tittel || "Admin Konsoll", valg));
 });
 
 self.addEventListener("notificationclick", (e) => {

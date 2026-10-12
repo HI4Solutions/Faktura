@@ -3,17 +3,21 @@
 # Passkeys legges til senere (WebAuthn i API-et), se docs/arkitektur.md.
 # ---------------------------------------------------------------------------
 
+locals {
+  # Domenene appen svarer på: hoveddomenet, de andre og dem den er flyttet fra (docs/domene.md).
+  app_domener = distinct(concat([var.app_domain], var.app_domains, var.gamle_domener))
+}
+
 resource "google_identity_platform_config" "auth" {
   provider = google-beta
   project  = var.project_id
 
   autodelete_anonymous_users = true
-  authorized_domains = concat([
+  authorized_domains = distinct(concat([
     "localhost",
     "${var.project_id}.firebaseapp.com",
     "${var.project_id}.web.app",
-    var.app_domain,
-  ], var.app_domains)
+  ], local.app_domener))
 
   sign_in {
     allow_duplicate_emails = false
@@ -60,19 +64,39 @@ resource "google_firebase_hosting_site" "app" {
 resource "google_firebase_web_app" "app" {
   provider        = google-beta
   project         = var.project_id
-  display_name    = "HI4 Faktura"
+  display_name    = "Admin Konsoll"
   deletion_policy = "DELETE"
   depends_on      = [google_firebase_project.this]
 }
 
-# Eget domene. Terraform skriver ut DNS-oppføringene som må legges inn hos
-# domeneleverandøren (output «dns_for_app_domain»). Firebase utsteder sertifikat selv.
-resource "google_firebase_hosting_custom_domain" "app" {
+# Egne domener. Terraform skriver ut DNS-oppføringene som må legges inn hos domeneleverandøren
+# (output «dns_for_domener»), og Firebase utsteder sertifikat selv når de er på plass. Nøkkelen er
+# domenenavnet, så hoveddomenet kan byttes uten at noe lages på nytt (docs/domene.md).
+resource "google_firebase_hosting_custom_domain" "domene" {
+  for_each              = toset(local.app_domener)
   provider              = google-beta
   project               = var.project_id
   site_id               = google_firebase_hosting_site.app.site_id
-  custom_domain         = var.app_domain
+  custom_domain         = each.key
   wait_dns_verification = false
+}
+
+# Domener som bare sender videre (301, samme sti) til et av domenene over, f.eks. www.
+resource "google_firebase_hosting_custom_domain" "omdirigering" {
+  for_each              = var.domene_omdirigeringer
+  provider              = google-beta
+  project               = var.project_id
+  site_id               = google_firebase_hosting_site.app.site_id
+  custom_domain         = each.key
+  redirect_target       = each.value
+  wait_dns_verification = false
+  depends_on            = [google_firebase_hosting_custom_domain.domene]
+}
+
+# Før flyttingen het det ene domenet «app» (faktura.hi4.no).
+moved {
+  from = google_firebase_hosting_custom_domain.app
+  to   = google_firebase_hosting_custom_domain.domene["faktura.hi4.no"]
 }
 
 # ---------------------------------------------------------------------------
@@ -161,17 +185,17 @@ resource "google_monitoring_alert_policy" "dlq" {
 
 resource "google_apikeys_key" "picker" {
   name         = "faktura-picker"
-  display_name = "HI4 Faktura – Google Picker"
+  display_name = "Admin Konsoll – Google Picker"
 
   restrictions {
     api_targets {
       service = "picker.googleapis.com"
     }
     browser_key_restrictions {
-      allowed_referrers = [
-        "https://${var.app_domain}/*",
-        "https://${google_firebase_hosting_site.app.site_id}.web.app/*",
-      ]
+      allowed_referrers = concat(
+        [for d in local.app_domener : "https://${d}/*"],
+        ["https://${google_firebase_hosting_site.app.site_id}.web.app/*"],
+      )
     }
   }
 

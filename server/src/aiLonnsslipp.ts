@@ -108,7 +108,7 @@ export const slippSkjema: Skjema = {
 export function slippSystem(naa = new Date()): string {
   const { dato } = iDagOslo(naa);
   return [
-    "Du leser lønnsslipper (lønnsspesifikasjoner) fra norske lønnssystemer, som PDF eller bilde, og henter ut opplysningene om hver ansatt til ansattregisteret i HI4 Faktura. Svar bare med JSON etter skjemaet.",
+    "Du leser lønnsslipper (lønnsspesifikasjoner) fra norske lønnssystemer, som PDF eller bilde, og henter ut opplysningene om hver ansatt til ansattregisteret i Admin Konsoll. Svar bare med JSON etter skjemaet.",
     `Dagens dato er ${dato}.`,
     "",
     "Regler:",

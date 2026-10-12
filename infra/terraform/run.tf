@@ -26,6 +26,12 @@ locals {
     NODE_ENV               = "production"
   }
 
+  # De andre domenene appen svarer på, og dem den er flyttet fra (server/src/appadresse.ts).
+  domene_env = { for k, v in {
+    ANDRE_APP_URLER = join(",", [for d in var.app_domains : "https://${d}" if d != var.app_domain])
+    GAMLE_APP_URLER = join(",", [for d in var.gamle_domener : "https://${d}" if d != var.app_domain])
+  } : k => v if v != "" }
+
   # AI: Gemini på Vertex AI i EU (fakturautkast i API-et, forslag på innbetalinger i
   # workeren). Uten AI_PROSJEKT (ai_aktiv = false) er AI-funksjonene skjult.
   ai_env = merge({ for k, v in { AI_PROSJEKT = var.project_id } : k => v if var.ai_aktiv }, {
@@ -74,7 +80,7 @@ resource "google_cloud_run_v2_service" "api" {
       image = var.placeholder_image
 
       dynamic "env" {
-        for_each = merge(local.db_env, local.ai_env, local.skattekort_env, {
+        for_each = merge(local.db_env, local.domene_env, local.ai_env, local.skattekort_env, {
           ROLLE         = "api"
           ADMIN_EPOSTER = var.admin_eposter
           DB_USER       = google_sql_user.api.name
@@ -162,7 +168,7 @@ resource "google_cloud_run_v2_service" "worker" {
       image = var.placeholder_image
 
       dynamic "env" {
-        for_each = merge(local.db_env, local.ai_env, local.skattekort_env, { ROLLE = "worker", DB_USER = google_sql_user.worker.name })
+        for_each = merge(local.db_env, local.domene_env, local.ai_env, local.skattekort_env, { ROLLE = "worker", DB_USER = google_sql_user.worker.name })
         content {
           name  = env.key
           value = env.value

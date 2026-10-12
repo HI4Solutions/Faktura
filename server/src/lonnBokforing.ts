@@ -1,4 +1,4 @@
-// Bokføringen av lønnen i HI4 Fakturas eget regnskap (0078_lonn_bokforing.sql): lønnsbilaget for
+// Bokføringen av lønnen i regnskapet i Admin Konsoll (0078_lonn_bokforing.sql): lønnsbilaget for
 // en godkjent lønnskjøring. Bilaget står på utbetalingsdatoen og har posteringene for lønnen,
 // feriepengene, honorarene, utgiftene, trekkene, nettolønnen og arbeidsgiveravgiften (og OTP når det er valgt),
 // på kontoene i kontoplanen (norsk standard, NS 4102; organisasjonen kan endre dem). Det føres i
