@@ -1,21 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <!-- Admin Konsoll: samme merke som Logo.tsx, med tykkere spor og større knotter for små størrelser. -->
-  <defs>
-    <linearGradient id="f" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6489ff"/><stop offset=".5" stop-color="#4a4ff0"/><stop offset="1" stop-color="#2a1b8e"/></linearGradient>
-    <radialGradient id="l" cx="12" cy="0" r="38" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity=".3"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-    <radialGradient id="g"><stop offset="0" stop-color="#5ef0c4" stop-opacity=".6"/><stop offset="1" stop-color="#5ef0c4" stop-opacity="0"/></radialGradient>
-    <linearGradient id="m" x1="0" y1="9.5" x2="0" y2="38.5" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7af7d2"/><stop offset="1" stop-color="#14b386"/></linearGradient>
-  </defs>
-  <rect width="48" height="48" rx="12" fill="url(#f)"/>
-  <rect width="48" height="48" rx="12" fill="url(#l)"/>
-  <rect x=".5" y=".5" width="47" height="47" rx="11.5" fill="none" stroke="#fff" stroke-opacity=".16"/>
-  <g fill="#0a0f3d" fill-opacity=".32"><rect x="11.4" y="9.5" width="4.2" height="29" rx="2.1"/><rect x="21.9" y="9.5" width="4.2" height="29" rx="2.1"/><rect x="32.4" y="9.5" width="4.2" height="29" rx="2.1"/></g>
-  <g fill="#fff" fill-opacity=".72"><rect x="11.4" y="28" width="4.2" height="10.5" rx="2.1"/><rect x="32.4" y="22.5" width="4.2" height="16" rx="2.1"/></g>
-  <rect x="21.9" y="16.5" width="4.2" height="22" rx="2.1" fill="url(#m)"/>
-  <circle cx="24" cy="16.5" r="11.5" fill="url(#g)"/>
-  <g fill="#070b33" fill-opacity=".3"><rect x="7.5" y="25.6" width="12" height="7.2" rx="3.6"/><rect x="18" y="14.1" width="12" height="7.2" rx="3.6"/><rect x="28.5" y="20.1" width="12" height="7.2" rx="3.6"/></g>
-  <rect x="7.5" y="24.4" width="12" height="7.2" rx="3.6" fill="#fff"/>
-  <rect x="18" y="12.9" width="12" height="7.2" rx="3.6" fill="#5ef0c4"/>
-  <rect x="28.5" y="18.9" width="12" height="7.2" rx="3.6" fill="#fff"/>
-  <g stroke-opacity=".42" stroke-width="1.2" stroke-linecap="round"><path d="M10.5 28h6M31.5 22.5h6" stroke="#2b3a8f"/><path d="M21 16.5h6" stroke="#0a6a4e"/></g>
+  <!-- Admin Konsoll (Modul-K), samme merke som Logo.tsx med bredere mellomrom for små størrelser. -->
+  <style>.b{fill:#0d1530}.k{fill:#2f56d8}@media (prefers-color-scheme:dark){.b{fill:#ffffff}.k{fill:#5a7eff}}</style>
+  <path class="b" d="M14.41 1H10.5A9.5 9.5 0 0 0 1 10.5V37.5A9.5 9.5 0 0 0 10.5 47H14.41ZM18.41 1L18.41 19.99L42.1 2.19A9.5 9.5 0 0 0 37.5 1ZM18.41 47L18.41 28.01L42.1 45.81A9.5 9.5 0 0 1 37.5 47Z"/>
+  <path class="k" d="M19.74 24L45.16 4.88A9.5 9.5 0 0 1 47 10.5V37.5A9.5 9.5 0 0 1 45.16 43.12Z"/>
 </svg>

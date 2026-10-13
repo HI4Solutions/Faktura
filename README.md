@@ -1,5 +1,7 @@
 # Admin Konsoll
 
+<img src="docs/merkevare/admin-konsoll-logo.svg" alt="Admin Konsoll" height="56">
+
 Admin Konsoll (tidligere HI4 Faktura) er administrasjonsplattformen der foretak oppretter konto og
 fakturerer sine kunder, kjører lønn, styrer personalet og fører regnskapet. Bygget på
 Google Cloud. Kjernen er portert fra fakturamodulen i MedSide og gjort flerbruker

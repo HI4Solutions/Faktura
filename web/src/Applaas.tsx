@@ -188,7 +188,7 @@ function Laaseskjerm({ laas, opplast }: { laas: Laas; opplast: (automatisk: bool
   return (
     <div className="laas" role="dialog" aria-modal="true" aria-label="Appen er låst" onClick={() => lasOpp(false)}>
       <div className="laas-innhold">
-        <LogoIkon storrelse={72} animert={false} />
+        <LogoIkon storrelse={72} />
         <h1>Admin Konsoll er låst</h1>
         <p className="laas-hvem">{navn || " "}</p>
         <button type="button" className="primar laas-knapp" autoFocus>

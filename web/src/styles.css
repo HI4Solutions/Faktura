@@ -31,6 +31,8 @@
   --meny-dempet: #7d89a8;
   --meny-aktiv: #ffffff;
   --meny-aktiv-bg: rgba(255, 255, 255, 0.09);
+  --logo-farge: #0d1530;
+  --logo-kile: #2f56d8;
   --laas-bunn: #1e2969;
   --skygge-1: 0 1px 2px rgba(15, 23, 42, 0.05);
   --skygge-2: 0 1px 3px rgba(15, 23, 42, 0.06), 0 6px 16px -6px rgba(15, 23, 42, 0.10);
@@ -74,6 +76,8 @@
   --info-lys: #172848;
   --meny-bg: #070b18;
   --meny-bg-2: #0d1326;
+  --logo-farge: #ffffff;
+  --logo-kile: #5a7eff;
   --skygge-1: none;
   --skygge-2: 0 0 0 1px rgba(255, 255, 255, 0.02);
   --skygge-3: 0 24px 60px -12px rgba(0, 0, 0, 0.6);
@@ -131,9 +135,7 @@ strong { font-weight: 650; }
   color: var(--meny-tekst); padding: 18px 14px; display: flex; flex-direction: column; gap: 2px;
   position: sticky; top: 0; height: 100vh; overflow-y: auto; z-index: 20;
 }
-.meny .logo { margin: 2px 8px 18px; }
-.meny .logo-merkevare .logo-tekst, .mobiltopp .logo-merkevare .logo-tekst, .inngang-merke .logo-merkevare .logo-tekst { color: #fff; }
-.meny .logo-merkevare .logo-tekst span, .mobiltopp .logo-merkevare .logo-tekst span, .inngang-merke .logo-merkevare .logo-tekst span { color: #9db4ff; }
+.meny .logo { margin: 4px 8px 20px; }
 .meny-seksjon { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--meny-dempet); margin: 16px 10px 6px; font-weight: 600; }
 .meny a {
   display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 9px;
@@ -223,7 +225,6 @@ strong { font-weight: 650; }
     padding: calc(16px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
     background: var(--meny-bg);
   }
-  .mobiltopp .logo-tekst { font-size: 1.05rem; }
   .mobiltopp .topp-knapper { display: flex; align-items: center; gap: 8px; flex: none; }
   .meny-tema { display: none; } /* ligger i toppfeltet */
   .meny-tema + .bunn { margin-top: auto; }
@@ -270,10 +271,8 @@ strong { font-weight: 650; }
   @media (max-width: 359px) {
     .mobiltopp { gap: 8px; }
     .mobiltopp .logo-knapp { padding-right: 0; }
-    /* «Admin Konsoll» får plass ved siden av knappene også på 320 punkter. */
-    .mobiltopp .logo-merkevare { gap: 7px; }
-    .mobiltopp .logo-ikon { width: 28px; height: 28px; }
-    .mobiltopp .logo-merkevare .logo-tekst { font-size: 1rem; white-space: nowrap; }
+    /* Logoen får plass ved siden av knappene også på 320 punkter. */
+    .mobiltopp .logo-merkevare { height: 25px; width: auto; }
     .mobiltopp .temabryter button { width: 28px; }
     .mobiltopp .topp-knapper { gap: 6px; }
   }
@@ -504,8 +503,6 @@ button.oye:active:not(:disabled) { transform: none; }
     radial-gradient(700px 400px at 110% -10%, rgba(59, 111, 224, 0.6), transparent 60%),
     linear-gradient(160deg, #0d1530 0%, #1a2a66 100%);
 }
-.inngang-merke .logo-tekst { color: #fff; font-size: 1.3rem; }
-.inngang-merke .logo-tekst span { color: #b7c8ff; }
 .inngang-merke h2 { font-size: 2.1rem; line-height: 1.15; letter-spacing: -0.03em; font-weight: 750; margin: 0 0 16px; max-width: 460px; }
 .inngang-merke p { color: #c5cfee; max-width: 440px; font-size: 1.02rem; }
 .fordeler { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 14px; }
@@ -527,56 +524,10 @@ button.oye:active:not(:disabled) { transform: none; }
   .inngang-skjema { place-items: start center; padding-top: 36px; }
 }
 
-/* Logo */
-.logo-merkevare { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; }
-.logo-merkevare .logo-tekst { font-size: 1.1rem; white-space: nowrap; }
-.logo-merkevare .logo-tekst span { color: var(--aksent); font-weight: 600; }
-.logo-ikon { display: block; flex: none; overflow: visible; }
-.logo-ikon .logo-glod { transform-box: fill-box; transform-origin: center; }
-
-/* Én syklus på 8 s: kontrollene mikser (hver for seg, litt forskjøvet), gløden pulserer og en glans
-   sveiper over flisen, så hvile. Knottene holder seg innenfor sporet (se Logo.tsx). */
-.logo-ikon.animert .k1 { animation: logo-k1 8s cubic-bezier(.45, 0, .25, 1) infinite; }
-.logo-ikon.animert .k2 { animation: logo-k2 8s cubic-bezier(.45, 0, .25, 1) infinite; }
-.logo-ikon.animert .k3 { animation: logo-k3 8s cubic-bezier(.45, 0, .25, 1) infinite; }
-.logo-ikon.animert .logo-glod { animation: logo-glod 8s ease-in-out infinite; }
-.logo-ikon.animert .logo-glans { animation: logo-glans 8s ease-in-out infinite; }
-
-@keyframes logo-k1 {
-  0%, 8% { transform: translateY(0); }
-  20% { transform: translateY(4px); }
-  34% { transform: translateY(-3px); }
-  46%, 100% { transform: translateY(0); }
-}
-@keyframes logo-k2 {
-  0%, 12% { transform: translateY(0); }
-  24% { transform: translateY(5.5px); }
-  38% { transform: translateY(-2px); }
-  50%, 100% { transform: translateY(0); }
-}
-@keyframes logo-k3 {
-  0%, 16% { transform: translateY(0); }
-  28% { transform: translateY(-5px); }
-  42% { transform: translateY(3px); }
-  54%, 100% { transform: translateY(0); }
-}
-@keyframes logo-glod {
-  0%, 44% { opacity: 0.85; transform: scale(1); }
-  54% { opacity: 1; transform: scale(1.25); }
-  68%, 100% { opacity: 0.85; transform: scale(1); }
-}
-@keyframes logo-glans {
-  0%, 56% { transform: rotate(20deg) translateX(0); }
-  76%, 100% { transform: rotate(20deg) translateX(90px); }
-}
-
-/* Større utgave på innloggingen */
-.logo-stor { display: flex; justify-content: center; margin-bottom: 8px; }
-.logo-stor .logo-tekst { font-size: 1.5rem; }
-
-@media (prefers-reduced-motion: reduce) {
-  .logo-ikon.animert * { animation: none !important; }
-}
+/* Logo (Logo.tsx): nattblå med blå kile på lys bunn, hvit med klar blå kile på mørk bunn. */
+.logo-merkevare, .logo-ikon { display: block; flex: none; color: var(--logo-farge); }
+.logo-kile { fill: var(--logo-kile); }
+.meny, .mobiltopp, .inngang-merke, .laas { --logo-farge: #ffffff; --logo-kile: #5a7eff; }
 
 
 /* --------------------------------------------------------------------------
