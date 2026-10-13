@@ -42,7 +42,7 @@ variable "faktura_retention_locked" {
 variable "app_domains" {
   description = "Andre domener den samme appen svarer på fullt ut (innlogging, passkeys og tilbakeadressene fra banken, Altinn og Google), f.eks. det nye domenet før det blir hoveddomenet. Se docs/domene.md."
   type        = list(string)
-  default     = ["adminkonsoll.no"]
+  default     = []
 }
 
 variable "gamle_domener" {
@@ -78,7 +78,7 @@ variable "jobs_region" {
 variable "app_domain" {
   description = "Hoveddomenet: nettappen og API-et (/api/**) svarer her, og lenkene i e-post og varsler peker hit. Se docs/domene.md."
   type        = string
-  default     = "faktura.hi4.no"
+  default     = "adminkonsoll.no"
 }
 
 variable "epost_avsender" {

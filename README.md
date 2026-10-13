@@ -19,7 +19,7 @@ er vårt eget (modulen «Regnskap»); plattformen kobles ikke til andre regnskap
 | CI (databasetester, Terraform) og utrulling med GitHub Actions | Ferdig |
 | Infrastruktur rullet ut i `hi4-faktura-prod` | Ferdig |
 | API og worker (`server/`, TypeScript på Cloud Run) | Ferdig, testet mot Postgres |
-| Nettapp (`web/`, React + Vite) på `faktura.hi4.no`, og på `adminkonsoll.no` når DNS-en er på plass (flyttingen: [docs/domene.md](docs/domene.md)) | I drift |
+| Nettapp (`web/`, React + Vite) på `adminkonsoll.no` ([docs/domene.md](docs/domene.md)) | I drift |
 | Innlogging: passord, TOTP-MFA og passkeys | Ferdig |
 | Verifisering av organisasjoner og adminside | Ferdig (admin via GitHub-variabelen `ADMIN_EPOSTER`) |
 | Godkjenning av nye kontoer: forespørselen går til administratorene når e-postadressen er bekreftet, med modulene brukeren krysset av for (Faktura, Bemanning og de som kommer), og kontoen kommer ikke inn før den er godkjent | Ferdig (Administrasjon → Oversikt) |

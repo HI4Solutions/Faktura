@@ -93,12 +93,6 @@ resource "google_firebase_hosting_custom_domain" "omdirigering" {
   depends_on            = [google_firebase_hosting_custom_domain.domene]
 }
 
-# Før flyttingen het det ene domenet «app» (faktura.hi4.no).
-moved {
-  from = google_firebase_hosting_custom_domain.app
-  to   = google_firebase_hosting_custom_domain.domene["faktura.hi4.no"]
-}
-
 # ---------------------------------------------------------------------------
 # Overvåking
 # ---------------------------------------------------------------------------
