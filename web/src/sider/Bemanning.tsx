@@ -261,7 +261,7 @@ export function Bemanning({
           ]
         : [
             r.fast ? `Fast arbeidsdag ${fastTid(r.fast)}`.trim() : "",
-            ...r.vakter.map((v) => `${v.fra}–${v.til}${v.oppgave ? ` ${v.oppgave}` : ""}${v.publisert ? "" : " (ikke publisert)"}`),
+            ...r.vakter.map((v) => `${v.vakttype_navn ? `${v.vakttype_navn} ` : ""}${v.fra}–${v.til}${v.oppgave ? ` ${v.oppgave}` : ""}${v.publisert ? "" : " (ikke publisert)"}`),
             r.forte.length ? `Ført ${fortTider(r.forte)}${r.forte.some((x) => x.status === "levert") ? " (ikke godkjent)" : ""}` : "",
             r.ekstra ? `${timer(rund(r.ekstra))} ekstra` : "",
           ];
@@ -277,7 +277,10 @@ export function Bemanning({
       innhold = fravaerKode[r.fravaer.type];
     } else if (r.art === "jobb") {
       klasse += `${r.ekstra ? " ekstra" : " jobb"}${r.utkast ? " utkast" : ""}`;
-      innhold = r.ekstra ? timerTekst(r.ekstra) : "✓";
+      // Turnus (0106_turnus.sql): koden til vakttypen (D, K, N …) i fargen sin i stedet for ✓.
+      const type = !r.ekstra && r.vakter.length === 1 && r.vakter[0]!.vakttype_kode ? r.vakter[0]! : null;
+      if (type) klasse += ` turnus-kode vt${(type.vakttype_farge ?? 0) % 8}`;
+      innhold = r.ekstra ? timerTekst(r.ekstra) : (type?.vakttype_kode ?? "✓");
     } else if (r.art === "fri") {
       klasse += " fri";
       innhold = "–";

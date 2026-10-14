@@ -1,12 +1,13 @@
 // Rapportene for Personal i rapportmodulen (rapportmodul.ts): timene per ansatt med overtid og
 // merarbeid, timelisten, fraværet, sykefraværet med egenmeldingene, feriebanken, timebanken,
-// ekstratimene og ansattlisten.
+// ekstratimene, ansattlisten og turnusen (vaktene per ansatt og vakttype).
 import { alle } from "./db.js";
 import { beregnUke, uke, type Foring } from "./arbeidstid.js";
 import { regler } from "./ansatte.js";
 import { ekstratimer } from "./arbeidsplan.js";
 import { FRAVAERTYPER, fravaerNavn } from "./fravaer.js";
 import { SALDO, type Saldo } from "./timebank.js";
+import { helligdag } from "./helligdager.js";
 import type { Rapportdef } from "./rapportmodul.js";
 
 const rund = (n: number) => Math.round(n * 100) / 100;
@@ -341,5 +342,55 @@ export const personalRapporter: Rapportdef[] = [
               : null,
       })),
     }),
+  },
+  {
+    // Turnus (0106_turnus.sql): hvor mange vakter av hver vakttype hver ansatt har i perioden, med
+    // timene, helgene og helligdagene, så fordelingen av natt, kveld og helg kan ses over.
+    id: "personal.turnus",
+    modul: "personal",
+    navn: "Turnus",
+    beskrivelse: "Vaktene i perioden per ansatt og vakttype (dag, kveld, natt …): antall, timer, helg og helligdag, utkast og ledige vakter.",
+    funksjon: "vaktplan",
+    tilgang: "personal_les",
+    parameter: "periode",
+    hent: async (db, org, v) => {
+      const rader = await alle<{ ansattnummer: number | null; navn: string; vakttype: string; antall: number; timer: number; helg: number; utkast: number; datoer: string[] }>(
+        db,
+        `select a.ansattnummer, coalesce(a.fornavn || ' ' || a.etternavn, 'Ledige vakter') as navn,
+                coalesce(t.kode || ' ' || t.navn, 'Uten vakttype') as vakttype, count(*)::int as antall, sum(v.timer)::float8 as timer,
+                (count(*) filter (where extract(isodow from v.dato) in (6, 7)))::int as helg,
+                (count(*) filter (where v.publisert_at is null))::int as utkast,
+                array_agg(to_char(v.dato, 'YYYY-MM-DD')) as datoer
+           from faktura.vakter v
+           left join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id
+           left join faktura.vakttyper t on t.org_id = v.org_id and t.id = v.vakttype_id
+          where v.org_id = $1 and v.dato between $2 and $3
+          group by a.id, a.ansattnummer, a.fornavn, a.etternavn, t.id, t.kode, t.navn, t.rekkefolge
+          order by a.ansattnummer nulls last, t.rekkefolge nulls last, t.kode`,
+        [org, v.fra, v.til],
+      );
+      return {
+        kolonner: [
+          { nokkel: "ansattnummer", navn: "Nr", type: "tekst" },
+          { nokkel: "navn", navn: "Ansatt" },
+          { nokkel: "vakttype", navn: "Vakttype" },
+          { nokkel: "antall", navn: "Vakter", type: "antall", sum: true },
+          { nokkel: "timer", navn: "Timer", type: "timer", sum: true },
+          { nokkel: "helg", navn: "Helg", type: "antall", sum: true },
+          { nokkel: "helligdag", navn: "Helligdag", type: "antall", sum: true },
+          { nokkel: "utkast", navn: "Ikke publisert", type: "antall", sum: true },
+        ],
+        rader: rader.map((r) => ({
+          ansattnummer: r.ansattnummer,
+          navn: r.navn,
+          vakttype: r.vakttype,
+          antall: r.antall,
+          timer: rund(r.timer),
+          helg: r.helg,
+          helligdag: r.datoer.filter((d) => helligdag(d)).length,
+          utkast: r.utkast,
+        })),
+      };
+    },
   },
 ];

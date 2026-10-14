@@ -36,7 +36,19 @@ type PForslag =
       faste: string[]; // faste arbeidsdager uten vakt, som også får vikar
     }
   | { type: "vikar"; tekst: string; knapp: string; vakt_id: string | null; fast: { ansatt_id: string; dato: string } | null; vikar_id: string }
-  | { type: "ny_vakt"; tekst: string; knapp: string; ansatt_id: string | null; dato: string; fra: string; til: string; pause_min: number; oppgave: string | null; notat: string | null }
+  | {
+      type: "ny_vakt";
+      tekst: string;
+      knapp: string;
+      ansatt_id: string | null;
+      dato: string;
+      fra: string;
+      til: string;
+      pause_min: number;
+      oppgave: string | null;
+      notat: string | null;
+      vakttype_id?: string | null; // turnus: vakttypen (0106_turnus.sql)
+    }
   | { type: "publiser"; tekst: string; knapp: string; fra: string; til: string }
   | { type: "ta_vakt"; tekst: string; knapp: string; vakt_id: string }
   | { type: "plassering"; tekst: string; knapp: string; plasser: { dato: string; fase_id: string; oppgave_id: string; ansatt_id: string }[] }
@@ -257,7 +269,16 @@ async function utforPersonal(orgId: string, f: PForslag, hvem: { meg: string | n
       return { melding: "Vikaren er satt inn og har fått beskjed.", lenke: tavla(v.dato) };
     }
     case "ny_vakt":
-      await api("POST", `${o}/vakter`, { ansatt_id: f.ansatt_id, dato: f.dato, fra: f.fra, til: f.til, pause_min: f.pause_min, oppgave: f.oppgave, notat: f.notat });
+      await api("POST", `${o}/vakter`, {
+        ansatt_id: f.ansatt_id,
+        dato: f.dato,
+        fra: f.fra,
+        til: f.til,
+        pause_min: f.pause_min,
+        oppgave: f.oppgave,
+        notat: f.notat,
+        vakttype_id: f.vakttype_id ?? null,
+      });
       return { melding: "Vakten er lagt inn som utkast. Publiser når planen er klar.", lenke: { tekst: "Vaktplanen", til: `/vakter?uke=${mandag(f.dato)}` } };
     case "publiser": {
       const r = await api<{ publisert: number }>("POST", `${o}/vakter/publiser`, { fra: f.fra, til: f.til });

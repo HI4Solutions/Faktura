@@ -28,15 +28,20 @@ const dagFormat = new Intl.DateTimeFormat("nb-NO", { weekday: "short", day: "num
 const dag = (iso: string) => dagFormat.format(new Date(`${iso}T12:00:00Z`));
 const timer = (n: number) => `${n.toLocaleString("nb-NO", { maximumFractionDigits: 2 })} t`;
 
-const vaktSkjema = z.object({
+const vaktFelt = z.object({
   ansatt_id: uuid.nullable().optional(), // null: ledig vakt
   dato: datoS,
-  fra: klokke,
-  til: klokke,
+  // Uten fra og til: klokkeslettene og pausen fra vakttypen (0106_turnus.sql).
+  fra: klokke.optional(),
+  til: klokke.optional(),
   pause_min: z.number().int().min(0, "Pausen kan ikke være negativ").max(600, "Pausen kan være høyst 10 timer").optional(),
   oppgave: valgfri(tekst(60, "Oppgaven")),
   notat: valgfri(tekst(500, "Notatet")),
+  vakttype_id: uuid.nullable().optional(),
+  // Rollen vakten dekker i turnusen; en ledig vakt med rolle kan bare tas av dem med rollen.
+  rolle_id: uuid.nullable().optional(),
 });
+const vaktSkjema = vaktFelt.refine((v) => !!v.vakttype_id || (!!v.fra && !!v.til), { message: "Velg en vakttype eller skriv fra og til", path: ["fra"] });
 
 // Navnene og fraværet fra planen (ansatte_plan og fravaer_plan, 0063): de ansatte ser kollegaene
 // der, og fraværet deres bare som «fravaer». vikar_for_navn: den som er borte; har_vikar: en annen
@@ -47,13 +52,17 @@ const VAKT = `
          to_char(v.fra, 'HH24:MI') as fra, to_char(v.til, 'HH24:MI') as til, v.pause_min, v.timer, v.oppgave,
          case when v.ansatt_id is null or faktura.kan(v.org_id, 'personal_les') or faktura.er_meg(v.org_id, v.ansatt_id) then v.notat end as notat,
          v.publisert_at is not null as publisert, v.oppdatert, v.vikar_for,
+         v.vakttype_id, vt.kode as vakttype_kode, vt.navn as vakttype_navn, vt.farge as vakttype_farge,
+         v.rolle_id, vr.navn as rolle_navn, v.turnus_id,
          (select o.fornavn || ' ' || o.etternavn from faktura.vakter ov join faktura.ansatte_plan o on o.org_id = ov.org_id and o.id = ov.ansatt_id
            where ov.org_id = v.org_id and ov.id = v.vikar_for) as vikar_for_navn,
          exists (select 1 from faktura.vakter x where x.org_id = v.org_id and x.vikar_for = v.id) as har_vikar,
          (select f.type from faktura.fravaer_plan f where f.org_id = v.org_id and f.ansatt_id = v.ansatt_id and v.dato between f.fra and f.til limit 1) as fravaer,
          exists (select 1 from faktura.timeforinger t where t.org_id = v.org_id and t.vakt_id = v.id) as fort
     from faktura.vakter v
-    left join faktura.ansatte_plan a on a.org_id = v.org_id and a.id = v.ansatt_id`;
+    left join faktura.ansatte_plan a on a.org_id = v.org_id and a.id = v.ansatt_id
+    left join faktura.vakttyper vt on vt.org_id = v.org_id and vt.id = v.vakttype_id
+    left join faktura.ansattgrupper vr on vr.org_id = v.org_id and vr.id = v.rolle_id`;
 
 type Vakt = {
   id: string;
@@ -69,6 +78,8 @@ type Vakt = {
   publisert: boolean;
   vikar_for: string | null;
   fravaer: string | null;
+  vakttype_id: string | null;
+  rolle_id: string | null;
 };
 
 type Varsel = { bruker_id: string; tittel: string; tekst: string; url: string; tag: string };
@@ -216,21 +227,35 @@ export function vaktRuter() {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
       const ny = await en<{ id: string }>(
         db,
-        `insert into faktura.vakter (org_id, ansatt_id, dato, fra, til, pause_min, oppgave, notat)
-         values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
-        [orgId(c), b.ansatt_id ?? null, b.dato, b.fra, b.til, b.pause_min ?? 0, b.oppgave ?? null, b.notat ?? null],
+        `insert into faktura.vakter (org_id, ansatt_id, dato, fra, til, pause_min, oppgave, notat, vakttype_id, rolle_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+        [
+          orgId(c),
+          b.ansatt_id ?? null,
+          b.dato,
+          b.fra ?? null,
+          b.til ?? null,
+          b.pause_min ?? 0,
+          b.oppgave ?? null,
+          b.notat ?? null,
+          b.vakttype_id ?? null,
+          b.rolle_id ?? null,
+        ],
       );
       return en(db, `${VAKT} where v.id = $1`, [ny!.id]);
     });
     return c.json(v, 201);
   });
 
-  // Endre en vakt. Er den publisert, får de ansatte det gjelder, beskjed.
+  // Endre en vakt. Er den publisert, får de ansatte det gjelder, beskjed. En annen vakttype uten
+  // nye klokkeslett gir klokkeslettene fra typen. En vakt fra automatisk turnus som endres her, er
+  // ikke lenger med i kjøringen (en ny kjøring erstatter den ikke).
   r.patch("/vakter/:id", async (c) => {
-    const b = vaktSkjema.partial().parse(await c.req.json().catch(() => ({})));
-    const felt = Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined));
+    const b = vaktFelt.partial().parse(await c.req.json().catch(() => ({})));
+    const felt: Record<string, unknown> = Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined));
+    if (!Object.keys(felt).length) throw new ApiFeil(400, "Ingen felt å endre");
+    if (["ansatt_id", "dato", "fra", "til", "vakttype_id"].some((k) => k in felt)) felt.turnus_id = null;
     const navn = Object.keys(felt);
-    if (!navn.length) throw new ApiFeil(400, "Ingen felt å endre");
     const { etter, varsler } = await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
       const for_ = await en<Vakt>(db, `${VAKT} where v.org_id = $1 and v.id = $2`, [orgId(c), id(c)]);
@@ -346,9 +371,11 @@ export function vaktRuter() {
       ]))!.n;
       const nye = await alle(
         db,
-        `insert into faktura.vakter (org_id, ansatt_id, dato, fra, til, pause_min, oppgave, notat)
-         select v.org_id, v.ansatt_id, ny.dato, v.fra, v.til, v.pause_min, v.oppgave, v.notat
+        `insert into faktura.vakter (org_id, ansatt_id, dato, fra, til, pause_min, oppgave, notat, vakttype_id, rolle_id)
+         select v.org_id, v.ansatt_id, ny.dato, v.fra, v.til, v.pause_min, v.oppgave, v.notat,
+                case when t.aktiv then v.vakttype_id end, v.rolle_id
            from faktura.vakter v
+           left join faktura.vakttyper t on t.org_id = v.org_id and t.id = v.vakttype_id
            cross join generate_series(0, $5::int - 1) as k(n)
            cross join lateral (select v.dato + $4::int + k.n * 7 as dato) ny
            left join faktura.ansatte a on a.org_id = v.org_id and a.id = v.ansatt_id
@@ -377,8 +404,10 @@ export function vaktRuter() {
       if (o.ansatt_id === b.ansatt_id) throw new ApiFeil(400, "Velg en annen enn den som har vakten");
       const ny = (await en<{ id: string }>(
         db,
-        `insert into faktura.vakter (org_id, ansatt_id, dato, fra, til, pause_min, oppgave, notat, vikar_for)
-         select org_id, $3, dato, fra, til, pause_min, oppgave, $4, id from faktura.vakter where org_id = $1 and id = $2
+        `insert into faktura.vakter (org_id, ansatt_id, dato, fra, til, pause_min, oppgave, notat, vikar_for, vakttype_id, rolle_id)
+         select v.org_id, $3, v.dato, v.fra, v.til, v.pause_min, v.oppgave, $4, v.id, case when t.aktiv then v.vakttype_id end, v.rolle_id
+           from faktura.vakter v left join faktura.vakttyper t on t.org_id = v.org_id and t.id = v.vakttype_id
+          where v.org_id = $1 and v.id = $2
          returning id`,
         [orgId(c), id(c), b.ansatt_id, o.ansatt_navn ? `Vikar for ${o.ansatt_navn}` : "Vikar"],
       ))!;

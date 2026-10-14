@@ -169,6 +169,17 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten for personal", () => 
     expect(nye.forslag[0].tekst).toContain(": 7,5 t.");
     for (const v of nye.forslag) expect((await kall("POST", `/api/org/${org}/vakter`, { ansatt_id: v.ansatt_id, dato: v.dato, fra: v.fra, til: v.til, pause_min: v.pause_min, oppgave: v.oppgave })).status).toBe(201);
     expect((await spor({ handling: "ny_vakt", ansatt: "Ola" })).tekst).toBe("Hvilket klokkeslett? Si for eksempel «08–16».");
+    // Turnus (0106_turnus.sql): «sett Ola på nattevakt» gir klokkeslettene og pausen fra vakttypen.
+    const natt = (await kall("POST", `/api/org/${org}/turnus/vakttyper`, { navn: "Nattevakt", kode: "N", fra: "22:45", til: "07:15", pause_min: 15 })).data;
+    const nattevakt = await spor({ handling: "ny_vakt", ansatt: "Ola", datoer: [pluss(dag, 3)], vakttype: "nattevakt" });
+    expect(nattevakt.forslag[0]).toMatchObject({ type: "ny_vakt", ansatt_id: id.ola, fra: "22:45", til: "07:15", pause_min: 15, vakttype_id: natt.id });
+    expect(nattevakt.forslag[0].tekst).toMatch(/^Nattevakt for Ola Nordmann /);
+    expect((await spor({ handling: "ny_vakt", ansatt: "Ola", datoer: [pluss(dag, 3)], vakttype: "N" })).forslag[0]).toMatchObject({ vakttype_id: natt.id });
+    expect((await spor({ handling: "ny_vakt", ansatt: "Ola", datoer: [pluss(dag, 3)], vakttype: "langvakt" })).tekst).toBe(
+      "Fant ikke vakttypen «langvakt». Vakttypene er nattevakt (N).",
+    );
+    expect((await spor({ handling: "ny_vakt", ansatt: "Ola" })).tekst).toBe("Hvilket klokkeslett eller hvilken vakttype? Si for eksempel «08–16» eller «nattevakt».");
+    expect((await kall("DELETE", `/api/org/${org}/turnus/vakttyper/${natt.id}`)).status).toBe(204);
 
     const pub = await spor({ handling: "publiser_vakter" });
     expect(pub.forslag).toEqual([expect.objectContaining({ type: "publiser", fra: uke(dag).fra, til: uke(dag).til, knapp: "Publiser" })]);

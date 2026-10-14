@@ -24,6 +24,7 @@ import { ArbeidsplanDialog, fastTid, fastTider } from "./Arbeidsplan";
 import { helligdag } from "../helligdager";
 import { aapentPaa, ByttDialog, Bytter, fraKolleger, LederByttDialog, type ByttSvar, type ByttVakt, type Bytte, type Innstilling, type LederVakt } from "./Vaktbytte";
 import { rollevalg, Rollevalg, useRollevalg, type Rolle, type Rollevalget } from "./Roller";
+import { Turnus, useTurnus, VakttypeMerke } from "./Turnus";
 
 export type Vakt = {
   id: string;
@@ -44,6 +45,15 @@ export type Vakt = {
   vikar_for_navn: string | null;
   har_vikar: boolean; // en vikar dekker denne vakten
   fravaer: FravaerType | null; // den ansatte er borte den dagen
+  // Turnus (0106_turnus.sql): vakttypen (D, K, N …), rollen vakten dekker (en ledig vakt med rolle
+  // kan bare tas av dem med rollen), og kjøringen av automatisk turnus som laget den.
+  vakttype_id?: string | null;
+  vakttype_kode?: string | null;
+  vakttype_navn?: string | null;
+  vakttype_farge?: number | null;
+  rolle_id?: string | null;
+  rolle_navn?: string | null;
+  turnus_id?: string | null;
 };
 // En fast arbeidsdag fra arbeidsplanen (server/src/arbeidsplan.ts): en dag i planen uten vakt.
 // En hel dag har ikke klokkeslett.
@@ -106,8 +116,9 @@ type Ansatt = {
   ansatt_til: string | null;
   aktiv: boolean;
 };
-// Vaktplanen per dag, uke eller måned (måneden er bemanningskalenderen, Bemanning.tsx).
-type Visning = "dag" | "uke" | "maaned";
+// Vaktplanen per dag, uke eller måned (måneden er bemanningskalenderen, Bemanning.tsx), eller som
+// turnus over flere uker (Turnus.tsx).
+type Visning = "dag" | "uke" | "maaned" | "turnus";
 
 const tid = (v: Pick<Vakt, "fra" | "til">) => `${v.fra}–${v.til}`;
 const fornavn = (navn: string) => navn.split(" ")[0];
@@ -211,7 +222,11 @@ export function Vakter() {
   const uke = mandag(gyldigDato(sok.get("uke")) ? sok.get("uke")! : iDag());
   const dato = gyldigDato(sok.get("dato")) ? sok.get("dato")! : idag;
   const maaned = gyldigMaaned(sok.get("maaned")) ? sok.get("maaned")! : iDag().slice(0, 7);
-  const visning: Visning = sok.get("visning") === "dag" ? "dag" : sok.get("visning") === "maaned" || gammelKalender ? "maaned" : "uke";
+  const visning: Visning =
+    sok.get("visning") === "dag" ? "dag" : sok.get("visning") === "turnus" ? "turnus" : sok.get("visning") === "maaned" || gammelKalender ? "maaned" : "uke";
+  // Turnusen: mandagen den begynner, og hvor mange uker (standard fire).
+  const turnusStart = gyldigDato(sok.get("turnus")) ? mandag(sok.get("turnus")!) : mandag(iDag());
+  const turnusUker = Math.min(8, Math.max(1, Number(sok.get("uker")) || 4));
   const ga = (endring: Record<string, string | null>) => {
     const p = new URLSearchParams(sok);
     for (const [k, v] of Object.entries(endring)) {
@@ -229,13 +244,28 @@ export function Vakter() {
   // (dagen ikke i en stengt helg).
   const velgVisning = (v: Visning, dag?: string) => {
     const denneMnd = iDag().slice(0, 7);
-    const valgt = dag ?? (visning === "dag" ? dato : visning === "uke" ? (ukedager(uke).includes(iDag()) ? iDag() : uke) : maaned === denneMnd ? iDag() : `${maaned}-01`);
+    const valgt =
+      dag ??
+      (visning === "dag"
+        ? dato
+        : visning === "uke"
+          ? ukedager(uke).includes(iDag())
+            ? iDag()
+            : uke
+          : visning === "turnus"
+            ? turnusStart <= iDag() && iDag() <= leggTilDager(turnusStart, turnusUker * 7 - 1)
+              ? iDag()
+              : turnusStart
+            : maaned === denneMnd
+              ? iDag()
+              : `${maaned}-01`);
     const her = v === "dag" ? apenDag(valgt, helg) : valgt;
     ga({
       visning: v === "uke" ? null : v,
       dato: v === "dag" && her !== idag ? her : v === "dag" ? null : sok.get("dato"),
       uke: v === "uke" && mandag(her) !== mandag(iDag()) ? mandag(her) : v === "uke" ? null : sok.get("uke"),
       maaned: v === "maaned" && her.slice(0, 7) !== denneMnd ? her.slice(0, 7) : v === "maaned" ? null : sok.get("maaned"),
+      turnus: v === "turnus" && mandag(her) !== mandag(iDag()) ? mandag(her) : v === "turnus" ? null : sok.get("turnus"),
     });
   };
 
@@ -283,7 +313,20 @@ export function Vakter() {
           rollevalget={rollevalget}
         />
       )}
-      {fane === "plan" && visning !== "maaned" && (
+      {fane === "plan" && visning === "turnus" && (
+        <Turnus
+          start={turnusStart}
+          uker={turnusUker}
+          velg={(start, uker) => ga({ turnus: start === mandag(iDag()) ? null : start, uker: uker === 4 ? null : String(uker) })}
+          kanPlanlegge={kanPersonal(org.rolle)}
+          seAlle={seHelePlanen}
+          versjon={versjon}
+          endret={endret}
+          visningsvalg={<Visningsvalg visning={visning} velg={velgVisning} />}
+          rollevalget={rollevalget}
+        />
+      )}
+      {fane === "plan" && (visning === "dag" || visning === "uke") && (
         <Vaktplan
           visning={visning}
           velgVisning={velgVisning}
@@ -340,6 +383,7 @@ function Visningsvalg({ visning, velg }: { visning: Visning; velg: (v: Visning) 
           ["dag", "Dag"],
           ["uke", "Uke"],
           ["maaned", "Måned"],
+          ["turnus", "Turnus"],
         ] as const
       ).map(([v, t]) => (
         <button key={v} type="button" role="radio" aria-checked={visning === v} className={visning === v ? "valgt" : undefined} onClick={() => velg(v)}>
@@ -548,9 +592,10 @@ function Vaktplan({
       >
         <span className="vakt-tid">
           {v.advarsler.length > 0 && <IkonVarsel storrelse={13} />}
+          {v.vakttype_kode && <VakttypeMerke t={{ kode: v.vakttype_kode, farge: v.vakttype_farge ?? 0 }} tittel={v.vakttype_navn ?? undefined} />}
           {tid(v)}
         </span>
-        {medNavn && <span className="vakt-navn">{v.ansatt_navn ?? "Ledig vakt"}</span>}
+        {medNavn && <span className="vakt-navn">{v.ansatt_navn ?? (v.rolle_navn ? `Ledig (${v.rolle_navn.toLowerCase()})` : "Ledig vakt")}</span>}
         {v.fravaer ? (
           <span className="vakt-fravaer">
             {fravaerTekst[v.fravaer]} · {v.har_vikar ? "vikar inne" : "mangler vikar"}
@@ -1024,7 +1069,7 @@ function Vaktplan({
 
 // --- Velger for dag og måned (som ukevelgeren) ----------------------------------------------
 
-function Periodevelger({ navn, under, forrige, neste, naa }: { navn: string; under: string; forrige: [string, () => void]; neste: [string, () => void]; naa?: [string, () => void] }) {
+export function Periodevelger({ navn, under, forrige, neste, naa }: { navn: string; under: string; forrige: [string, () => void]; neste: [string, () => void]; naa?: [string, () => void] }) {
   return (
     <div className="ukevelger">
       <button type="button" className="ikon" aria-label={forrige[0]} title={forrige[0]} onClick={forrige[1]}>
@@ -1381,8 +1426,15 @@ function VaktSkjema({
       pause: String(vakt.pause_min ?? sist?.pause_min ?? 0),
       oppgave: vakt.oppgave ?? sist?.oppgave ?? "",
       notat: vakt.notat ?? "",
+      vakttype_id: vakt.vakttype_id ?? "",
+      rolle_id: vakt.rolle_id ?? "",
     };
   });
+  // Vakttypene (turnus, 0106_turnus.sql): en vakttype fyller inn klokkeslettene og pausen. Rollene:
+  // hvem som kan ta en ledig vakt.
+  const turnus = useTurnus(org?.id, 0);
+  const typer = (turnus.data?.vakttyper ?? []).filter((t) => t.aktiv || t.id === vakt.vakttype_id);
+  const roller = useData(() => hent<Rolle[]>(`/org/${org!.id}/ansattgrupper`), [org?.id]);
   const h = useHandling();
   const sett = (e: Partial<typeof v>) => settV({ ...v, ...e });
   const pause = v.pause.trim() === "" ? 0 : tall(v.pause);
@@ -1405,6 +1457,9 @@ function VaktSkjema({
       pause_min: Math.round(pause),
       oppgave: v.oppgave.trim() || null,
       notat: v.notat.trim() || null,
+      vakttype_id: v.vakttype_id || null,
+      // Rollen settes bare på en ledig vakt (en vakt fra turnusen beholder sin).
+      ...(v.ansatt_id ? {} : { rolle_id: v.rolle_id || null }),
     };
     const r = await h.kjor(() => (vakt.id ? api("PATCH", `/org/${org!.id}/vakter/${vakt.id}`, kropp) : api("POST", `/org/${org!.id}/vakter`, kropp)));
     if (!r) return;
@@ -1456,7 +1511,7 @@ function VaktSkjema({
         <label>
           Ansatt
           <select value={v.ansatt_id} onChange={(e) => sett({ ansatt_id: e.target.value })}>
-            <option value="">Ledig vakt (alle ansatte kan ta den)</option>
+            <option value="">Ledig vakt (de ansatte kan ta den)</option>
             {valg.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.fornavn} {a.etternavn}
@@ -1464,6 +1519,38 @@ function VaktSkjema({
             ))}
           </select>
         </label>
+        {!v.ansatt_id && (roller.data?.length ?? 0) > 0 && (
+          <label>
+            Hvem kan ta den
+            <select value={v.rolle_id} onChange={(e) => sett({ rolle_id: e.target.value })}>
+              <option value="">Alle ansatte</option>
+              {roller.data!.map((r) => (
+                <option key={r.id} value={r.id}>
+                  De med rollen {r.navn.toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {typer.length > 0 && (
+          <label>
+            Vakttype
+            <select
+              value={v.vakttype_id}
+              onChange={(e) => {
+                const t = typer.find((x) => x.id === e.target.value);
+                sett(t ? { vakttype_id: t.id, fra: t.fra, til: t.til, pause: String(t.pause_min) } : { vakttype_id: "" });
+              }}
+            >
+              <option value="">Ingen (egne klokkeslett)</option>
+              {typer.map((t) => (
+                <option key={t.id} value={t.id} disabled={!t.aktiv}>
+                  {t.kode} – {t.navn} ({t.fra}–{t.til})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Dato
           <input type="date" required value={v.dato} onChange={(e) => sett({ dato: e.target.value })} />
@@ -1783,13 +1870,16 @@ function LedigeVakter({
               <div key={r.v.id} className="liste-rad statisk ledig-vakt">
                 <span className="linje">
                   <span className="tittel">
+                    {r.v.vakttype_kode && <VakttypeMerke t={{ kode: r.v.vakttype_kode, farge: r.v.vakttype_farge ?? 0 }} tittel={r.v.vakttype_navn ?? undefined} />}{" "}
                     {visDag(r.v.dato)} · {tid(r.v)}
                   </span>
                   <button type="button" className="primar" disabled={h.opptatt} onClick={() => ta(r.v)}>
                     Ta vakten
                   </button>
                 </span>
-                <span className="under">{[timer(r.v.timer), r.v.oppgave, r.v.notat].filter(Boolean).join(" · ")}</span>
+                <span className="under">
+                  {[timer(r.v.timer), r.v.vakttype_navn, r.v.rolle_navn ? `for ${r.v.rolle_navn.toLowerCase()}` : null, r.v.oppgave, r.v.notat].filter(Boolean).join(" · ")}
+                </span>
               </div>
             ) : (
               <div key={r.b.id} className="liste-rad statisk ledig-vakt">

@@ -2744,3 +2744,170 @@ h2.utgift-gruppe .dempet { font-weight: 450; }
 .yrkesskade-liste > li { padding: 11px 0; border-bottom: 1px solid var(--kant); }
 .yrkesskade-oppgaver { margin: 6px 0 0; padding-left: 18px; }
 .yrkesskader .topp { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* --------------------------------------------------------------------------
+   Turnus (Turnus.tsx): vakttypene i farger, de ansatte nedover og dagene bortover
+   -------------------------------------------------------------------------- */
+:root {
+  --vt0: #8a5a00; --vt0-lys: #fdf1d6;
+  --vt1: #b14a08; --vt1-lys: #ffe8d6;
+  --vt2: #3730a3; --vt2-lys: #e6e8fd;
+  --vt3: #0e7068; --vt3-lys: #daf3ee;
+  --vt4: #1f5fbf; --vt4-lys: #e3edfc;
+  --vt5: #b4235f; --vt5-lys: #fce8f0;
+  --vt6: #6b2fd0; --vt6-lys: #efe7fd;
+  --vt7: #475569; --vt7-lys: #e8edf3;
+}
+:root[data-tema="mork"] {
+  --vt0: #f2c35b; --vt0-lys: #33290f;
+  --vt1: #ffb070; --vt1-lys: #3a2412;
+  --vt2: #a5b4fc; --vt2-lys: #1e1b4b;
+  --vt3: #62d6c6; --vt3-lys: #0f2f2b;
+  --vt4: #8ab4ff; --vt4-lys: #172848;
+  --vt5: #f7a1c4; --vt5-lys: #3b1627;
+  --vt6: #c6a9ff; --vt6-lys: #2a1f47;
+  --vt7: #cbd5e1; --vt7-lys: #222a36;
+}
+.vt0 { --vt: var(--vt0); --vt-lys: var(--vt0-lys); }
+.vt1 { --vt: var(--vt1); --vt-lys: var(--vt1-lys); }
+.vt2 { --vt: var(--vt2); --vt-lys: var(--vt2-lys); }
+.vt3 { --vt: var(--vt3); --vt-lys: var(--vt3-lys); }
+.vt4 { --vt: var(--vt4); --vt-lys: var(--vt4-lys); }
+.vt5 { --vt: var(--vt5); --vt-lys: var(--vt5-lys); }
+.vt6 { --vt: var(--vt6); --vt-lys: var(--vt6-lys); }
+.vt7 { --vt: var(--vt7); --vt-lys: var(--vt7-lys); }
+.vt-merke {
+  display: inline-grid; place-items: center; min-width: 20px; height: 18px; padding: 0 4px; border-radius: 5px; vertical-align: 1px;
+  background: var(--vt-lys, var(--flate-2)); color: var(--vt, var(--tekst-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vt, var(--kant)) 30%, transparent);
+  font-size: 0.7rem; font-weight: 750; letter-spacing: 0.02em; line-height: 1;
+}
+.vt-merke.tom { --vt: var(--dempet); --vt-lys: var(--flate-2); }
+.vakt-chip .vakt-tid .vt-merke { margin-right: 1px; }
+.blokk { display: block; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+label.avkryss { display: flex; align-items: flex-start; gap: 8px; font-weight: 450; line-height: 1.45; }
+label.avkryss input[type="checkbox"] { flex: none; margin: 3px 0 0; }
+
+.turnus-uker select { width: auto; margin: 0; padding-right: 30px; }
+.turnus-forklaring { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: -2px 0 12px; font-size: 0.84rem; color: var(--tekst-2); }
+.turnus-forklaring > span { display: inline-flex; align-items: center; gap: 6px; }
+/* Hjelpeteksten er vanlig tekst (ellers blir det mellomrom rundt delen som bare gjelder tastaturet). */
+.turnus-forklaring > .turnus-hjelp { display: inline; }
+.turnus-kort { padding: 0; overflow: hidden; }
+.turnus-rull { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+table.turnus { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.8rem; }
+table.turnus th, table.turnus td { padding: 0; border-bottom: 1px solid var(--kant); text-align: center; background: var(--flate); text-transform: none; letter-spacing: 0; }
+table.turnus thead th { position: sticky; top: 0; z-index: 1; padding: 4px 0; font-size: 0.7rem; font-weight: 650; color: var(--dempet); text-transform: none; letter-spacing: 0; }
+table.turnus .turnus-uker-rad th { padding: 6px 0 2px; border-bottom: none; text-align: left; font-size: 0.72rem; color: var(--tekst-2); }
+table.turnus .turnus-uke { padding-left: 6px !important; border-left: 2px solid var(--kant-sterk); }
+table.turnus .turnus-dag { min-width: 30px; width: 30px; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--tekst-2); }
+table.turnus .turnus-dag span { display: block; font-weight: 600; color: var(--dempet); }
+table.turnus .turnus-dag.helg, table.turnus td.helg { background: var(--flate-2); }
+table.turnus .turnus-dag.helligdag span, table.turnus .turnus-dag.helligdag { color: var(--fare); }
+table.turnus .turnus-dag.idag { color: var(--aksent); box-shadow: inset 0 -2px 0 var(--aksent); }
+table.turnus .ny-uke { border-left: 2px solid var(--kant-sterk); }
+table.turnus .turnus-navn {
+  position: sticky; left: 0; z-index: 2; min-width: 128px; max-width: 170px; padding: 0 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 0.82rem; font-weight: 550; color: var(--tekst); background: var(--flate); box-shadow: 1px 0 0 var(--kant);
+}
+table.turnus thead .turnus-navn { z-index: 3; }
+table.turnus tbody th.turnus-navn { border-left: 3px solid var(--g, transparent); }
+table.turnus .turnus-navn .forkortet { display: none; }
+table.turnus .turnus-rolle th {
+  position: sticky; left: 0; padding: 8px 10px 4px; text-align: left; font-size: 0.68rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--g); background: var(--flate);
+}
+table.turnus .turnus-sum { position: sticky; right: 0; min-width: 70px; padding: 0 8px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; box-shadow: -1px 0 0 var(--kant); }
+table.turnus thead .turnus-sum { z-index: 2; }
+button.turnus-rute {
+  display: grid; place-items: center; width: 100%; min-width: 30px; height: 30px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; color: var(--tekst-2); font-size: 0.74rem; font-weight: 700; cursor: pointer;
+}
+button.turnus-rute:hover:not(:disabled) { background: var(--aksent-lys); }
+button.turnus-rute:focus-visible { outline: 2px solid var(--aksent); outline-offset: -2px; position: relative; z-index: 1; }
+button.turnus-rute.vt { background: var(--vt-lys); color: var(--vt); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vt) 22%, transparent); }
+button.turnus-rute.vt:hover:not(:disabled) { background: color-mix(in srgb, var(--vt-lys) 70%, var(--vt) 30%); }
+button.turnus-rute.uten-type { font-size: 0.62rem; font-weight: 650; color: var(--tekst); background: var(--flate-2); }
+button.turnus-rute.fast { color: var(--dempet); font-size: 1rem; }
+button.turnus-rute.merke-fravaer { background: var(--fv-lys); color: var(--fv); font-size: 0.66rem; }
+button.turnus-rute.med-vakt { text-decoration: line-through; }
+button.turnus-rute.utkast { outline: 1px dashed color-mix(in srgb, var(--vt, var(--dempet)) 55%, transparent); outline-offset: -4px; }
+button.turnus-rute.advarsel { position: relative; }
+button.turnus-rute.advarsel::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--advarsel); }
+button.turnus-rute.utenfor { cursor: default; background: repeating-linear-gradient(135deg, transparent 0 5px, var(--kant) 5px 6px); }
+button.turnus-rute.opptatt { opacity: 0.45; }
+button.turnus-rute:disabled { cursor: default; }
+table.turnus tfoot th { max-width: 170px; padding: 0 10px; text-align: left; font-size: 0.76rem; font-weight: 600; color: var(--tekst-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: sticky; left: 0; background: var(--flate-2); z-index: 1; }
+table.turnus tfoot td { height: 26px; font-size: 0.7rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--dempet); background: var(--flate-2); }
+table.turnus tfoot tr:first-child > * { border-top: 2px solid var(--kant-sterk); }
+table.turnus .turnus-bemanning td.mangler { color: var(--fare); background: var(--fare-lys); }
+table.turnus .turnus-bemanning td.ok { color: var(--ok); }
+table.turnus .turnus-bemanning td.over { color: var(--advarsel); }
+button.turnus-ledig {
+  display: block; width: calc(100% - 4px); min-height: 0; margin: 2px; padding: 2px 0; border: 1px dashed var(--kant-sterk); border-radius: 5px;
+  background: var(--flate); box-shadow: none; color: var(--tekst-2); font-size: 0.68rem; font-weight: 700;
+}
+button.turnus-ledig.utkast { border-style: dotted; }
+@media (max-width: 700px) {
+  table.turnus .turnus-navn, table.turnus tfoot th { min-width: 64px; max-width: 84px; padding: 0 6px; font-size: 0.76rem; }
+  table.turnus .turnus-navn .fullt, table.turnus tfoot th .fullt { display: none; }
+  table.turnus .turnus-navn .forkortet { display: inline; }
+  /* Timene ruller med, så flere dager får plass. */
+  table.turnus .turnus-sum { position: static; min-width: 60px; padding: 0 6px; font-size: 0.72rem; box-shadow: none; }
+  .turnus-uker { flex: 0 0 auto; }
+}
+
+/* Valget i en rute og oppsettet */
+.vakttype-valg { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 10px 0 14px; }
+.vakttype-valg > button {
+  display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 8px 10px; border: 1px solid var(--kant); border-radius: var(--radius-s);
+  background: var(--flate); box-shadow: none; color: var(--tekst); text-align: left; font-weight: 500;
+}
+.vakttype-valg > button > span:last-child { display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
+.vakttype-valg > button .dempet { font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.vakttype-valg > button:hover { border-color: var(--vt, var(--aksent)); background: var(--vt-lys, var(--aksent-lys)); }
+.vakttype-valg > button.valgt { border-color: var(--vt, var(--aksent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt, var(--aksent)) 35%, transparent); }
+.vakttype-valg .vt-merke { min-width: 28px; height: 26px; font-size: 0.85rem; }
+.rute-valg .liste-enkel li { display: flex; align-items: center; gap: 8px; }
+.rute-valg .liste-enkel li .lenke { margin-left: auto; }
+.turnus-oppsett > .faner { margin-bottom: 14px; }
+.vakttype-liste { list-style: none; margin: 0 0 12px; padding: 0; }
+.vakttype-liste > li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--kant); }
+.vakttype-liste > li > span:nth-child(2) { flex: 1; min-width: 0; }
+.vakttype-liste > li .vt-merke { min-width: 30px; height: 26px; font-size: 0.85rem; }
+.vakttype-liste > li.inaktiv { opacity: 0.6; }
+.vakttype-liste > li > form { flex: 1; }
+.vakttype-skjema { padding: 12px 14px 4px; margin-bottom: 12px; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate-2); }
+.vakttype-skjema .rad:first-child { grid-template-columns: minmax(0, 1fr) 90px; }
+.fargevalg { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.fargevalg > button { min-height: 0; padding: 3px; border: 2px solid transparent; border-radius: 8px; background: none; box-shadow: none; }
+.fargevalg > button.valgt { border-color: var(--vt); }
+.fargevalg .vt-merke { min-width: 30px; height: 26px; font-size: 0.8rem; }
+.behov-rull { overflow-x: auto; margin: 4px 0 12px; }
+table.behov-tabell { width: max-content; min-width: 100%; font-size: 0.86rem; }
+table.behov-tabell th, table.behov-tabell td { padding: 6px 4px; vertical-align: middle; }
+table.behov-tabell thead th { font-size: 0.74rem; text-align: center; }
+table.behov-tabell thead th:first-child { text-align: left; }
+table.behov-tabell tbody th { min-width: 150px; padding-right: 10px; font-size: 0.86rem; font-weight: 550; text-align: left; text-transform: none; letter-spacing: 0; color: var(--tekst); }
+table.behov-tabell tbody th select { width: auto; margin-top: 4px; padding: 3px 26px 3px 8px; font-size: 0.78rem; }
+table.behov-tabell td { text-align: center; }
+table.behov-tabell td input:not([type="checkbox"]) { width: 46px; margin: 0; padding: 6px 4px; text-align: center; font-variant-numeric: tabular-nums; }
+table.behov-tabell td.alle input { width: 60px; border-style: dashed; }
+table.behov-tabell tr.ny-type > * { border-top: 2px solid var(--kant-sterk); }
+table.behov-tabell.ansatt-valg td input[type="checkbox"] { width: 18px; height: 18px; }
+table.forslag-tabell td { font-variant-numeric: tabular-nums; }
+table.forslag-tabell td.under { color: var(--advarsel); font-weight: 600; }
+.auto-turnus .forslag { margin-top: 8px; }
+.auto-turnus details.hull { display: block; margin: 6px 0 12px; font-size: 0.86rem; }
+.auto-turnus details.hull summary { cursor: pointer; font-weight: 600; color: var(--tekst-2); }
+.auto-turnus details.hull ul { margin: 8px 0 0; padding-left: 18px; }
+.auto-turnus details.hull li { margin-bottom: 4px; }
+.auto-turnus .kjoringer { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--kant); }
+.auto-turnus .kjoringer h3 { margin: 0 0 8px; font-size: 0.86rem; }
+.auto-turnus .kjoringer li { display: flex; align-items: center; gap: 10px; font-size: 0.86rem; }
+.auto-turnus .kjoringer li .lenke { margin-left: auto; }
+/* Koden til vakttypen i månedsvisningen (Bemanning.tsx) */
+.bemanning td.bm-rute.turnus-kode button { background: var(--vt-lys); color: var(--vt); font-weight: 750; }
+.bemanning td.bm-rute.turnus-kode.utkast button { background: transparent; outline: 1px dashed color-mix(in srgb, var(--vt) 60%, transparent); outline-offset: -3px; }
+/* Hjelpen om tastene vises ikke på berøringsskjermer. */
+@media (hover: none) { .kun-tastatur { display: none; } }

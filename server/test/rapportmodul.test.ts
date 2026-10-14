@@ -157,6 +157,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "personal.timebank",
         "personal.ekstratimer",
         "personal.ansatte",
+        "personal.turnus",
         "personal.yrkesskader",
       ],
       lonn: [
@@ -208,7 +209,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     expect(liste.moduler[2].rapporter[0]).toEqual({ id: "lonn.journal", navn: "Lønnsjournal", beskrivelse: expect.any(String), parameter: "periode", maanedlig: true });
     // Regnskap ser lønn og timer, men ikke fraværet og feriebanken (som i personalmodulen).
     const r = await moduler(regnskap);
-    expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte"]);
+    expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte", "personal.turnus"]);
     // Sykepengene og refusjonene fra NAV (helseopplysninger) og permisjonene (fravær) ser bare eier
     // og administrator; avstemmingen ser regnskap.
     expect(r.lonn).toHaveLength(18);
@@ -339,6 +340,24 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     expect(tb.data.merknad).toContain("uten feriepenger og arbeidsgiveravgift");
     expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.timebank`, undefined, regnskap)).status).toBe(200);
     expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.timebank`, undefined, fakturerer)).status).toBe(403);
+  });
+
+  it("turnusrapporten: vaktene per ansatt og vakttype, med helg, helligdag, utkast og ledige", async () => {
+    const t = (await kall("POST", `/api/org/${org}/turnus/vakttyper`, { navn: "Nattevakt", kode: "N", fra: "23:00", til: "07:00" })).data;
+    const ansatte = (await kall("GET", `/api/org/${org}/ansatte`)).data as any[];
+    const a = ansatte.find((x) => x.aktiv)!;
+    // Fredag 25. og lørdag 26. desember 2026 (1. og 2. juledag), og en ledig nattevakt søndag 27.
+    for (const dato of ["2026-12-25", "2026-12-26"]) expect((await kall("POST", `/api/org/${org}/vakter`, { ansatt_id: a.id, dato, vakttype_id: t.id })).status).toBe(201);
+    expect((await kall("POST", `/api/org/${org}/vakter`, { dato: "2026-12-27", vakttype_id: t.id })).status).toBe(201);
+    await kall("POST", `/api/org/${org}/vakter/publiser`, { fra: "2026-12-25", til: "2026-12-25" });
+    const r = await kall("GET", `/api/org/${org}/rapportmodul/personal.turnus?fra=2026-12-21&til=2026-12-27`);
+    expect(r.status).toBe(200);
+    expect(r.data.rader).toEqual([
+      { ansattnummer: a.ansattnummer, navn: `${a.fornavn} ${a.etternavn}`, vakttype: "N Nattevakt", antall: 2, timer: 16, helg: 1, helligdag: 2, utkast: 1 },
+      { ansattnummer: null, navn: "Ledige vakter", vakttype: "N Nattevakt", antall: 1, timer: 8, helg: 1, helligdag: 0, utkast: 1 },
+    ]);
+    expect(r.data.sum).toMatchObject({ antall: 3, timer: 24, helg: 2, helligdag: 2, utkast: 2 });
+    expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.turnus?fra=2026-12-21&til=2026-12-27`, undefined, regnskap)).status).toBe(200);
   });
 
   it("utsendingsoppsettet: bare eier og administrator, med totrinn, og eierne varsles om nye mottakere", async () => {

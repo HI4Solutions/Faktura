@@ -30,6 +30,7 @@ describe("rutene og funksjonene de krever", () => {
     expect(funksjonerFor("/ekstratimer.pdf")).toEqual(["vaktplan"]);
     expect(funksjonerFor("/tavle/mine")).toEqual(["vaktplan"]);
     expect(funksjonerFor("/egenmelding")).toEqual(["vaktplan"]);
+    expect(funksjonerFor("/turnus/kjoringer")).toEqual(["vaktplan"]);
     expect(funksjonerFor("/rapportmodul/lonn.journal")).toEqual([]); // rapport for rapport (rapportmodul.ts)
     expect(funksjonerFor("/lonn/kjoringer")).toEqual(["lonn"]);
     expect(funksjonerFor("/regnskap/anleggsmidler")).toEqual(["regnskap"]);
@@ -91,6 +92,7 @@ describe.skipIf(!process.env.DATABASE_URL)("funksjoner per organisasjon", () => 
     expect((await kall("GET", `/api/org/${org}/ansatte`)).data.error).toBe("Ansatte og timer er ikke slått på for organisasjonen");
     // Vaktplanen står på, men bygger på ansatte og timer.
     expect((await kall("GET", `/api/org/${org}/vakter?fra=2026-10-05&til=2026-10-11`)).data.error).toBe("Ansatte og timer er ikke slått på for organisasjonen");
+    expect((await kall("GET", `/api/org/${org}/turnus`)).data.error).toBe("Ansatte og timer er ikke slått på for organisasjonen");
     expect((await kall("GET", `/api/org/${org}/fakturaer`)).status).toBe(200);
     expect((await kall("GET", `/api/org/${org}/gjentakelser`)).status).toBe(200);
     const o = await meg();

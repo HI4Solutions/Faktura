@@ -278,6 +278,48 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   jobb, mangler vikar) følger det, mens ledige vakter (uten rolle), advarslene, «Publiser» og
   «Kopier uka» gjelder alle. Valget huskes på enheten per organisasjon (`localStorage`) og
   endrer bare visningen
+- Turnus (`0106_turnus.sql`, `server/src/turnus.ts`, `server/src/turnusplan.ts`,
+  `web/src/sider/Turnus.tsx`): dag-, kveld- og nattevakter i den samme vaktplanen, for dem som
+  går i turnus. `vakttyper` har navn, kode (1–3 bokstaver eller tall, f.eks. D, K og N, unik i
+  organisasjonen uansett store og små bokstaver), fra–til (over midnatt går fint), pause og
+  farge; en type som ikke er i bruk lenger, kan ikke velges til nye vakter, men vaktene som har
+  den, står. En vakt kan ha en vakttype (`vakter.vakttype_id`): tidene hentes fra typen når vakten
+  lages uten tider eller typen byttes uten at tidene endres (triggeren `vakter_av_vakttype`), og
+  vakten kan likevel få andre tider. En ledig vakt kan være for én rolle (`vakter.rolle_id`), og
+  da kan bare de med rollen ta den (`ta_vakt`). Bemanningsbehovet (`vakttype_behov`) står per
+  vakttype og ukedag, for alle roller eller per rolle (behovet per rolle kommer i tillegg), og
+  helligdagene bemannes som søndager. `ansatt_vakttyper` er hvem som er med i turnusen og hvilke
+  vakttyper de kan gå, og `turnus_regler` reglene (under). Alt lese- og skrivebeskyttes som
+  vaktplanen (RLS: `plan` for å lese, `personal` for å endre). Visningen «Turnus»
+  (`?visning=turnus&turnus=<mandag>&uker=1–8`) viser de ansatte rolle for rolle mot dagene, med
+  koden for vakten i fargen til typen, fraværet (andre ser bare «F», som ellers), utkast med
+  stiplet kant og en prikk ved advarsler, timene planlagt mot avtalt, og nederst de ledige vaktene
+  og bemanningen mot behovet per vakttype. En rute fylles ved å trykke på den eller (på PC) skrive
+  koden; Delete fjerner og pilene flytter. De ansatte ser den publiserte turnusen, uten
+  bemanningsradene. Oppsettet (vakttyper, behov, hvem går hva og regler) ligger i visningen, og
+  «Legg inn dag, kveld og natt» lager tre vanlige vakttyper å begynne med. Automatisk turnus
+  (`POST /turnus/forslag`, `planlegg` i `turnusplan.ts`, en ren funksjon) fordeler de ansatte på
+  plassene for en periode på høyst 13 uker, uansett hvilke ukedager de pleier å jobbe: dag for
+  dag, som en tilordning med lavest samlet kostnad (den ungarske metoden, som rulleringen på
+  tavla). Behovet en dag er det som står igjen når vaktene som finnes (også ledige), er trukket
+  fra. Faste regler, som aldri brytes (plassen blir heller stående åpen): ansatt og ikke borte,
+  vakttypen og rollen, én vakt per døgn, minst `hvile` timer mellom vaktene (11), høyst
+  `dager_paa_rad` dager og `netter_paa_rad` nattevakter på rad, høyst hver `helg`-te helg, den
+  ukentlige grensen og 35 timer sammenhengende fri i uka (arbeidsmiljøloven § 10-8; ikke for dem
+  som ikke er arbeidstakere), og ikke mer enn den avtalte arbeidstiden i uka og i perioden, med
+  vaktene som står der fra før og fraværet trukket fra (så turnusen ikke blir ekstratimer i
+  lønnen). Den som ligger mest bak det avtalte, får plassen; ellers går vaktene helst i blokker
+  av samme type, helgen holdes samlet, nattevakter og helger fordeles jevnt etter
+  stillingsstørrelse, og dagvakt rett etter nattevakter unngås. Tilkallingsvikarer (uten avtalt
+  arbeidstid) brukes bare når ingen andre kan. Det som ikke kan fylles, vises med grunnen (f.eks.
+  «for lite hvile» eller «jobber helg for ofte») og kan bli ledige vakter for rollen. Forslaget
+  vises før det legges inn som utkast (`POST /turnus/kjoringer`, `turnus_kjoringer`): en ny
+  kjøring erstatter utkastene fra de forrige i perioden, og en kjøring kan angres
+  (`DELETE /turnus/kjoringer/:id`). Vakter som er publisert eller endret for hånd (da settes
+  `turnus_id` til null), står. Vaktene publiseres som før, med varsler. AI-assistenten kan legge
+  inn vakter med vakttype («nattevakt til Ola på fredag»), og rapporten «Turnus»
+  (`personal.turnus`) viser vaktene og timene per ansatt og vakttype for en periode, med helger,
+  helligdager, det som ikke er publisert og de ledige vaktene
 - `vaktbytter` (`0060_vaktbytte.sql`, `server/src/vaktbytte.ts`): den ansatte gir bort en
   publisert vakt eller en fast arbeidsdag (den blir en vakt med de samme tidene,
   `vakt_fra_plan`), til en bestemt kollega eller til alle med samme rolle (uten rolle: alle), eller

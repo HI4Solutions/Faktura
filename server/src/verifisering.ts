@@ -76,6 +76,7 @@ const TESTPERSONAL: PersonalGrunnlag = {
   meg: "test-ansatt-1",
   faser: [{ id: "test-fase-1", navn: "Formiddag", fra: "08:00", til: "12:00" }],
   oppgaver: [{ id: "test-oppgave-1", navn: "Kasse" }],
+  vakttyper: [{ id: "test-vakttype-1", kode: "N", navn: "Nattevakt", fra: "23:00", til: "07:00", pause_min: 0 }],
   kan: { personal: true, se: true, ferie: true, plan: true },
   vaktplan: true,
   helg: true,

@@ -40,6 +40,7 @@ export type PersonalKommando = {
   pause_min: number | null;
   timer: number | null;
   oppgave: string | null;
+  vakttype: string | null;
   fase: string | null;
   dager: number | null;
   godkjent: boolean | null;
@@ -61,7 +62,19 @@ export type PForslag =
       faste: string[]; // faste arbeidsdager i perioden (uten vakt), som får vikar gjennom /vakter/fra-plan
     }
   | { type: "vikar"; tekst: string; knapp: string; vakt_id: string | null; fast: { ansatt_id: string; dato: string } | null; vikar_id: string }
-  | { type: "ny_vakt"; tekst: string; knapp: string; ansatt_id: string | null; dato: string; fra: string; til: string; pause_min: number; oppgave: string | null; notat: string | null }
+  | {
+      type: "ny_vakt";
+      tekst: string;
+      knapp: string;
+      ansatt_id: string | null;
+      dato: string;
+      fra: string;
+      til: string;
+      pause_min: number;
+      oppgave: string | null;
+      notat: string | null;
+      vakttype_id: string | null; // turnus: vakttypen (klokkeslettene er fra den)
+    }
   | { type: "publiser"; tekst: string; knapp: string; fra: string; til: string }
   | { type: "ta_vakt"; tekst: string; knapp: string; vakt_id: string }
   | { type: "plassering"; tekst: string; knapp: string; plasser: { dato: string; fase_id: string; oppgave_id: string; ansatt_id: string }[] }
@@ -97,6 +110,8 @@ export type PersonalGrunnlag = {
   meg: string | null; // brukerens egen ansattrad
   faser: { id: string; navn: string; fra: string | null; til: string | null }[];
   oppgaver: { id: string; navn: string }[];
+  // Vakttypene i turnusen (0106_turnus.sql), f.eks. D dagvakt 07–15 og N nattevakt 23–07.
+  vakttyper: { id: string; kode: string; navn: string; fra: string; til: string; pause_min: number }[];
   // personal: eier og administrator; se: også regnskap; plan: også de aktive ansatte (vaktplanen og
   // tavla, 0063_ansatte_ser_planen.sql).
   kan: { personal: boolean; se: boolean; ferie: boolean; plan: boolean };
@@ -131,6 +146,13 @@ export async function hentPersonal(db: Db, org: string): Promise<PersonalGrunnla
       ? await alle(db, "select id, navn, to_char(fra, 'HH24:MI') as fra, to_char(til, 'HH24:MI') as til from faktura.tavle_faser where org_id = $1 order by rekkefolge, opprettet", [org])
       : [],
     oppgaver: tavle ? await alle(db, "select id, navn from faktura.tavle_oppgaver where org_id = $1 order by rekkefolge, opprettet", [org]) : [],
+    vakttyper: k.vaktplan
+      ? await alle(
+          db,
+          "select id, kode, navn, to_char(fra, 'HH24:MI') as fra, to_char(til, 'HH24:MI') as til, pause_min from faktura.vakttyper where org_id = $1 and aktiv order by rekkefolge, fra",
+          [org],
+        )
+      : [],
     // Feriebanken ser eier, administrator og den ansatte selv (ikke regnskap).
     kan: { personal: k.personal, se: k.se, ferie: k.personal || !!k.meg, plan: k.plan },
     vaktplan: k.vaktplan,
@@ -147,6 +169,7 @@ export function personalRegister(p: PersonalGrunnlag): string {
   if (!p.helg) deler.push("Stengt i helgene: «denne uka», «neste uke» og andre perioder gjelder mandag–fredag. Lørdag og søndag bare når brukeren sier dem.");
   if (p.faser.length) deler.push(`Fasene på tavla (id: navn):\n${p.faser.map((f, i) => `F${i + 1}: ${enLinje(f.navn, 40)}${f.fra ? ` ${f.fra}–${f.til}` : ""}`).join("\n")}`);
   if (p.oppgaver.length) deler.push(`Oppgavene på tavla (id: navn):\n${p.oppgaver.map((o, i) => `O${i + 1}: ${enLinje(o.navn, 40)}`).join("\n")}`);
+  if (p.vakttyper.length) deler.push(`Vakttypene (kode: navn og klokkeslett):\n${p.vakttyper.map((t) => `${t.kode}: ${enLinje(t.navn, 40)} ${t.fra}–${t.til}`).join("\n")}`);
   return deler.join("\n\n");
 }
 
@@ -167,6 +190,7 @@ export const personalFelt: Record<string, Skjema> = {
   pause_min: { type: "INTEGER", nullable: true, description: "Pause i minutter når brukeren sier den, ellers null" },
   timer: { type: "NUMBER", nullable: true, description: "for_timer: antall timer når brukeren sier det uten klokkeslett, ellers null" },
   oppgave: tekst("Oppgaven: id-en på tavla (O1, O2 …) når den står der, ellers slik brukeren sa den, eller null"),
+  vakttype: tekst("ny_vakt: vakttypen (koden fra listen, f.eks. D, K eller N) når brukeren sier den («nattevakt», «kveldsvakt»), ellers null"),
   fase: tekst("Fasen på tavla (F1, F2 …), eller null for hele dagen"),
   dager: { type: "NUMBER", nullable: true, description: "overfor_ferie: antall feriedager, ellers null" },
   godkjent: { type: "BOOLEAN", nullable: true, description: "godkjenn_timer og svar_overforing: true for å godkjenne, false for å avvise eller avslå, ellers null" },
@@ -176,7 +200,7 @@ export const personalFelt: Record<string, Skjema> = {
 export const personalHandlingtekst = [
   "- fravaer: registrere fravær («Kari er syk i dag», «jeg er syk», «Ola har ferie 1.–5. juli», «jeg har sykt barn i morgen», «jeg vil avspasere fredag»). fravaerstype, fra_dato og til_dato (samme dag når bare én dag er sagt). Sier brukeren hvem som tar vaktene («… og Per er vikar»), sett vikar.",
   "- vikar: sette inn en vikar for en ansatt som er borte («Per er vikar for Kari på fredag»). ansatt er den som er borte, vikar den som tar over, fra_dato og til_dato dagene.",
-  "- ny_vakt: legge inn vakter («legg inn vakt for Kari fredag 08–16», «Ola jobber 9–17 mandag til onsdag», «lag en ledig vakt lørdag 10–18»). datoer (alle dagene), klokke_fra og klokke_til, pause_min og oppgave når de sies. En ledig vakt har ansatt null.",
+  "- ny_vakt: legge inn vakter («legg inn vakt for Kari fredag 08–16», «Ola jobber 9–17 mandag til onsdag», «lag en ledig vakt lørdag 10–18», «sett Kari på nattevakt fredag»). datoer (alle dagene), klokke_fra og klokke_til, pause_min og oppgave når de sies. Sier brukeren en vakttype (dagvakt, kveldsvakt, nattevakt …), sett vakttype til koden fra listen; da trengs ikke klokkeslett. En ledig vakt har ansatt null.",
   "- publiser_vakter: publisere vaktplanen så de ansatte ser den («publiser neste uke», «send ut vaktplanen»). fra_dato og til_dato (mandag til søndag for en uke).",
   "- ta_vakt: brukeren vil ta en ledig vakt («jeg tar den ledige vakten på lørdag»). fra_dato og til_dato.",
   "- plasser: sette en ansatt i en oppgave på tavla («sett Kari på kassa i dag», «Ola på lager etter lunsj»). oppgave, fase (null for hele dagen) og datoer.",
@@ -443,16 +467,39 @@ async function vikar(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSvar
   return { tekst: deler.join(" "), forslag, lenker: [{ tekst: "Tavla", til: `/vakter?fane=tavle&dato=${fra}` }] };
 }
 
+// Vakttypen brukeren sa: koden («N»), navnet («nattevakt») eller begynnelsen av det («natt»).
+function finnVakttype(typer: PersonalGrunnlag["vakttyper"], sagt: string | null | undefined) {
+  const s = (sagt ?? "").trim().toLowerCase();
+  if (!s) return null;
+  return (
+    typer.find((t) => t.kode.toLowerCase() === s) ??
+    typer.find((t) => t.navn.toLowerCase() === s) ??
+    typer.find((t) => t.navn.toLowerCase().startsWith(s) || s.startsWith(t.navn.toLowerCase().replace(/vakt$/, ""))) ??
+    null
+  );
+}
+
 async function nyVakt(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSvar> {
   if (!k.p.vaktplan) return UTEN_VAKTPLAN;
   if (!k.p.kan.personal) return ingen("legge inn vakter");
   const a = finnAnsatt(k.p, ai.ansatt);
   if (a.ukjent) return { tekst: `Fant ikke «${a.ukjent}» blant de ansatte.` };
-  const fra = klokke(ai.klokke_fra);
-  const til = klokke(ai.klokke_til);
-  if (!fra || !til) return { tekst: "Hvilket klokkeslett? Si for eksempel «08–16»." };
+  // Vakttypen (turnus): koden eller navnet; klokkeslettene og pausen er fra den, med mindre
+  // brukeren sa andre.
+  const vt = finnVakttype(k.p.vakttyper, ai.vakttype);
+  if (ai.vakttype && !vt && k.p.vakttyper.length)
+    return { tekst: `Fant ikke vakttypen «${enLinje(ai.vakttype, 40)}». Vakttypene er ${liste(k.p.vakttyper.map((t) => `${t.navn.toLowerCase()} (${t.kode})`))}.` };
+  const fra = klokke(ai.klokke_fra) ?? vt?.fra ?? null;
+  const til = klokke(ai.klokke_til) ?? vt?.til ?? null;
+  if (!fra || !til)
+    return { tekst: k.p.vakttyper.length ? "Hvilket klokkeslett eller hvilken vakttype? Si for eksempel «08–16» eller «nattevakt»." : "Hvilket klokkeslett? Si for eksempel «08–16»." };
   const dager = dagerFra(ai, k.iDag, 14, k.p.helg);
-  const pause = typeof ai.pause_min === "number" && ai.pause_min >= 0 && ai.pause_min <= 600 ? Math.round(ai.pause_min) : 0;
+  const pause =
+    typeof ai.pause_min === "number" && ai.pause_min >= 0 && ai.pause_min <= 600
+      ? Math.round(ai.pause_min)
+      : vt && fra === vt.fra && til === vt.til
+        ? vt.pause_min
+        : 0;
   const o = finnPaTavla(k.p.oppgaver, "O", ai.oppgave);
   const oppgave = o?.navn ?? (enLinje(ai.oppgave, 60) || null);
   const borte = a.a
@@ -476,7 +523,8 @@ async function nyVakt(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSva
     pause_min: pause,
     oppgave,
     notat: enLinje(ai.notat, 500) || null,
-    tekst: `${a.a ? `Vakt for ${a.a.navn}` : "Ledig vakt"} ${dag(d)} ${fra}–${til}${pause ? ` (${pause} min pause)` : ""}${oppgave ? `, ${oppgave}` : ""}: ${timerTekst(t)}.`,
+    vakttype_id: vt?.id ?? null,
+    tekst: `${vt ? vt.navn : "Vakt"}${a.a ? ` for ${a.a.navn}` : vt ? " (ledig)" : ""}${!vt && !a.a ? " (ledig)" : ""} ${dag(d)} ${fra}–${til}${pause ? ` (${pause} min pause)` : ""}${oppgave ? `, ${oppgave}` : ""}: ${timerTekst(t)}.`,
     knapp: "Lag vakt",
   }));
   const deler = [forslag.length === 1 ? `Skal jeg legge inn vakten (${hvemTekst})?` : `${flertall(forslag.length, "vakt", "vakter")} for ${hvemTekst}.`];
