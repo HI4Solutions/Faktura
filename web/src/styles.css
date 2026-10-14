@@ -143,6 +143,8 @@ strong { font-weight: 650; }
   margin: 0 -14px; padding: 2px 14px 14px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 .meny-fot { flex: none; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+/* Konto nederst i lista (Innstillinger og de andre): en vanlig overskrift, ikke en nedtrekk. */
+.meny-seksjon { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--meny-dempet); margin: 16px 10px 6px; font-weight: 600; }
 /* Kategoriene foldes ut og sammen med overskriften (pila snur når den er åpen). */
 .meny-gruppe { display: flex; flex-direction: column; gap: 2px; }
 button.meny-kategori {

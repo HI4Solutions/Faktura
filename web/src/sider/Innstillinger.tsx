@@ -16,12 +16,12 @@ import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey }
 import { SlettOrganisasjon } from "../slettOrg";
 
 type OrgDel = "organisasjon" | "faktura" | "betaling";
-export type InnstillingFane = "organisasjon" | "faktura" | "personal" | "lonn" | "konto" | "app";
+type InnstillingFane = "organisasjon" | "faktura" | "personal" | "lonn" | "konto" | "app";
 
-// Fanene i innstillingene (og punktene under Innstillinger i sidemenyen): organisasjonens bare for
-// eier og administrator. Regnskapsbyråer fakturerer ikke; Faktura er med når modulen er på (eller
-// banken, som regnskapet også bruker), Personal og Lønn når funksjonene er på.
-export function innstillingFaner(org: MinOrg | null | undefined): [InnstillingFane, string][] {
+// Fanene i innstillingene: organisasjonens bare for eier og administrator. Regnskapsbyråer
+// fakturerer ikke; Faktura er med når modulen er på (eller banken, som regnskapet også bruker),
+// Personal og Lønn når funksjonene er på.
+function innstillingFaner(org: MinOrg | null | undefined): [InnstillingFane, string][] {
   const faner: [InnstillingFane, string][] = [];
   if (org && erAdmin(org)) {
     const byraa = org.type === "regnskapsbyraa";
@@ -112,9 +112,8 @@ function nyAdresse(fane: string | null, del: string | null, sted: string, bank: 
 // regnskapsføreren og slettingen; Faktura oppsettet av fakturaene, logoen, betalingen, kontonumrene,
 // banken og EHF; Personal arbeidstiden, ferien, vaktbyttene, timebanken og bursdagene; Lønn
 // lønnsoppsettet, betalingsfila, a-meldingen, skattekortene og bokføringen.
-// Fanen og underfanen adressen gir (også de gamle adressene), med fanene og underfanene som finnes:
-// for siden og for sidemenyen (punktet som er valgt under Innstillinger).
-export function valgtInnstilling(org: MinOrg | null, orgs: MinOrg[], sok: URLSearchParams, hash: string) {
+// Fanen og underfanen adressen gir (også de gamle adressene), med fanene og underfanene som finnes.
+function valgtInnstilling(org: MinOrg | null, orgs: MinOrg[], sok: URLSearchParams, hash: string) {
   const faner = innstillingFaner(org);
   // Tilbake fra Google (Google Disk-koblingen): «Min konto».
   const [onsket, onsketDel] = nyAdresse(

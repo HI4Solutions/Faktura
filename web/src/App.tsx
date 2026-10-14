@@ -16,7 +16,7 @@ import { Kunder, Produkter } from "./sider/Register";
 import { Importer } from "./sider/Importer";
 import { FakturaSkjema, FakturaVisning, Fakturaliste } from "./sider/Fakturaer";
 import { FlereFakturaer } from "./sider/Flere";
-import { Innstillinger, innstillingFaner, valgtInnstilling, type InnstillingFane } from "./sider/Innstillinger";
+import { Innstillinger } from "./sider/Innstillinger";
 import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
@@ -43,7 +43,7 @@ import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
   IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
   IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva,
-  IkonNed, IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSkjerm, IkonSkjold, IkonTavle, IkonTimebank,
+  IkonNed, IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSkjold, IkonTavle, IkonTimebank,
   IkonUtgift, IkonVelg,
 } from "./ikoner";
 
@@ -59,19 +59,12 @@ const orgType: Record<string, string> = { foretak: "Foretak", regnskapsbyraa: "R
 // Antall nye beskjeder (99+ over det).
 const UlesteTall = ({ n }: { n: number }) => (n > 0 ? <span className="ulest-tall" aria-label={`${n} nye`}>{n > 99 ? "99+" : n}</span> : null);
 
-// Punktene i sidemenyen, i kategorier (Plattform, Innstillinger, Faktura, Personal, Lønn, Regnskap).
+// Punktene i sidemenyen, i kategorier (Plattform, Faktura, Personal, Lønn, Regnskap).
 type MenyIkon = (p: { storrelse?: number }) => ReactNode;
-type MenyPunkt = { til: string; Ikon: MenyIkon; tekst: string; aktiv: boolean; teller?: number; klikk?: () => void };
+type MenyPunkt = { til: string; Ikon: MenyIkon; tekst: string; aktiv: boolean; teller?: number };
 type MenyKategoriData = { navn: string; punkter: MenyPunkt[]; aktiv: boolean };
 
 function MenyLenke({ x }: { x: MenyPunkt }) {
-  if (x.klikk)
-    return (
-      <a href="#" onClick={(e) => (e.preventDefault(), x.klikk!())}>
-        <x.Ikon />
-        {x.tekst}
-      </a>
-    );
   return (
     <Link to={x.til} className={x.aktiv ? "active" : undefined} aria-current={x.aktiv ? "page" : undefined}>
       <x.Ikon />
@@ -374,23 +367,14 @@ function Ramme() {
     ["/admin?fane=drift", "Drift", ["drift"], IkonDrift],
   ];
 
-  // Sidemenyen: Oversikt øverst, så kategoriene: Plattform (plattformadministratoren),
-  // Innstillinger, og modulene (Faktura, Personal, Lønn, Regnskap og Rapporter; de ansatte har
-  // sine egne grupper). Kategoriene foldes ut og sammen og er lukket som standard; den med siden man
-  // er på, åpnes når man kommer dit. En kategori med ett punkt er en vanlig lenke.
+  // Sidemenyen: Oversikt øverst, så kategoriene: Plattform (plattformadministratoren) og modulene
+  // (Faktura, Personal, Lønn, Regnskap og Rapporter; de ansatte har sine egne grupper). Kategoriene
+  // foldes ut og sammen og er lukket som standard; den med siden man er på, åpnes når man kommer dit.
+  // En kategori med ett punkt er en vanlig lenke. Konto (Innstillinger) står nederst som før.
   const punkt = (til: string, Ikon: MenyIkon, tekst: string, aktiv: boolean, teller?: number): MenyPunkt => ({ til, Ikon, tekst, aktiv, teller });
   const kategori = (navn: string, punkter: (MenyPunkt | false | null | undefined)[], aktiv = false): MenyKategoriData => {
     const p = punkter.filter((x): x is MenyPunkt => !!x);
     return { navn, punkter: p, aktiv: aktiv || p.some((x) => x.aktiv) };
-  };
-  const innstilling = sted.pathname === "/innstillinger" && org ? valgtInnstilling(org, orgs, her, sted.hash).fane : null;
-  const innstillingIkon: Record<InnstillingFane, MenyIkon> = {
-    organisasjon: IkonInnstillinger,
-    faktura: IkonFaktura,
-    personal: IkonAnsatte,
-    lonn: IkonLonn,
-    konto: IkonPerson,
-    app: IkonSkjerm,
   };
   // Lønnen: fanene på Lønn som punkter (Lonn.tsx); lederen ser kjøringene først, ellers egne slipper.
   const lonnLeder = !ansatt && kanSeLonn(org);
@@ -401,16 +385,6 @@ function Ramme() {
         plattformPunkter.map(([til, tekst, faner, Ikon]) => punkt(til, Ikon, tekst, !!adminFane && faner.includes(adminFane))),
         sted.pathname === "/admin",
       ),
-    kategori(
-      "Innstillinger",
-      [
-        ...(org ? innstillingFaner(org).map(([v, tekst]) => punkt(`/innstillinger?fane=${v}`, innstillingIkon[v], tekst, innstilling === v)) : []),
-        // Bare eier og administrator verifiserer (Verifisering.tsx).
-        org?.verifisering === "ny" && org.direkte_medlem && erAdmin(org) && punkt("/verifisering", IkonSkjold, "Verifiser organisasjon", sted.pathname === "/verifisering"),
-        kanInstallere && { ...punkt("#installer", IkonInstaller, "Installer appen", false), klikk: () => void installer() },
-      ],
-      sted.pathname === "/innstillinger",
-    ),
     ...(org && !ansatt
       ? [
           visFaktura &&
@@ -632,6 +606,28 @@ function Ramme() {
             ) : (
               <MenyKategori key={k.navn} k={k} apen={apne.has(k.navn)} veksle={() => veksle(k.navn)} />
             ),
+          )}
+          {/* Konto nederst i lista, som før: Innstillinger er alltid synlig (ikke i en nedtrekk). Uten
+              organisasjon (plattformadministratoren) er det bare å installere appen. */}
+          {(org || kanInstallere) && <div className="meny-seksjon">Konto</div>}
+          {org && (
+            <NavLink to="/innstillinger">
+              <IkonInnstillinger />
+              Innstillinger
+            </NavLink>
+          )}
+          {/* Bare eier og administrator verifiserer (Verifisering.tsx). */}
+          {org?.verifisering === "ny" && org.direkte_medlem && erAdmin(org) && (
+            <NavLink to="/verifisering">
+              <IkonSkjold />
+              Verifiser organisasjon
+            </NavLink>
+          )}
+          {kanInstallere && (
+            <a href="#" onClick={(e) => (e.preventDefault(), void installer())}>
+              <IkonInstaller />
+              Installer appen
+            </a>
           )}
         </div>
         <div className="meny-fot">

@@ -642,17 +642,17 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `?fane=skattekort` og `?fane=personal#lonn`, `#afp`, `#amelding`, `#skattekort`) går til fanen og
   underfanen der delen er nå (`nyAdresse`)
 - Sidemenyen (`App.tsx`) har Oversikt øverst, forsiden for hver rolle (se under), og resten i
-  kategorier: Plattform (bare for plattformadministratorene), Innstillinger (fanene i
-  innstillingene som punkter, Verifiser organisasjon for eier og administrator, og Installer
-  appen), Faktura (Fakturaer, Kunder og Produkter), Personal (Ansatte, Vaktplan, Timer eller
-  «Timer og ferie», og Beskjeder), Lønn (fanene på Lønn som punkter: Lønnskjøringer, A-melding,
-  Sykepenger, Årsoversikt, Reiser og Mine lønnsslipper), Regnskap (delene av Regnskap som egne
-  punkter: Bilag, Utgifter, Bank, Mva, Saldobalanse, Årsoppgjør, Anleggsmidler, Periodiseringer,
-  Saldoavskrivninger og Kontoer, som `?fane=` på `/regnskap`) og Rapporter. Kategoriene foldes ut
-  og sammen med overskriften (`MenyKategori`): de er lukket som standard, og den med siden man er
-  på, åpnes når man kommer dit; lukket viser den tallet på nye beskjeder, og en kategori med ett
-  punkt er en vanlig lenke. Lista ruller, og bunnen (utseendet, navnet og «Logg ut») står fast,
-  også i skuffen på mobil. Det rollen og modulene ikke gir tilgang til, er ikke med. De ansatte
+  kategorier: Plattform (bare for plattformadministratorene), Faktura (Fakturaer, Kunder og
+  Produkter), Personal (Ansatte, Vaktplan, Timer eller «Timer og ferie», og Beskjeder), Lønn
+  (fanene på Lønn som punkter: Lønnskjøringer, A-melding, Sykepenger, Årsoversikt, Reiser og Mine
+  lønnsslipper), Regnskap (delene av Regnskap som egne punkter: Bilag, Utgifter, Bank, Mva,
+  Saldobalanse, Årsoppgjør, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer, som
+  `?fane=` på `/regnskap`) og Rapporter, og nederst Konto (Innstillinger, Verifiser organisasjon
+  for eier og administrator, og Installer appen), som alltid er synlig. Kategoriene foldes ut og
+  sammen med overskriften (`MenyKategori`): de er lukket som standard, og den med siden man er på,
+  åpnes når man kommer dit; lukket viser den tallet på nye beskjeder, og en kategori med ett punkt
+  er en vanlig lenke. Lista ruller, og bunnen (utseendet, navnet og «Logg ut») står fast, også i
+  skuffen på mobil. Det rollen og modulene ikke gir tilgang til, er ikke med. De ansatte
   har sin egen meny (under Roller). Et regnskapsbyrå har Klienter i stedet for Oversikt og ikke
   Faktura.
 - Hver har sin egen oversikt, satt sammen av de samme delene (`OversiktDeler.tsx`: hilsenen,
@@ -1405,7 +1405,7 @@ grupper:
   `/ansatte/meg`; bare lesing) og Beskjeder (med tallet på de nye).
 
 Gruppene er kategorier som foldes ut og sammen, som for de andre, og Innstillinger (Min konto og App)
-er en egen kategori øverst. Punktet for siden og fanen man står på, er valgt, og fanene på sidene er
+ligger under Konto nederst. Punktet for siden og fanen man står på, er valgt, og fanene på sidene er
 der fortsatt. Bunnmenyen på mobil har Oversikt, Kalender, Ekstra
 timer og Fravær, og resten under «Mer» (med en prikk når det er nye beskjeder).
 
