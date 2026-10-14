@@ -175,35 +175,53 @@ export interface Epost {
 
 let resend: Resend | undefined;
 
+// Slik svarer Resend når avsenderdomenet ikke er verifisert i kontoen.
+export const avsenderIkkeVerifisert = (feil: { message?: string } | null | undefined) => /not verified|verify your domain/i.test(feil?.message ?? "");
+
+// Sender én e-post gjennom Resend. Resend tar bare imot noen få e-poster i sekundet: når mange
+// fakturaer sendes samtidig, venter vi litt og prøver igjen (idempotensnøkkelen hindrer dobbel
+// sending). Er avsenderdomenet ikke verifisert i Resend (f.eks. etter et domenebytte), sendes
+// e-posten fra reserveadressen i stedet, så fakturaene ikke stopper.
+export async function sendGjennomResend(klient: Pick<Resend, "emails">, m: EpostMelding, avsender: string, reserve?: string): Promise<{ id: string }> {
+  const navn = m.fraNavn.replace(/["<>]/g, "");
+  let fra = avsender;
+  let nokkel = m.idempotensnokkel;
+  for (let forsok = 1; ; forsok++) {
+    const { data, error } = await klient.emails.send(
+      {
+        from: `${navn} <${fra}>`,
+        to: m.til,
+        replyTo: m.svarTil,
+        cc: m.kopi?.length ? m.kopi : undefined,
+        bcc: m.blindkopi?.length ? m.blindkopi : undefined,
+        subject: m.emne,
+        text: m.tekst,
+        html: m.html,
+        attachments: m.vedlegg?.map((v) => ({ filename: v.filnavn, content: Buffer.from(v.data), contentType: v.type })),
+      },
+      nokkel ? { idempotencyKey: nokkel } : undefined,
+    );
+    if (data && !error) return { id: data.id };
+    if (error?.name === "rate_limit_exceeded" && forsok < 8) {
+      await new Promise((ok) => setTimeout(ok, 600 * forsok + Math.random() * 600));
+      continue;
+    }
+    if (reserve && fra !== reserve && avsenderIkkeVerifisert(error)) {
+      console.warn(JSON.stringify({ severity: "WARNING", message: "Avsenderdomenet er ikke verifisert i Resend; sender fra reserveadressen", avsender: fra, reserve, feil: error?.message }));
+      fra = reserve;
+      // Egen nøkkel: Resend kan ha husket den avviste forespørselen.
+      nokkel = nokkel ? `${nokkel}-reserve` : undefined;
+      continue;
+    }
+    throw new Error(`Resend: ${error?.message ?? "ukjent feil"}`);
+  }
+}
+
 export const resendEpost: Epost = {
   async send(m) {
     if (!config.resendNokkel || config.resendNokkel === "ikke-satt") throw new Error("RESEND_API_KEY er ikke satt");
     resend ??= new Resend(config.resendNokkel);
-    const navn = m.fraNavn.replace(/["<>]/g, "");
-    // Resend tar bare imot noen få e-poster i sekundet. Når mange fakturaer sendes samtidig,
-    // venter vi litt og prøver igjen (idempotensnøkkelen hindrer dobbel sending).
-    for (let forsok = 1; ; forsok++) {
-      const { data, error } = await resend.emails.send(
-        {
-          from: `${navn} <${config.epostAvsender}>`,
-          to: m.til,
-          replyTo: m.svarTil,
-          cc: m.kopi?.length ? m.kopi : undefined,
-          bcc: m.blindkopi?.length ? m.blindkopi : undefined,
-          subject: m.emne,
-          text: m.tekst,
-          html: m.html,
-          attachments: m.vedlegg?.map((v) => ({ filename: v.filnavn, content: Buffer.from(v.data), contentType: v.type })),
-        },
-        m.idempotensnokkel ? { idempotencyKey: m.idempotensnokkel } : undefined,
-      );
-      if (data && !error) return { id: data.id };
-      if (error?.name === "rate_limit_exceeded" && forsok < 8) {
-        await new Promise((ok) => setTimeout(ok, 600 * forsok + Math.random() * 600));
-        continue;
-      }
-      throw new Error(`Resend: ${error?.message ?? "ukjent feil"}`);
-    }
+    return sendGjennomResend(resend, m, config.epostAvsender, config.epostAvsenderReserve);
   },
 };
 

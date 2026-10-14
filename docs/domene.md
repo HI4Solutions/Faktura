@@ -41,8 +41,13 @@ domenet og skal stå.
   kobles til eller tilgangen fornyes.
 - **Altinn** (systemregisteret, når skattekortene er satt opp): trykk «Oppdater i Altinn» under
   Administrasjon → Drift, så systemet har tilbakeadressen på domenet.
-- **Resend:** webhooken for e-postsporingen peker til `https://adminkonsoll.no/api/offentlig/resend`.
-  Avsenderen (`epost_avsender`) må ligge på et domene som er verifisert i Resend.
+- **Resend:** webhooken for e-postsporingen peker til `https://adminkonsoll.no/api/offentlig/resend`
+  (hendelsene `email.delivered`, `email.delivery_delayed`, `email.bounced` og `email.complained`),
+  og signeringsnøkkelen dens ligger i Secret Manager som `resend-webhook-secret`. API-et leser den
+  når det starter, så etter en ny nøkkel må det rulles ut på nytt (Utrulling → Run workflow).
+  E-posten sendes fra `post@adminkonsoll.no` (`epost_avsender`), og domenet må være verifisert i
+  samme Resend-konto som API-nøkkelen hører til. Sier Resend at det ikke er det, sendes e-posten fra
+  reserveadressen `faktura@hi4.no` i stedet (`EPOST_AVSENDER_RESERVE`), og loggen får en advarsel.
 
 ## Et nytt domene senere
 

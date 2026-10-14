@@ -47,7 +47,10 @@ export const config = {
   andreAppUrler: adresser(valgfri("ANDRE_APP_URLER")),
   // De av dem appen er flyttet fra: der vises en melding om den nye adressen.
   gamleAppUrler: adresser(valgfri("GAMLE_APP_URLER")),
-  epostAvsender: valgfri("EPOST_AVSENDER") ?? "faktura@hi4.no",
+  epostAvsender: valgfri("EPOST_AVSENDER") ?? "post@adminkonsoll.no",
+  // Brukes når Resend sier at avsenderdomenet over ikke er verifisert (tjenester.ts), så e-posten
+  // likevel går.
+  epostAvsenderReserve: valgfri("EPOST_AVSENDER_RESERVE") ?? "faktura@hi4.no",
   resendNokkel: valgfri("RESEND_API_KEY"),
   resendWebhookHemmelighet: valgfri("RESEND_WEBHOOK_SECRET"),
   googleClientId: valgfri("GOOGLE_OAUTH_CLIENT_ID"),
