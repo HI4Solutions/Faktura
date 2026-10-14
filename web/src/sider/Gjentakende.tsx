@@ -66,7 +66,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
     <>
       <div className="topp">
         <h1>Fakturaer</h1>
-        {kanSkrive(org?.rolle) && (
+        {kanSkrive(org) && (
           <button className="primar" onClick={() => settRedigerer({})}>
             Ny gjentakelse
           </button>
@@ -82,7 +82,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
         <div className="kort liste">
           {data.map((g) => {
             const sum = summerMedMakstak(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25, rabatt_prosent: l.rabatt_prosent, rabatt_belop: l.rabatt_belop })), g.makstak);
-            const apne = () => kanSkrive(org?.rolle) && settRedigerer(g);
+            const apne = () => kanSkrive(org) && settRedigerer(g);
             return (
               <div key={g.id} className="liste-rad" role="button" tabIndex={0} onClick={apne} onKeyDown={(e) => e.key === "Enter" && apne()}>
                 <span className="linje">
@@ -98,7 +98,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
                 {g.aktiv && (
                   <span className="linje">
                     <span className="under">Sendes {dato(g.neste_dato)}</span>
-                    {kanSkrive(org?.rolle) && (
+                    {kanSkrive(org) && (
                       <button
                         className="lenke"
                         disabled={h.opptatt}
@@ -137,7 +137,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
             {data.map((g) => {
               const sum = summerMedMakstak(g.linjer.map((l: any) => ({ antall: l.antall ?? 1, enhetspris: l.enhetspris, mva_sats: l.mva_sats ?? 25, rabatt_prosent: l.rabatt_prosent, rabatt_belop: l.rabatt_belop })), g.makstak);
               return (
-                <tr key={g.id} className="klikkbar" onClick={() => kanSkrive(org?.rolle) && settRedigerer(g)}>
+                <tr key={g.id} className="klikkbar" onClick={() => kanSkrive(org) && settRedigerer(g)}>
                   <td>{g.kunde_navn}</td>
                   <td>{intervallTekst[g.intervall]}</td>
                   <td className="tall">{kr(sum.inkl)}</td>
@@ -147,7 +147,7 @@ function GjentakendeFakturaer({ faner }: { faner: ReactNode }) {
                     <span className={`merke ${g.aktiv ? "merke-ok" : "merke-noytral"}`}>{g.aktiv ? "Aktiv" : "Stoppet"}</span>
                   </td>
                   <td className="hoyre" onClick={(e) => e.stopPropagation()}>
-                    {kanSkrive(org?.rolle) && g.aktiv && (
+                    {kanSkrive(org) && g.aktiv && (
                       <button
                         className="lenke"
                         disabled={h.opptatt}

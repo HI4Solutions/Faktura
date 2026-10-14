@@ -6,7 +6,7 @@ import { dato } from "../format";
 import { IkonBjelle, IkonInstaller } from "../ikoner";
 import { usePwa } from "../Pwa";
 import { erInstallert, erIos, hentAbonnement, installer, pushStotte, slaAvVarsler, slaPaVarsler } from "../pwa";
-import { harFunksjon, useKonto } from "../konto";
+import { erAnsatt, harFunksjon, kanPersonal, useKonto } from "../konto";
 import { foreslattNavn, leggTilPasskey, passkeyFeil } from "../passkey";
 import { bekreftMedServer, biometriNavn, hentPasskeyIder, lagreLaas, lesLaas, lyttPaLaas, merkAktiv, stotterApplaas } from "../applaas";
 import { settTema, useTema, type Tema } from "../tema";
@@ -166,21 +166,23 @@ interface PushData {
   abonnementer: { id: string; endpoint: string; enhet: string | null; opprettet: string; sist_sendt: string | null }[];
 }
 
-export function AppOgVarsler() {
+// Underfanene App (installering, utseende og applås) og Varsler (push) i Innstillinger → App.
+export function AppOgVarsler({ del }: { del?: "app" | "varsler" }) {
   const { meg } = useKonto();
   const { data, last } = useData(() => hent<PushData>("/push"), []);
-  // Bare de varslene som gjelder: ansatte får bare varsler om timer, vakter, fravær, bursdager,
-  // beskjeder og lønnsslipper, og de bare der ansatte og timer er slått på. Bursdager og
-  // beskjeder går til alle i organisasjonen, lønnsslippen til den som er ansatt (med lønn).
+  // Bare de varslene som gjelder: ansatte (og egne roller uten moduler) får bare varsler om timer,
+  // vakter, fravær, bursdager, beskjeder og lønnsslipper, og de bare der ansatte og timer er slått
+  // på. Bursdager og beskjeder går til alle i organisasjonen, lønnsslippen til den som er ansatt
+  // (med lønn).
   const orgs = meg?.organisasjoner ?? [];
-  const bareAnsatt = orgs.length > 0 && orgs.every((o) => o.rolle === "ansatt");
+  const bareAnsatt = orgs.length > 0 && orgs.every((o) => erAnsatt(o));
   const typer = Object.entries(data?.typer ?? {}).filter(([type]) =>
     type === "bursdag" || type === "beskjed"
       ? orgs.some((o) => o.personal)
       : type === "lonn"
         ? orgs.some((o) => o.personal && !!o.ansatt_id && harFunksjon(o, "lonn"))
         : type === "timer" || type === "vakter" || type === "fravaer"
-        ? orgs.some((o) => o.personal && (o.rolle === "ansatt" || o.ansatt_id || ["eier", "admin"].includes(o.rolle)))
+        ? orgs.some((o) => o.personal && (erAnsatt(o) || o.ansatt_id || kanPersonal(o)))
         : !bareAnsatt,
   );
   const { kanInstallere } = usePwa();
@@ -227,109 +229,113 @@ export function AppOgVarsler() {
 
   return (
     <>
-      <div className="kort">
-        <h2 style={{ marginTop: 0 }}>App</h2>
-        {erInstallert() ? (
-          <p className="dempet liten">Admin Konsoll er installert som app på denne enheten.</p>
-        ) : kanInstallere ? (
-          <>
-            <p className="dempet liten">Installer Admin Konsoll som en app på denne enheten, med eget ikon og vindu.</p>
-            <button onClick={() => void installer()}>
-              <IkonInstaller storrelse={16} /> Installer appen
-            </button>
-          </>
-        ) : erIos() ? (
-          <p className="dempet liten">
-            Trykk på Del-knappen <span aria-hidden="true">⎋</span> i Safari og velg <strong>«Legg til på Hjem-skjerm»</strong> for å
-            bruke Admin Konsoll som en app. Da kan du også få push-varsler.
-          </p>
-        ) : (
-          <p className="dempet liten">
-            Du kan installere Admin Konsoll som en app fra nettleserens meny («Installer app» eller «Legg til på startskjermen»).
-          </p>
-        )}
-        <UtseendeValg />
-        <AppLaasValg />
-      </div>
+      {del !== "varsler" && (
+        <div className="kort">
+          <h2 style={{ marginTop: 0 }}>App</h2>
+          {erInstallert() ? (
+            <p className="dempet liten">Admin Konsoll er installert som app på denne enheten.</p>
+          ) : kanInstallere ? (
+            <>
+              <p className="dempet liten">Installer Admin Konsoll som en app på denne enheten, med eget ikon og vindu.</p>
+              <button onClick={() => void installer()}>
+                <IkonInstaller storrelse={16} /> Installer appen
+              </button>
+            </>
+          ) : erIos() ? (
+            <p className="dempet liten">
+              Trykk på Del-knappen <span aria-hidden="true">⎋</span> i Safari og velg <strong>«Legg til på Hjem-skjerm»</strong> for å
+              bruke Admin Konsoll som en app. Da kan du også få push-varsler.
+            </p>
+          ) : (
+            <p className="dempet liten">
+              Du kan installere Admin Konsoll som en app fra nettleserens meny («Installer app» eller «Legg til på startskjermen»).
+            </p>
+          )}
+          <UtseendeValg />
+          <AppLaasValg />
+        </div>
+      )}
 
-      <div className="kort">
-        <h2 style={{ marginTop: 0 }}>Varsler</h2>
-        <p className="dempet liten">Få beskjed på telefonen eller PC-en når noe skjer med fakturaene, også når appen er lukket.</p>
+      {del !== "app" && (
+        <div className="kort">
+          <h2 style={{ marginTop: 0 }}>Varsler</h2>
+          <p className="dempet liten">Få beskjed på telefonen eller PC-en når noe skjer, også når appen er lukket.</p>
 
-        {stotte === "installer" ? (
-          <div className="melding info">
-            På iPhone og iPad må appen først legges til på Hjem-skjermen (se over). Åpne den derfra og slå på varsler.
-          </div>
-        ) : stotte === "nei" ? (
-          <div className="melding info">Denne nettleseren støtter ikke push-varsler.</div>
-        ) : !data ? null : !data.nokkel ? (
-          <div className="melding info">Push-varsler er ikke satt opp på plattformen ennå.</div>
-        ) : (
-          <>
-            {tillatelse === "denied" && !paDenne && (
-              <div className="melding feil">
-                Varsler er blokkert for denne siden. Tillat varsler i nettleserens innstillinger (ofte via hengelåsen ved adressefeltet), og
-                last siden på nytt.
-              </div>
-            )}
-            <div className="knapper">
-              {paDenne ? (
-                <>
-                  <span className="merke merke-ok">På for denne enheten</span>
-                  <button disabled={h.opptatt} onClick={test}>
-                    Send testvarsel
-                  </button>
-                  <button className="lenke" disabled={h.opptatt} onClick={slaAv}>
-                    Slå av her
-                  </button>
-                </>
-              ) : (
-                <button className="primar" disabled={h.opptatt || tillatelse === "denied"} onClick={slaPa}>
-                  <IkonBjelle storrelse={16} /> Slå på varsler på denne enheten
-                </button>
+          {stotte === "installer" ? (
+            <div className="melding info">
+              På iPhone og iPad må appen først legges til på Hjem-skjermen (se over). Åpne den derfra og slå på varsler.
+            </div>
+          ) : stotte === "nei" ? (
+            <div className="melding info">Denne nettleseren støtter ikke push-varsler.</div>
+          ) : !data ? null : !data.nokkel ? (
+            <div className="melding info">Push-varsler er ikke satt opp på plattformen ennå.</div>
+          ) : (
+            <>
+              {tillatelse === "denied" && !paDenne && (
+                <div className="melding feil">
+                  Varsler er blokkert for denne siden. Tillat varsler i nettleserens innstillinger (ofte via hengelåsen ved adressefeltet), og
+                  last siden på nytt.
+                </div>
               )}
-            </div>
-            {testSendt && <p className="liten dempet" style={{ marginTop: 8 }}>Testvarselet er sendt. Det kommer i løpet av noen sekunder.</p>}
-          </>
-        )}
-
-        {data && data.abonnementer.length > 0 && (
-          <>
-            <p className="liten" style={{ margin: "16px 0 0", fontWeight: 600 }}>
-              Varsle meg om
-            </p>
-            <div className="valgliste">
-              {typer.map(([type, navn]) => (
-                <label key={type}>
-                  <input type="checkbox" checked={data.valg[type] !== false} disabled={h.opptatt} onChange={(e) => velg(type, e.target.checked)} />
-                  {navn}
-                </label>
-              ))}
-            </div>
-            <p className="liten" style={{ margin: "8px 0 0", fontWeight: 600 }}>
-              Enheter med varsler
-            </p>
-            <ul className="enheter">
-              {data.abonnementer.map((a) => (
-                <li key={a.id}>
-                  <span>
-                    {a.enhet ?? "Ukjent enhet"}
-                    {a.endpoint === denne && <span className="denne">denne</span>}
-                    <span className="dempet liten" style={{ display: "block" }}>
-                      Lagt til {dato(a.opprettet)}
-                      {a.sist_sendt ? ` · siste varsel ${dato(a.sist_sendt)}` : ""}
-                    </span>
-                  </span>
-                  <button className="lenke" disabled={h.opptatt} onClick={() => (a.endpoint === denne ? slaAv() : fjern(a.id))}>
-                    Fjern
+              <div className="knapper">
+                {paDenne ? (
+                  <>
+                    <span className="merke merke-ok">På for denne enheten</span>
+                    <button disabled={h.opptatt} onClick={test}>
+                      Send testvarsel
+                    </button>
+                    <button className="lenke" disabled={h.opptatt} onClick={slaAv}>
+                      Slå av her
+                    </button>
+                  </>
+                ) : (
+                  <button className="primar" disabled={h.opptatt || tillatelse === "denied"} onClick={slaPa}>
+                    <IkonBjelle storrelse={16} /> Slå på varsler på denne enheten
                   </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-        <Feil melding={h.feil} />
-      </div>
+                )}
+              </div>
+              {testSendt && <p className="liten dempet" style={{ marginTop: 8 }}>Testvarselet er sendt. Det kommer i løpet av noen sekunder.</p>}
+            </>
+          )}
+
+          {data && data.abonnementer.length > 0 && (
+            <>
+              <p className="liten" style={{ margin: "16px 0 0", fontWeight: 600 }}>
+                Varsle meg om
+              </p>
+              <div className="valgliste">
+                {typer.map(([type, navn]) => (
+                  <label key={type}>
+                    <input type="checkbox" checked={data.valg[type] !== false} disabled={h.opptatt} onChange={(e) => velg(type, e.target.checked)} />
+                    {navn}
+                  </label>
+                ))}
+              </div>
+              <p className="liten" style={{ margin: "8px 0 0", fontWeight: 600 }}>
+                Enheter med varsler
+              </p>
+              <ul className="enheter">
+                {data.abonnementer.map((a) => (
+                  <li key={a.id}>
+                    <span>
+                      {a.enhet ?? "Ukjent enhet"}
+                      {a.endpoint === denne && <span className="denne">denne</span>}
+                      <span className="dempet liten" style={{ display: "block" }}>
+                        Lagt til {dato(a.opprettet)}
+                        {a.sist_sendt ? ` · siste varsel ${dato(a.sist_sendt)}` : ""}
+                      </span>
+                    </span>
+                    <button className="lenke" disabled={h.opptatt} onClick={() => (a.endpoint === denne ? slaAv() : fjern(a.id))}>
+                      Fjern
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <Feil melding={h.feil} />
+        </div>
+      )}
     </>
   );
 }

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, kanLonn, useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
 import { IkonVenstre } from "../ikoner";
 
@@ -140,7 +140,7 @@ export function Sykepenger() {
 
 function Oversikt({ apne }: { apne: (id: string) => void }) {
   const { org } = useKonto();
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const sti = `/org/${org!.id}/nav`;
   const status = useData(() => hent<Status>(sti), [sti], { oppdater: true });
   const foresporsler = useData(() => hent<Foresporsel[]>(`${sti}/forespoersler`), [sti], { oppdater: true });
@@ -173,7 +173,7 @@ function Oversikt({ apne }: { apne: (id: string) => void }) {
         Sykmeldingene NAV sender dere, gir sykefravær (gradert når sykmeldingen er det), og NAVs forespørsler om inntektsmelding besvares her: arbeidsgiverperioden,
         inntekten og refusjonskravet.{" "}
         {s.refusjon ? "Dere betaler lønnen under sykdom og krever refusjon fra NAV" : "NAV betaler sykepengene etter arbeidsgiverperioden til den ansatte"} (
-        <Link to="/innstillinger?fane=personal#lonn">endre</Link>).
+        <Link to="/innstillinger?fane=lonn&del=lonn">endre</Link>).
         {s.pa && s.miljo === "test" && <span className="merke merke-noytral lonn-merke">Testmiljø</span>}
       </p>
 
@@ -190,11 +190,11 @@ function Oversikt({ apne }: { apne: (id: string) => void }) {
         ) : !s.tilgang ? (
           <p className="liten">
             Gi Admin Konsoll tilgang hos NAV i Altinn: tilgangspakken «{s.pakke}». Trykk «Utvid tilgangen i Altinn» under{" "}
-            <Link to="/innstillinger?fane=personal#skattekort">Innstillinger → Ansatte og timer</Link>, og la daglig leder godkjenne i Altinn.
+            <Link to="/innstillinger?fane=lonn&del=skattekort">Innstillinger → Lønn → Skattekort</Link>, og la daglig leder godkjenne i Altinn.
           </p>
         ) : !s.virksomhet ? (
           <p className="liten">
-            Legg inn virksomheten (underenheten der de ansatte jobber) under <Link to="/innstillinger?fane=personal#lonn">Innstillinger → Ansatte og timer → A-melding</Link>.
+            Legg inn virksomheten (underenheten der de ansatte jobber) under <Link to="/innstillinger?fane=lonn&del=amelding">Innstillinger → Lønn → A-melding</Link>.
           </p>
         ) : (
           <p className="liten">
@@ -591,7 +591,7 @@ function SykmeldingRad({ m }: { m: Sykmelding }) {
 
 function ForesporselSide({ id, tilbake }: { id: string; tilbake: () => void }) {
   const { org } = useKonto();
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const sti = `/org/${org!.id}/nav/forespoersler/${id}`;
   const d = useData(() => hent<Detalj>(sti), [sti]);
   // Mens inntektsmeldingen sendes eller NAV kontrollerer den: spør igjen.

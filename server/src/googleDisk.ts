@@ -255,6 +255,7 @@ export function googleCallback() {
           `insert into faktura.disk_organisasjoner (bruker_id, org_id)
            select faktura.bruker_id(), m.org_id from faktura.medlemmer m
             where m.bruker_id = faktura.bruker_id() and m.rolle <> 'ansatt' and faktura.har_funksjon(m.org_id, 'google_disk')
+              and (m.rolle <> 'tilpasset' or faktura.tilpasset_har(m.org_id, m.bruker_id, 'faktura'))
            returning org_id as id`,
         );
       });

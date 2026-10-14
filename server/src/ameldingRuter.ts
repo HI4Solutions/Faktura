@@ -127,7 +127,7 @@ export function ameldingRuter() {
       if (b.innsending === "api") {
         const i = await innsending(db, orgId(c));
         if (!i.pa) throw new ApiFeil(409, "Innsending til Skatteetaten er ikke slått på ennå. Last ned fila og last den opp på skatteetaten.no.");
-        if (!i.tilgang) throw new ApiFeil(409, "Gi tilgang til a-meldingen i Altinn først (Innstillinger → Ansatte og timer → Skatteetaten og Altinn).");
+        if (!i.tilgang) throw new ApiFeil(409, "Gi tilgang til a-meldingen i Altinn først (Innstillinger → Lønn → Skattekort).");
       }
       const feil = kontroller(await hentGrunnlag(db, orgId(c), maaned)).filter((a) => a.niva === "feil");
       if (feil.length) throw new ApiFeil(400, feil.map((f) => f.tekst).join(" "));

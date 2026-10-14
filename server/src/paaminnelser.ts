@@ -171,7 +171,8 @@ async function varsle(p: Tatt) {
     mottakere: await alle<{ bruker_id: string; epost: string }>(
       db,
       `select m.bruker_id, b.epost from faktura.medlemmer m join faktura.brukere b on b.id = m.bruker_id
-        where m.org_id = $1 and case when $2 = 'meg' then m.bruker_id = $3 else m.rolle in ('eier', 'admin', 'fakturerer') end`,
+        where m.org_id = $1 and case when $2 = 'meg' then m.bruker_id = $3
+                 else m.rolle in ('eier', 'admin', 'fakturerer') or faktura.tilpasset_har(m.org_id, m.bruker_id, 'faktura') end`,
       [p.org_id, p.hvem, p.opprettet_av],
     ),
   }));

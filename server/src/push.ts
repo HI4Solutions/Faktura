@@ -113,8 +113,12 @@ export async function sendVarsel(v: Varsel): Promise<{ sendt: number; fjernet: n
          left join faktura.push_valg pv on pv.bruker_id = a.bruker_id
         where ($1::uuid[] is null or a.bruker_id = any($1::uuid[]))
           and ($2::uuid is null or exists (select 1 from faktura.medlemmer m where m.org_id = $2 and m.bruker_id = a.bruker_id
-                                              -- Varsler til hele organisasjonen går ikke til ansatte (de ser ikke fakturaene).
-                                              and ($1::uuid[] is not null or m.rolle <> 'ansatt')))
+                                              -- Varsler til hele organisasjonen går ikke til ansatte (de ser ikke fakturaene),
+                                              -- og med en egen rolle bare med Faktura eller Regnskap.
+                                              and ($1::uuid[] is not null
+                                                   or (m.rolle <> 'ansatt'
+                                                       and (m.rolle <> 'tilpasset' or faktura.tilpasset_har(m.org_id, m.bruker_id, 'faktura')
+                                                            or faktura.tilpasset_har(m.org_id, m.bruker_id, 'regnskap'))))))
           and a.bruker_id is distinct from $3::uuid
           and ($4 = 'test' or coalesce((pv.valg ->> $4)::boolean, true))`,
       [v.bruker_ider ?? (v.bruker_id ? [v.bruker_id] : null), v.org_id ?? null, v.unntatt ?? null, v.hendelse],
@@ -248,7 +252,7 @@ export function pushRuter() {
         bruker_id: b.id,
         tittel: "Varsler er slått på",
         tekst: "Slik ser et varsel fra Admin Konsoll ut. Trykk for å åpne innstillingene.",
-        url: "/innstillinger?fane=app",
+        url: "/innstillinger?fane=app&del=varsler",
         tag: "test",
       },
     });

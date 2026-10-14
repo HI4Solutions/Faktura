@@ -54,7 +54,7 @@ export async function hentBetalinger(
           hva: "Forskuddstrekk",
           rolle: "forskuddstrekk",
           mangler: !o?.skatt_kontonr
-            ? "Legg inn Skatteetatens kontonummer for forskuddstrekk under Innstillinger → Ansatte og timer."
+            ? "Legg inn Skatteetatens kontonummer for forskuddstrekk under Innstillinger → Lønn → Betalingsfil."
             : !k.forskuddstrekk_kid
               ? `Legg inn KID-en for forskuddstrekk i ${maanedNavn(k.utbetalingsdato.slice(0, 7) + "-01")} (fra Skatteetatens KID-generator).`
               : null,

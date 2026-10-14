@@ -13,13 +13,14 @@ import { ApiFeil } from "./feil.js";
 import { adminBekreftEpost, adminSendBekreftelse } from "./epostbekreftelse.js";
 import { leggIKo } from "./tjenester.js";
 
-// Modulene (Faktura, Bemanning og de som kommer), for registreringen: åpent, og husket fem
-// minutter.
-export type Modul = { kode: string; navn: string; beskrivelse: string };
+// Modulene (Faktura, Personal, Lønn, Regnskap og de som kommer), for registreringen: åpent, og
+// husket fem minutter. Med modulen hver bygger på (Lønn på Personal) og kjernen (funksjonen modulen
+// slås av og på med).
+export type Modul = { kode: string; navn: string; beskrivelse: string; krever: string | null; kjerne: string };
 let modulMinne: { tid: number; liste: Promise<Modul[]> } | undefined;
 export function hentModuler(): Promise<Modul[]> {
   if (!modulMinne || Date.now() - modulMinne.tid > 5 * 60_000) {
-    const liste = somSystem((db) => alle<Modul>(db, "select kode, navn, beskrivelse from faktura.moduler order by rekkefolge"));
+    const liste = somSystem((db) => alle<Modul>(db, "select kode, navn, beskrivelse, krever, kjerne from faktura.moduler order by rekkefolge"));
     modulMinne = { tid: Date.now(), liste };
     liste.catch(() => (modulMinne = undefined));
   }

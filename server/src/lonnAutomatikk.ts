@@ -3,7 +3,7 @@
 // naturalytelser, reiser, timebanken, lønnsendringer, de ansatte, oppsettet og trekktabellene, eller
 // en annen kjøring som er godkjent eller åpnet igjen). Hver morgen lager den den ordinære kjøringen
 // for måneden (når organisasjonen har kjørt lønn i Admin Konsoll de siste tre månedene og ikke har slått det av
-// under Innstillinger → Ansatte og timer), regner ut utkastene som ikke er regnet ut det siste døgnet,
+// under Innstillinger → Lønn), regner ut utkastene som ikke er regnet ut det siste døgnet,
 // minner eier og administrator på en kjøring som ikke er godkjent tre dager før lønnsdagen, og
 // rydder bort endringene alle utkastene har sett.
 import { alle, en, somSystem } from "./db.js";
@@ -19,7 +19,7 @@ const visDato = (d: string) => d.split("-").reverse().join(".");
 // Varsel til eier og administrator.
 async function varsle(org: string, tittel: string, tekst: string, url: string, tag: string) {
   const mottakere = await somSystem((db) =>
-    alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and rolle in ('eier', 'admin')", [org]),
+    alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and (rolle in ('eier', 'admin') or faktura.tilpasset_har(org_id, bruker_id, 'lonn'))", [org]),
   );
   if (mottakere.length)
     await leggIKo({ type: "varsel", varsel: { hendelse: "lonn", org_id: org, bruker_ider: mottakere.map((m) => m.bruker_id), tittel, tekst, url, tag } }).catch(

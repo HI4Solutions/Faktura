@@ -1577,7 +1577,7 @@ function Kontoer() {
         <h3 style={{ marginTop: 0 }}>Kontoene for salget, utgiftene, anleggsmidlene og periodiseringene</h3>
         <p className="liten dempet">
           Standarden er norsk standard kontoplan (NS 4102). Tomt felt: standardkontoen. Endringer gjelder bilagene som føres etterpå. Balansekontoene for
-          periodiseringene er forslag; hver periodisering har sine kontoer. Lønnskontoene står under Innstillinger → Ansatte og timer.
+          periodiseringene er forslag; hver periodisering har sine kontoer. Lønnskontoene står under Innstillinger → Lønn → Bokføring.
         </p>
         <div className="bokforing-kontoer">
           {o.data.kontoer.map((k) => (

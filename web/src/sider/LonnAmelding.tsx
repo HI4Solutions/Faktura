@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Feil, Laster, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, kanLonn, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { IkonVenstre } from "../ikoner";
 import { maaned as maanedTekst } from "../lonn";
@@ -155,7 +155,7 @@ function Innsendingstekst({ i }: { i: Innsending }) {
           </a>
           {i.pa ? (
             <>
-              , eller gi tilgang i Altinn (<Link to="/innstillinger?fane=personal#skattekort">Innstillinger → Ansatte og timer</Link>), så sender appen den.
+              , eller gi tilgang i Altinn (<Link to="/innstillinger?fane=lonn&del=skattekort">Innstillinger → Lønn → Skattekort</Link>), så sender appen den.
             </>
           ) : (
             "."
@@ -258,7 +258,7 @@ function AmeldingListe({ aar, velgAar, apne }: { aar: number; velgAar: (a: numbe
 
 function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => void }) {
   const { org } = useKonto();
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const d = useData(
     () =>
       hent<{
@@ -356,7 +356,7 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
               ) : a.ansatt_id ? (
                 <Link to={`/ansatte/${a.ansatt_id}`}>Åpne den ansatte</Link>
               ) : /Innstillinger/.test(a.tekst) ? (
-                <Link to="/innstillinger?fane=personal#amelding">Til innstillingene</Link>
+                <Link to="/innstillinger?fane=lonn&del=amelding">Til innstillingene</Link>
               ) : null}
             </li>
           ))}
@@ -432,7 +432,7 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
             {kanSende
               ? "Fila lastes opp på skatteetaten.no om du ikke vil sende fra appen."
               : x.innsending.pa
-                ? "Gi tilgang til a-meldingen i Altinn (Innstillinger → Ansatte og timer), så kan appen sende den."
+                ? "Gi tilgang til a-meldingen i Altinn (Innstillinger → Lønn → Skattekort), så kan appen sende den."
                 : "Fila lastes opp på skatteetaten.no (a-melding som fil). Merk den som lastet opp etterpå, så erstatter en ny fil for måneden den."}
           </p>
         </div>

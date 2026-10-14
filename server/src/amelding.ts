@@ -407,10 +407,10 @@ export function kontroller(g: Grunnlag): Avvik[] {
   if (!g.virksomhet)
     a.push({
       niva: "feil",
-      tekst: "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Ansatte og timer → A-melding.",
+      tekst: "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Lønn → A-melding.",
     });
   if (g.slipper.some((s) => s.otp > 0) && !g.pensjonsinnretning)
-    a.push({ niva: "feil", tekst: "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Ansatte og timer → A-melding." });
+    a.push({ niva: "feil", tekst: "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Lønn → A-melding." });
   const iMelding = new Set(g.slipper.map((s) => s.ansatt_id));
   for (const f of g.arbeidsforhold) {
     if (!f.har_fnr) a.push({ niva: "feil", tekst: `${f.navn} mangler fødselsnummer (eller D-nummer).`, ansatt_id: f.id });

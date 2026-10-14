@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, hent } from "../api";
 import { Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, kanLonn, useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
 import { IkonPluss, IkonVenstre } from "../ikoner";
 import { maaned } from "../lonn";
@@ -119,7 +119,7 @@ function Oversikt({ leder, apne }: { leder: boolean; apne: (id: string) => void 
   const [filter, settFilter] = useState(leder ? "sendt" : "");
   const d = useData(() => hent<{ satser: "staten" | "trekkfri"; reiser: Reise[] }>(`/org/${org!.id}/reiser${filter ? `?status=${filter}` : ""}`), [org?.id, filter], { oppdater: true });
   const smal = useSmal();
-  const kanFore = erAdmin(org?.rolle) || !!org?.ansatt_id;
+  const kanFore = kanLonn(org) || !!org?.ansatt_id;
 
   return (
     <>
@@ -292,7 +292,7 @@ function ReiseSide({ id, leder, tilbake, apne }: { id: string; leder: boolean; t
   const ny = id === "ny";
   const sti = `/org/${org!.id}/reiser`;
   const d = useData(() => (ny ? Promise.resolve(null) : hent<Reise>(`${sti}/${id}`)), [sti, id]);
-  const admin = leder && erAdmin(org?.rolle);
+  const admin = leder && kanLonn(org);
   const ansatte = useData(
     () => (admin && ny ? hent<{ id: string; fornavn: string; etternavn: string; arbeidstaker: boolean; aktiv: boolean }[]>(`/org/${org!.id}/ansatte`) : Promise.resolve([])),
     [org?.id, admin, ny],

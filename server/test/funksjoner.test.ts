@@ -4,24 +4,28 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { lagApi } from "../src/api.js";
 import { config } from "../src/config.js";
-import { funksjonerFor, glemFunksjoner, harFunksjon } from "../src/funksjoner.js";
+import { alle, somSystem } from "../src/db.js";
+import { funksjonerFor, glemFunksjoner, harFunksjon, KREVER, modulFor } from "../src/funksjoner.js";
 
 describe("rutene og funksjonene de krever", () => {
   it("kjenner igjen stiene", () => {
     expect(funksjonerFor("/ehf")).toEqual(["ehf"]);
-    expect(funksjonerFor("/kunder/abc/ehf")).toEqual(["ehf"]);
-    expect(funksjonerFor("/fakturaer/abc/ehf")).toEqual(["ehf"]);
-    expect(funksjonerFor("/fakturaer/abc")).toEqual([]);
+    // Fakturaene, kundene og produktene er funksjonen faktura (modulen Faktura, 0110_moduler.sql).
+    expect(funksjonerFor("/kunder/abc/ehf").sort()).toEqual(["ehf", "faktura"]);
+    expect(funksjonerFor("/fakturaer/abc/ehf").sort()).toEqual(["ehf", "faktura"]);
+    expect(funksjonerFor("/fakturaer/abc")).toEqual(["faktura"]);
+    expect(funksjonerFor("/ai/faktura").sort()).toEqual(["ai", "faktura"]);
     expect(funksjonerFor("/bank/hent")).toEqual(["bank"]);
     expect(funksjonerFor("/banktransaksjoner/abc/ai").sort()).toEqual(["ai", "bank"]);
     expect(funksjonerFor("/ai/assistent")).toEqual(["ai"]);
     expect(funksjonerFor("/gjentakelser/abc/kjor")).toEqual(["gjentakende"]);
-    expect(funksjonerFor("/produkter/abc/indeksregulering")).toEqual(["gjentakende"]);
-    expect(funksjonerFor("/fakturaer/flere")).toEqual(["flere"]);
-    expect(funksjonerFor("/fakturaer/utsted-flere")).toEqual(["flere"]);
-    expect(funksjonerFor("/kunder/importer")).toEqual(["import"]);
+    expect(funksjonerFor("/produkter/abc/indeksregulering").sort()).toEqual(["faktura", "gjentakende"]);
+    expect(funksjonerFor("/fakturaer/flere").sort()).toEqual(["faktura", "flere"]);
+    expect(funksjonerFor("/fakturaer/utsted-flere").sort()).toEqual(["faktura", "flere"]);
+    expect(funksjonerFor("/kunder/importer").sort()).toEqual(["faktura", "import"]);
     expect(funksjonerFor("/ansatte/importer").sort()).toEqual(["ansatte", "import"]);
-    expect(funksjonerFor("/kunder")).toEqual([]);
+    expect(funksjonerFor("/kunder")).toEqual(["faktura"]);
+    expect(funksjonerFor("/kontoer")).toEqual([]); // kontoene brukes også av lønnen og regnskapet
     expect(funksjonerFor("/eksport/fakturaer.csv")).toEqual(["rapporter"]);
     expect(funksjonerFor("/paaminnelser/abc")).toEqual(["paaminnelser"]);
     expect(funksjonerFor("/timer/lever")).toEqual(["ansatte"]);
@@ -37,6 +41,31 @@ describe("rutene og funksjonene de krever", () => {
     expect(funksjonerFor("/lonn-oppsett")).toEqual(["ansatte"]);
     // Rollene hører til de ansatte (om personen er ansatt, følger rollen).
     expect(funksjonerFor("/ansattgrupper/fra-stillinger")).toEqual(["ansatte"]);
+  });
+
+  // Modulen forespørselen gjelder, for de egne rollene (0111_tilgangsroller.sql).
+  it("modulen en rute gjelder", () => {
+    expect(modulFor("/lonn/kjoringer")).toBe("lonn");
+    expect(modulFor("/lonn")).toBe("lonn");
+    expect(modulFor("/lonn-oppsett")).toBe(null);
+    expect(modulFor("/reiser/abc/godkjenn")).toBe("lonn");
+    expect(modulFor("/skattekort/hent")).toBe("lonn");
+    expect(modulFor("/amelding-virksomheter")).toBe("lonn");
+    expect(modulFor("/nav/sykmeldinger")).toBe("lonn");
+    expect(modulFor("/rapportmodul/lonn.journal")).toBe("lonn");
+    expect(modulFor("/rapportmodul/lonn.journal/pdf")).toBe("lonn");
+    expect(modulFor("/rapportmodul/regnskap.saldobalanse")).toBe("regnskap");
+    expect(modulFor("/regnskap/bilag")).toBe("regnskap");
+    expect(modulFor("/rapportmodul/personal.timer")).toBe(null);
+    expect(modulFor("/ansatte")).toBe(null);
+    expect(modulFor("/fakturaer")).toBe(null);
+  });
+});
+
+describe.skipIf(!process.env.DATABASE_URL)("funksjonene i API-et og databasen", () => {
+  it("det funksjonene bygger på, er det samme som i databasen", async () => {
+    const db = await somSystem((d) => alle<{ kode: string; krever: string }>(d, "select kode, krever from faktura.funksjoner where krever is not null"));
+    expect(Object.fromEntries(db.map((f) => [f.kode, f.krever]))).toEqual(KREVER);
   });
 });
 
@@ -64,7 +93,8 @@ describe.skipIf(!process.env.DATABASE_URL)("funksjoner per organisasjon", () => 
 
   it("en ny organisasjon har alle funksjonene, og appen får lista", async () => {
     const o = await meg();
-    expect(o.funksjoner).toEqual(["ehf", "bank", "ai", "gjentakende", "flere", "paaminnelser", "rapporter", "import", "google_disk", "ansatte", "vaktplan", "lonn", "regnskap"]);
+    expect(o.funksjoner).toEqual(["faktura", "ehf", "bank", "ai", "gjentakende", "flere", "paaminnelser", "rapporter", "import", "google_disk", "ansatte", "vaktplan", "lonn", "regnskap"]);
+    expect(o.moduler).toEqual(["faktura", "personal", "lonn", "regnskap"]);
     expect(o.personal).toBe(true);
     expect((await kall("GET", `/api/org/${org}/vakter?fra=2026-10-05&til=2026-10-11`)).status).toBe(200);
   });

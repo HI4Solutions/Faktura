@@ -40,7 +40,7 @@ export function Verifisering() {
       </>
     );
   }
-  if (!erAdmin(org?.rolle)) return <p>Bare eiere og administratorer kan verifisere organisasjonen.</p>;
+  if (!erAdmin(org)) return <p>Bare eiere og administratorer kan verifisere organisasjonen.</p>;
 
   const venterManuell = data.forsok?.some((f: any) => f.metode === "manuell" && f.status === "venter");
 

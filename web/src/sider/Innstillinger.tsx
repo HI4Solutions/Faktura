@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent, lastOppLogo } from "../api";
-import { EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
-import { erAdmin, harFunksjon, useKonto } from "../konto";
+import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
+import { erAdmin, harFunksjon, harModul, MODULNAVN, useKonto, type MinOrg, type ModulKode } from "../konto";
 import { dato, orgnr } from "../format";
 import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
@@ -15,87 +15,176 @@ import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 import { SlettOrganisasjon } from "../slettOrg";
 
-type Fane = "organisasjon" | "faktura" | "personal" | "konto" | "app";
 type OrgDel = "organisasjon" | "faktura" | "betaling";
-// Faner som er slått sammen med andre (lenker og varsler bruker dem fortsatt): fanen de nå er en
-// del av, og stedet på den.
-const SAMMENSLATT: Record<string, [Fane, string]> = {
-  betaling: ["faktura", "betaling"],
-  ehf: ["faktura", "ehf"],
-  brukere: ["organisasjon", "brukere"],
-  skattekort: ["personal", "skattekort"],
-};
+export type InnstillingFane = "organisasjon" | "faktura" | "personal" | "lonn" | "konto" | "app";
 
-// Innstillingene er delt i faner. Fanen står i adressen (?fane=), så lenker kan gå rett til
-// den. Organisasjon har opplysningene, brukerne og regnskapsføreren; Faktura har oppsettet av
-// fakturaene, logoen, betalingen (kontonumre, purring og banken) og EHF. Organisasjonens
-// innstillinger vises bare for administratorer; regnskapsbyråer fakturerer ikke, og EHF krever
-// organisasjonsnummer.
-export function Innstillinger() {
-  const { org } = useKonto();
-  const [sok, settSok] = useSearchParams();
-  const admin = Boolean(org && erAdmin(org.rolle));
-  const byraa = org?.type === "regnskapsbyraa";
-  const faner: [Fane, string][] = [];
-  if (admin) {
+// Fanene i innstillingene (og punktene under Innstillinger i sidemenyen): organisasjonens bare for
+// eier og administrator. Regnskapsbyråer fakturerer ikke; Faktura er med når modulen er på (eller
+// banken, som regnskapet også bruker), Personal og Lønn når funksjonene er på.
+export function innstillingFaner(org: MinOrg | null | undefined): [InnstillingFane, string][] {
+  const faner: [InnstillingFane, string][] = [];
+  if (org && erAdmin(org)) {
+    const byraa = org.type === "regnskapsbyraa";
     faner.push(["organisasjon", "Organisasjon"]);
-    if (!byraa) faner.push(["faktura", "Faktura"]);
-    if (org?.type !== "privatperson" && harFunksjon(org, "ansatte")) faner.push(["personal", "Ansatte og timer"]);
+    if (!byraa && (harFunksjon(org, "faktura") || harFunksjon(org, "bank"))) faner.push(["faktura", "Faktura"]);
+    if (org.type !== "privatperson" && harFunksjon(org, "ansatte")) faner.push(["personal", "Personal"]);
+    if (org.type !== "privatperson" && harFunksjon(org, "lonn")) faner.push(["lonn", "Lønn"]);
   }
   faner.push(["konto", "Min konto"], ["app", "App"]);
+  return faner;
+}
+
+// Underfanene i hver fane (?del=): det som hører sammen, så hver side blir kort. Google Disk er med
+// når en av organisasjonene har funksjonen.
+function underfaner(fane: InnstillingFane, org: MinOrg | null, orgs: MinOrg[]): [string, string][] {
+  const byraa = org?.type === "regnskapsbyraa";
+  const faktura = harFunksjon(org, "faktura");
+  switch (fane) {
+    case "organisasjon":
+      return [
+        ["opplysninger", "Opplysninger"],
+        ["brukere", "Brukere"],
+        ["roller", "Roller"],
+        ["regnskapsforer", byraa ? "Klienter" : "Regnskapsfører"],
+        ...(org?.rolle === "eier" && org.direkte_medlem ? [["slett", "Slett organisasjonen"] as [string, string]] : []),
+      ];
+    case "faktura":
+      return [
+        ...(faktura
+          ? ([
+              ["oppsett", "Fakturaoppsett"],
+              ["logo", "Logo"],
+              ["betaling", "Betaling og purring"],
+              ["kontoer", "Kontonumre"],
+            ] as [string, string][])
+          : []),
+        ...(harFunksjon(org, "bank") ? [["bank", "Bank"] as [string, string]] : []),
+        ...(faktura && org?.type !== "privatperson" && harFunksjon(org, "ehf") ? [["ehf", "EHF"] as [string, string]] : []),
+      ];
+    case "personal":
+      return [
+        ["arbeidstid", "Arbeidstid og overtid"],
+        ...(harFunksjon(org, "vaktplan")
+          ? ([
+              ["fravaer", "Ferie og egenmelding"],
+              ["vaktbytte", "Vaktbytte"],
+            ] as [string, string][])
+          : []),
+        ["timebank", "Timebank"],
+        ["bursdager", "Bursdager"],
+      ];
+    case "lonn":
+      return [
+        ["lonn", "Lønn"],
+        ["betalingsfil", "Betalingsfil"],
+        ["amelding", "A-melding"],
+        ["skattekort", "Skattekort"],
+        ["bokforing", "Bokføring"],
+      ];
+    case "konto":
+      return [["innlogging", "Innlogging"], ...(orgs.some((o) => harFunksjon(o, "google_disk")) ? [["disk", "Google Disk"] as [string, string]] : [])];
+    case "app":
+      return [
+        ["app", "App"],
+        ["varsler", "Varsler"],
+      ];
+  }
+}
+
+// Gamle adresser (lenker og varsler bruker dem fortsatt): fanen og underfanen de er nå. Fra før
+// lå lønnen på fanen Ansatte og timer (#lonn, #afp, #amelding, #skattekort), og betalingen,
+// EHF, brukerne og skattekortene var egne faner.
+function nyAdresse(fane: string | null, del: string | null, sted: string, bank: boolean): [string | null, string | null] {
+  if (fane === "betaling") return ["faktura", bank ? "bank" : "betaling"];
+  if (fane === "ehf") return ["faktura", "ehf"];
+  if (fane === "brukere") return ["organisasjon", "brukere"];
+  if (fane === "skattekort") return ["lonn", "skattekort"];
+  if (fane === "personal" && !del) {
+    if (sted === "lonn" || sted === "afp") return ["lonn", "lonn"];
+    if (sted === "amelding") return ["lonn", "amelding"];
+    if (sted === "skattekort") return ["lonn", "skattekort"];
+  }
+  return [fane, del];
+}
+
+// Innstillingene er delt i faner, og hver fane i underfaner. Fanen og underfanen står i adressen
+// (?fane=&del=), så lenker kan gå rett dit. Organisasjon har opplysningene, brukerne, rollene,
+// regnskapsføreren og slettingen; Faktura oppsettet av fakturaene, logoen, betalingen, kontonumrene,
+// banken og EHF; Personal arbeidstiden, ferien, vaktbyttene, timebanken og bursdagene; Lønn
+// lønnsoppsettet, betalingsfila, a-meldingen, skattekortene og bokføringen.
+// Fanen og underfanen adressen gir (også de gamle adressene), med fanene og underfanene som finnes:
+// for siden og for sidemenyen (punktet som er valgt under Innstillinger).
+export function valgtInnstilling(org: MinOrg | null, orgs: MinOrg[], sok: URLSearchParams, hash: string) {
+  const faner = innstillingFaner(org);
   // Tilbake fra Google (Google Disk-koblingen): «Min konto».
-  const onsket = sok.get("fane") ?? (sok.has("disk") ? "konto" : null);
-  const [tilFane, sted] = (onsket && SAMMENSLATT[onsket]) || [onsket, null];
-  const fane = faner.find(([v]) => v === tilFane)?.[0] ?? faner[0][0];
-  const ehf = !byraa && org?.type !== "privatperson" && harFunksjon(org, "ehf");
+  const [onsket, onsketDel] = nyAdresse(
+    sok.get("fane") ?? (sok.has("disk") ? "konto" : null),
+    sok.get("del") ?? (sok.has("disk") ? "disk" : null),
+    hash.replace(/^#/, ""),
+    sok.has("bank") || sok.has("kobling"),
+  );
+  const fane = faner.find(([v]) => v === onsket)?.[0] ?? faner[0][0];
+  const deler = underfaner(fane, org, orgs);
+  const del = deler.find(([v]) => v === onsketDel)?.[0] ?? deler[0]?.[0] ?? "";
+  return { faner, fane, deler, del };
+}
+
+export function Innstillinger() {
+  const { org, meg } = useKonto();
+  const [sok, settSok] = useSearchParams();
+  const { hash } = useLocation();
+  const admin = Boolean(org && erAdmin(org));
+  const { faner, fane, deler, del } = valgtInnstilling(org, meg?.organisasjoner ?? [], sok, hash);
   const skjema = useOrgSkjema(admin);
-  useRullTil(fane === tilFane ? sted : null);
+  // Et sted på underfanen (f.eks. #afp) når innholdet over er lastet.
+  useRullTil(hash ? hash.replace(/^#/, "") : null);
+  // Til en annen fane eller underfane (uten det som var med i adressen fra før, f.eks. svaret fra
+  // banken eller Google).
+  const ga = (f: InnstillingFane, d?: string) => settSok(d ? { fane: f, del: d } : { fane: f }, { replace: true });
 
   return (
     <>
       <h1>Innstillinger</h1>
       <div className="faner innstillinger-faner" role="tablist" aria-label="Innstillinger">
         {faner.map(([v, navn]) => (
-          <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => settSok({ fane: v }, { replace: true })}>
+          <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga(v)}>
             {navn}
           </button>
         ))}
       </div>
+      {deler.length > 1 && (
+        <div className="underfaner" role="tablist" aria-label={faner.find(([v]) => v === fane)?.[1]}>
+          {deler.map(([v, navn]) => (
+            <button key={v} type="button" role="tab" aria-selected={del === v} className={del === v ? "valgt" : undefined} onClick={() => ga(fane, v)}>
+              {navn}
+            </button>
+          ))}
+        </div>
+      )}
       {fane === "organisasjon" && (
         <>
-          <OrgSkjemaDel del="organisasjon" skjema={skjema} />
-          <div id="brukere" className="innstilling-sted">
-            <Medlemmer />
-            <Regnskapsforer />
-          </div>
-          {org?.rolle === "eier" && org.direkte_medlem && <SlettOrg />}
+          {del === "opplysninger" && <OrgSkjemaDel del="organisasjon" skjema={skjema} />}
+          {del === "brukere" && <Medlemmer />}
+          {del === "roller" && <Tilgangsroller />}
+          {del === "regnskapsforer" && <Regnskapsforer />}
+          {del === "slett" && <SlettOrg />}
         </>
       )}
       {fane === "faktura" && (
         <>
-          <OrgSkjemaDel del="faktura" skjema={skjema} />
-          <Logo />
-          <div id="betaling" className="innstilling-sted">
-            <OrgSkjemaDel del="betaling" skjema={skjema} />
-            <Kontoer />
-            {harFunksjon(org, "bank") && <BankKobling />}
-          </div>
-          {ehf && (
-            <div id="ehf" className="innstilling-sted">
-              <EhfSending />
-            </div>
-          )}
+          {del === "oppsett" && <OrgSkjemaDel del="faktura" skjema={skjema} />}
+          {del === "logo" && <Logo />}
+          {del === "betaling" && <OrgSkjemaDel del="betaling" skjema={skjema} />}
+          {del === "kontoer" && <Kontoer />}
+          {del === "bank" && <BankKobling />}
+          {del === "ehf" && <EhfSending />}
         </>
       )}
-      {fane === "personal" && (
-        <>
-          <PersonalOppsett />
-          {harFunksjon(org, "lonn") && <SkattekortKobling />}
-          {harFunksjon(org, "lonn") && <BokforingOppsett />}
-        </>
-      )}
-      {fane === "konto" && <MinKonto />}
-      {fane === "app" && <AppOgVarsler />}
+      {(fane === "personal" || (fane === "lonn" && ["lonn", "betalingsfil", "amelding"].includes(del))) && <PersonalOppsett del={del} />}
+      {fane === "lonn" && del === "skattekort" && <SkattekortKobling />}
+      {fane === "lonn" && del === "bokforing" && <BokforingOppsett />}
+      {fane === "konto" && <MinKonto del={del} />}
+      {fane === "app" && <AppOgVarsler del={del === "varsler" ? "varsler" : "app"} />}
     </>
   );
 }
@@ -175,7 +264,7 @@ function FlereVirksomheter({ enhetsregisteret, hoved }: { enhetsregisteret: { or
   const tom = { orgnr: "", navn: "", aga_sone: "1" };
   const [ny, settNy] = useState(tom);
   const h = useHandling();
-  const kan = Boolean(org && erAdmin(org.rolle));
+  const kan = Boolean(org && erAdmin(org));
   const andre = data?.andre ?? [];
   async function leggTil() {
     const r = await h.kjor(() => api("POST", `/org/${org!.id}/lonn/virksomheter`, { ...ny, orgnr: ny.orgnr.replace(/\s/g, ""), navn: ny.navn.trim() }));
@@ -281,7 +370,18 @@ function egenmeldingsregler(o: { egenmelding: Egenmeldingsordning; egenmelding_d
     ...barn,
   };
 }
-function PersonalOppsett() {
+// Overskriften på hver underfane i Personal og Lønn (samme skjema, lagres samlet).
+const TITTEL: Record<string, string> = {
+  arbeidstid: "Arbeidstid og overtid",
+  fravaer: "Ferie og egenmelding",
+  vaktbytte: "Vaktbytte",
+  timebank: "Timebank",
+  bursdager: "Bursdager",
+  lonn: "Lønn",
+  betalingsfil: "Betalingsfil til nettbanken",
+  amelding: "A-melding",
+};
+function PersonalOppsett({ del }: { del: string }) {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
   // Virksomhetene (underenhetene) i Enhetsregisteret, til a-meldingen.
@@ -419,32 +519,54 @@ function PersonalOppsett() {
 
   return (
     <form className="kort" onSubmit={lagre}>
-      <h2>Ansatte og timer</h2>
-      <p className="dempet">
-        Hold oversikt over de ansatte, og la dem føre timene sine i appen. De leverer uka, og du godkjenner eller avviser den. Overtiden regnes ut av seg selv.
-      </p>
-      <label>
-        <input type="checkbox" checked={o.aktiv} onChange={(e) => settO({ ...o, aktiv: e.target.checked })} />
-        Bruk ansatte og timer i {org?.navn}
-      </label>
-      <h3>Arbeidstid</h3>
-      <label>
-        Full stilling (timer per uke)
-        <input inputMode="decimal" required value={o.full_stilling} onChange={(e) => settO({ ...o, full_stilling: e.target.value })} />
-        <span className="felt-hjelp">
-          Det nye ansatte får, så det ikke må skrives inn hver gang (vanligvis 37,5; 35,5 eller 33,6 med turnus eller skift). Hver ansatt kan ha sin egen, og
-          stillingsprosenten regnes av den.
-        </span>
-      </label>
-      <label>
-        <input type="checkbox" checked={o.helg} onChange={(e) => settO({ ...o, helg: e.target.checked })} />
-        Åpent i helgene (lørdag og søndag)
-      </label>
-      <p className="liten dempet">
-        Har dere stengt i helgene, viser vaktplanen, tavla, timene og de faste arbeidsdagene bare mandag–fredag, og dag for dag hopper over helgen. Lørdag og
-        søndag vises likevel når noen har vakt, fast dag eller timer da.
-      </p>
-      {harFunksjon(org, "vaktplan") && (
+      <h2 style={{ marginTop: 0 }}>{TITTEL[del] ?? "Ansatte og timer"}</h2>
+      {del === "arbeidstid" && (
+        <>
+          <p className="dempet">
+            Hold oversikt over de ansatte, og la dem føre timene sine i appen. De leverer uka, og du godkjenner eller avviser den. Overtiden regnes ut av seg selv.
+          </p>
+          <label>
+            <input type="checkbox" checked={o.aktiv} onChange={(e) => settO({ ...o, aktiv: e.target.checked })} />
+            Bruk ansatte og timer i {org?.navn}
+          </label>
+          <label>
+            Full stilling (timer per uke)
+            <input inputMode="decimal" required value={o.full_stilling} onChange={(e) => settO({ ...o, full_stilling: e.target.value })} />
+            <span className="felt-hjelp">
+              Det nye ansatte får, så det ikke må skrives inn hver gang (vanligvis 37,5; 35,5 eller 33,6 med turnus eller skift). Hver ansatt kan ha sin egen, og
+              stillingsprosenten regnes av den.
+            </span>
+          </label>
+          <label>
+            <input type="checkbox" checked={o.helg} onChange={(e) => settO({ ...o, helg: e.target.checked })} />
+            Åpent i helgene (lørdag og søndag)
+          </label>
+          <p className="liten dempet">
+            Har dere stengt i helgene, viser vaktplanen, tavla, timene og de faste arbeidsdagene bare mandag–fredag, og dag for dag hopper over helgen. Lørdag og
+            søndag vises likevel når noen har vakt, fast dag eller timer da.
+          </p>
+          <h3>Overtid</h3>
+          <div className="rad">
+            <label>
+              Timer per dag før overtid
+              <input inputMode="decimal" required value={o.daglig_grense} onChange={(e) => settO({ ...o, daglig_grense: e.target.value })} />
+            </label>
+            <label>
+              Timer per uke før overtid
+              <input inputMode="decimal" required value={o.ukentlig_grense} onChange={(e) => settO({ ...o, ukentlig_grense: e.target.value })} />
+            </label>
+            <label>
+              Overtidstillegg (%)
+              <input inputMode="numeric" required value={o.overtid_prosent} onChange={(e) => settO({ ...o, overtid_prosent: e.target.value })} />
+            </label>
+          </div>
+          <p className="liten dempet">
+            Arbeidsmiljøloven: arbeid ut over 9 timer per dag eller 40 timer per uke er overtid, med minst 40 % tillegg (§ 10-4 og § 10-6). Har dere tariffavtale
+            med andre grenser, skriver du dem her.
+          </p>
+        </>
+      )}
+      {del === "fravaer" && harFunksjon(org, "vaktplan") && (
         <>
           <h3>Ferie</h3>
           <label>
@@ -490,7 +612,10 @@ function PersonalOppsett() {
             <input inputMode="numeric" required value={o.egenmelding_barn_dager} onChange={(e) => settO({ ...o, egenmelding_barn_dager: e.target.value })} />
             <span className="felt-hjelp">Loven: 3 dager, deretter kan dere kreve legeerklæring. Dere kan godta flere (høyst 30).</span>
           </label>
-          <h3>Vaktbytte</h3>
+        </>
+      )}
+      {del === "vaktbytte" && harFunksjon(org, "vaktplan") && (
+        <>
           <label>
             Ansatte kan bytte vakter
             <select value={o.vaktbytte} onChange={(e) => settO({ ...o, vaktbytte: e.target.value as Vaktbytte })}>
@@ -519,40 +644,21 @@ function PersonalOppsett() {
           )}
         </>
       )}
-      <h3>Overtid</h3>
-      <div className="rad">
-        <label>
-          Timer per dag før overtid
-          <input inputMode="decimal" required value={o.daglig_grense} onChange={(e) => settO({ ...o, daglig_grense: e.target.value })} />
-        </label>
-        <label>
-          Timer per uke før overtid
-          <input inputMode="decimal" required value={o.ukentlig_grense} onChange={(e) => settO({ ...o, ukentlig_grense: e.target.value })} />
-        </label>
-        <label>
-          Overtidstillegg (%)
-          <input inputMode="numeric" required value={o.overtid_prosent} onChange={(e) => settO({ ...o, overtid_prosent: e.target.value })} />
-        </label>
-      </div>
-      <p className="liten dempet">
-        Arbeidsmiljøloven: arbeid ut over 9 timer per dag eller 40 timer per uke er overtid, med minst 40 % tillegg (§ 10-4 og § 10-6). Har dere tariffavtale
-        med andre grenser, skriver du dem her.
-      </p>
-      <h3>Timebank</h3>
-      <label>
-        <input type="checkbox" checked={o.timebank} onChange={(e) => settO({ ...o, timebank: e.target.checked })} />
-        Timebank: overtid og ekstratimer kan avspaseres senere
-      </label>
-      <p className="liten dempet">
-        De ansatte kan føre overtid og ekstratimer «til timebanken» i stedet for å få dem lønnet nå, og søke om avspasering (hele dager eller noen timer) når de
-        vil ta dem ut. Du godkjenner timene og avspaseringen, kan justere banken (f.eks. en dag for jobb på en fridag) og betale ut timer i lønnskjøringen. For
-        overtid utbetales overtidstillegget likevel (arbeidsmiljøloven § 10-6); avspasering av overtid må avtales skriftlig, f.eks. i arbeidsavtalen.
-      </p>
-      {harFunksjon(org, "lonn") && (
+      {del === "timebank" && (
         <>
-          <h3 id="lonn" className="innstilling-sted">
-            Lønn
-          </h3>
+          <label>
+            <input type="checkbox" checked={o.timebank} onChange={(e) => settO({ ...o, timebank: e.target.checked })} />
+            Timebank: overtid og ekstratimer kan avspaseres senere
+          </label>
+          <p className="liten dempet">
+            De ansatte kan føre overtid og ekstratimer «til timebanken» i stedet for å få dem lønnet nå, og søke om avspasering (hele dager eller noen timer) når de
+            vil ta dem ut. Du godkjenner timene og avspaseringen, kan justere banken (f.eks. en dag for jobb på en fridag) og betale ut timer i lønnskjøringen. For
+            overtid utbetales overtidstillegget likevel (arbeidsmiljøloven § 10-6); avspasering av overtid må avtales skriftlig, f.eks. i arbeidsavtalen.
+          </p>
+        </>
+      )}
+      {del === "lonn" && harFunksjon(org, "lonn") && (
+        <>
           <label>
             <input type="checkbox" checked={o.auto_kjoring} onChange={(e) => settO({ ...o, auto_kjoring: e.target.checked })} />
             Lag lønnskjøringen for måneden automatisk
@@ -669,7 +775,10 @@ function PersonalOppsett() {
                 : "Reiseregningene betales etter Skatteetatens trekkfrie satser (f.eks. 693 kr per døgn på hotell og 3,50 kr per km i 2026), så ingenting blir trekkpliktig."}
             </span>
           </label>
-          <h4 className="lonn-under">Betalingsfil til nettbanken</h4>
+        </>
+      )}
+      {del === "betalingsfil" && harFunksjon(org, "lonn") && (
+        <>
           <div className="rad">
             <label>
               Lønnskonto (lønnen betales fra)
@@ -718,9 +827,10 @@ function PersonalOppsett() {
               nettbanken.
             </span>
           </label>
-          <h4 className="lonn-under" id="amelding">
-            A-melding
-          </h4>
+        </>
+      )}
+      {del === "amelding" && harFunksjon(org, "lonn") && (
+        <>
           <div className="rad">
             <label>
               Virksomhet (underenhet)
@@ -758,21 +868,24 @@ function PersonalOppsett() {
           </p>
         </>
       )}
-      <h3>Bursdager</h3>
-      <label>
-        Varsle om bursdager
-        <select value={o.bursdag_varsel} onChange={(e) => settO({ ...o, bursdag_varsel: e.target.value as Bursdagsvarsel })}>
-          <option value="av">Nei</option>
-          <option value="push">Ja, med push-varsel</option>
-          <option value="epost">Ja, med e-post</option>
-          <option value="begge">Ja, med push-varsel og e-post</option>
-        </select>
-      </label>
-      <p className="liten dempet">
-        Når en ansatt har bursdag, får alle de andre i {org?.navn} beskjed kl. 08 (den som har bursdag, får ikke). Bursdagen er fødselsdatoen på ansattkortet,
-        og der kan du også unnta en ansatt. Push-varsel går til dem som har slått på varsler i appen, og hver enkelt kan slå av bursdagsvarslene for seg selv.
-        E-post går til e-postadressen på ansattkortet eller innloggingen.
-      </p>
+      {del === "bursdager" && (
+        <>
+          <label>
+            Varsle om bursdager
+            <select value={o.bursdag_varsel} onChange={(e) => settO({ ...o, bursdag_varsel: e.target.value as Bursdagsvarsel })}>
+              <option value="av">Nei</option>
+              <option value="push">Ja, med push-varsel</option>
+              <option value="epost">Ja, med e-post</option>
+              <option value="begge">Ja, med push-varsel og e-post</option>
+            </select>
+          </label>
+          <p className="liten dempet">
+            Når en ansatt har bursdag, får alle de andre i {org?.navn} beskjed kl. 08 (den som har bursdag, får ikke). Bursdagen er fødselsdatoen på ansattkortet,
+            og der kan du også unnta en ansatt. Push-varsel går til dem som har slått på varsler i appen, og hver enkelt kan slå av bursdagsvarslene for seg selv.
+            E-post går til e-postadressen på ansattkortet eller innloggingen.
+          </p>
+        </>
+      )}
       <Feil melding={h.feil} />
       {lagret && (
         <div className="melding ok" role="status">
@@ -788,25 +901,24 @@ function PersonalOppsett() {
   );
 }
 
-function MinKonto() {
+// Min konto: innloggingen (passkeys og autentiseringsappen) og Google Disk.
+function MinKonto({ del }: { del: string }) {
   const { meg } = useKonto();
+  if (del === "disk") return <GoogleDisk />;
   return (
-    <>
-      <div className="kort">
-        <h2 style={{ marginTop: 0 }}>{meg?.bruker.navn}</h2>
-        <p className="dempet">{meg?.bruker.epost}</p>
-        <Passkeys />
-        <h2>Autentiseringsapp</h2>
-        <Totrinn />
-        {!meg?.mfa && (
-          <p className="liten dempet" style={{ marginTop: 8 }}>
-            For å sende fakturaer må du være logget inn med passkey eller med kode fra autentiseringsappen. Har du nettopp
-            lagt til en av dem, logger du ut og inn igjen.
-          </p>
-        )}
-      </div>
-      <GoogleDisk />
-    </>
+    <div className="kort">
+      <h2 style={{ marginTop: 0 }}>{meg?.bruker.navn}</h2>
+      <p className="dempet">{meg?.bruker.epost}</p>
+      <Passkeys />
+      <h2>Autentiseringsapp</h2>
+      <Totrinn />
+      {!meg?.mfa && (
+        <p className="liten dempet" style={{ marginTop: 8 }}>
+          For å sende fakturaer må du være logget inn med passkey eller med kode fra autentiseringsappen. Har du nettopp
+          lagt til en av dem, logger du ut og inn igjen.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1173,7 +1285,7 @@ function Passkeys() {
 
 function GoogleDisk() {
   const { meg } = useKonto();
-  const { data, last } = useData(() => hent("/disk"), []);
+  const { data, last, feil } = useData(() => hent("/disk"), []);
   const h = useHandling();
   const resultat = new URLSearchParams(window.location.search).get("disk");
 
@@ -1183,10 +1295,17 @@ function GoogleDisk() {
     if (velger) forberedVelger().catch((e) => settVelgerFeil(e.message));
   }, [Boolean(velger)]);
 
-  if (!data || (!data.tilgjengelig && !data.kobling)) return null;
-  // Uten noen organisasjon med Google Disk (funksjonene i Administrasjon) vises det bare for å
-  // koble fra en kobling som finnes.
-  if (!data.kobling && !(meg?.organisasjoner ?? []).some((o) => harFunksjon(o, "google_disk"))) return null;
+  if (feil) return <Feil melding={feil} />;
+  if (!data) return <Laster />;
+  // Uten noen organisasjon med Google Disk (funksjonene i Plattform) vises det bare for å koble fra
+  // en kobling som finnes.
+  if ((!data.tilgjengelig && !data.kobling) || (!data.kobling && !(meg?.organisasjoner ?? []).some((o) => harFunksjon(o, "google_disk"))))
+    return (
+      <div className="kort">
+        <h2 style={{ marginTop: 0 }}>Google Disk</h2>
+        <p className="dempet">Kopiering av fakturaene til Google Disk er ikke slått på for organisasjonene dine.</p>
+      </div>
+    );
   const k = data.kobling;
 
   const byttMappe = () =>
@@ -1341,46 +1460,134 @@ function Logo() {
   );
 }
 
+// Brukerne i organisasjonen med rollen sin: en av de faste, eller en av de egne rollene (Roller).
+// Eier og administrator inviterer og bytter rolle; bare en eier kan gi eller ta eierrollen.
+type Medlem = { bruker_id: string; rolle: string; tilgangsrolle_id: string | null; tilgangsrolle: string | null; epost: string; navn: string | null };
+const ROLLETEKST: Record<string, string> = {
+  eier: "Eier",
+  admin: "Administrator",
+  fakturerer: "Fakturerer",
+  regnskap: "Regnskap",
+  les: "Les",
+  ansatt: "Ansatt",
+};
+// Verdien i rollevalget: den faste rollen, eller «t:» og id-en til den egne rollen.
+const rolleVerdi = (m: { rolle: string; tilgangsrolle_id: string | null }) => (m.rolle === "tilpasset" ? `t:${m.tilgangsrolle_id}` : m.rolle);
+const fraRolleVerdi = (v: string) => (v.startsWith("t:") ? { rolle: "tilpasset", tilgangsrolle_id: v.slice(2) } : { rolle: v, tilgangsrolle_id: null });
+
+function Rollevalg({ verdi, endre, faste, roller, etikett, disabled }: {
+  verdi: string;
+  endre: (v: string) => void;
+  faste: string[];
+  roller: Tilgangsrolle[];
+  etikett?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <select value={verdi} onChange={(e) => endre(e.target.value)} aria-label={etikett} disabled={disabled}>
+      <optgroup label="Faste roller">
+        {faste.map((r) => (
+          <option key={r} value={r}>
+            {ROLLETEKST[r]}
+          </option>
+        ))}
+      </optgroup>
+      {roller.length > 0 && (
+        <optgroup label="Egne roller">
+          {roller.map((r) => (
+            <option key={r.id} value={`t:${r.id}`}>
+              {r.navn}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+  );
+}
+
 function Medlemmer() {
-  const { org } = useKonto();
-  const { data, last } = useData(() => hent(`/org/${org!.id}/medlemmer`), [org?.id]);
+  const { org, meg, oppdater } = useKonto();
+  const { data, last } = useData(() => hent<Medlem[]>(`/org/${org!.id}/medlemmer`), [org?.id]);
+  const roller = useData(() => hent<Tilgangsrolle[]>(`/org/${org!.id}/tilgangsroller`), [org?.id]);
   const [epost, settEpost] = useState("");
-  const [rolle, settRolle] = useState("fakturerer");
+  const [rolle, settRolle] = useState(harModul(org, "faktura") ? "fakturerer" : "admin");
   const [lenke, settLenke] = useState<string | null>(null);
   const h = useHandling();
+  const eier = org?.rolle === "eier";
+  // De faste rollene som passer: fakturerer og les bare med Faktura, og eier bare for en eier.
+  const faste = ["admin", ...(harModul(org, "faktura") ? ["fakturerer"] : []), "regnskap", ...(harModul(org, "faktura") ? ["les"] : [])];
 
   async function inviter(e: FormEvent) {
     e.preventDefault();
-    const r = await h.kjor(() => api("POST", `/org/${org!.id}/invitasjoner`, { epost, rolle }));
+    const r = await h.kjor(() => api("POST", `/org/${org!.id}/invitasjoner`, { epost, ...fraRolleVerdi(rolle) }));
     if (r) {
       settLenke(r.lenke);
       settEpost("");
+      roller.last();
     }
   }
-
-  const rolletekst: Record<string, string> = { eier: "Eier", admin: "Administrator", fakturerer: "Fakturerer", regnskap: "Regnskap", les: "Les", ansatt: "Ansatt (timer)" };
+  async function byttRolle(m: Medlem, v: string) {
+    const ny = fraRolleVerdi(v);
+    const navn = ny.rolle === "tilpasset" ? roller.data?.find((r) => r.id === ny.tilgangsrolle_id)?.navn : ROLLETEKST[ny.rolle];
+    if (!confirm(`Gi ${m.navn ?? m.epost} rollen ${navn}?`)) return;
+    const ok = await h.kjor(async () => (await api("PATCH", `/org/${org!.id}/medlemmer/${m.bruker_id}`, ny), true));
+    if (!ok) return;
+    last();
+    roller.last();
+    if (m.bruker_id === meg?.bruker.id) await oppdater(); // egen rolle: menyen og tilgangen endres
+  }
 
   return (
     <div className="kort">
       <h2 style={{ marginTop: 0 }}>Brukere</h2>
-      <table className="kompakt">
-        <tbody>
-          {(data ?? []).map((m: any) => (
-            <tr key={m.bruker_id}>
-              <td>{m.navn ?? m.epost}</td>
-              <td className="dempet">{m.epost}</td>
-              <td>{rolletekst[m.rolle]}</td>
-              <td className="hoyre">
-                {m.rolle !== "eier" && (
-                  <button className="lenke" onClick={() => confirm(`Fjerne ${m.epost}?`) && h.kjor(() => api("DELETE", `/org/${org!.id}/medlemmer/${m.bruker_id}`)).then(last)}>
-                    Fjern
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <p className="dempet liten">
+        Hver bruker har en rolle: en av de faste, eller en av organisasjonens egne roller (under Roller), som gir modulene som er krysset av.
+      </p>
+      <div className="tabell">
+        <table className="kompakt">
+          <tbody>
+            {(data ?? []).map((m) => {
+              // Eierrollen gis og tas bare av en eier, og ingen bytter sin egen rolle her.
+              const kanBytte = m.bruker_id !== meg?.bruker.id && (eier || m.rolle !== "eier");
+              const valg = [...(eier ? ["eier"] : []), ...faste, ...(m.rolle === "ansatt" || org?.personal ? ["ansatt"] : [])];
+              return (
+                <tr key={m.bruker_id}>
+                  <td>
+                    {m.navn ?? m.epost}
+                    {m.navn && <span className="dempet liten" style={{ display: "block" }}>{m.epost}</span>}
+                  </td>
+                  <td>
+                    {kanBytte ? (
+                      <Rollevalg
+                        verdi={rolleVerdi(m)}
+                        endre={(v) => void byttRolle(m, v)}
+                        faste={valg.includes(m.rolle) || m.rolle === "tilpasset" ? valg : [m.rolle, ...valg]}
+                        roller={roller.data ?? []}
+                        etikett={`Rollen til ${m.navn ?? m.epost}`}
+                        disabled={h.opptatt}
+                      />
+                    ) : m.rolle === "tilpasset" ? (
+                      m.tilgangsrolle
+                    ) : (
+                      ROLLETEKST[m.rolle] ?? m.rolle
+                    )}
+                  </td>
+                  <td className="hoyre">
+                    {m.rolle !== "eier" && (
+                      <button
+                        className="lenke"
+                        onClick={() => confirm(`Fjerne ${m.epost}?`) && h.kjor(() => api("DELETE", `/org/${org!.id}/medlemmer/${m.bruker_id}`)).then(() => (last(), roller.last()))}
+                      >
+                        Fjern
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       <form onSubmit={inviter} className="rad" style={{ marginTop: 16, alignItems: "end" }}>
         <label>
           Inviter e-post
@@ -1388,12 +1595,7 @@ function Medlemmer() {
         </label>
         <label>
           Rolle
-          <select value={rolle} onChange={(e) => settRolle(e.target.value)}>
-            <option value="admin">Administrator</option>
-            <option value="fakturerer">Fakturerer</option>
-            <option value="regnskap">Regnskap (bokføre betalinger)</option>
-            <option value="les">Les</option>
-          </select>
+          <Rollevalg verdi={rolle} endre={settRolle} faste={faste} roller={roller.data ?? []} />
         </label>
         <label>
           <button className="primar" disabled={h.opptatt}>
@@ -1401,6 +1603,7 @@ function Medlemmer() {
           </button>
         </label>
       </form>
+      <p className="liten dempet">Ansatte inviteres fra ansattkortet (Personal → Ansatte), så de kobles til timene og vaktene sine.</p>
       {lenke && (
         <div className="melding ok">
           Send denne lenken til personen. Den gjelder i 7 dager og bare for e-postadressen du skrev inn:
@@ -1410,6 +1613,203 @@ function Medlemmer() {
       )}
       <Feil melding={h.feil} />
     </div>
+  );
+}
+
+// Rollene i bedriften (0111_tilgangsroller.sql): eier og administrator lager egne roller, f.eks.
+// Daglig leder eller Personalansvarlig, og krysser av for modulene hver rolle gir (bare de som er
+// slått på for organisasjonen; Lønn tar med Personal). Innstillingene, brukerne og rollene er alltid
+// bare for eier og administrator, og en rolle uten moduler er som Ansatt: bare sitt eget.
+type Tilgangsrolle = { id: string; navn: string; beskrivelse: string | null; moduler: ModulKode[]; brukere: number; invitert: number };
+type Rolleskjema = { id: string | null; navn: string; beskrivelse: string; moduler: ModulKode[] };
+const MODULER: ModulKode[] = ["faktura", "personal", "lonn", "regnskap"];
+const MODULTEKST: Record<ModulKode, string> = {
+  faktura: "Fakturaene, kundene, produktene og innbetalingene",
+  personal: "De ansatte, vaktplanen, timene, ferien og fraværet",
+  lonn: "Lønnskjøringene, a-meldingen, skattekortene og reisene (med Personal)",
+  regnskap: "Regnskapet, bilagene, utgiftene, banken og mva",
+};
+// Forslag når organisasjonen lager rollene sine (med modulene som er slått på); vises når en av
+// modulene i «krever» er på.
+const FORSLAG: { navn: string; beskrivelse: string; moduler: ModulKode[]; krever: ModulKode[] }[] = [
+  { navn: "Daglig leder", beskrivelse: "Alle modulene, uten innstillingene og brukerne", moduler: ["faktura", "personal", "lonn", "regnskap"], krever: MODULER },
+  { navn: "Økonomiansvarlig", beskrivelse: "Fakturaene og regnskapet", moduler: ["faktura", "regnskap"], krever: ["faktura", "regnskap"] },
+  { navn: "Personalansvarlig", beskrivelse: "De ansatte, vaktplanen og timene", moduler: ["personal"], krever: ["personal"] },
+  { navn: "Lønnsansvarlig", beskrivelse: "Lønnen og de ansatte", moduler: ["personal", "lonn"], krever: ["lonn"] },
+];
+const FASTE_ROLLER: [string, string][] = [
+  ["Eier", "Alt, også å gi andre eierrollen og slette organisasjonen."],
+  ["Administrator", "Alle modulene, innstillingene, brukerne og rollene."],
+  ["Fakturerer", "Lage og sende fakturaer, og registrere betalinger."],
+  ["Regnskap", "Se fakturaene, bokføre betalinger, regnskapet, og se de ansatte og lønnen."],
+  ["Les", "Bare se fakturaene."],
+  ["Ansatt", "Sitt eget: timer, vakter, ferie, fravær og lønnsslipper."],
+];
+// Lønn bygger på Personal: med Lønn følger Personal, og uten Personal går Lønn.
+function velgModul(moduler: ModulKode[], m: ModulKode, pa: boolean): ModulKode[] {
+  let ny = pa ? [...moduler, m] : moduler.filter((x) => x !== m);
+  if (pa && m === "lonn") ny.push("personal");
+  if (!pa && m === "personal") ny = ny.filter((x) => x !== "lonn");
+  return MODULER.filter((x) => ny.includes(x));
+}
+
+function Tilgangsroller() {
+  const { org } = useKonto();
+  const { data, last } = useData(() => hent<Tilgangsrolle[]>(`/org/${org!.id}/tilgangsroller`), [org?.id]);
+  const [skjema, settSkjema] = useState<Rolleskjema | null>(null);
+  const h = useHandling();
+  const lagring = useHandling();
+  const tilgjengelige = MODULER.filter((m) => harModul(org, m));
+  const roller = data ?? [];
+  const brukt = new Set(roller.map((r) => r.navn.trim().toLowerCase()));
+  const forslag = FORSLAG.filter((f) => !brukt.has(f.navn.toLowerCase()) && f.krever.some((m) => tilgjengelige.includes(m)));
+
+  async function lagre(e: FormEvent) {
+    e.preventDefault();
+    const s = skjema!;
+    const kropp = { navn: s.navn.trim(), beskrivelse: s.beskrivelse.trim() || null, moduler: s.moduler };
+    const r = await lagring.kjor(() => (s.id ? api("PUT", `/org/${org!.id}/tilgangsroller/${s.id}`, kropp) : api("POST", `/org/${org!.id}/tilgangsroller`, kropp)));
+    if (!r) return;
+    settSkjema(null);
+    last();
+  }
+  const slett = (r: Tilgangsrolle) =>
+    confirm(`Slette rollen ${r.navn}?`) && h.kjor(async () => (await api("DELETE", `/org/${org!.id}/tilgangsroller/${r.id}`), true)).then(last);
+  const ny = (f?: (typeof FORSLAG)[number]) => {
+    lagring.settFeil(null);
+    settSkjema({ id: null, navn: f?.navn ?? "", beskrivelse: f?.beskrivelse ?? "", moduler: (f?.moduler ?? []).filter((m) => tilgjengelige.includes(m)) });
+  };
+
+  return (
+    <>
+      <div className="kort">
+        <div className="topp" style={{ marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Roller</h2>
+          <button className="primar" type="button" onClick={() => ny()}>
+            Ny rolle
+          </button>
+        </div>
+        <p className="dempet liten">
+          Lag rollene dere trenger, f.eks. Daglig leder eller Personalansvarlig, og velg modulene hver rolle gir. Gi rollen til en bruker under Brukere.
+          Innstillingene, brukerne og rollene er alltid bare for eier og administrator, og en rolle uten moduler gir bare tilgang til sitt eget, som Ansatt.
+        </p>
+        {!data ? (
+          <Laster />
+        ) : roller.length === 0 ? (
+          <p className="dempet">Ingen egne roller ennå.</p>
+        ) : (
+          <ul className="rolleliste">
+            {roller.map((r) => (
+              <li key={r.id}>
+                <div>
+                  <strong>{r.navn}</strong>
+                  {r.beskrivelse && <span className="dempet liten">{r.beskrivelse}</span>}
+                  <div className="merker">
+                    {r.moduler.length ? (
+                      r.moduler.map((m) => (
+                        <span key={m} className={`merke ${harModul(org, m) ? "merke-info" : "merke-noytral"}`} title={harModul(org, m) ? undefined : "Modulen er ikke slått på"}>
+                          {MODULNAVN[m]}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="merke merke-noytral">Bare sitt eget</span>
+                    )}
+                  </div>
+                  <span className="dempet liten rolle-antall">
+                    {r.brukere === 1 ? "1 bruker" : `${r.brukere} brukere`}
+                    {r.invitert > 0 ? ` · ${r.invitert} invitert` : ""}
+                  </span>
+                </div>
+                <div className="knapper">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      lagring.settFeil(null);
+                      settSkjema({ id: r.id, navn: r.navn, beskrivelse: r.beskrivelse ?? "", moduler: r.moduler });
+                    }}
+                  >
+                    Endre
+                  </button>
+                  <button type="button" className="fare" disabled={h.opptatt} onClick={() => slett(r)}>
+                    Slett
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Feil melding={h.feil} />
+        {forslag.length > 0 && (
+          <>
+            <p className="liten" style={{ margin: "16px 0 0", fontWeight: 600 }}>
+              Forslag
+            </p>
+            <div className="forslag">
+              {forslag.map((f) => (
+                <button key={f.navn} type="button" onClick={() => ny(f)} title={f.beskrivelse}>
+                  + {f.navn}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      <div className="kort">
+        <h2 style={{ marginTop: 0 }}>De faste rollene</h2>
+        <ul className="rolleliste faste">
+          {FASTE_ROLLER.map(([navn, tekst]) => (
+            <li key={navn}>
+              <div>
+                <strong>{navn}</strong>
+                <span className="dempet liten">{tekst}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <Dialog apen={!!skjema} lukk={() => settSkjema(null)} tittel={skjema?.id ? "Endre rollen" : "Ny rolle"}>
+        {skjema && (
+          <form onSubmit={lagre}>
+            <label>
+              Navn
+              <input required minLength={2} maxLength={60} value={skjema.navn} onChange={(e) => settSkjema({ ...skjema, navn: e.target.value })} placeholder="Daglig leder" />
+            </label>
+            <label>
+              Beskrivelse (valgfritt)
+              <input maxLength={300} value={skjema.beskrivelse} onChange={(e) => settSkjema({ ...skjema, beskrivelse: e.target.value })} />
+            </label>
+            <p className="liten" style={{ margin: "12px 0 4px", fontWeight: 600 }}>
+              Modulene rollen gir
+            </p>
+            {tilgjengelige.map((m) => (
+              <label key={m}>
+                <input type="checkbox" checked={skjema.moduler.includes(m)} onChange={(e) => settSkjema({ ...skjema, moduler: velgModul(skjema.moduler, m, e.target.checked) })} />
+                {MODULNAVN[m]}
+                <span className="felt-hjelp">{MODULTEKST[m]}</span>
+              </label>
+            ))}
+            {MODULER.some((m) => !tilgjengelige.includes(m)) && (
+              <p className="liten dempet">
+                {MODULER.filter((m) => !tilgjengelige.includes(m))
+                  .map((m) => MODULNAVN[m])
+                  .join(" og ")}{" "}
+                er ikke slått på for {org?.navn}.
+              </p>
+            )}
+            {!skjema.moduler.length && <p className="liten dempet">Uten moduler ser brukerne bare sitt eget (timer, vakter, fravær og lønnsslipper), som Ansatt.</p>}
+            <Feil melding={lagring.feil} />
+            <div className="knapper">
+              <button className="primar" disabled={lagring.opptatt}>
+                Lagre
+              </button>
+              <button type="button" onClick={() => settSkjema(null)}>
+                Avbryt
+              </button>
+            </div>
+          </form>
+        )}
+      </Dialog>
+    </>
   );
 }
 

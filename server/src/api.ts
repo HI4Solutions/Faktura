@@ -521,13 +521,15 @@ export function lagApi() {
   });
 
   // --- Medlemmer og regnskapsfører ---------------------------------------
+  // Med den egne rollen (tilgangsrollen, 0111_tilgangsroller.sql) for dem som har rollen tilpasset.
   org.get("/medlemmer", async (c) =>
     c.json(
       await bruk(c, (db) =>
         alle(
           db,
-          `select m.bruker_id, m.rolle, m.opprettet, b.epost, b.navn
+          `select m.bruker_id, m.rolle, m.tilgangsrolle_id, t.navn as tilgangsrolle, m.opprettet, b.epost, b.navn
              from faktura.medlemmer m join faktura.brukere b on b.id = m.bruker_id
+             left join faktura.tilgangsroller t on t.org_id = m.org_id and t.id = m.tilgangsrolle_id
             where m.org_id = $1 order by m.opprettet`,
           [orgId(c)],
         ),
@@ -535,15 +537,66 @@ export function lagApi() {
     ),
   );
 
+  // Rollen: en av de faste, eller tilpasset med en av organisasjonens egne roller.
+  const rolleValg = (roller: [string, ...string[]]) =>
+    z.object({ rolle: z.enum(roller), tilgangsrolle_id: uuid.nullish() }).refine((r) => (r.rolle === "tilpasset") === !!r.tilgangsrolle_id, {
+      message: "Velg en rolle",
+      path: ["tilgangsrolle_id"],
+    });
+
   org.post("/invitasjoner", async (c) => {
-    const b = await kropp(c, z.object({ epost: z.string().email(), rolle: z.enum(["admin", "fakturerer", "regnskap", "les"]) }));
-    const token = await bruk(c, async (db) => (await en(db, "select faktura.inviter_medlem($1, $2, $3) as t", [orgId(c), b.epost, b.rolle]))!.t);
+    const b = await kropp(c, rolleValg(["admin", "fakturerer", "regnskap", "les", "tilpasset"]).and(z.object({ epost: z.string().email() })));
+    const token = await bruk(
+      c,
+      async (db) => (await en(db, "select faktura.inviter_medlem($1, $2, $3, $4) as t", [orgId(c), b.epost, b.rolle, b.tilgangsrolle_id ?? null]))!.t,
+    );
     return c.json({ lenke: `${config.appUrl}/invitasjon/${token}` }, 201);
   });
 
   org.patch("/medlemmer/:bruker", async (c) => {
-    const b = await kropp(c, z.object({ rolle: z.enum(["eier", "admin", "fakturerer", "regnskap", "les"]) }));
-    await bruk(c, (db) => db.query("select faktura.endre_rolle($1, $2, $3)", [orgId(c), uuid.parse(c.req.param("bruker")), b.rolle]));
+    const b = await kropp(c, rolleValg(["eier", "admin", "fakturerer", "regnskap", "les", "ansatt", "tilpasset"]));
+    await bruk(c, (db) =>
+      db.query("select faktura.endre_rolle($1, $2, $3, $4)", [orgId(c), uuid.parse(c.req.param("bruker")), b.rolle, b.tilgangsrolle_id ?? null]),
+    );
+    return c.body(null, 204);
+  });
+
+  // --- Egne roller (tilgangsroller) ----------------------------------------
+  // Eier og administrator lager roller med modulene de gir (Faktura, Personal, Lønn, Regnskap);
+  // alle i organisasjonen ser dem. Med antall brukere og invitasjoner som venter, per rolle.
+  const rolleSkjema = z.object({
+    navn: z.string().trim().min(2, "Skriv et navn på rollen").max(60, "Navnet kan ha høyst 60 tegn"),
+    beskrivelse: z.string().trim().max(300, "Beskrivelsen kan ha høyst 300 tegn").nullish(),
+    moduler: z.array(z.enum(["faktura", "personal", "lonn", "regnskap"])).max(4),
+  });
+  const ROLLE = `select t.id, t.navn, t.beskrivelse, t.moduler, t.opprettet, t.endret,
+                        (select count(*) from faktura.medlemmer m where m.org_id = t.org_id and m.tilgangsrolle_id = t.id)::int as brukere,
+                        (select count(*) from faktura.invitasjoner i
+                          where i.org_id = t.org_id and i.tilgangsrolle_id = t.id and i.akseptert_at is null and i.utloper > now())::int as invitert
+                   from faktura.tilgangsroller t`;
+  org.get("/tilgangsroller", async (c) =>
+    c.json(await bruk(c, (db) => alle(db, `${ROLLE} where t.org_id = $1 order by lower(t.navn)`, [orgId(c)]))),
+  );
+  org.post("/tilgangsroller", async (c) => {
+    const b = await kropp(c, rolleSkjema);
+    const r = await bruk(c, async (db) => {
+      const ny = (await en<{ id: string }>(db, "select id from faktura.lagre_tilgangsrolle($1, null, $2, $3, $4)", [orgId(c), b.navn, b.beskrivelse ?? null, b.moduler]))!;
+      return en(db, `${ROLLE} where t.id = $1`, [ny.id]);
+    });
+    return c.json(r, 201);
+  });
+  org.put("/tilgangsroller/:id", async (c) => {
+    const b = await kropp(c, rolleSkjema);
+    const id = uuid.parse(c.req.param("id"));
+    return c.json(
+      await bruk(c, async (db) => {
+        await db.query("select faktura.lagre_tilgangsrolle($1, $2, $3, $4, $5)", [orgId(c), id, b.navn, b.beskrivelse ?? null, b.moduler]);
+        return en(db, `${ROLLE} where t.id = $1`, [id]);
+      }),
+    );
+  });
+  org.delete("/tilgangsroller/:id", async (c) => {
+    await bruk(c, (db) => db.query("select faktura.slett_tilgangsrolle($1, $2)", [orgId(c), uuid.parse(c.req.param("id"))]));
     return c.body(null, 204);
   });
 

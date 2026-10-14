@@ -1,5 +1,5 @@
 // Kontogodkjenning: en ny konto kommer ikke inn før plattformadministratoren har godkjent den.
-// Den nye brukeren velger modulene sine (Faktura, Bemanning, ...) ved registreringen, og
+// Den nye brukeren velger modulene sine (Faktura, Personal, Lønn, Regnskap) ved registreringen, og
 // administratorene får e-post med modulene når e-posten er bekreftet, navnet skrevet inn og
 // modulene valgt. De godkjenner med modulene (eller andre), og brukeren får e-post om utfallet.
 // Organisasjonene brukeren lager etterpå, får bare funksjonene i modulene. En invitasjon fra en
@@ -43,8 +43,9 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
   it("modulene kan hentes uten innlogging", async () => {
     const r = await kall("GET", "/api/offentlig/moduler", null);
     expect(r.status).toBe(200);
-    expect(r.data.map((m: any) => m.kode)).toEqual(["faktura", "bemanning", "regnskap"]);
-    expect(r.data[1]).toMatchObject({ navn: "Bemanning", beskrivelse: expect.stringContaining("vaktplan") });
+    expect(r.data.map((m: any) => m.kode)).toEqual(["faktura", "personal", "lonn", "regnskap"]);
+    expect(r.data[1]).toMatchObject({ navn: "Personal", beskrivelse: expect.stringContaining("vaktplan") });
+    expect(r.data[2]).toMatchObject({ navn: "Lønn", krever: "personal" });
     expect(r.headers.get("cache-control")).toContain("max-age");
   });
 
@@ -67,18 +68,19 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     expect((await kall("PATCH", "/api/meg", nina, { moduler: [] })).status).toBe(400);
     expect((await kall("PATCH", "/api/meg", nina, { moduler: ["finnes_ikke"] })).data.error).toBe("Ukjent modul");
     expect((await kall("PATCH", "/api/meg", nina, {})).status).toBe(400);
-    expect((await kall("PATCH", "/api/meg", nina, { moduler: ["bemanning", "faktura"] })).data).toMatchObject({ moduler: ["faktura", "bemanning"] });
+    expect((await kall("PATCH", "/api/meg", nina, { moduler: ["personal", "faktura"] })).data).toMatchObject({ moduler: ["faktura", "personal"] });
     await kall("GET", "/api/meg", nina);
     const e = tilAdmin("nina.konto@server.test");
     expect(e).toHaveLength(1);
     expect(e[0]!.emne).toBe("Ny konto venter på godkjenning: Nina Nilsen");
-    expect(e[0]!.tekst).toContain("Moduler: Faktura og Bemanning");
+    expect(e[0]!.tekst).toContain("Moduler: Faktura og Personal");
     expect(e[0]!.tekst).toContain(`Godkjenn eller avvis den på ${config.appUrl}/admin`);
     // Med navnet fra innloggingen går e-posten når modulene er valgt.
     await kall("GET", "/api/meg", per);
     expect(tilAdmin("per.konto@server.test")).toHaveLength(0);
-    await kall("PATCH", "/api/meg", per, { moduler: ["bemanning"] });
-    expect(tilAdmin("per.konto@server.test").map((x) => x.tekst)).toEqual([expect.stringContaining("Moduler: Bemanning")]);
+    // Lønn bygger på Personal, som kommer med.
+    await kall("PATCH", "/api/meg", per, { moduler: ["lonn"] });
+    expect(tilAdmin("per.konto@server.test").map((x) => x.tekst)).toEqual([expect.stringContaining("Moduler: Personal og Lønn")]);
   });
 
   it("modulene lagres rett fra registreringen, og forespørselen går når e-postadressen er bekreftet", async () => {
@@ -93,7 +95,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     expect((await kall("GET", "/api/admin/kontoer", nina)).status).toBe(403);
     const venter = (await kall("GET", "/api/admin/kontoer", admin)).data;
     expect(venter.map((v: any) => v.epost)).toEqual(expect.arrayContaining(["nina.konto@server.test", "per.konto@server.test"]));
-    expect(venter.find((v: any) => v.epost === "nina.konto@server.test").moduler).toEqual(["faktura", "bemanning"]);
+    expect(venter.find((v: any) => v.epost === "nina.konto@server.test").moduler).toEqual(["faktura", "personal"]);
     expect((await kall("GET", "/api/admin/brukere", admin)).data.find((b: any) => b.epost === "nina.konto@server.test")).toMatchObject({ status: "venter" });
     const id = venter.find((v: any) => v.epost === "nina.konto@server.test").id;
     expect((await kall("POST", `/api/admin/brukere/${id}/godkjenning`, nina, { godkjent: true })).status).toBe(403);
@@ -110,7 +112,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     const meg = (await kall("GET", "/api/meg", nina)).data;
     expect(meg.bruker).toMatchObject({ status: "godkjent", moduler: ["faktura"] });
     // Modulene endres ikke av brukeren etter godkjenningen.
-    expect((await kall("PATCH", "/api/meg", nina, { moduler: ["bemanning"] })).data.error).toBe("Kontoen er alt behandlet");
+    expect((await kall("PATCH", "/api/meg", nina, { moduler: ["personal"] })).data.error).toBe("Kontoen er alt behandlet");
     const org = (await kall("POST", "/api/organisasjoner", nina, { navn: "Ninas firma AS" })).data;
     expect(org.id).toBeTruthy();
     const funksjoner = (await kall("GET", "/api/meg", nina)).data.organisasjoner.find((o: any) => o.id === org.id).funksjoner;

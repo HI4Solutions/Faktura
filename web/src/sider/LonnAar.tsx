@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, kanLonn, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { IkonLonn } from "../ikoner";
 import { apnePdf, MND } from "../lonn";
@@ -172,7 +172,7 @@ function AarsoversiktVisning({ aar, ansatt }: { aar: number; ansatt?: string }) 
 
 export function Aarsoversikter() {
   const { org } = useKonto();
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const smal = useSmal();
   const naa = new Date();
   const [valgtAar, settAar] = useAar();

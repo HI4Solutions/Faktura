@@ -189,7 +189,7 @@ export const fakturaerSomSkalPurres = () =>
       db,
       `select f.id from faktura.fakturaer f
          join faktura.organisasjoner o on o.id = f.org_id
-        where o.purring_auto and o.verifisering <> 'sperret'
+        where o.purring_auto and o.verifisering <> 'sperret' and faktura.har_funksjon(o.id, 'faktura')
           and f.type = 'faktura' and f.status = 'utstedt'
           and f.forfallsdato + o.purring_dager <= faktura.i_dag()
           and coalesce((select k.epost from faktura.kunder k where k.id = f.kunde_id), f.kunde ->> 'epost') is not null

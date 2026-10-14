@@ -211,7 +211,7 @@ export function Ansatte() {
   const [apen, settApen] = useState<Partial<Ansatt> | null>(null);
   const { data, feil, last } = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte${alle ? "" : "?aktiv=true"}`), [org?.id, alle]);
   const smal = useSmal();
-  const endre = kanPersonal(org?.rolle);
+  const endre = kanPersonal(org);
   const vaktplan = harFunksjon(org, "vaktplan");
   const sortering = useSortering<AnsattKolonne>("faktura.ansatte.sortering", vaktplan ? KOLONNER : UTEN_DAGER, "navn");
   // Rollene (f.eks. lege og sekretær) settes opp her og i bemanningskalenderen.
@@ -223,7 +223,7 @@ export function Ansatte() {
   // Alle, også de som har sluttet (de som er hentet inn fra en kunde, hentes ikke inn igjen).
   const allePersoner = useData(() => (roller ? hent<Ansatt[]>(`/org/${org!.id}/ansatte`) : Promise.resolve(null)), [org?.id, roller, rolleVersjon]);
 
-  if (!kanSePersonal(org?.rolle) || !org?.personal)
+  if (!kanSePersonal(org) || !org?.personal)
     return (
       <>
         <h1>Ansatte</h1>
@@ -231,7 +231,7 @@ export function Ansatte() {
           <Tom ikon={<IkonAnsatte storrelse={22} />} tittel={org?.personal ? "Du har ikke tilgang til ansatte" : "Ansatte og timer er ikke slått på"}>
             {!org?.personal && endre && (
               <p>
-                Slå det på under <Link to="/innstillinger?fane=personal">Innstillinger → Ansatte og timer</Link>.
+                Slå det på under <Link to="/innstillinger?fane=personal">Innstillinger → Personal</Link>.
               </p>
             )}
           </Tom>
@@ -503,13 +503,13 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     timelonn: ansatt.timelonn ?? null,
     stillingsprosent: ansatt.stillingsprosent ?? 100,
   }));
-  // Bursdagsvarsler (Innstillinger → Ansatte og timer): da kan den ansatte unntas.
+  // Bursdagsvarsler (Innstillinger → Personal → Bursdager): da kan den ansatte unntas.
   const oppsett = useData(
     () => hent<{ bursdag_varsel: string; full_stilling: number; ferie_dager: number; otp_prosent: number; otp_unntak_75: boolean }>(`/org/${org!.id}/lonn-oppsett`),
     [org?.id],
   );
   const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
-  // Virksomhetene (0101, Innstillinger → Ansatte og timer → A-melding): valget vises når foretaket har flere.
+  // Virksomhetene (0101, Innstillinger → Lønn → A-melding): valget vises når foretaket har flere.
   const virksomheter = useData(
     () =>
       harFunksjon(org, "lonn")
@@ -519,7 +519,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
         : Promise.resolve(null),
     [org?.id],
   );
-  // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Ansatte og timer).
+  // En ny ansatt får organisasjonens arbeidstid i full stilling (Innstillinger → Personal).
   const fullStilling = Number(oppsett.data?.full_stilling ?? 37.5);
   // Rollene (f.eks. lege og sekretær, Roller.tsx); en ny kan lages rett herfra (nyRolle) når
   // personen lagres. Med vaktplanen (funksjonene i Administrasjon) også den faste arbeidsplanen
@@ -1050,7 +1050,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           <label>
             Arbeidstid i full stilling
             <input inputMode="decimal" {...felt("ukentlig_arbeidstid")} />
-            <span className="felt-hjelp">Timer per uke. Standarden ({tallformat.format(fullStilling)}) står under Innstillinger → Ansatte og timer.</span>
+            <span className="felt-hjelp">Timer per uke. Standarden ({tallformat.format(fullStilling)}) står under Innstillinger → Personal.</span>
           </label>
         </div>
         {!arbeidstaker && endringsdato}
@@ -1227,7 +1227,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                         : "Uten skattekort trekkes 50 %."}{" "}
                 {ansatt.skattekort_kilde === "skatteetaten" || ansatt.skattekort_hentet
                   ? "Hentes fra Skatteetaten; som biarbeidsgiver brukes trekket for biarbeidsgiver."
-                  : "Med koblingen til Skatteetaten (Innstillinger → Ansatte og timer) hentes skattekortet av seg selv når fødselsnummeret er registrert."}
+                  : "Med koblingen til Skatteetaten (Innstillinger → Lønn → Skattekort) hentes skattekortet av seg selv når fødselsnummeret er registrert."}
               </p>
               {ansatt.id && <SkattekortFraSkatteetaten a={ansatt as Ansatt} />}
               <h3>A-melding</h3>

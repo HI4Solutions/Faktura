@@ -1343,8 +1343,8 @@ export function lonnRuter() {
         orgId(c),
       ]);
       const fra = o?.lonnskonto ?? org?.kontonr ?? null;
-      if (!fra) throw new ApiFeil(400, "Legg inn lønnskontoen (kontoen lønnen betales fra) under Innstillinger → Ansatte og timer.");
-      if (!o?.bank_bic) throw new ApiFeil(400, "Legg inn BIC for banken lønnskontoen er i (står i nettbanken, f.eks. DNBANOKK for DNB) under Innstillinger → Ansatte og timer.");
+      if (!fra) throw new ApiFeil(400, "Legg inn lønnskontoen (kontoen lønnen betales fra) under Innstillinger → Lønn → Betalingsfil.");
+      if (!o?.bank_bic) throw new ApiFeil(400, "Legg inn BIC for banken lønnskontoen er i (står i nettbanken, f.eks. DNBANOKK for DNB) under Innstillinger → Lønn → Betalingsfil.");
       const betales = (k.slipper as any[]).filter((s) => Number(s.netto) > 0);
       if (!betales.length) throw new ApiFeil(400, "Ingen har noe til utbetaling i denne kjøringen.");
       const mangler = betales.filter((s) => !s.kontonr || !kontonrGyldig(s.kontonr));

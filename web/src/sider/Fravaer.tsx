@@ -834,7 +834,7 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
   const til = tidligere ? leggTilDager(iDag(), -1) : leggTilDager(iDag(), 365);
   const { data, feil } = useData(() => hent<Fravaer[]>(`/org/${org!.id}/fravaer?fra=${fra}&til=${til}`), [org?.id, tidligere, versjon]);
   const ansatte = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte`), [org?.id, versjon]);
-  const endre = kanPersonal(org?.rolle);
+  const endre = kanPersonal(org);
   const liste = (data ?? []).slice().sort((a, b) => (tidligere ? b.fra.localeCompare(a.fra) : a.fra.localeCompare(b.fra)));
 
   return (

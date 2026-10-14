@@ -70,7 +70,7 @@ export function Rapporter() {
   const { org } = useKonto();
   const [sok, settSok] = useSearchParams();
   const liste = useData(() => hent<{ moduler: Modul[] }>(`/org/${org!.id}/rapportmodul`), [org?.id]);
-  const admin = erAdmin(org?.rolle);
+  const admin = erAdmin(org);
   const moduler = liste.data?.moduler ?? [];
   const faner: [string, string][] = [...moduler.map((m) => [m.id, m.navn] as [string, string]), ...(admin && moduler.length ? [["utsending", "Utsending"] as [string, string]] : [])];
   const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? faner[0]?.[0];

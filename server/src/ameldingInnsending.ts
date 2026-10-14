@@ -72,7 +72,7 @@ function ameldingFeil(r: { status: number; data: any; tekst: string }): EtatFeil
 // Varsel til eier og administrator.
 async function varsle(org: string, tittel: string, tekst: string, tag: string) {
   const mottakere = await somSystem((db) =>
-    alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and rolle in ('eier', 'admin')", [org]),
+    alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and (rolle in ('eier', 'admin') or faktura.tilpasset_har(org_id, bruker_id, 'lonn'))", [org]),
   );
   if (mottakere.length)
     await leggIKo({ type: "varsel", varsel: { hendelse: "lonn", org_id: org, bruker_ider: mottakere.map((m) => m.bruker_id), tittel, tekst, url: "/lonn?fane=amelding", tag } }).catch(
@@ -108,7 +108,7 @@ export async function lagAmelding(org: string, ameldingId: string) {
     if (!config.ameldingInnsending) throw new EtatFeil("Innsending til Skatteetaten er ikke slått på ennå. Last ned fila og last den opp på skatteetaten.no.", 503);
     const t = await hentTilgang(org);
     if (!t?.orgnr || !harPakke(t, A_ORDNING))
-      throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Innstillinger → Ansatte og timer.", 409);
+      throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Innstillinger → Lønn → Skattekort.", 409);
     const token = await hentToken(SCOPE.amelding, t.orgnr);
     const r = await etatKall(`${adresser().amelding}/innsending/${maaned}/${t.orgnr}?idempotencyKey=${m.id}`, token, { metode: "POST", kropp: leveranse, hvem: "Skatteetaten" });
     if (r.status >= 300) throw ameldingFeil(r);

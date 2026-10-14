@@ -104,9 +104,9 @@ describe.skipIf(!process.env.DATABASE_URL)("betalingsfila fra lønnskjøringen",
     expect((await kall("POST", sti)).data.error).toBe("Godkjenn lønnen før betalingsfila lastes ned");
     k = (await kall("POST", `/api/org/${org}/lonn/kjoringer/${k.id}/godkjenn`)).data;
     expect(k.status).toBe("godkjent");
-    expect((await kall("POST", sti)).data.error).toBe("Legg inn lønnskontoen (kontoen lønnen betales fra) under Innstillinger → Ansatte og timer.");
+    expect((await kall("POST", sti)).data.error).toBe("Legg inn lønnskontoen (kontoen lønnen betales fra) under Innstillinger → Lønn → Betalingsfil.");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { lonnskonto: "8601 11 17947" })).data.lonnskonto).toBe("86011117947");
-    expect((await kall("POST", sti)).data.error).toBe("Legg inn BIC for banken lønnskontoen er i (står i nettbanken, f.eks. DNBANOKK for DNB) under Innstillinger → Ansatte og timer.");
+    expect((await kall("POST", sti)).data.error).toBe("Legg inn BIC for banken lønnskontoen er i (står i nettbanken, f.eks. DNBANOKK for DNB) under Innstillinger → Lønn → Betalingsfil.");
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { bank_bic: "dnba nokk" })).data.bank_bic).toBe("DNBANOKK");
     expect((await kall("POST", sti)).data.error).toBe("Mangler gyldig kontonummer: Per Utenkonto. Legg det inn på den ansatte.");
     // Den ansatte ser ikke kjøringen.

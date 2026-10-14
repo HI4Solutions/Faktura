@@ -128,7 +128,7 @@ export function FlereFakturaer() {
     }
   }
 
-  if (!kanSkrive(org?.rolle)) return <p className="dempet">Du har ikke tilgang til å lage fakturaer.</p>;
+  if (!kanSkrive(org)) return <p className="dempet">Du har ikke tilgang til å lage fakturaer.</p>;
   if (!orgData.data || !kunder.data || !produkter.data) return <Laster />;
 
   if (resultat) {
@@ -192,7 +192,7 @@ export function FlereFakturaer() {
       <p className="undertittel">Lag og send mange fakturaer på én gang, til forskjellige kunder med forskjellige produkter.</p>
       {!orgData.data.kontonr && (
         <div className="melding info">
-          Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Faktura</Link> før du sender fakturaer.
+          Legg inn kontonummer under <Link to="/innstillinger?fane=faktura&del=betaling">Innstillinger → Faktura → Betaling og purring</Link> før du sender fakturaer.
         </div>
       )}
 

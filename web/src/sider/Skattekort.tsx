@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Feil, Laster, useData, useHandling } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, kanLonn, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { naarTekst } from "./Bank";
 
@@ -77,7 +77,7 @@ export const trekkTekst = (t: Trekk) =>
         ? `Prosenttrekk ${prosent(t.prosent)}`
         : "–";
 
-// --- Innstillinger → Ansatte og timer ---------------------------------------------------------
+// --- Innstillinger → Lønn → Skattekort --------------------------------------------------------
 
 export function SkattekortKobling() {
   const { org } = useKonto();
@@ -85,7 +85,7 @@ export function SkattekortKobling() {
   const h = useHandling();
   const [henter, settHenter] = useState<string | null>(null); // sist_hentet da «Hent nå» ble trykket
   const [kopiert, settKopiert] = useState(false);
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const t = s.data?.tilgang;
   const endres = t?.status === "godkjent" && (t.endring_status === "venter" || t.endring_status === "ny");
   const venter = t?.status === "venter" || t?.status === "ny" || henter !== null || endres;
@@ -109,7 +109,16 @@ export function SkattekortKobling() {
 
   if (s.feil) return <Feil melding={s.feil} />;
   if (!s.data) return <Laster />;
-  if (!s.data.tilgjengelig) return null;
+  if (!s.data.tilgjengelig)
+    return (
+      <div className="kort skattekort-kobling" id="skattekort">
+        <h2 style={{ marginTop: 0 }}>Skattekort fra Skatteetaten</h2>
+        <p className="dempet">
+          Henting av skattekortene fra Skatteetaten (og a-meldingen og sykepengene gjennom Altinn) er ikke satt opp på plattformen ennå. Skattekortet kan
+          registreres på hver ansatt så lenge.
+        </p>
+      </div>
+    );
   const d = s.data;
 
   const ber = async () => {
@@ -344,7 +353,7 @@ export function SkattekortGodkjent() {
       {status === null && <p>{org?.navn} har ikke bedt om tilgang til Skatteetaten. Velg organisasjonen øverst og prøv igjen, eller gå til Innstillinger.</p>}
       <Feil melding={feil} />
       <div className="knapper">
-        <Link className="knapp primar" to="/innstillinger?fane=skattekort">
+        <Link className="knapp primar" to="/innstillinger?fane=lonn&del=skattekort">
           Til innstillingene
         </Link>
       </div>

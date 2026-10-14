@@ -21,7 +21,7 @@ export function Kunder() {
     <>
       <div className="topp">
         <h1>Kunder</h1>
-        {kanSkrive(org?.rolle) && (
+        {kanSkrive(org) && (
           <div className="knapper">
             {harFunksjon(org, "import") && (
               <Link className="knapp" to="/kunder/importer">
@@ -41,7 +41,7 @@ export function Kunder() {
       ) : smal ? (
         <div className="kort liste">
           {(data ?? []).map((k: any) => (
-            <button key={k.id} type="button" className="liste-rad" onClick={() => kanSkrive(org?.rolle) && settRedigerer(k)}>
+            <button key={k.id} type="button" className="liste-rad" onClick={() => kanSkrive(org) && settRedigerer(k)}>
               <span className="linje">
                 <span className="tittel">{k.navn}</span>
                 <span className="under">{k.kundenummer}</span>
@@ -55,7 +55,7 @@ export function Kunder() {
               </span>
             </button>
           ))}
-          {data?.length === 0 && <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org?.rolle) && harFunksjon(org, "import")} sok={sok} />}
+          {data?.length === 0 && <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org) && harFunksjon(org, "import")} sok={sok} />}
         </div>
       ) : (
         <div className="kort tabell">
@@ -71,7 +71,7 @@ export function Kunder() {
             </thead>
             <tbody>
               {(data ?? []).map((k: any) => (
-                <tr key={k.id} className="klikkbar" onClick={() => kanSkrive(org?.rolle) && settRedigerer(k)}>
+                <tr key={k.id} className="klikkbar" onClick={() => kanSkrive(org) && settRedigerer(k)}>
                   <td>{k.kundenummer}</td>
                   <td>{k.navn}</td>
                   <td>{orgnr(k.orgnr)}</td>
@@ -85,7 +85,7 @@ export function Kunder() {
               {data?.length === 0 && (
                 <tr>
                   <td colSpan={5}>
-                    <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org?.rolle) && harFunksjon(org, "import")} sok={sok} />
+                    <IngenEnna hva="kunder" sti="/kunder/importer" kanImportere={kanSkrive(org) && harFunksjon(org, "import")} sok={sok} />
                   </td>
                 </tr>
               )}
@@ -333,7 +333,7 @@ export function Produkter() {
     <>
       <div className="topp">
         <h1>Produkter og tjenester</h1>
-        {kanSkrive(org?.rolle) && (
+        {kanSkrive(org) && (
           <div className="knapper">
             {harFunksjon(org, "import") && (
               <Link className="knapp" to="/produkter/importer">
@@ -352,7 +352,7 @@ export function Produkter() {
       ) : smal ? (
         <div className="kort liste">
           {(data ?? []).map((p: any) => (
-            <button key={p.id} type="button" className="liste-rad" onClick={() => kanSkrive(org?.rolle) && settRedigerer(p)}>
+            <button key={p.id} type="button" className="liste-rad" onClick={() => kanSkrive(org) && settRedigerer(p)}>
               <span className="linje">
                 <span className="tittel">{p.navn}</span>
                 <span className="belop">{p.enhetspris == null ? <span className="dempet">Variabel</span> : kr(p.enhetspris)}</span>
@@ -368,7 +368,7 @@ export function Produkter() {
               </span>
             </button>
           ))}
-          {data?.length === 0 && <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org?.rolle) && harFunksjon(org, "import")} />}
+          {data?.length === 0 && <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org) && harFunksjon(org, "import")} />}
         </div>
       ) : (
         <div className="kort tabell">
@@ -385,7 +385,7 @@ export function Produkter() {
             </thead>
             <tbody>
               {(data ?? []).map((p: any) => (
-                <tr key={p.id} className="klikkbar" onClick={() => kanSkrive(org?.rolle) && settRedigerer(p)}>
+                <tr key={p.id} className="klikkbar" onClick={() => kanSkrive(org) && settRedigerer(p)}>
                   <td>{p.varenummer}</td>
                   <td>{p.navn}</td>
                   <td>{p.enhet}</td>
@@ -400,7 +400,7 @@ export function Produkter() {
               {data?.length === 0 && (
                 <tr>
                   <td colSpan={6}>
-                    <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org?.rolle) && harFunksjon(org, "import")} />
+                    <IngenEnna hva="produkter" sti="/produkter/importer" kanImportere={kanSkrive(org) && harFunksjon(org, "import")} />
                   </td>
                 </tr>
               )}

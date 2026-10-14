@@ -608,7 +608,7 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
           : { sist_hentet: new Date().toISOString(), siste_feil: f.message },
       );
       if (utlopt)
-        await varsle(orgId, `Koble til ${k.bank} på nytt`, `Appen får ikke lenger lese innbetalingene fra ${k.bank}. Forny tilgangen med BankID.`, "/innstillinger?fane=betaling");
+        await varsle(orgId, `Koble til ${k.bank} på nytt`, `Appen får ikke lenger lese innbetalingene fra ${k.bank}. Forny tilgangen med BankID.`, "/innstillinger?fane=faktura&del=bank");
     }
   }
   if (resultat.forslag > 0)
@@ -681,8 +681,8 @@ export async function planleggBankhenting(naa = new Date()): Promise<number> {
       await varsle(
         k.org_id,
         `Tilgangen til ${k.bank} går snart ut`,
-        `Appen kan lese innbetalingene til ${new Date(utlop).toLocaleDateString("nb-NO", { timeZone: "Europe/Oslo" })}. Forny med BankID under Innstillinger → Faktura.`,
-        "/innstillinger?fane=betaling",
+        `Appen kan lese innbetalingene til ${new Date(utlop).toLocaleDateString("nb-NO", { timeZone: "Europe/Oslo" })}. Forny med BankID under Innstillinger → Faktura → Bank.`,
+        "/innstillinger?fane=faktura&del=bank",
       );
     }
   }

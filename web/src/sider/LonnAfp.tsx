@@ -7,7 +7,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, kanLonn, useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
 
 type Kvartal = {
@@ -36,7 +36,7 @@ const MND = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "augus
 
 export function Afp() {
   const { org } = useKonto();
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const smal = useSmal();
   const [aar, settAar] = useState(Number(iDag().slice(0, 4)));
   const sti = `/org/${org!.id}/lonn/afp`;
@@ -86,7 +86,7 @@ export function Afp() {
       {!oppsett.afp && (
         <div className="melding advarsel" role="status">
           AFP er ikke slått på, så lønnskjøringene avsetter ikke premien. Slå det på under{" "}
-          <Link to="/innstillinger?fane=personal#afp">Innstillinger → Ansatte og timer → AFP</Link>.
+          <Link to="/innstillinger?fane=lonn&del=lonn#afp">Innstillinger → Lønn → Lønn</Link>.
         </div>
       )}
       <p className="liten dempet">

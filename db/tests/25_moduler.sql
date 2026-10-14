@@ -28,8 +28,9 @@ grant execute on all functions in schema test to public;
 
 \c :api
 -- Modulene kan alle se, og hver funksjon hører til en.
-select test.er((select array_agg(kode order by rekkefolge) from faktura.moduler), array['faktura', 'bemanning', 'regnskap'], 'Faktura, Bemanning og Regnskap');
-select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'bemanning'), array['ansatte', 'vaktplan', 'lonn'], 'Bemanning har ansatte, vaktplan og lønn');
+select test.er((select array_agg(kode order by rekkefolge) from faktura.moduler), array['faktura', 'personal', 'lonn', 'regnskap'], 'Faktura, Personal, Lønn og Regnskap');
+select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'personal'), array['ansatte', 'vaktplan'], 'Personal har ansatte og vaktplan');
+select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'lonn'), array['lonn'], 'Lønn har lønnen');
 select test.er((select count(*) from faktura.funksjoner where modul is null), 0::bigint, 'alle funksjonene har en modul');
 
 -- En ny bruker velger modulene (minst én, og bare kjente).
@@ -38,9 +39,9 @@ select set_config('app.bruker_id', :'u', false);
 select test.feiler($$select faktura.velg_moduler('{}')$$, 'FA400');
 select test.feiler($$select faktura.velg_moduler(array['faktura', 'finnes_ikke'])$$, 'FA400');
 select test.er(faktura.meld_konto(), false, 'ikke meldt uten moduler');
-select test.er(faktura.velg_moduler(array['bemanning', 'faktura']), array['faktura', 'bemanning'], 'valgt, i modulenes rekkefølge');
-select test.er(faktura.velg_moduler(array['bemanning']), array['bemanning'], 'endret');
-select test.er((select array_agg(modul) from faktura.bruker_moduler), array['bemanning'], 'brukeren ser sine egne');
+select test.er(faktura.velg_moduler(array['personal', 'faktura']), array['faktura', 'personal'], 'valgt, i modulenes rekkefølge');
+select test.er(faktura.velg_moduler(array['lonn']), array['personal', 'lonn'], 'endret: Lønn tar med Personal');
+select test.er((select array_agg(modul order by modul) from faktura.bruker_moduler), array['lonn', 'personal'], 'brukeren ser sine egne');
 select test.er(faktura.meld_konto(), true, 'meldt når navn og moduler er på plass');
 -- Endres ikke direkte.
 select test.feiler($$insert into faktura.bruker_moduler (bruker_id, modul) values (faktura.bruker_id(), 'faktura')$$, '42501');
@@ -53,24 +54,26 @@ select faktura.velg_moduler(array['faktura']);
 
 -- Plattformadministratoren ser modulene i forespørselen og godkjenner med dem, eller med andre.
 select set_config('app.betrodd', 'on', false);
-select test.er((select moduler from faktura.admin_kontoer_venter() where id = :'u'), array['bemanning'], 'modulene står i forespørselen');
+select test.er((select moduler from faktura.admin_kontoer_venter() where id = :'u'), array['personal', 'lonn'], 'modulene står i forespørselen');
 select test.er((faktura.behandle_konto(:'u', true)).status, 'godkjent', 'godkjent med modulene den ba om');
-select test.er((select moduler from faktura.admin_brukere() where id = :'u'), array['bemanning'], 'og i brukerlista');
+select test.er((select moduler from faktura.admin_brukere() where id = :'u'), array['personal', 'lonn'], 'og i brukerlista');
 select test.feiler($$select faktura.behandle_konto('$$ || :'u2' || $$', true, null, '{}')$$, 'FA400');
-select test.er((faktura.behandle_konto(:'u2', true, null, array['faktura', 'bemanning'])).status, 'godkjent', 'godkjent med en modul til');
-select test.er((select moduler from faktura.admin_brukere() where id = :'u2'), array['faktura', 'bemanning'], 'med begge modulene');
-select test.er((select jsonb_agg(m ->> 'kode') from jsonb_array_elements(faktura.admin_funksjoner() -> 'moduler') m), '["faktura", "bemanning", "regnskap"]'::jsonb, 'modulene i funksjonsoversikten');
-select test.er((select f ->> 'modul' from jsonb_array_elements(faktura.admin_funksjoner() -> 'funksjoner') f where f ->> 'kode' = 'vaktplan'), 'bemanning', 'med modulen per funksjon');
+select test.er((faktura.behandle_konto(:'u2', true, null, array['faktura', 'personal'])).status, 'godkjent', 'godkjent med en modul til');
+select test.er((select moduler from faktura.admin_brukere() where id = :'u2'), array['faktura', 'personal'], 'med begge modulene');
+select test.er((select jsonb_agg(m ->> 'kode') from jsonb_array_elements(faktura.admin_funksjoner() -> 'moduler') m), '["faktura", "personal", "lonn", "regnskap"]'::jsonb, 'modulene i funksjonsoversikten');
+select test.er((select f ->> 'modul' from jsonb_array_elements(faktura.admin_funksjoner() -> 'funksjoner') f where f ->> 'kode' = 'vaktplan'), 'personal', 'med modulen per funksjon');
 select set_config('app.betrodd', '', false);
 
 -- Etter godkjenningen endrer bare administratoren modulene.
 select set_config('app.bruker_id', :'u', false);
 select test.feiler($$select faktura.velg_moduler(array['faktura'])$$, 'FA403');
 
--- En organisasjon fra brukeren med bare Bemanning får bare funksjonene i Bemanning.
-select id as org from faktura.opprett_organisasjon('Bare Bemanning AS') \gset
-select test.er((select array_agg(kode order by kode) from faktura.org_funksjoner where org_id = :'org' and aktiv), array['ansatte', 'lonn', 'vaktplan'], 'bare Bemanning');
+-- En organisasjon fra brukeren med Personal og Lønn får bare funksjonene i dem (ikke fakturaene).
+select id as org from faktura.opprett_organisasjon('Bare Personal AS') \gset
+select test.er((select array_agg(kode order by kode) from faktura.org_funksjoner where org_id = :'org' and aktiv), array['ansatte', 'lonn', 'vaktplan'], 'bare Personal og Lønn');
 select test.er(faktura.har_funksjon(:'org', 'ehf'), false, 'uten EHF');
+select test.er(faktura.har_modul(:'org', 'faktura'), false, 'uten Faktura');
+select test.er((select moduler from faktura.mine_organisasjoner where id = :'org'), array['personal', 'lonn'], 'appen får modulene');
 select test.er((select personal from faktura.mine_organisasjoner where id = :'org'), true, 'ansatte og timer er slått på fra start');
 
 -- Med begge modulene: standarden, også i modulene (EHF er av som standard her).
@@ -79,7 +82,8 @@ update faktura.funksjoner set standard = false where kode = 'ehf';
 \c :api
 select set_config('app.bruker_id', :'u2', false);
 select id as org2 from faktura.opprett_organisasjon('Begge Moduler AS') \gset
-select test.er(faktura.har_funksjon(:'org2', 'vaktplan'), true, 'Bemanning er med');
+select test.er(faktura.har_funksjon(:'org2', 'vaktplan'), true, 'Personal er med');
+select test.er(faktura.har_funksjon(:'org2', 'lonn'), false, 'men ikke Lønn');
 select test.er(faktura.har_funksjon(:'org2', 'bank'), true, 'Faktura er med');
 select test.er(faktura.har_funksjon(:'org2', 'ehf'), false, 'men ikke det som er av som standard');
 select test.er((select personal from faktura.mine_organisasjoner where id = :'org2'), true, 'ansatte og timer er på');

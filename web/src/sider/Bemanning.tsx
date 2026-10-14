@@ -12,7 +12,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { api, hent, lastNed } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling, useSmal } from "../felles";
 import { kortNavn, rollevalg, Rollevalg, RollerOppsett, type Rolle, type Rollevalget } from "./Roller";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, kanPersonal, useKonto } from "../konto";
 import { dato as visDato, iDag, leggTilDager, leggTilMaaneder } from "../format";
 import { IkonAnsatte, IkonHoyre, IkonRapport, IkonVenstre } from "../ikoner";
 import { erHelg, gyldigDato, mandag, middag, tallformat, timer, ukenr, visDag } from "../uke";
@@ -83,7 +83,7 @@ export function Bemanning({
   const smal = useSmal();
   const { org } = useKonto();
   // Bare eier og administrator ser hva slags fravær det er; andre ser F (0047_fravaer_skjult.sql).
-  const serType = erAdmin(org?.rolle);
+  const serType = kanPersonal(org);
   const forste = `${maaned}-01`;
   const siste = leggTilDager(leggTilMaaneder(forste, 1), -1);
   // Hele uker, så ukene i kantene av måneden kommer med.

@@ -13,7 +13,7 @@ export interface MinOrg {
   verifisering: string;
   rolle: string;
   direkte_medlem: boolean;
-  // Ansatte og timer er slått på (Innstillinger → Ansatte og timer).
+  // Ansatte og timer er slått på (Innstillinger → Personal).
   personal: boolean;
   // Den innloggedes egen ansattrad her (fører egne timer), eller null.
   ansatt_id: string | null;
@@ -28,9 +28,21 @@ export interface MinOrg {
   timebank?: boolean;
   // Vaktbytte (0060_vaktbytte.sql): av, med godkjenning eller fritt (0108_meny_vaktbytte.sql).
   vaktbytte?: "av" | "godkjenning" | "fritt";
+  // Modulene organisasjonen har (0110_moduler.sql), som plattformadministratoren gir.
+  moduler?: ModulKode[];
+  // Med en egen rolle (rollen «tilpasset», 0111_tilgangsroller.sql): navnet på rollen og modulene
+  // den gir (de som er slått på).
+  tilgangsrolle?: string | null;
+  rollemoduler?: ModulKode[] | null;
 }
 
-export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan" | "lonn" | "regnskap";
+// Modulene: Faktura, Personal, Lønn og Regnskap.
+export type ModulKode = "faktura" | "personal" | "lonn" | "regnskap";
+export const MODULNAVN: Record<ModulKode, string> = { faktura: "Faktura", personal: "Personal", lonn: "Lønn", regnskap: "Regnskap" };
+// Om organisasjonen har modulen. Uten lista (eldre API) er alt på.
+export const harModul = (org: Pick<MinOrg, "moduler"> | null | undefined, kode: ModulKode) => !!org && (!org.moduler || org.moduler.includes(kode));
+
+export type Funksjon = "faktura" | "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan" | "lonn" | "regnskap";
 // Om organisasjonen har funksjonen. Uten lista (eldre API) er alt på.
 export const harFunksjon = (org: Pick<MinOrg, "funksjoner"> | null | undefined, kode: Funksjon) => !!org && (!org.funksjoner || org.funksjoner.includes(kode));
 
@@ -137,17 +149,36 @@ export function useKonto() {
   return k;
 }
 
-export const kanSkrive = (rolle?: string) => ["eier", "admin", "fakturerer"].includes(rolle ?? "");
-export const kanBokfore = (rolle?: string) => ["eier", "admin", "fakturerer", "regnskap"].includes(rolle ?? "");
-export const erAdmin = (rolle?: string) => ["eier", "admin"].includes(rolle ?? "");
-// Ansatte (rollen ansatt) ser bare sine egne timer; personal styrer ansatte og godkjenner timer,
-// og regnskap kan se dem.
-export const erAnsatt = (rolle?: string) => rolle === "ansatt";
-export const kanPersonal = erAdmin;
-export const kanSePersonal = (rolle?: string) => ["eier", "admin", "regnskap"].includes(rolle ?? "");
-// Eier og administrator har Timer og Ferie som ett punkt i menyen, «Timer og ferie», med Ferie som
-// siste fane på Timer; de ansatte har dem som egne punkter.
-export const timerOgFerie = (org: MinOrg | null | undefined) =>
-  !!org?.personal && harFunksjon(org, "vaktplan") && !erAnsatt(org.rolle) && erAdmin(org.rolle);
-// Regnskapet (anleggsmidlene, bilagene): eier, administrator og regnskap.
-export const kanSeRegnskap = (rolle?: string) => ["eier", "admin", "regnskap"].includes(rolle ?? "");
+// Tilgangen i organisasjonen: de faste rollene (eier, administrator, fakturerer, regnskap, les og
+// ansatt), og de egne rollene (tilpasset), som gir modulene som er krysset av, som i databasen
+// (faktura.kan, 0111_tilgangsroller.sql). Administrasjonen (innstillingene, brukerne og rollene) er
+// bare for eier og administrator.
+type Tilgang = Pick<MinOrg, "rolle"> & Partial<Pick<MinOrg, "rollemoduler">>;
+const rolleHar = (org: Tilgang | null | undefined, ...moduler: ModulKode[]) =>
+  org?.rolle === "tilpasset" && moduler.some((m) => !!org.rollemoduler?.includes(m));
+const fast = (org: Tilgang | null | undefined, ...roller: string[]) => roller.includes(org?.rolle ?? "");
+
+// Fakturaene, kundene og produktene: skrive og sende (Faktura), og se (også Regnskap og les).
+export const kanSkrive = (org?: Tilgang | null) => fast(org, "eier", "admin", "fakturerer") || rolleHar(org, "faktura");
+export const kanSeFakturaer = (org?: Tilgang | null) => fast(org, "eier", "admin", "fakturerer", "regnskap", "les") || rolleHar(org, "faktura", "regnskap");
+// Fakturadelen i menyen og på oversikten: modulen Faktura er på, brukeren ser fakturaene, og det er
+// ikke et regnskapsbyrå selv (byrået ser klientenes).
+export const visFakturadelen = (org: MinOrg | null | undefined) =>
+  !!org && org.type !== "regnskapsbyraa" && !erAnsatt(org) && harFunksjon(org, "faktura") && kanSeFakturaer(org);
+export const kanBokfore = (org?: Tilgang | null) => fast(org, "eier", "admin", "fakturerer", "regnskap") || rolleHar(org, "faktura", "regnskap");
+export const erAdmin = (org?: Tilgang | null) => fast(org, "eier", "admin");
+// Ansatte (rollen ansatt, og en egen rolle uten moduler) ser bare sitt eget; personal styrer de
+// ansatte og godkjenner timer, og regnskap kan se dem.
+export const erAnsatt = (org?: Tilgang | null) => fast(org, "ansatt") || (org?.rolle === "tilpasset" && !org.rollemoduler?.length);
+export const kanPersonal = (org?: Tilgang | null) => erAdmin(org) || rolleHar(org, "personal");
+export const kanSePersonal = (org?: Tilgang | null) => fast(org, "eier", "admin", "regnskap") || rolleHar(org, "personal");
+// Lønnen (kjøringene, a-meldingen, skattekortene, reisene): se (eier, administrator og regnskap) og
+// kjøre (eier og administrator), og med en egen rolle med Lønn begge deler.
+export const kanSeLonn = (org?: Tilgang | null) => fast(org, "eier", "admin", "regnskap") || rolleHar(org, "lonn");
+export const kanLonn = (org?: Tilgang | null) => erAdmin(org) || rolleHar(org, "lonn");
+// Eier og administrator (og en egen rolle med Personal) har Timer og Ferie som ett punkt i menyen,
+// «Timer og ferie», med Ferie som siste fane på Timer; de ansatte har dem som egne punkter.
+export const timerOgFerie = (org: MinOrg | null | undefined) => !!org?.personal && harFunksjon(org, "vaktplan") && !erAnsatt(org) && kanPersonal(org);
+// Regnskapet (anleggsmidlene, bilagene): eier, administrator og regnskap (og en egen rolle med
+// Regnskap).
+export const kanSeRegnskap = (org?: Tilgang | null) => fast(org, "eier", "admin", "regnskap") || rolleHar(org, "regnskap");

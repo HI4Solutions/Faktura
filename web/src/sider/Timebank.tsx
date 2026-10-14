@@ -85,7 +85,7 @@ const STATUS: Record<Soknad["status"], { tekst: string; klasse: string }> = {
 
 export function Timebank({ versjon, endret, valgt, velg }: { versjon: number; endret: () => void; valgt: string | null; velg: (id: string | null) => void }) {
   const { org } = useKonto();
-  const leder = kanPersonal(org?.rolle);
+  const leder = kanPersonal(org);
   const egen = org?.ansatt_id ?? null;
   const o = useData(() => hent<Oversikt>(`/org/${org!.id}/timebank`), [org?.id, versjon]);
   const [melding, settMelding] = useState<string | null>(null);

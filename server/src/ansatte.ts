@@ -402,13 +402,16 @@ function ukesummer(foringer: Foringsrad[], r: Regler, avtalt: Map<string, number
 }
 
 // Push til eier og administrator (de som godkjenner timer, planlegger vakter og får vite om
-// sykdom), unntatt den som selv gjorde det. Slås opp av serveren: en ansatt ser ikke hvem de andre medlemmene er.
+// sykdom), og dem med en egen rolle med modulen (Personal, eller Lønn for reisene), unntatt den
+// som selv gjorde det. Slås opp av serveren: en ansatt ser ikke hvem de andre medlemmene er.
 export async function varslePersonal(org: string, unntatt: string, hendelse: "timer" | "vakter" | "fravaer" | "reiser", tittel: string, tekst: string, url: string, tag: string) {
   const mottakere = await somSystem((db) =>
-    alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and rolle in ('eier', 'admin') and bruker_id <> $2", [
-      org,
-      unntatt,
-    ]),
+    alle<{ bruker_id: string }>(
+      db,
+      `select bruker_id from faktura.medlemmer
+        where org_id = $1 and (rolle in ('eier', 'admin') or faktura.tilpasset_har(org_id, bruker_id, $3)) and bruker_id <> $2`,
+      [org, unntatt, hendelse === "reiser" ? "lonn" : "personal"],
+    ),
   );
   if (mottakere.length)
     await leggIKo({ type: "varsel", varsel: { hendelse, org_id: org, bruker_ider: mottakere.map((m) => m.bruker_id), tittel, tekst, url, tag } });

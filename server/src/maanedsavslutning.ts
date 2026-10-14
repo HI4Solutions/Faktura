@@ -346,7 +346,7 @@ export async function avsluttMaanederForAlle(naa = new Date(), maks = 25, org: s
       feilet.delete(id);
       if (a) {
         const mottakere = await somSystem((db) =>
-          alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and rolle in ('eier', 'admin', 'regnskap')", [id]),
+          alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and (rolle in ('eier', 'admin', 'regnskap') or faktura.tilpasset_har(org_id, bruker_id, 'regnskap'))", [id]),
         );
         if (mottakere.length)
           await leggIKo({

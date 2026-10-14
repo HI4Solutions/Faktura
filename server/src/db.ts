@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import pg from "pg";
 import { Connector, AuthTypes, IpAddressTypes } from "@google-cloud/cloud-sql-connector";
 import { config } from "./config.js";
@@ -30,6 +31,11 @@ export async function hentPool(): Promise<pg.Pool> {
 
 export type Db = pg.PoolClient;
 
+// Modulen forespørselen gjelder (0111_tilgangsroller.sql): mellomvaren i funksjoner.ts setter den
+// for lønns- og regnskapsrutene, og transaksjonene for brukeren får den som app.modul. Med en egen
+// rolle avgjør den om det er Lønn eller Personal som gir tilgangen til personaldataene.
+export const modulKontekst = new AsyncLocalStorage<string>();
+
 // Kjører fn i én transaksjon med app.bruker_id satt, slik at RLS og faktura.kan() virker.
 export async function somBruker<T>(brukerId: string, fn: (db: Db) => Promise<T>): Promise<T> {
   return transaksjon(fn, brukerId);
@@ -57,6 +63,8 @@ async function transaksjon<T>(fn: (db: Db) => Promise<T>, brukerId?: string, ege
   try {
     await db.query("begin");
     if (brukerId) await db.query("select set_config('app.bruker_id', $1, true)", [brukerId]);
+    const modul = brukerId ? modulKontekst.getStore() : undefined;
+    if (modul) await db.query("select set_config('app.modul', $1, true)", [modul]);
     const svar = await fn(db);
     await db.query("commit");
     return svar;

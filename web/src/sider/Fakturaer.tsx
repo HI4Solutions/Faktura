@@ -46,7 +46,7 @@ export function Fakturaliste() {
     <>
       <div className="topp">
         <h1>Fakturaer</h1>
-        {kanSkrive(org?.rolle) && (
+        {kanSkrive(org) && (
           <div className="knapper">
             {harFunksjon(org, "flere") && (
               <Link className="knapp" to="/fakturaer/flere">
@@ -60,7 +60,7 @@ export function Fakturaliste() {
         )}
       </div>
       <Fakturafaner valgt={status} velgStatus={settStatus} />
-      {utkast.length > 0 && kanSkrive(org?.rolle) && harFunksjon(org, "flere") && (
+      {utkast.length > 0 && kanSkrive(org) && harFunksjon(org, "flere") && (
         <div className="knapper" style={{ marginBottom: 14 }}>
           <button type="button" onClick={() => settSendUtkast(true)}>
             Send flere utkast …
@@ -74,8 +74,8 @@ export function Fakturaliste() {
         <Fakturatabell
           rader={data ?? []}
           klikk={(id) => nav(`/fakturaer/${id}`)}
-          kopier={kanSkrive(org?.rolle) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined}
-          betaling={kanBokfore(org?.rolle)}
+          kopier={kanSkrive(org) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined}
+          betaling={kanBokfore(org)}
         />
       )}
       <Dialog apen={sendUtkast} lukk={() => settSendUtkast(false)} tittel="Send utkast">
@@ -671,7 +671,7 @@ export function FakturaSkjema() {
       )}
       {!orgData.data.kontonr && (
         <div className="melding info">
-          Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Faktura</Link> før du sender fakturaer.
+          Legg inn kontonummer under <Link to="/innstillinger?fane=faktura&del=betaling">Innstillinger → Faktura → Betaling og purring</Link> før du sender fakturaer.
         </div>
       )}
       {fraAssistent && <div className="melding info">Fylt ut av AI-assistenten. Se over kunde, linjer og datoer før du sender.</div>}
@@ -960,7 +960,7 @@ export function FakturaVisning() {
   const nestePurring = f.purringer?.some((p: any) => p.type === "paaminnelse") ? "inkassovarsel" : "paaminnelse";
   const aaBetale = f.sum_inkl_mva - f.kreditert_belop - f.betalt_belop;
   const linjerMedRabatt = f.linjer.some((l: any) => l.rabatt_prosent != null || l.rabatt_belop != null);
-  const rolle = org?.rolle;
+  const rolle = org;
 
   const handling = async (fn: () => Promise<unknown>, gaaTil?: string) => {
     const r = await h.kjor(fn);

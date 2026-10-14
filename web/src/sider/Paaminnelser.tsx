@@ -123,7 +123,7 @@ export function Paaminnelser({ faner }: { faner: ReactNode }) {
   const [sok, settSok] = useSearchParams();
   const { data, feil, last } = useData(() => hent<Paaminnelse[]>(`/org/${org!.id}/paaminnelser`), [org?.id]);
   const [redigerer, settRedigerer] = useState<Partial<Paaminnelse> | null>(null);
-  const skriv = kanSkrive(org?.rolle);
+  const skriv = kanSkrive(org);
 
   // Fra et produkt (?produkt=…) eller en kunde (?kunde=…): ny påminnelse med dem fylt inn.
   useEffect(() => {
@@ -512,7 +512,7 @@ export function SendFraPaaminnelse() {
 
   if (paaminnelse.feil) return <Feil melding={paaminnelse.feil} />;
   if (!p || !o || !kunder.data || !produkter.data || !linjer) return <Laster />;
-  if (!kanSkrive(org?.rolle)) return <Feil melding="Du har ikke tilgang til å lage fakturaer i denne organisasjonen." />;
+  if (!kanSkrive(org)) return <Feil melding="Du har ikke tilgang til å lage fakturaer i denne organisasjonen." />;
 
   const kunde = kunder.data.find((k) => k.id === kundeId);
   const utenMva = !o.mva_registrert;
@@ -800,7 +800,7 @@ export function SendFraPaaminnelse() {
         {mottaker && <p className="liten dempet">{mottaker}</p>}
         {!o.kontonr && (
           <div className="melding info">
-            Legg inn kontonummer under <Link to="/innstillinger?fane=betaling">Innstillinger → Faktura</Link> før du sender fakturaer.
+            Legg inn kontonummer under <Link to="/innstillinger?fane=faktura&del=betaling">Innstillinger → Faktura → Betaling og purring</Link> før du sender fakturaer.
           </div>
         )}
         <Feil melding={h.feil} />

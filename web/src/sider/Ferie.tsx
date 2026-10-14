@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
-import { erAdmin, timerOgFerie, useKonto } from "../konto";
+import { erAdmin, kanPersonal, timerOgFerie, useKonto } from "../konto";
 import { dato, iDag } from "../format";
 import { IkonHoyre, IkonVenstre } from "../ikoner";
 import { FravaerDialog, fravaerPeriode, type Fravaer } from "./Fravaer";
@@ -91,7 +91,7 @@ export function Ferie() {
   const [sok, settSok] = useSearchParams();
   const aar = Number(sok.get("aar")) || iAar();
   const velg = (a: number) => settSok(a === iAar() ? {} : { aar: String(a) }, { replace: true });
-  return erAdmin(org?.rolle) ? <Ferieoversikt aar={aar} velg={velg} /> : <MinFerie aar={aar} velg={velg} />;
+  return kanPersonal(org) ? <Ferieoversikt aar={aar} velg={velg} /> : <MinFerie aar={aar} velg={velg} />;
 }
 
 // --- Eier og administrator: alle ansatte og søknadene --------------------------------------

@@ -1,11 +1,11 @@
 // Bokføringen av lønnen i regnskapet i Admin Konsoll (server/src/lonnBokforingRuter.ts):
-// kontoene og valgene under Innstillinger → Ansatte og timer, og lønnsbilaget på lønnskjøringen
+// kontoene og valgene under Innstillinger → Lønn → Bokføring, og lønnsbilaget på lønnskjøringen
 // (bilagserien L: det gjeldende bilaget, og de som er reversert fordi kjøringen ble åpnet igjen).
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, hent, lastNed } from "../api";
 import { Feil, Laster, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, kanLonn, useKonto } from "../konto";
 import { dato, kr } from "../format";
 
 type Kontorad = { rolle: string; navn: string; standard: string; konto: string; endret: boolean };
@@ -24,7 +24,7 @@ type Bilag = {
 };
 type Forslag = { dato: string; tekst: string; posteringer: Postering[]; sum: number };
 
-// --- Innstillinger → Ansatte og timer -------------------------------------------------------------
+// --- Innstillinger → Lønn → Bokføring ------------------------------------------------------------
 
 export function BokforingOppsett() {
   const { org } = useKonto();
@@ -199,7 +199,7 @@ export function Bilagstabell({ b }: { b: { posteringer: (Pick<Postering, "konto"
 
 export function KjoringBokforing({ kjoringId, godkjent, godkjentAt }: { kjoringId: string; godkjent: boolean; godkjentAt: string | null }) {
   const { org } = useKonto();
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const sti = `/org/${org!.id}/lonn/kjoringer/${kjoringId}`;
   const d = useData(() => hent<{ gjeldende: Bilag | null; bilag: Bilag[]; forslag: Forslag | null }>(`${sti}/bokforing`), [sti, godkjent, godkjentAt]);
   const h = useHandling();

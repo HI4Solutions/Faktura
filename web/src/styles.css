@@ -133,10 +133,34 @@ strong { font-weight: 650; }
 .meny {
   background: linear-gradient(180deg, var(--meny-bg) 0%, var(--meny-bg-2) 100%);
   color: var(--meny-tekst); padding: 18px 14px; display: flex; flex-direction: column; gap: 2px;
-  position: sticky; top: 0; height: 100vh; overflow-y: auto; z-index: 20;
+  position: sticky; top: 0; height: 100vh; overflow: hidden; z-index: 20;
 }
-.meny .logo { margin: 4px 8px 20px; }
-.meny-seksjon { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--meny-dempet); margin: 16px 10px 6px; font-weight: 600; }
+.meny .logo { margin: 4px 8px 20px; flex: none; }
+.meny .orgvelger { flex: none; }
+/* Lista ruller (rullefeltet helt ut i kanten), og bunnen står fast under den. */
+.meny-liste {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px;
+  margin: 0 -14px; padding: 2px 14px 14px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.meny-fot { flex: none; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+/* Kategoriene foldes ut og sammen med overskriften (pila snur når den er åpen). */
+.meny-gruppe { display: flex; flex-direction: column; gap: 2px; }
+button.meny-kategori {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 0; margin-top: 8px; padding: 8px 10px;
+  border: 0; border-radius: 9px; background: transparent; box-shadow: none; color: var(--meny-dempet);
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+button.meny-kategori:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); color: #fff; }
+button.meny-kategori:active:not(:disabled) { transform: none; }
+button.meny-kategori:focus-visible { box-shadow: 0 0 0 2px #7d9bff; }
+.meny-kategori-navn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.meny-kategori svg { flex: none; transition: transform .18s ease; }
+button.meny-kategori[aria-expanded="true"] svg { transform: rotate(180deg); }
+button.meny-kategori[aria-expanded="true"], button.meny-kategori.har-aktiv { color: var(--meny-tekst); }
+button.meny-kategori .ulest-tall { letter-spacing: 0; }
+.meny-punkter { display: flex; flex-direction: column; gap: 2px; }
+.meny-punkter[hidden] { display: none; }
 .meny a {
   display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 9px;
   color: var(--meny-tekst); text-decoration: none; font-size: 0.93rem; font-weight: 500;
@@ -175,8 +199,8 @@ strong { font-weight: 650; }
 /* Utseende (som systemet, lyst eller mørkt): i toppfeltet på mobil og nederst i menyen på
    PC, begge på mørk bunn. */
 .meny-tema {
-  margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 8px 0 12px 10px; color: var(--meny-dempet); font-size: 0.8rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 4px 0 12px 10px; color: var(--meny-dempet); font-size: 0.8rem; font-weight: 600;
 }
 .meny-tema + .bunn { margin-top: 0; }
 .temabryter {
@@ -227,7 +251,7 @@ strong { font-weight: 650; }
   }
   .mobiltopp .topp-knapper { display: flex; align-items: center; gap: 8px; flex: none; }
   .meny-tema { display: none; } /* ligger i toppfeltet */
-  .meny-tema + .bunn { margin-top: auto; }
+  .meny-fot { padding-top: 0; border-top: 0; }
   .mobiltopp button.ikon {
     background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.18); box-shadow: none;
     width: 40px; height: 40px; min-height: 40px; padding: 0; justify-content: center; border-radius: 11px;
@@ -265,7 +289,6 @@ strong { font-weight: 650; }
     transform: translateX(-100%); visibility: hidden; transition: transform .22s ease, visibility .22s;
   }
   .meny.apen { transform: none; visibility: visible; box-shadow: var(--skygge-3); }
-  .meny { overscroll-behavior: contain; }
   body.skriver .bunnmeny { display: none; }
   .meny-skygge.apen { display: block; position: fixed; inset: 0; background: rgba(5, 10, 25, 0.5); z-index: 39; }
   @media (max-width: 359px) {
@@ -408,6 +431,28 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 .faner.utseende { margin-bottom: 6px; }
 /* Steder i innstillingene som lenker går rett til (under toppfeltet på mobil) */
 .innstilling-sted { scroll-margin-top: 76px; }
+/* Underfanene i innstillingene: en linje under fanene, med en strek under den valgte. På mobil
+   ruller de sidelengs i stedet for å bryte. */
+.underfaner { display: flex; gap: 2px; flex-wrap: wrap; margin: -4px 0 18px; border-bottom: 1px solid var(--kant); }
+.underfaner button {
+  border: 0; border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; margin-bottom: -1px; box-shadow: none;
+  background: transparent; color: var(--dempet); padding: 8px 12px; white-space: nowrap;
+}
+.underfaner button:hover:not(:disabled) { color: var(--tekst); background: var(--flate-2); }
+.underfaner button.valgt, .underfaner button.valgt:hover:not(:disabled) { color: var(--aksent); border-bottom-color: var(--aksent); background: transparent; }
+.underfaner button:active:not(:disabled) { transform: none; }
+
+/* Rollene i bedriften (Innstillinger → Organisasjon → Roller) */
+.rolleliste { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rolleliste li { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate); }
+.rolleliste li > div { min-width: 0; }
+.rolleliste strong { display: block; }
+.rolleliste li > div > span { display: block; margin-top: 2px; }
+.rolleliste .merker { display: flex; margin-top: 8px; }
+.rolleliste .rolle-antall { margin-top: 6px; }
+.rolleliste .knapper { flex: none; margin: 0; }
+.rolleliste.faste li { background: var(--flate-2); }
+.forslag { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
 
 /* Nøkkeltall */
 .nokkeltall { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px; }
@@ -687,7 +732,7 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
   input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--felt-hoyde, 44px); }
   button, .knapp { min-height: var(--knapp-hoyde, 42px); }
   button.lenke, .dialog-topp button { min-height: 0; }
-  .meny a { padding: 11px 12px; }
+  .meny a, button.meny-kategori { padding: 11px 12px; }
   label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { padding: 4px 0; }
 }
 
@@ -726,6 +771,10 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
   /* Innstillingene har mange faner: de brytes over to linjer, så alle synes. */
   .faner.innstillinger-faner, .faner.fakturafaner { flex-wrap: wrap; overflow: visible; }
   .faner.innstillinger-faner button, .faner.fakturafaner button { flex: 1 1 auto; justify-content: center; }
+  .underfaner { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .underfaner::-webkit-scrollbar { display: none; }
+  .underfaner button { flex: none; }
+  .rolleliste li { flex-direction: column; }
 
   /* Handlinger på fakturasiden: to kolonner med like store knapper */
   .topp .handlinger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 8px; }
@@ -1038,6 +1087,13 @@ tr.makstak-linje td { color: var(--ok); }
 .admin-detaljer section { margin-top: 20px; }
 .admin-detaljer h3 { font-size: 0.95rem; margin: 0 0 8px; }
 /* Modulene over funksjonene (Faktura, Bemanning, ...), med en strek mellom dem. */
+/* Modulene i plattformadministrasjonen: modulen som hovedbryter, funksjonene i den under. */
+.modul-blokker { display: grid; gap: 10px; margin: 8px 0 4px; }
+.modul-blokk { border: 1px solid var(--kant); border-radius: var(--radius-s); padding: 10px 12px; background: var(--flate-2); }
+.modul-blokk.pa { background: var(--flate); }
+.modul-hode { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-weight: 450; }
+.modul-hode input { margin-top: 3px; flex: none; }
+.modul-blokk .funksjon-liste { margin: 6px 0 0 26px; }
 .funksjon-liste li label { display: flex; align-items: flex-start; gap: 0; margin: 0; font-weight: 450; }
 .funksjon-liste li label input { margin-top: 3px; flex: none; }
 /* Klokkeslett (24-timers, TT:MM) */
@@ -2464,7 +2520,7 @@ button.lenke.lonn-pdf { padding: 0 16px; flex: none; }
 .lonn-endringsdato { margin: 4px 0 12px; padding: 10px 12px; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate-2); }
 .lonn-endringsdato .rad { margin-bottom: 4px; }
 
-/* Skattekort fra Skatteetaten (Innstillinger → Ansatte og timer, og på den ansatte) */
+/* Skattekort fra Skatteetaten (Innstillinger → Lønn → Skattekort, og på den ansatte) */
 .skattekort-kobling h2 .merke { margin-left: 6px; vertical-align: middle; font-size: 0.7em; }
 .skattekort-fra-skatteetaten { margin: 8px 0 4px; padding: 10px 12px; border: 1px solid var(--kant); border-radius: 10px; background: var(--flate-2); }
 .skattekort-fra-skatteetaten p { margin: 0 0 6px; }

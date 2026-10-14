@@ -257,8 +257,8 @@ describe("a-meldingen (uten database)", () => {
       ],
     });
     expect(a.map((x) => [x.niva, x.tekst])).toEqual([
-      ["feil", "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Ansatte og timer → A-melding."],
-      ["feil", "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Ansatte og timer → A-melding."],
+      ["feil", "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Lønn → A-melding."],
+      ["feil", "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Lønn → A-melding."],
       ["feil", "Kari Hansen mangler fødselsnummer (eller D-nummer)."],
       ["feil", "Kari Hansen mangler yrkeskode (7 siffer, SSBs yrkeskoder)."],
       ["advarsel", "Per Time slutter 15.11.2026: velg årsaken til sluttdatoen."],
@@ -382,8 +382,8 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     expect(l.maaneder.find((m: any) => m.maaned === "2026-09")).toMatchObject({ frist: "2026-10-05", med_lonn: 2, arbeidsforhold: 2, siste: null });
     const g = (await api("GET", `/api/org/${org}/amelding/2026-09`)).data;
     expect(g.avvik.map((a: any) => a.tekst)).toEqual([
-      "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Ansatte og timer → A-melding.",
-      "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Ansatte og timer → A-melding.",
+      "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Lønn → A-melding.",
+      "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Lønn → A-melding.",
       "Per Melding mangler yrkeskode (7 siffer, SSBs yrkeskoder).",
       // OTP (0097): de som er med i ordningen, meldes inn hos pensjonsleverandøren.
       "Kari Melding er med i OTP fra 01.01.2025: meld den ansatte inn hos pensjonsleverandøren, og før datoen på den ansatte.",

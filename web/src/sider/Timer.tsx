@@ -1,6 +1,6 @@
 // Timer: den ansatte fører timene sine og leverer uka; eier og administrator godkjenner eller
 // avviser og ser alle ansattes uker (regnskap ser dem også). Overtiden regnes av serveren
-// (server/src/arbeidstid.ts) etter grensene under Innstillinger → Ansatte og timer.
+// (server/src/arbeidstid.ts) etter grensene under Innstillinger → Personal.
 //
 // Fanen står i adressen (?fane=mine|alle|godkjenning|timebank), uka med mandagen
 // (?uke=2026-10-05), og den ansatte man ser på under «Alle ansatte» med ?ansatt=. «Send ekstra
@@ -112,8 +112,8 @@ function huskSist(v: Sist) {
 export function useTimerFaner(versjon = 0) {
   const { org } = useKonto();
   const egen = org?.ansatt_id ?? null;
-  const personal = kanPersonal(org?.rolle);
-  const seAlle = kanSePersonal(org?.rolle);
+  const personal = kanPersonal(org);
+  const seAlle = kanSePersonal(org);
 
   // Ukene som venter på godkjenning (det siste året): til fanen og tallet på den.
   const venter = useData(
@@ -170,8 +170,8 @@ export function Timer() {
   const endret = () => settVersjon((v) => v + 1);
   useNarDataEndres(endret); // f.eks. timer som er ført eller godkjent med AI-assistenten
   const egen = org?.ansatt_id ?? null;
-  const personal = kanPersonal(org?.rolle);
-  const seAlle = kanSePersonal(org?.rolle);
+  const personal = kanPersonal(org);
+  const seAlle = kanSePersonal(org);
   const { faner, venter, antallVenter } = useTimerFaner(versjon);
   // «Send ekstra timer» (?send=1): skjemaet åpnes i den ansattes egen uke.
   const send = sok.get("send") === "1" && !!egen;
@@ -195,9 +195,9 @@ export function Timer() {
         <h1>Timer</h1>
         <div className="kort">
           <Tom ikon={<IkonKlokke storrelse={22} />} tittel={!org?.personal ? "Timeføringen er ikke slått på" : "Du fører ikke timer her"}>
-            {!org?.personal && erAdmin(org?.rolle) ? (
+            {!org?.personal && erAdmin(org) ? (
               <p>
-                Slå den på under <Link to="/innstillinger?fane=personal">Innstillinger → Ansatte og timer</Link>.
+                Slå den på under <Link to="/innstillinger?fane=personal">Innstillinger → Personal</Link>.
               </p>
             ) : (
               <p>Ta kontakt med den som administrerer {org?.navn}.</p>

@@ -67,15 +67,20 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med den siste lenken, og kan sende en ny eller bekrefte adressen for brukeren (også i
   Identity Platform; hvem og når lagres) når hen vet at den er riktig
   (`0105_epostbekreftelse.sql`, `server/src/epostbekreftelse.ts`)
-- `moduler` og `bruker_moduler`: plattformens moduler (foreløpig Faktura og Bemanning), og
-  hvilke en bruker har bedt om eller fått. Hver funksjon (`funksjoner.modul`) hører til en
-  modul. Den som lager en konto, krysser av for modulene den trenger (lagres rett fra
+- `moduler` og `bruker_moduler`: plattformens moduler, Faktura, Personal, Lønn og Regnskap
+  (`0110_moduler.sql`; Bemanning ble delt i Personal og Lønn), og hvilke en bruker har bedt om
+  eller fått. Hver funksjon (`funksjoner.modul`) hører til en modul, og hver modul har en kjerne
+  (`moduler.kjerne`), funksjonen den står og faller med: `faktura` (fakturaene, kundene og
+  produktene, som nå kan slås av), `ansatte`, `lonn` og `regnskap`. Lønn bygger på Personal
+  (`moduler.krever`), og velger man Lønn, følger Personal med. `faktura.har_modul(org, modul)`
+  sier om organisasjonen har modulen (kjernen er på, og modulen den bygger på), og
+  `org_modulliste` gir lista appen får (`mine_organisasjoner.moduler`). Den som lager en konto, krysser av for modulene den trenger (lagres rett fra
   registreringen, også før e-postadressen er bekreftet, eller på venteskjermen), og
   forespørselen til administratorene går først når navn og moduler er på plass, med modulene i
   e-posten. Administratoren godkjenner med de modulene eller andre (Plattform → Plattformoversikt),
   og etter godkjenningen er det bare administratoren som endrer dem. Organisasjonene brukeren
   lager, får bare funksjonene i modulene (av standarden for nye organisasjoner), og med
-  Bemanning er ansatte og timer slått på fra start. Brukere uten moduler (fra før, eller
+  Personal er ansatte og timer slått på fra start. Brukere uten moduler (fra før, eller
   godkjent av en invitasjon uten å ha valgt) får standarden som før. En ny modul er en rad i
   `moduler` og funksjonene dens; da kommer den med i registreringen, forespørselen,
   godkjenningen og administrasjonen uten flere endringer (`0044_moduler.sql`,
@@ -213,7 +218,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   de samme forespørslene som fakturautkast og assistenten, og tale til tekst med et stille
   opptak (der AI-en ikke skal finne noen tale)
 - `lonn_oppsett`, `ansatte`, `timeforinger`: ansatte og timer, slått på per organisasjon
-  (Innstillinger → Ansatte og timer). Ansattregisteret har personalia, ansettelse og lønn.
+  (Innstillinger → Personal). Ansattregisteret har personalia, ansettelse og lønn.
   Lista over de ansatte kan sorteres etter hver kolonne (nr., navn, stilling, stillingsprosent,
   faste dager, lønn, ansatt fra og rolle): trykk på overskriften, og en gang til for motsatt vei;
   på mobil velges det i «Sorter» (`web/src/sortering.tsx`). Navnet sorteres etter etternavnet,
@@ -411,7 +416,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   ansatte kan ikke endre eller fjerne dokumentasjonen etterpå. Databasen sjekker reglene
   (`faktura.fravaer_egenmelding`): egen sykdom inntil 3 kalenderdager på rad og 4 ganger i
   løpet av 12 måneder, etter to måneder i jobben (folketrygdloven § 8-24); arbeidsgiveren kan
-  gi mer under Innstillinger → Ansatte og timer (`lonn_oppsett.egenmelding_dager`,
+  gi mer under Innstillinger → Personal → Ferie og egenmelding (`lonn_oppsett.egenmelding_dager`,
   `egenmelding_ganger`, `egenmelding_dager_aar`, f.eks. IA-ordningen med 8 dager per gang og 24
   dager i løpet av 12 måneder), aldri mindre: lovens regler gjelder alltid. Sykt barn: inntil 3
   dager på rad (`egenmelding_barn_dager`), og telles ikke med i de fire gangene. Fravær med
@@ -540,7 +545,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   i full stilling), og kan endres etterpå. `lonn_oppsett.full_stilling` er organisasjonens
   arbeidstid i full stilling (vanligvis 37,5), som nye ansatte får (`0048_full_stilling.sql`)
 - `lonn_oppsett.helg` (`0064_helg.sql`): åpent i helgene (standard: ja). Eier og administrator
-  slår det av under Innstillinger → Ansatte og timer når de har stengt lørdag og søndag; alle i
+  slår det av under Innstillinger → Personal → Arbeidstid og overtid når de har stengt lørdag og søndag; alle i
   organisasjonen får det i `mine_organisasjoner.helg` (`/api/meg`). Med stengt helg viser
   vaktplanen (dagen, uka og måneden), tavla, timeføringen (timelista og ukeoversikten) og de
   faste arbeidsdagene bare mandag–fredag, ukevelgeren viser «5.–9. okt.», og dag for dag (i
@@ -551,7 +556,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   mandag–fredag (dagene brukeren sier, gjelder likevel), og hopper over tomme helgedager når den
   forteller hvem som jobber
 - `lonn_oppsett.bursdag_varsel` og `ansatte.bursdag_varsel`: bursdagsvarsler. Eier og
-  administrator slår dem på under Innstillinger → Ansatte og timer (de ansatte har ikke tilgang
+  administrator slår dem på under Innstillinger → Personal → Bursdager (de ansatte har ikke tilgang
   dit) og velger push-varsel, e-post eller begge. Når en aktiv ansatt har bursdag (fødselsdatoen
   på ansattkortet; 29. februar feires 28. februar i år som ikke er skuddår), får alle de andre i
   organisasjonen beskjed kl. 08 norsk tid: medlemmene og de aktive ansatte, også dem uten
@@ -608,12 +613,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   hver bruker sist så beskjedene: nye er andres beskjeder etter det, høyst 14 dager gamle. De
   står merket på siden, og tallet på dem står i menyen (i bunnmenyen for de ansatte, ellers som
   en prikk på «Mer»); siden henter nye beskjeder hvert minutt mens den er åpen
-- `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til (EHF,
-  bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
-  Disk, ansatte og timer, vaktplan og bemanning, lønn; vaktplanen og lønnen bygger på ansatte og timer),
-  gruppert i modulene Faktura og Bemanning. Fakturaer, kunder og produkter har alle. Plattformadministratoren slår dem av og på i
-  detaljene for organisasjonen (Plattform → Organisasjoner) og velger standarden for nye
-  organisasjoner nederst samme sted; de som fantes da funksjonene kom, beholdt alt. API-et avviser rutene
+- `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til
+  (fakturaene, EHF, bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter,
+  import, Google Disk, ansatte og timer, vaktplan og bemanning, lønn, regnskap; vaktplanen og
+  lønnen bygger på ansatte og timer, og fakturafunksjonene som EHF og påminnelsene på
+  fakturaene), gruppert i modulene Faktura, Personal, Lønn og Regnskap. Plattformadministratoren
+  slår modulene av og på med kjernen og funksjonene under hver i detaljene for organisasjonen
+  (Plattform → Organisasjoner), og velger standarden for nye organisasjoner nederst samme sted; de
+  som fantes da funksjonene kom, beholdt alt. Banken, AI og importen virker uten Faktura (regnskapet
+  bruker banken). API-et avviser rutene
   til en funksjon organisasjonen ikke har (`server/src/funksjoner.ts`, med svaret husket et
   halvt minutt), bakgrunnsjobbene hopper over organisasjonen (bankhenting, gjentakende
   fakturaer, EHF-sending, som da går på e-post, påminnelser og Google Disk), og appen
@@ -622,20 +630,31 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   Betalt, Kreditert, Gjentakende og Innbetalinger (`web/src/fakturameny.tsx`). Gjentakende og
   Innbetalinger har de samme adressene som før (`/gjentakende`, `/innbetalinger`), og
   «Fakturaer» er valgt i menyen på alle tre.
-  Innstillingene har fanene Organisasjon (opplysningene, brukerne, regnskapsføreren og
-  sletting), Faktura (fakturaoppsettet, logoen, betalingen med kontonumre, purring og banken,
-  og EHF), Ansatte og timer, Min konto og App. Hver del lagrer bare sine felt
-  (`PATCH /org/:id` tar imot deler av organisasjonen), og det som ikke er lagret, blir med
-  mellom fanene. Gamle lenker og varsler (`?fane=betaling`, `?fane=ehf`, `?fane=brukere`) går
-  til fanen og stedet der delen er nå
+  Innstillingene har faner med underfaner (`?fane=&del=`, `Innstillinger.tsx`): Organisasjon
+  (opplysningene, brukerne, rollene, regnskapsføreren eller klientene, og sletting for eieren),
+  Faktura (fakturaoppsettet, logoen, betaling og purring, kontonumrene, banken og EHF), Personal
+  (arbeidstid og overtid, ferie og egenmelding, vaktbytte, timebanken og bursdagene), Lønn
+  (lønnsoppsettet, betalingsfila, a-meldingen, skattekortene og bokføringen), Min konto
+  (innloggingen og Google Disk) og App (appen og varslene). Organisasjon, Faktura, Personal og
+  Lønn er bare for eier og administrator, og bare når modulene er på. Hver del lagrer bare sine
+  felt (`PATCH /org/:id` tar imot deler av organisasjonen), og det som ikke er lagret, blir med
+  mellom underfanene. Gamle lenker og varsler (`?fane=betaling`, `?fane=ehf`, `?fane=brukere`,
+  `?fane=skattekort` og `?fane=personal#lonn`, `#afp`, `#amelding`, `#skattekort`) går til fanen og
+  underfanen der delen er nå (`nyAdresse`)
 - Sidemenyen (`App.tsx`) har Oversikt øverst, forsiden for hver rolle (se under), og resten i
-  seksjoner: Plattform (bare for plattformadministratorene), Faktura (Fakturaer, Kunder og
-  Produkter), Personal (Ansatte, Vaktplan, Timer eller «Timer og ferie», Lønn og Beskjeder),
-  Regnskap (delene av Regnskap som egne punkter: Bilag, Utgifter, Bank, Mva, Saldobalanse,
-  Årsoppgjør, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer, som `?fane=` på
-  `/regnskap`), Rapporter og Konto (Innstillinger, Verifiser organisasjon og Installer appen). Det
-  rollen og funksjonene ikke gir tilgang til, er ikke med. De ansatte har sin egen meny (under
-  Roller). Et regnskapsbyrå har Klienter i stedet for Oversikt og ikke Faktura.
+  kategorier: Plattform (bare for plattformadministratorene), Innstillinger (fanene i
+  innstillingene som punkter, Verifiser organisasjon for eier og administrator, og Installer
+  appen), Faktura (Fakturaer, Kunder og Produkter), Personal (Ansatte, Vaktplan, Timer eller
+  «Timer og ferie», og Beskjeder), Lønn (fanene på Lønn som punkter: Lønnskjøringer, A-melding,
+  Sykepenger, Årsoversikt, Reiser og Mine lønnsslipper), Regnskap (delene av Regnskap som egne
+  punkter: Bilag, Utgifter, Bank, Mva, Saldobalanse, Årsoppgjør, Anleggsmidler, Periodiseringer,
+  Saldoavskrivninger og Kontoer, som `?fane=` på `/regnskap`) og Rapporter. Kategoriene foldes ut
+  og sammen med overskriften (`MenyKategori`): de er lukket som standard, og den med siden man er
+  på, åpnes når man kommer dit; lukket viser den tallet på nye beskjeder, og en kategori med ett
+  punkt er en vanlig lenke. Lista ruller, og bunnen (utseendet, navnet og «Logg ut») står fast,
+  også i skuffen på mobil. Det rollen og modulene ikke gir tilgang til, er ikke med. De ansatte
+  har sin egen meny (under Roller). Et regnskapsbyrå har Klienter i stedet for Oversikt og ikke
+  Faktura.
 - Hver har sin egen oversikt, satt sammen av de samme delene (`OversiktDeler.tsx`: hilsenen,
   nøkkeltallene, som lenker til siden de hører til, og «Til oppfølging» med én linje per ting som
   venter). Hvert kort henter sitt fra de samme rutene som sidene, så et kort som er tregt eller
@@ -726,7 +745,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (oppbevares fem år etter siste utbetaling)
 - Betalingsfila (`0076_lonn_betalingsfil.sql`, `server/src/betalingsfil.ts`): en godkjent kjøring
   lastes ned som ISO 20022-betalingsfil (pain.001.001.03, som alle norske banker tar imot, eller
-  .09 under Innstillinger → Ansatte og timer) og lastes opp og godkjennes i nettbanken. Én betaling
+  .09 under Innstillinger → Lønn → Betalingsfil) og lastes opp og godkjennes i nettbanken. Én betaling
   med alle de ansatte: lønn (`CtgyPurp` SALA, så bare dem med lønnstilgang i nettbanken ser
   beløpene), samlet bokført, på utbetalingsdatoen, fra lønnskontoen (`lonn_oppsett.lonnskonto`,
   ellers organisasjonens kontonummer) i banken med BIC-en i oppsettet (`bank_bic`). Hver ansatt
@@ -1322,6 +1341,39 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 ¹ Når brukeren også er koblet til et ansattkort (eieren kan for eksempel føre egne timer).
 ² Så lenge den ansatte er aktiv (ikke etter at de har sluttet).
 
+#### Egne roller
+
+Eier og administrator lager rollene bedriften trenger (`0111_tilgangsroller.sql`, Innstillinger →
+Organisasjon → Roller), f.eks. Daglig leder, Økonomiansvarlig, Personalansvarlig og
+Lønnsansvarlig, og krysser av for modulene hver rolle gir. Brukeren får da rollen `tilpasset`
+med rollen sin (`medlemmer.tilgangsrolle_id`), ved invitasjonen eller senere under Brukere.
+`faktura.kan` slår opp modulene (`rollemoduler`) og gir:
+
+| Modul | Gir |
+|---|---|
+| Faktura | det fakturereren kan: lese, skrive, utstede og bokføre fakturadataene |
+| Personal | det eier og administrator kan med de ansatte, vaktplanen, timene, fraværet og timebanken |
+| Lønn | det eier og administrator kan med lønnen, og Personal (lønnssiden bruker personaldataene) |
+| Regnskap | regnskapet, og bokføre betalinger; se fakturaene og (i regnskapet) lønnsbilagene |
+
+Innstillingene, brukerne, rollene, banken og utsendingen av rapportene er alltid bare for eier og
+administrator, og en rolle uten moduler er som rollen `ansatt`. En modul som ikke er på for
+organisasjonen, kan ikke gis (en rolle som har den fra før, beholder den, men den virker ikke før
+modulen er på igjen). En rolle kan ikke slettes mens noen har den eller er invitert med den.
+
+Lønnsdataene og personaldataene har de samme radreglene (`personal`, `personal_les`), så API-et
+forteller databasen hvilken modul forespørselen gjelder: rutene under `/lonn`, `/skattekort`,
+`/amelding`, `/nav` og `/reiser` (og lønnsrapportene) setter `app.modul` til `lonn`, og rutene
+under `/regnskap` (og regnskapsrapportene) til `regnskap` (`modulKontekst` i `db.ts` og `modulFor`
+i `funksjoner.ts`). Med Lønn gir `personal` da tilgang i lønnsrutene, og med Personal i de andre;
+rapportlista spør per rapport med modulen den hører til (`kan_i_modul`). Varslene går til dem som
+har modulen (`tilpasset_har`): timene og fraværet med Personal, lønnen, a-meldingen og NAV med
+Lønn, månedsavslutningen med Regnskap og fakturaene med Faktura. En egen rolle rangeres mellom
+fakturerer og regnskap (`rolle_rang`), og i et regnskapsbyrå gir den klientene bare med Regnskap.
+Appen leser modulene fra `mine_organisasjoner` (`moduler`, `tilgangsrolle` og `rollemoduler`) og
+viser menyen, oversikten og innstillingene etter dem (`konto.tsx`: `kanPersonal`, `kanLonn`,
+`kanSeRegnskap` osv.).
+
 En regnskapsfører med tilgangen «bokfør» får rollen `regnskap` hos klienten. Med
 tilgangen «les» får regnskapsføreren rollen `les`. Tilgangen kan ha utløpsdato, og
 begge parter kan trekke den. Byråets ansatte med rollen `ansatt` får ikke tilgang til
@@ -1352,8 +1404,9 @@ grupper:
   skattekortet, feriebanken og inntekten med lønnsslippene og årsoversikten, fra
   `/ansatte/meg`; bare lesing) og Beskjeder (med tallet på de nye).
 
-Innstillinger (egen konto og app) ligger under Konto. Punktet for siden og fanen man står på, er
-valgt, og fanene på sidene er der fortsatt. Bunnmenyen på mobil har Oversikt, Kalender, Ekstra
+Gruppene er kategorier som foldes ut og sammen, som for de andre, og Innstillinger (Min konto og App)
+er en egen kategori øverst. Punktet for siden og fanen man står på, er valgt, og fanene på sidene er
+der fortsatt. Bunnmenyen på mobil har Oversikt, Kalender, Ekstra
 timer og Fravær, og resten under «Mer» (med en prikk når det er nye beskjeder).
 
 Eier og administrator har Timer og Ferie som ett punkt, «Timer og ferie» (`timerOgFerie` i

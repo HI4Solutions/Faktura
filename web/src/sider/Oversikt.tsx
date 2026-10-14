@@ -1,31 +1,36 @@
 // Oversikten for organisasjonen (forsiden for eier, administrator og de andre rollene utenom de
 // ansatte, som har sin egen i AnsattOversikt.tsx): det som venter på deg i fakturaene, personalet,
 // lønnen og regnskapet («Til oppfølging»), hvem som er på jobb og borte i dag, og fakturaene med
-// nøkkeltall, fakturert per måned og det som forfaller snart. Det rollen og funksjonene ikke gir
-// tilgang til, hentes ikke og vises ikke. Et regnskapsbyrå ser klientene.
+// nøkkeltall, fakturert per måned og det som forfaller snart. Det modulene og rollen ikke gir
+// tilgang til, hentes ikke og vises ikke: uten Faktura er nøkkeltallene personalets. Et
+// regnskapsbyrå ser klientene.
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { hent } from "../api";
 import { Feil, Laster, Tom, useData } from "../felles";
-import { harFunksjon, kanBokfore, kanPersonal, kanSePersonal, kanSeRegnskap, kanSkrive, useKonto } from "../konto";
+import { harFunksjon, kanBokfore, kanPersonal, kanSeLonn, kanSePersonal, kanSeRegnskap, kanSkrive, useKonto, visFakturadelen } from "../konto";
 import { dato, iDag, kr, leggTilDager } from "../format";
 import { visDag } from "../uke";
 import { maaned } from "../lonn";
-import { IkonFaktura, IkonHake, IkonKalender, IkonKlokke, IkonKroner, IkonKunder, IkonPluss, IkonUtkast, IkonVarsel } from "../ikoner";
+import { IkonAnsatte, IkonFaktura, IkonFravaer, IkonHake, IkonKalender, IkonKlokke, IkonKroner, IkonKunder, IkonLedigeVakter, IkonPluss, IkonUtkast, IkonVarsel } from "../ikoner";
 import { Fakturatabell } from "./Fakturaer";
 import { dagerTil, navnListe, useHentVedApning, type BankStatus } from "./Bank";
 import type { VaktSvar } from "./Vakter";
 import type { ByttSvar } from "./Vaktbytte";
 import { fravaerTekst } from "./Fravaer";
-import { antall, hilsen, Oppfolging, type Oppgave } from "./OversiktDeler";
+import { antall, hilsen, Oppfolging, Tall, type Oppgave } from "./OversiktDeler";
 
 export function Oversikt() {
   const { org, meg, velgOrg } = useKonto();
   const nav = useNavigate();
-  const { data, feil } = useData(() => hent<any[]>(`/org/${org!.id}/fakturaer`), [org?.id], { oppdater: true });
+  // Fakturadelen: modulen Faktura, for dem som ser fakturaene.
+  const faktura = visFakturadelen(org);
+  const { data, feil } = useData(() => (faktura ? hent<any[]>(`/org/${org!.id}/fakturaer`) : Promise.resolve([] as any[])), [org?.id, faktura], {
+    oppdater: true,
+  });
   const bank = useData(
-    () => (org?.type === "regnskapsbyraa" || !harFunksjon(org, "bank") ? Promise.resolve(null) : hent<BankStatus>(`/org/${org!.id}/bank`).catch(() => null)),
-    [org?.id],
+    () => (!faktura || !harFunksjon(org, "bank") ? Promise.resolve(null) : hent<BankStatus>(`/org/${org!.id}/bank`).catch(() => null)),
+    [org?.id, faktura],
     { oppdater: true },
   );
   // Nye innbetalinger fra banken når oversikten åpnes.
@@ -72,7 +77,7 @@ export function Oversikt() {
               {klienter.length === 0 && (
                 <tr>
                   <td colSpan={3} className="dempet">
-                    Ingen klienter ennå. Be om tilgang under <Link to="/innstillinger?fane=brukere">Innstillinger → Organisasjon</Link>, eller be klienten invitere byrået.
+                    Ingen klienter ennå. Be om tilgang under <Link to="/innstillinger?fane=organisasjon&del=regnskapsforer">Innstillinger → Organisasjon → Klienter</Link>, eller be klienten invitere byrået.
                   </td>
                 </tr>
               )}
@@ -121,7 +126,7 @@ export function Oversikt() {
     ...(forfalt.length
       ? [{ nokkel: "forfalt", tekst: `${antall(forfalt.length, "faktura", "fakturaer")} har passert forfall (${kr(sumForfalt)} kr)`, til: "/fakturaer?status=utstedt", fare: true }]
       : []),
-    ...(utkast.length && kanSkrive(org?.rolle)
+    ...(utkast.length && kanSkrive(org)
       ? [{ nokkel: "utkast", tekst: `${antall(utkast.length, "fakturautkast", "fakturautkast")} er klare til å sendes`, til: "/fakturaer?status=utkast" }]
       : []),
     ...personal.oppgaver,
@@ -135,7 +140,7 @@ export function Oversikt() {
           <h1>{hilsen(meg?.bruker.navn)}</h1>
           <p>Her er status for {org?.navn}.</p>
         </div>
-        {kanSkrive(org?.rolle) && (
+        {faktura && kanSkrive(org) && (
           <div className="knapper">
             <button onClick={() => nav("/kunder")}>
               <IkonKunder storrelse={16} /> Ny kunde
@@ -146,44 +151,47 @@ export function Oversikt() {
           </div>
         )}
       </div>
-      {org?.verifisering === "ny" && (
+      {faktura && org?.verifisering === "ny" && (
         <div className="melding info">
           Organisasjonen er ikke verifisert ennå. Til den er det, kan dere sende opptil 20 fakturaer og 50 000 kr per måned.{" "}
           <Link to="/verifisering">Verifiser nå</Link>
         </div>
       )}
-      {org?.verifisering === "sperret" && <div className="melding feil">Organisasjonen er sperret og kan ikke sende fakturaer.</div>}
+      {faktura && org?.verifisering === "sperret" && <div className="melding feil">Organisasjonen er sperret og kan ikke sende fakturaer.</div>}
       {bank.data && <BankMelding s={bank.data} />}
-      <div className="nokkeltall">
-        <div className="kort">
-          <div className="etikett">
-            <span className="ikonboks"><IkonKroner /></span> Utestående
+      {!faktura && personal.tall && <PersonalTall {...personal.tall} />}
+      {faktura && (
+        <div className="nokkeltall">
+          <div className="kort">
+            <div className="etikett">
+              <span className="ikonboks"><IkonKroner /></span> Utestående
+            </div>
+            <div className="verdi">{kr(sumUte)}</div>
+            <div className="under">{utestaende.length} ubetalte fakturaer</div>
           </div>
-          <div className="verdi">{kr(sumUte)}</div>
-          <div className="under">{utestaende.length} ubetalte fakturaer</div>
-        </div>
-        <div className="kort">
-          <div className="etikett">
-            <span className={`ikonboks ${forfalt.length ? "fare" : "noytral"}`}><IkonVarsel /></span> Forfalt
+          <div className="kort">
+            <div className="etikett">
+              <span className={`ikonboks ${forfalt.length ? "fare" : "noytral"}`}><IkonVarsel /></span> Forfalt
+            </div>
+            <div className="verdi">{kr(sumForfalt)}</div>
+            <div className="under">{forfalt.length ? `${forfalt.length} fakturaer har passert forfall` : "Ingenting forfalt"}</div>
           </div>
-          <div className="verdi">{kr(sumForfalt)}</div>
-          <div className="under">{forfalt.length ? `${forfalt.length} fakturaer har passert forfall` : "Ingenting forfalt"}</div>
-        </div>
-        <div className="kort">
-          <div className="etikett">
-            <span className="ikonboks ok"><IkonHake /></span> Fakturert denne måneden
+          <div className="kort">
+            <div className="etikett">
+              <span className="ikonboks ok"><IkonHake /></span> Fakturert denne måneden
+            </div>
+            <div className="verdi">{kr(fakturertMnd)}</div>
+            <div className="under">{betaltMnd} av dem er betalt</div>
           </div>
-          <div className="verdi">{kr(fakturertMnd)}</div>
-          <div className="under">{betaltMnd} av dem er betalt</div>
-        </div>
-        <div className="kort">
-          <div className="etikett">
-            <span className="ikonboks noytral"><IkonUtkast /></span> Utkast
+          <div className="kort">
+            <div className="etikett">
+              <span className="ikonboks noytral"><IkonUtkast /></span> Utkast
+            </div>
+            <div className="verdi">{utkast.length}</div>
+            <div className="under">{utkast.length ? "Klare til å sendes" : "Ingen utkast"}</div>
           </div>
-          <div className="verdi">{utkast.length}</div>
-          <div className="under">{utkast.length ? "Klare til å sendes" : "Ingen utkast"}</div>
         </div>
-      </div>
+      )}
 
       {personal.idag ? (
         <div className="dash-rad">
@@ -194,69 +202,97 @@ export function Oversikt() {
         <Oppfolging oppgaver={oppgaver} laster={personal.laster || regnskap.laster} />
       )}
 
-      <div className="dash-rad">
-        <div className="kort">
-          <div className="kort-topp">
-            <h2>Fakturert inkl. mva</h2>
-            <span className="dempet liten">Siste seks måneder</span>
+      {faktura && (
+        <>
+        <div className="dash-rad">
+          <div className="kort">
+            <div className="kort-topp">
+              <h2>Fakturert inkl. mva</h2>
+              <span className="dempet liten">Siste seks måneder</span>
+            </div>
+            <Stolper data={maaneder} />
           </div>
-          <Stolper data={maaneder} />
-        </div>
-        <div className="kort">
-          <div className="kort-topp">
-            <h2>Forfaller snart</h2>
-            <Link to="/fakturaer?status=utstedt" className="liten">
-              Se alle
-            </Link>
-          </div>
-          {snart.length ? (
-            <ul className="liste-enkel">
-              {snart.map((f) => (
-                <li key={f.id} style={{ cursor: "pointer" }} onClick={() => nav(`/fakturaer/${f.id}`)}>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="tittel">{f.kunde_navn ?? f.kunde?.navn ?? `Faktura ${f.fakturanummer}`}</div>
-                    <div className="dempet liten">
-                      Nr. {f.fakturanummer} · forfaller {dato(f.forfallsdato)}
+          <div className="kort">
+            <div className="kort-topp">
+              <h2>Forfaller snart</h2>
+              <Link to="/fakturaer?status=utstedt" className="liten">
+                Se alle
+              </Link>
+            </div>
+            {snart.length ? (
+              <ul className="liste-enkel">
+                {snart.map((f) => (
+                  <li key={f.id} style={{ cursor: "pointer" }} onClick={() => nav(`/fakturaer/${f.id}`)}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="tittel">{f.kunde_navn ?? f.kunde?.navn ?? `Faktura ${f.fakturanummer}`}</div>
+                      <div className="dempet liten">
+                        Nr. {f.fakturanummer} · forfaller {dato(f.forfallsdato)}
+                      </div>
                     </div>
-                  </div>
-                  <span className="tall">{kr(rest(f))}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Tom ikon={<IkonKlokke />} tittel="Ingen ubetalte fakturaer">
-              <span className="liten">Alt er betalt eller forfalt.</span>
-            </Tom>
-          )}
-        </div>
-      </div>
-
-      <div className="kort-topp" style={{ marginTop: 8 }}>
-        <h2>Siste fakturaer</h2>
-        <Link to="/fakturaer" className="liten">
-          Alle fakturaer
-        </Link>
-      </div>
-      {data.length ? (
-        <Fakturatabell
-          rader={data.slice(0, 8)}
-          klikk={(id) => nav(`/fakturaer/${id}`)}
-          kopier={kanSkrive(org?.rolle) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined}
-          betaling={kanBokfore(org?.rolle)}
-        />
-      ) : (
-        <div className="kort">
-          <Tom ikon={<IkonFaktura />} tittel="Ingen fakturaer ennå">
-            <p className="liten">Lag den første fakturaen, så dukker den opp her.</p>
-            {kanSkrive(org?.rolle) && (
-              <button className="primar" onClick={() => nav("/fakturaer/ny")}>
-                <IkonPluss storrelse={16} /> Ny faktura
-              </button>
+                    <span className="tall">{kr(rest(f))}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Tom ikon={<IkonKlokke />} tittel="Ingen ubetalte fakturaer">
+                <span className="liten">Alt er betalt eller forfalt.</span>
+              </Tom>
             )}
-          </Tom>
+          </div>
         </div>
+
+        <div className="kort-topp" style={{ marginTop: 8 }}>
+          <h2>Siste fakturaer</h2>
+          <Link to="/fakturaer" className="liten">
+            Alle fakturaer
+          </Link>
+        </div>
+        {data.length ? (
+          <Fakturatabell
+            rader={data.slice(0, 8)}
+            klikk={(id) => nav(`/fakturaer/${id}`)}
+            kopier={kanSkrive(org) ? (id) => nav(`/fakturaer/ny?kopi=${id}`) : undefined}
+            betaling={kanBokfore(org)}
+          />
+        ) : (
+          <div className="kort">
+            <Tom ikon={<IkonFaktura />} tittel="Ingen fakturaer ennå">
+              <p className="liten">Lag den første fakturaen, så dukker den opp her.</p>
+              {kanSkrive(org) && (
+                <button className="primar" onClick={() => nav("/fakturaer/ny")}>
+                  <IkonPluss storrelse={16} /> Ny faktura
+                </button>
+              )}
+            </Tom>
+          </div>
+        )}
+        </>
       )}
     </>
+  );
+}
+
+// Nøkkeltallene for personalet, når fakturadelen ikke er med (uten Faktura, eller en rolle uten
+// fakturaene): på jobb og borte i dag, timer til godkjenning og ledige vakter.
+function PersonalTall({ paJobb, borte, uker, ledige }: PersonalTallData) {
+  return (
+    <div className="nokkeltall">
+      {paJobb !== null && <Tall ikon={<IkonAnsatte />} etikett="På jobb i dag" til="/vakter?visning=dag" verdi={String(paJobb)} under="på vakt eller fast arbeidsdag" />}
+      {borte !== null && (
+        <Tall ikon={<IkonFravaer />} tone={borte ? "fare" : "noytral"} etikett="Borte i dag" til="/vakter?visning=dag" verdi={String(borte)} under={borte ? "syke, på ferie eller borte" : "Alle er her"} />
+      )}
+      {uker !== null && (
+        <Tall
+          ikon={<IkonKlokke />}
+          tone={uker ? undefined : "ok"}
+          etikett="Timer til godkjenning"
+          til="/timer?fane=godkjenning"
+          verdi={String(uker)}
+          under={uker ? antall(uker, "uke venter", "uker venter") : "Alt er godkjent"}
+        />
+      )}
+      {ledige !== null && <Tall ikon={<IkonLedigeVakter />} etikett="Ledige vakter" til="/vakter" verdi={String(ledige)} under="uten ansatt de neste sju dagene" />}
+    </div>
   );
 }
 
@@ -325,7 +361,7 @@ function BankMelding({ s }: { s: BankStatus }) {
     <>
       {feil.length > 0 && (
         <div className="melding feil">
-          Appen får ikke lenger lese innbetalingene fra {navnListe(feil.map((k) => k.bank))}. <Link to="/innstillinger?fane=betaling">Koble til på nytt</Link>
+          Appen får ikke lenger lese innbetalingene fra {navnListe(feil.map((k) => k.bank))}. <Link to="/innstillinger?fane=faktura&del=bank">Koble til på nytt</Link>
         </div>
       )}
       {snart.map((k) => {
@@ -333,7 +369,7 @@ function BankMelding({ s }: { s: BankStatus }) {
         return (
           <div key={k.id} className="melding info">
             Tilgangen til {k.bank} går ut {igjen <= 0 ? "i dag" : `om ${igjen} ${igjen === 1 ? "dag" : "dager"}`}.{" "}
-            <Link to="/innstillinger?fane=betaling">Forny med BankID</Link>
+            <Link to="/innstillinger?fane=faktura&del=bank">Forny med BankID</Link>
           </div>
         );
       })}
@@ -358,17 +394,19 @@ function BankMelding({ s }: { s: BankStatus }) {
 type KjoringRad = { id: string; periode: string; type: "ordinar" | "ekstra"; utbetalingsdato: string; status: "utkast" | "godkjent" };
 type Kollega = { id: string; fornavn: string; etternavn: string };
 type IDagData = { dato: string; paJobb: { navn: string; tid: string }[]; borte: { navn: string; hva: string }[]; ledige: number };
+// Tallene for personalet (null: ikke med for rollen eller funksjonene).
+type PersonalTallData = { paJobb: number | null; borte: number | null; uker: number | null; ledige: number | null };
 const dagerMellom = (fra: string, til: string) => Math.round((Date.parse(`${til}T12:00:00Z`) - Date.parse(`${fra}T12:00:00Z`)) / 86_400_000);
 
 // Det som venter i personalet og lønnen: timer, vaktbytter, feriesøknader og søknader om avspasering
 // til godkjenning (eier og administrator), ledige vakter de neste sju dagene og lønnskjøringer som
 // ikke er godkjent. Og hvem som er på jobb og borte i dag, for dem som ser vaktplanen.
-function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData | null } {
+function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData | null; tall: PersonalTallData | null } {
   const { org } = useKonto();
-  const se = !!org?.personal && kanSePersonal(org.rolle);
-  const leder = se && kanPersonal(org!.rolle);
+  const se = !!org?.personal && kanSePersonal(org);
+  const leder = se && kanPersonal(org);
   const vaktplan = se && harFunksjon(org, "vaktplan");
-  const lonn = se && harFunksjon(org, "lonn");
+  const lonn = kanSeLonn(org) && !!org?.personal && harFunksjon(org, "lonn");
   const bytte = leder && vaktplan && org?.vaktbytte !== "av";
   const idag = iDag();
   const sti = `/org/${org?.id}`;
@@ -428,14 +466,22 @@ function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData |
       ledige: ledige.filter((v) => v.dato === idag).length,
     };
   }
-  return { oppgaver, laster, idag: idagData };
+  const tall: PersonalTallData | null = se
+    ? {
+        paJobb: idagData ? idagData.paJobb.length : null,
+        borte: idagData ? idagData.borte.length : null,
+        uker: leder ? (timer.data ? uker : null) : null,
+        ledige: vaktplan && vakter.data ? ledige.length : null,
+      }
+    : null;
+  return { oppgaver, laster, idag: idagData, tall };
 }
 
 // Regnskapet: punktene i månedsavslutningen for forrige måned som ikke er i orden (bankpostene,
 // utgiftene og resten), med lenke dit (RegnskapAvslutning.tsx).
 function useRegnskap(): { oppgaver: Oppgave[]; laster: boolean } {
   const { org } = useKonto();
-  const se = harFunksjon(org, "regnskap") && kanSeRegnskap(org?.rolle) && org?.type !== "regnskapsbyraa";
+  const se = harFunksjon(org, "regnskap") && kanSeRegnskap(org) && org?.type !== "regnskapsbyraa";
   const status = useData(
     () =>
       se

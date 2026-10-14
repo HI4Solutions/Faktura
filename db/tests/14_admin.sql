@@ -68,8 +68,10 @@ select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'fakturaer')::i
 select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'epost')::int, 1, 'på e-post');
 select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'ehf')::int, 1, 'som EHF');
 select test.er(current_setting('test.d')::jsonb ?| array['fakturert', 'utestaende'], false, 'ingen beløp');
-select test.er((select count(*)::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'funksjoner') x where (x ->> 'aktiv')::boolean), 13,
+select test.er((select count(*)::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'funksjoner') x where (x ->> 'aktiv')::boolean), 14,
                'alle funksjonene er på');
+select test.er((select count(distinct x ->> 'modul')::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'funksjoner') x), 4,
+               'funksjonene i de fire modulene');
 select test.er(current_setting('test.d')::jsonb -> 'medlemmer' -> 0 ->> 'epost', 'adminside@test.no', 'eieren er medlem');
 select test.er(current_setting('test.d')::jsonb -> 'medlemmer' -> 0 ->> 'rolle', 'eier', 'som eier');
 select test.er(current_setting('test.d')::jsonb -> 'kontonr_endringer' -> 0 ->> 'fra', '86011117947', 'siste kontonummerendring fra');

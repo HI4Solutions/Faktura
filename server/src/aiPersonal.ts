@@ -379,7 +379,7 @@ async function fravaer(k: PKontekst, ai: Partial<PersonalKommando>): Promise<PSv
   // registrerer den med timene, så assistenten åpner timebanken i stedet for å foreslå fraværet.
   if (type === "avspasering") {
     const paa = (await en<{ paa: boolean }>(k.db, "select faktura.timebank_paa($1) as paa", [k.orgId]))?.paa;
-    if (!paa) return { tekst: "Timebanken er ikke slått på (Innstillinger → Ansatte og timer)." };
+    if (!paa) return { tekst: "Timebanken er ikke slått på (Innstillinger → Personal → Timebank)." };
     return h.selv && !k.p.kan.personal
       ? { tekst: "Åpner timebanken. Der søker du om avspasering, med timene den tar fra banken.", gaa_til: "/timer?fane=timebank" }
       : { tekst: `Åpner timebanken til ${h.a.navn}. Der registrerer du avspaseringen, med timene den tar fra banken.`, gaa_til: `/timer?fane=timebank&ansatt=${h.a.id}` };

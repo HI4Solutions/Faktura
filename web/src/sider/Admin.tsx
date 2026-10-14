@@ -86,7 +86,7 @@ const kontoMerke = (s: Bruker["status"]) =>
 type Fane = "oversikt" | "organisasjoner" | "drift";
 // En bruker i en organisasjon, med rollen der.
 type OrgBruker = Bruker & { rolle: string };
-const ROLLEREKKE = ["eier", "admin", "fakturerer", "regnskap", "les", "ansatt"];
+const ROLLEREKKE = ["eier", "admin", "fakturerer", "tilpasset", "regnskap", "les", "ansatt"];
 const rolleRekke = (r: string) => (ROLLEREKKE.includes(r) ? ROLLEREKKE.indexOf(r) : ROLLEREKKE.length);
 // Funksjonene organisasjonene kan ha tilgang til (0041_funksjoner.sql).
 type Funksjon = { kode: string; navn: string; beskrivelse: string; krever: string | null; standard: boolean; modul?: string };
@@ -100,7 +100,9 @@ type Funksjonsoversikt = {
 const statusMerke: Record<string, string> = { ny: "merke-advarsel", verifisert: "merke-ok", sperret: "merke-fare" };
 const statusTekst: Record<string, string> = { ny: "Ikke verifisert", verifisert: "Verifisert", sperret: "Sperret" };
 const metodeTekst: Record<string, string> = { epostdomene: "e-postdomene", brreg_epost: "e-posten i Enhetsregisteret", manuell: "manuelt" };
-const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les", ansatt: "ansatt" };
+const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les", ansatt: "ansatt", tilpasset: "egen rolle" };
+// Rollen i organisasjonen, med navnet på den egne rollen (0111_tilgangsroller.sql) når den er med.
+const rollenTil = (m: { rolle: string; tilgangsrolle?: string | null }) => (m.rolle === "tilpasset" && m.tilgangsrolle ? m.tilgangsrolle : (rolleTekst[m.rolle] ?? m.rolle));
 const integrasjonTekst: Record<string, string> = { peppol: "EHF (Recommand)", bank: "Enable Banking", google_drive: "Google Disk", fiken: "Fiken", tripletex: "Tripletex", poweroffice: "PowerOffice", visma: "Visma" };
 
 // «for 5 min siden», «for 3 t siden», «for 2 dager siden», ellers datoen.
@@ -668,7 +670,7 @@ function OrgDetaljer({ id, brukere, apne, endret }: { id: string; brukere?: Bruk
               return (
                 <li key={m.epost}>
                   <span>
-                    <strong>{m.navn ?? m.epost}</strong> <span className="dempet liten">({rolleTekst[m.rolle] ?? m.rolle})</span>
+                    <strong>{m.navn ?? m.epost}</strong> <span className="dempet liten">({rollenTil(m)})</span>
                     {b && b.status !== "godkjent" && <> {kontoMerke(b.status)}</>}
                     <span className="dempet liten">
                       {" · "}
@@ -851,8 +853,12 @@ function SlettedeOrganisasjoner() {
   );
 }
 
-// Funksjonene én organisasjon har tilgang til: slå av og på (lagres med en gang).
-function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: (Omit<Funksjon, "standard"> & { aktiv: boolean })[] }) {
+// Modulene og funksjonene én organisasjon har tilgang til (0110_moduler.sql): hver modul slås av og
+// på med kjernen sin (fakturaene, ansatte og timer, lønnen og regnskapet), og funksjonene i modulen
+// står under den når den er på. Lagres med en gang.
+type OrgFunksjon = Omit<Funksjon, "standard"> & { aktiv: boolean };
+function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: OrgFunksjon[] }) {
+  const moduler = useModuler();
   const [aktive, settAktive] = useState(() => new Set(funksjoner.filter((f) => f.aktiv).map((f) => f.kode)));
   const h = useHandling();
   if (!funksjoner.length) return null;
@@ -863,29 +869,67 @@ function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: (Omit<Funks
     const r = await h.kjor(() => api<{ aktive: string[] }>("PUT", `/admin/organisasjoner/${id}/funksjoner`, { [kode]: aktiv }));
     settAktive(r ? new Set(r.aktive) : for_);
   };
+  const rad = (f: OrgFunksjon) => {
+    const mangler = f.krever && !aktive.has(f.krever) ? funksjoner.find((x) => x.kode === f.krever)?.navn : null;
+    return (
+      <li key={f.kode}>
+        <label className={mangler ? "dempet" : undefined}>
+          <input type="checkbox" checked={aktive.has(f.kode)} onChange={(e) => void sett(f.kode, e.target.checked)} />
+          <span>
+            <strong>{f.navn}</strong>
+            <span className="dempet liten"> · {f.beskrivelse}</span>
+            {mangler && <span className="liten advarsel-tekst"> · virker bare med {mangler}</span>}
+          </span>
+        </label>
+      </li>
+    );
+  };
+  const medKjerne = (moduler ?? []).filter((m) => m.kjerne && funksjoner.some((f) => f.kode === m.kjerne));
+  // Uten modullista (eldre server) som før: alle funksjonene i én liste.
+  if (!medKjerne.length)
+    return (
+      <section>
+        <h3>Funksjoner</h3>
+        <ul className="admin-rader funksjon-liste">{funksjoner.map(rad)}</ul>
+        <Feil melding={h.feil} />
+      </section>
+    );
+  const kjerner = new Set(medKjerne.map((m) => m.kjerne));
+  const utenModul = funksjoner.filter((f) => !kjerner.has(f.kode) && !medKjerne.some((m) => m.kode === f.modul));
   return (
     <section>
-      <h3>Funksjoner</h3>
+      <h3>Moduler og funksjoner</h3>
       <p className="liten dempet" style={{ marginTop: 0 }}>
-        Hva organisasjonen har tilgang til. Fakturaer, kunder og produkter har alle. Endringen gjelder med en gang.
+        Modulene organisasjonen har tilgang til, og funksjonene i hver. Bedriften gir modulene videre til rollene sine. Endringen gjelder med en gang.
       </p>
-      <ul className="admin-rader funksjon-liste">
-        {funksjoner.map((f) => {
-          const mangler = f.krever && !aktive.has(f.krever) ? funksjoner.find((x) => x.kode === f.krever)?.navn : null;
+      <div className="modul-blokker">
+        {medKjerne.map((m) => {
+          const pa = aktive.has(m.kjerne!);
+          const grunn = m.krever ? medKjerne.find((x) => x.kode === m.krever) : undefined;
+          const mangler = grunn && !aktive.has(grunn.kjerne!) ? grunn.navn : null;
+          // Av: bare funksjonene som virker uten modulen (f.eks. banken, som regnskapet også bruker).
+          const andre = funksjoner.filter((f) => f.modul === m.kode && f.kode !== m.kjerne && (pa || f.krever !== m.kjerne));
           return (
-            <li key={f.kode}>
-              <label className={mangler ? "dempet" : undefined}>
-                <input type="checkbox" checked={aktive.has(f.kode)} onChange={(e) => void sett(f.kode, e.target.checked)} />
+            <div key={m.kode} className={`modul-blokk${pa ? " pa" : ""}`}>
+              <label className={`modul-hode${mangler ? " dempet" : ""}`}>
+                <input type="checkbox" aria-label={`Modulen ${m.navn}`} checked={pa} onChange={(e) => void sett(m.kjerne!, e.target.checked)} />
                 <span>
-                  <strong>{f.navn}</strong>
-                  <span className="dempet liten"> · {f.beskrivelse}</span>
+                  <strong>{m.navn}</strong>
+                  <span className="dempet liten"> · {m.beskrivelse}</span>
                   {mangler && <span className="liten advarsel-tekst"> · virker bare med {mangler}</span>}
                 </span>
               </label>
-            </li>
+              {andre.length > 0 && <ul className="admin-rader funksjon-liste">{andre.map(rad)}</ul>}
+            </div>
           );
         })}
-      </ul>
+      </div>
+      {utenModul.length > 0 && (
+        <>
+          <h4>Annet</h4>
+          <ul className="admin-rader funksjon-liste">{utenModul.map(rad)}</ul>
+        </>
+      )}
       <Feil melding={h.feil} />
     </section>
   );

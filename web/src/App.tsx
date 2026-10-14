@@ -1,10 +1,12 @@
-import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { updateProfile } from "firebase/auth";
 import { hentAuth } from "./firebase";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster, Tom } from "./felles";
-import { KontoProvider, erAdmin, erAnsatt, harFunksjon, kanSePersonal, kanSeRegnskap, kanSkrive, timerOgFerie, useKonto, type Funksjon } from "./konto";
+import {
+  KontoProvider, erAdmin, erAnsatt, harFunksjon, kanLonn, kanPersonal, kanSeLonn, kanSePersonal, kanSeRegnskap, kanSkrive, timerOgFerie, useKonto, visFakturadelen, type Funksjon,
+} from "./konto";
 import { Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
 import { BekreftEpost, BekreftLenke } from "./sider/Bekreftelse";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
@@ -14,7 +16,7 @@ import { Kunder, Produkter } from "./sider/Register";
 import { Importer } from "./sider/Importer";
 import { FakturaSkjema, FakturaVisning, Fakturaliste } from "./sider/Fakturaer";
 import { FlereFakturaer } from "./sider/Flere";
-import { Innstillinger } from "./sider/Innstillinger";
+import { Innstillinger, innstillingFaner, valgtInnstilling, type InnstillingFane } from "./sider/Innstillinger";
 import { Verifisering } from "./sider/Verifisering";
 import { Admin } from "./sider/Admin";
 import { Gjentakende } from "./sider/Gjentakende";
@@ -41,7 +43,8 @@ import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
   IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
   IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva,
-  IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSkjold, IkonTavle, IkonTimebank, IkonUtgift, IkonVelg,
+  IkonNed, IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSkjerm, IkonSkjold, IkonTavle, IkonTimebank,
+  IkonUtgift, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -55,6 +58,49 @@ const initialer = (navn: string) =>
 const orgType: Record<string, string> = { foretak: "Foretak", regnskapsbyraa: "Regnskapsbyrå", privatperson: "Privatperson" };
 // Antall nye beskjeder (99+ over det).
 const UlesteTall = ({ n }: { n: number }) => (n > 0 ? <span className="ulest-tall" aria-label={`${n} nye`}>{n > 99 ? "99+" : n}</span> : null);
+
+// Punktene i sidemenyen, i kategorier (Plattform, Innstillinger, Faktura, Personal, Lønn, Regnskap).
+type MenyIkon = (p: { storrelse?: number }) => ReactNode;
+type MenyPunkt = { til: string; Ikon: MenyIkon; tekst: string; aktiv: boolean; teller?: number; klikk?: () => void };
+type MenyKategoriData = { navn: string; punkter: MenyPunkt[]; aktiv: boolean };
+
+function MenyLenke({ x }: { x: MenyPunkt }) {
+  if (x.klikk)
+    return (
+      <a href="#" onClick={(e) => (e.preventDefault(), x.klikk!())}>
+        <x.Ikon />
+        {x.tekst}
+      </a>
+    );
+  return (
+    <Link to={x.til} className={x.aktiv ? "active" : undefined} aria-current={x.aktiv ? "page" : undefined}>
+      <x.Ikon />
+      {x.tekst}
+      <UlesteTall n={x.teller ?? 0} />
+    </Link>
+  );
+}
+
+// En kategori som foldes ut og sammen med overskriften. Lukket viser den antall nye (beskjedene),
+// og en prikk når siden man er på, ligger i den.
+function MenyKategori({ k, apen, veksle }: { k: MenyKategoriData; apen: boolean; veksle: () => void }) {
+  const id = `meny-${k.navn.toLowerCase().replace(/[^a-z0-9æøå]+/g, "-")}`;
+  const teller = k.punkter.reduce((n, x) => n + (x.teller ?? 0), 0);
+  return (
+    <div className={`meny-gruppe${apen ? " apen" : ""}`}>
+      <button type="button" className={`meny-kategori${k.aktiv && !apen ? " har-aktiv" : ""}`} aria-expanded={apen} aria-controls={id} onClick={veksle}>
+        <span className="meny-kategori-navn">{k.navn}</span>
+        {!apen && <UlesteTall n={teller} />}
+        <IkonNed storrelse={16} />
+      </button>
+      <div id={id} className="meny-punkter" hidden={!apen}>
+        {k.punkter.map((x) => (
+          <MenyLenke key={x.til} x={x} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // En side som hører til en funksjon organisasjonen ikke har (funksjonene i Administrasjon).
 function Krever({ kode, navn, children }: { kode: Funksjon | Funksjon[]; navn: string; children: ReactNode }) {
@@ -136,6 +182,15 @@ function Ramme() {
   const { meg, org, velgOrg, loggUt } = useKonto();
   const [ny, settNy] = useState(false);
   const [menyApen, settMenyApen] = useState(false);
+  // Kategoriene i sidemenyen som er åpne (lukket som standard).
+  const [apne, settApne] = useState<ReadonlySet<string>>(() => new Set());
+  const veksle = (navn: string) =>
+    settApne((a) => {
+      const n = new Set(a);
+      if (n.has(navn)) n.delete(navn);
+      else n.add(navn);
+      return n;
+    });
   const { kanInstallere } = usePwa();
   useVarselNavigering();
   const sted = useLocation();
@@ -174,24 +229,28 @@ function Ramme() {
   }, []);
   const orgs = meg?.organisasjoner ?? [];
   // Ansatte (rollen ansatt) ser bare timene sine. Ellers: Ansatte og Timer når det er slått på.
-  const ansatt = erAnsatt(org?.rolle);
-  const visAnsatte = !ansatt && !!org?.personal && kanSePersonal(org.rolle);
-  const visTimer = ansatt || (!!org?.personal && (kanSePersonal(org.rolle) || !!org.ansatt_id));
+  const ansatt = erAnsatt(org);
+  const visAnsatte = !ansatt && !!org?.personal && kanSePersonal(org);
+  const visTimer = ansatt || (!!org?.personal && (kanSePersonal(org) || !!org.ansatt_id));
   const visVakter = harFunksjon(org, "vaktplan");
-  // Feriebanken: eier og administrator ser alle, den ansatte seg selv (regnskap ser den ikke).
-  const visFerie = visVakter && !!org?.personal && (ansatt || erAdmin(org.rolle));
+  // Feriebanken: eier og administrator (og en egen rolle med Personal) ser alle, den ansatte seg
+  // selv (regnskap ser den ikke).
+  const visFerie = visVakter && !!org?.personal && (ansatt || kanPersonal(org));
   // Beskjeder til rollene: alle i organisasjonen, når Ansatte og timer er slått på. Telleren viser
   // de nye (ikke mens man er på siden).
   const visBeskjeder = !!org?.personal;
-  // Lønn: eier, administrator og regnskap ser lønnskjøringene, og den som er ansatt, sine egne
-  // lønnsslipper (funksjonen «Lønn» bygger på ansatte og timer).
-  const visLonn = harFunksjon(org, "lonn") && !!org?.personal && ((!ansatt && kanSePersonal(org.rolle)) || !!org.ansatt_id);
+  // Lønn: eier, administrator og regnskap (og en egen rolle med Lønn) ser lønnskjøringene, og den
+  // som er ansatt, sine egne lønnsslipper (funksjonen «Lønn» bygger på ansatte og timer).
+  const visLonn = harFunksjon(org, "lonn") && !!org?.personal && ((!ansatt && kanSeLonn(org)) || !!org.ansatt_id);
+  // Fakturaene, kundene og produktene: modulen Faktura, for dem som ser fakturaene.
+  const visFaktura = visFakturadelen(org);
   // Rapporter (felles rapportmodul): fakturarapportene med funksjonen «Rapporter», og personal- og
   // lønnsrapportene for eier, administrator og regnskap. Serveren velger rapport for rapport.
   // Regnskap (anleggsmidlene og saldoavskrivningene): eier, administrator og regnskap.
-  const visRegnskap = !ansatt && harFunksjon(org, "regnskap") && kanSeRegnskap(org?.rolle);
+  const visRegnskap = !ansatt && harFunksjon(org, "regnskap") && kanSeRegnskap(org);
   const visRapporter =
-    !ansatt && (harFunksjon(org, "rapporter") || visRegnskap || (kanSePersonal(org?.rolle) && (harFunksjon(org, "ansatte") || harFunksjon(org, "lonn"))));
+    !ansatt &&
+    ((visFaktura && harFunksjon(org, "rapporter")) || visRegnskap || (kanSePersonal(org) && harFunksjon(org, "ansatte")) || (kanSeLonn(org) && harFunksjon(org, "lonn")));
   const uleste = useUlesteBeskjeder(org?.id, visBeskjeder);
   const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
   // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
@@ -289,14 +348,8 @@ function Ramme() {
       </Link>
     );
   };
-  const personalmeny = !ansatt && iPersonal && (visAnsatte || visTimer || visBeskjeder);
-  // En fane på en side som eget punkt i menyen (Regnskap og Plattform).
-  const fanePunkt = (til: string, aktiv: boolean, Ikon: (p: { storrelse?: number }) => ReactNode, tekst: string) => (
-    <Link key={til} to={til} className={aktiv ? "active" : undefined} aria-current={aktiv ? "page" : undefined}>
-      <Ikon />
-      {tekst}
-    </Link>
-  );
+  // Bunnmenyen viser personaldelen på personalsidene, og alltid når fakturadelen ikke er med.
+  const personalmeny = !ansatt && (iPersonal || (!visFaktura && org?.type !== "regnskapsbyraa")) && (visAnsatte || visTimer || visBeskjeder);
   // Regnskapet er en egen seksjon i menyen, med fanene på Regnskap som punkter (Regnskap.tsx; uten
   // fane i adressen er det bilagene).
   const regnskapFane = sted.pathname === "/regnskap" ? (her.get("fane") ?? "bilag") : null;
@@ -320,6 +373,91 @@ function Ramme() {
     ["/admin?fane=organisasjoner", "Organisasjoner", ["organisasjoner", "funksjoner", "brukere"], IkonSkjold],
     ["/admin?fane=drift", "Drift", ["drift"], IkonDrift],
   ];
+
+  // Sidemenyen: Oversikt øverst, så kategoriene: Plattform (plattformadministratoren),
+  // Innstillinger, og modulene (Faktura, Personal, Lønn, Regnskap og Rapporter; de ansatte har
+  // sine egne grupper). Kategoriene foldes ut og sammen og er lukket som standard; den med siden man
+  // er på, åpnes når man kommer dit. En kategori med ett punkt er en vanlig lenke.
+  const punkt = (til: string, Ikon: MenyIkon, tekst: string, aktiv: boolean, teller?: number): MenyPunkt => ({ til, Ikon, tekst, aktiv, teller });
+  const kategori = (navn: string, punkter: (MenyPunkt | false | null | undefined)[], aktiv = false): MenyKategoriData => {
+    const p = punkter.filter((x): x is MenyPunkt => !!x);
+    return { navn, punkter: p, aktiv: aktiv || p.some((x) => x.aktiv) };
+  };
+  const innstilling = sted.pathname === "/innstillinger" && org ? valgtInnstilling(org, orgs, her, sted.hash).fane : null;
+  const innstillingIkon: Record<InnstillingFane, MenyIkon> = {
+    organisasjon: IkonInnstillinger,
+    faktura: IkonFaktura,
+    personal: IkonAnsatte,
+    lonn: IkonLonn,
+    konto: IkonPerson,
+    app: IkonSkjerm,
+  };
+  // Lønnen: fanene på Lønn som punkter (Lonn.tsx); lederen ser kjøringene først, ellers egne slipper.
+  const lonnLeder = !ansatt && kanSeLonn(org);
+  const kategorier = [
+    meg?.plattformadmin &&
+      kategori(
+        "Plattform",
+        plattformPunkter.map(([til, tekst, faner, Ikon]) => punkt(til, Ikon, tekst, !!adminFane && faner.includes(adminFane))),
+        sted.pathname === "/admin",
+      ),
+    kategori(
+      "Innstillinger",
+      [
+        ...(org ? innstillingFaner(org).map(([v, tekst]) => punkt(`/innstillinger?fane=${v}`, innstillingIkon[v], tekst, innstilling === v)) : []),
+        // Bare eier og administrator verifiserer (Verifisering.tsx).
+        org?.verifisering === "ny" && org.direkte_medlem && erAdmin(org) && punkt("/verifisering", IkonSkjold, "Verifiser organisasjon", sted.pathname === "/verifisering"),
+        kanInstallere && { ...punkt("#installer", IkonInstaller, "Installer appen", false), klikk: () => void installer() },
+      ],
+      sted.pathname === "/innstillinger",
+    ),
+    ...(org && !ansatt
+      ? [
+          visFaktura &&
+            kategori("Faktura", [
+              punkt("/fakturaer", IkonFaktura, "Fakturaer", iFakturadelen(sted.pathname)),
+              punkt("/kunder", IkonKunder, "Kunder", sted.pathname.startsWith("/kunder")),
+              punkt("/produkter", IkonProdukter, "Produkter", sted.pathname.startsWith("/produkter")),
+            ]),
+          kategori("Personal", [
+            visAnsatte && punkt("/ansatte", IkonAnsatte, "Ansatte", sted.pathname.startsWith("/ansatte")),
+            visTimer && visVakter && punkt("/vakter", IkonKalender, "Vaktplan", sted.pathname === "/vakter"),
+            visTimer && punkt("/timer", IkonKlokke, timerOgFerie(org) ? "Timer og ferie" : "Timer", iTimerOgFerie),
+            visBeskjeder && punkt("/beskjeder", IkonBjelle, "Beskjeder", sted.pathname === "/beskjeder", nyeBeskjeder),
+          ]),
+          visLonn &&
+            kategori(
+              "Lønn",
+              [
+                lonnLeder && punkt("/lonn?fane=kjoringer", IkonLonn, "Lønnskjøringer", paa("/lonn", "kjoringer", true)),
+                lonnLeder && punkt("/lonn?fane=amelding", IkonRapport, "A-melding", paa("/lonn", "amelding")),
+                lonnLeder && kanLonn(org) && punkt("/lonn?fane=sykepenger", IkonFravaer, "Sykepenger", paa("/lonn", "sykepenger")),
+                lonnLeder && punkt("/lonn?fane=aar", IkonKalender, "Årsoversikt", paa("/lonn", "aar")),
+                lonnLeder && punkt("/lonn?fane=reiser", IkonReise, "Reiser", paa("/lonn", "reiser")),
+                !!org.ansatt_id && punkt("/lonn?fane=mine", IkonPerson, "Mine lønnsslipper", paa("/lonn", "mine", !lonnLeder)),
+                !!org.ansatt_id && !lonnLeder && punkt("/lonn?fane=reiser", IkonReise, "Mine reiser", paa("/lonn", "reiser")),
+              ],
+              sted.pathname === "/lonn" || sted.pathname.startsWith("/skattekort"),
+            ),
+          // Regnskap og Rapporter: ikke for byrået selv (klientene har sine).
+          visRegnskap &&
+            org.type !== "regnskapsbyraa" &&
+            kategori(
+              "Regnskap",
+              regnskapPunkter.map(([fane, tekst, Ikon]) => punkt(fane === "bilag" ? "/regnskap" : `/regnskap?fane=${fane}`, Ikon, tekst, regnskapFane === fane)),
+              sted.pathname === "/regnskap",
+            ),
+          visRapporter && org.type !== "regnskapsbyraa" && kategori("Rapporter", [punkt("/rapporter", IkonRapport, "Rapporter", sted.pathname === "/rapporter")]),
+        ]
+      : []),
+    ...(org && ansatt ? ansattGrupper.map(([navn, punkter]) => kategori(navn, punkter.map((x) => punkt(x.til, x.Ikon, x.tekst, x.aktiv, x.teller)))) : []),
+  ].filter((k): k is MenyKategoriData => !!k && k.punkter.length > 0);
+  const aktivKategori = kategorier.find((k) => k.aktiv && k.punkter.length > 1)?.navn ?? null;
+
+  // Kategorien med siden man er på, åpnes når man kommer dit (også om den var lukket).
+  useEffect(() => {
+    if (aktivKategori) settApne((a) => (a.has(aktivKategori) ? a : new Set(a).add(aktivKategori)));
+  }, [aktivKategori, sted.pathname, sted.search]);
 
   // Plattformadministratoren kommer inn også uten organisasjon (til sin egen oversikt).
   if (ny || (orgs.length === 0 && !meg?.plattformadmin)) {
@@ -405,13 +543,13 @@ function Ramme() {
             )}
           </>
         )}
-        {org && !ansatt && !personalmeny && org.type !== "regnskapsbyraa" && (
+        {org && !ansatt && !personalmeny && visFaktura && (
           <>
             <NavLink to="/fakturaer" end={false} className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
               <IkonFaktura storrelse={22} />
               <span>Fakturaer</span>
             </NavLink>
-            {kanSkrive(org?.rolle) && (
+            {kanSkrive(org) && (
               <NavLink to="/fakturaer/ny" className="ny" aria-label="Ny faktura">
                 <span className="pluss">
                   <IkonPluss storrelse={24} />
@@ -455,7 +593,8 @@ function Ramme() {
           <div style={{ minWidth: 0 }}>
             <div className="navn">{org?.navn ?? "Ingen organisasjon"}</div>
             <div className="type">
-              {org ? (ansatt ? "Ansatt" : orgType[org.type] ?? org.type) : "Plattformadministrator"}
+              {/* Med en egen rolle: navnet på rollen (f.eks. Personalansvarlig). */}
+              {org ? (org.rolle === "tilpasset" && org.tilgangsrolle ? org.tilgangsrolle : ansatt ? "Ansatt" : (orgType[org.type] ?? org.type)) : "Plattformadministrator"}
               {org && !org.direkte_medlem ? " · klient" : ""}
             </div>
           </div>
@@ -477,135 +616,39 @@ function Ramme() {
             <option value="__ny">+ Ny organisasjon</option>
           </select>
         </div>
-        {/* Oversikt øverst: forsiden for hver rolle (de ansatte har sin egen, AnsattOversikt.tsx; et
-            regnskapsbyrå ser klientene). Resten i seksjoner. */}
-        {org && (
-          <NavLink to="/" end>
-            <IkonOversikt />
-            {org.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}
-          </NavLink>
-        )}
-        {meg?.plattformadmin && (
-          <>
-            <div className="meny-seksjon">Plattform</div>
-            {plattformPunkter.map(([til, tekst, faner, Ikon]) => fanePunkt(til, !!adminFane && faner.includes(adminFane), Ikon, tekst))}
-          </>
-        )}
-        {org &&
-          (ansatt ? (
-            ansattGrupper.map(([navn, punkter]) => (
-              <Fragment key={navn}>
-                <div className="meny-seksjon">{navn}</div>
-                {punkter.map((x) => ansattLenke(x))}
-              </Fragment>
-            ))
-          ) : (
-            <>
-              {org.type !== "regnskapsbyraa" && (
-                <>
-                  <div className="meny-seksjon">Faktura</div>
-                  {/* Gjentakende og innbetalinger ligger under Fakturaer (fakturameny.tsx). */}
-                  <NavLink to="/fakturaer" className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
-                    <IkonFaktura />
-                    Fakturaer
-                  </NavLink>
-                  <NavLink to="/kunder">
-                    <IkonKunder />
-                    Kunder
-                  </NavLink>
-                  <NavLink to="/produkter">
-                    <IkonProdukter />
-                    Produkter
-                  </NavLink>
-                </>
-              )}
-              {(visAnsatte || visTimer || visBeskjeder) && (
-                <>
-                  <div className="meny-seksjon">Personal</div>
-                  {visAnsatte && (
-                    <NavLink to="/ansatte">
-                      <IkonAnsatte />
-                      Ansatte
-                    </NavLink>
-                  )}
-                  {visTimer && visVakter && (
-                    <NavLink to="/vakter">
-                      <IkonKalender />
-                      Vaktplan
-                    </NavLink>
-                  )}
-                  {visTimer && (
-                    <NavLink to="/timer" className={({ isActive }) => (isActive || iTimerOgFerie ? "active" : undefined)}>
-                      <IkonKlokke />
-                      {timerOgFerie(org) ? "Timer og ferie" : "Timer"}
-                    </NavLink>
-                  )}
-                  {visLonn && (
-                    <NavLink to="/lonn">
-                      <IkonLonn />
-                      Lønn
-                    </NavLink>
-                  )}
-                  {visBeskjeder && (
-                    <NavLink to="/beskjeder">
-                      <IkonBjelle />
-                      Beskjeder
-                      <UlesteTall n={nyeBeskjeder} />
-                    </NavLink>
-                  )}
-                </>
-              )}
-              {/* Regnskap og Rapporter: ikke for byrået selv (klientene har sine). */}
-              {visRegnskap && org.type !== "regnskapsbyraa" && (
-                <>
-                  <div className="meny-seksjon">Regnskap</div>
-                  {regnskapPunkter.map(([fane, tekst, Ikon]) => fanePunkt(fane === "bilag" ? "/regnskap" : `/regnskap?fane=${fane}`, regnskapFane === fane, Ikon, tekst))}
-                </>
-              )}
-              {visRapporter && org.type !== "regnskapsbyraa" && (
-                <>
-                  <div className="meny-seksjon">Rapporter</div>
-                  <NavLink to="/rapporter">
-                    <IkonRapport />
-                    Rapporter
-                  </NavLink>
-                </>
-              )}
-            </>
-          ))}
-        {/* Uten organisasjon (plattformadministratoren) er det ikke noe under Konto, bortsett fra å installere appen. */}
-        {(org || kanInstallere) && <div className="meny-seksjon">Konto</div>}
-        {org && (
-          <NavLink to="/innstillinger">
-            <IkonInnstillinger />
-            Innstillinger
-          </NavLink>
-        )}
-        {org?.verifisering === "ny" && org.direkte_medlem && !ansatt && (
-          <NavLink to="/verifisering">
-            <IkonSkjold />
-            Verifiser organisasjon
-          </NavLink>
-        )}
-        {kanInstallere && (
-          <a href="#" onClick={(e) => (e.preventDefault(), void installer())}>
-            <IkonInstaller />
-            Installer appen
-          </a>
-        )}
-        <div className="meny-tema">
-          <span>Utseende</span>
-          <TemaBryter />
+        {/* Lista ruller, og bunnen (utseende, navn og logg ut) står fast. Oversikt øverst: forsiden
+            for hver rolle (de ansatte har sin egen, AnsattOversikt.tsx; et regnskapsbyrå ser
+            klientene). */}
+        <div className="meny-liste">
+          {org && (
+            <NavLink to="/" end>
+              <IkonOversikt />
+              {org.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}
+            </NavLink>
+          )}
+          {kategorier.map((k) =>
+            k.punkter.length === 1 ? (
+              <MenyLenke key={k.navn} x={k.punkter[0]!} />
+            ) : (
+              <MenyKategori key={k.navn} k={k} apen={apne.has(k.navn)} veksle={() => veksle(k.navn)} />
+            ),
+          )}
         </div>
-        <div className="bunn">
-          <span className="avatar rund">{initialer(meg?.bruker.navn ?? meg?.bruker.epost ?? "?")}</span>
-          <div className="hvem">
-            <div>{meg?.bruker.navn}</div>
-            <span>{meg?.bruker.epost}</span>
+        <div className="meny-fot">
+          <div className="meny-tema">
+            <span>Utseende</span>
+            <TemaBryter />
           </div>
-          <button className="ikon" onClick={loggUt} title="Logg ut" aria-label="Logg ut">
-            <IkonLoggUt />
-          </button>
+          <div className="bunn">
+            <span className="avatar rund">{initialer(meg?.bruker.navn ?? meg?.bruker.epost ?? "?")}</span>
+            <div className="hvem">
+              <div>{meg?.bruker.navn}</div>
+              <span>{meg?.bruker.epost}</span>
+            </div>
+            <button className="ikon" onClick={loggUt} title="Logg ut" aria-label="Logg ut">
+              <IkonLoggUt />
+            </button>
+          </div>
         </div>
       </nav>
       <main className="innhold" data-modul={iPersonal ? "personal" : undefined}>

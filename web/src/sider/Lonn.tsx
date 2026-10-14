@@ -13,7 +13,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent, lastNed } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
-import { erAdmin, erAnsatt, kanSePersonal, useKonto } from "../konto";
+import { erAdmin, erAnsatt, kanLonn, kanSeLonn, kanSePersonal, useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
 import { IkonLonn, IkonPluss, IkonVarsel, IkonVenstre } from "../ikoner";
 import { apnePdf, maaned } from "../lonn";
@@ -169,14 +169,14 @@ const apneSlipp = (orgId: string, slippId: string) => apnePdf(`/org/${orgId}/lon
 export function Lonn() {
   const { org } = useKonto();
   const [sok, settSok] = useSearchParams();
-  const leder = !erAnsatt(org?.rolle) && kanSePersonal(org?.rolle);
+  const leder = !erAnsatt(org) && kanSeLonn(org);
   const egen = !!org?.ansatt_id;
   // AFP (0098): fanen når organisasjonen er med i Fellesordningen (eller den står i adressen).
   const oppsett = useData(() => (leder && org?.personal ? hent<{ afp?: boolean }>(`/org/${org.id}/lonn-oppsett`) : Promise.resolve(null)), [org?.id, leder]);
   const faner: [string, string][] = [];
   if (leder) faner.push(["kjoringer", "Lønnskjøringer"], ["amelding", "A-melding"], ["aar", "Årsoversikt"]);
   // Sykepenger og NAV: helseopplysninger, så bare eier og administrator.
-  if (leder && erAdmin(org?.rolle)) faner.splice(2, 0, ["sykepenger", "Sykepenger"]);
+  if (leder && kanLonn(org)) faner.splice(2, 0, ["sykepenger", "Sykepenger"]);
   if (leder && (oppsett.data?.afp || sok.get("fane") === "afp")) faner.splice(faner.length - 1, 0, ["afp", "AFP"]);
   // Reiseregningene: de som ser lønnen, ser alle; den ansatte fører og ser sine egne (etter
   // lønnsslippene, som er det den ansatte ser først).
@@ -203,9 +203,9 @@ export function Lonn() {
         <h1>Lønn</h1>
         <div className="kort">
           <Tom ikon={<IkonLonn storrelse={22} />} tittel={!org?.personal ? "Ansatte og timer er ikke slått på" : "Ingen lønnsslipper her"}>
-            {!org?.personal && erAdmin(org?.rolle) ? (
+            {!org?.personal && erAdmin(org) ? (
               <p>
-                Slå det på under <Link to="/innstillinger?fane=personal">Innstillinger → Ansatte og timer</Link>.
+                Slå det på under <Link to="/innstillinger?fane=personal">Innstillinger → Personal</Link>.
               </p>
             ) : (
               <p>Du er ikke registrert som ansatt i {org?.navn}.</p>
@@ -249,7 +249,7 @@ export function Lonn() {
 function Kjoringer({ apne }: { apne: (id: string) => void }) {
   const { org } = useKonto();
   const smal = useSmal();
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const liste = useData(() => hent<KjoringRad[]>(`/org/${org!.id}/lonn/kjoringer`), [org?.id], { oppdater: true });
   const [ny, settNy] = useState(false);
   const status = (k: KjoringRad) => (
@@ -278,7 +278,7 @@ function Kjoringer({ apne }: { apne: (id: string) => void }) {
         <div className="kort">
           <Tom ikon={<IkonLonn storrelse={22} />} tittel="Ingen lønnskjøringer ennå">
             <p>
-              Sjekk at de ansatte har lønn, kontonummer og skattekort, og lønnsoppsettet under <Link to="/innstillinger?fane=personal">Innstillinger → Ansatte og timer</Link>.
+              Sjekk at de ansatte har lønn, kontonummer og skattekort, og lønnsoppsettet under <Link to="/innstillinger?fane=lonn">Innstillinger → Lønn</Link>.
             </p>
             {admin && (
               <button type="button" className="primar" onClick={() => settNy(true)}>
@@ -431,7 +431,7 @@ function NyKjoring({ siste, laget }: { siste: string | null; laget: (id: string)
 
 function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
   const { org } = useKonto();
-  const admin = erAdmin(org?.rolle);
+  const admin = kanLonn(org);
   const k = useData(() => hent<Kjoring>(`/org/${org!.id}/lonn/kjoringer/${id}`), [org?.id, id]);
   useNarDataEndres(() => void k.last());
   const arter = useData(() => hent<Lonnsart[]>(`/org/${org!.id}/lonn/lonnsarter`), [org?.id]);
@@ -668,7 +668,7 @@ function KjoringSide({ id, tilbake }: { id: string; tilbake: () => void }) {
         Fastlønn for arbeidsdagene den ansatte er ansatt, timelønn og overtid fra de godkjente timene som ikke er lønnet, faste tillegg, sykepenger i arbeidsgiverperioden og
         omsorgsdager for dem med timelønn, naturalytelsene, de godkjente reiseregningene og de faste trekkene, og feriepenger i juni. Skattetrekket etter skattekortet (50 % uten skattekort), OTP med {tallTekst(d.otp_prosent)} %, feriepenger med{" "}
         {tallTekst(d.feriepenger_prosent)} % og arbeidsgiveravgift i {soneTekst(d)}. Satsene står under{" "}
-        <Link to="/innstillinger?fane=personal">Innstillinger → Ansatte og timer</Link>.
+        <Link to="/innstillinger?fane=lonn">Innstillinger → Lønn</Link>.
       </p>
 
       <Dialog apen={godkjenn} lukk={() => settGodkjenn(false)} tittel={`Godkjenne lønnen for ${kjoringNavn(d)}?`}>

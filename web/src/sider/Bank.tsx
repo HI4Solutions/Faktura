@@ -300,7 +300,7 @@ export function useHentVedApning() {
     lyttere.add(f);
     return () => void lyttere.delete(f);
   }, []);
-  const skal = Boolean(org && org.type !== "regnskapsbyraa" && harFunksjon(org, "bank") && kanBokfore(org.rolle));
+  const skal = Boolean(org && org.type !== "regnskapsbyraa" && harFunksjon(org, "bank") && kanBokfore(org));
   useEffect(() => {
     if (!skal || !org) return;
     const id = org.id;
@@ -355,7 +355,7 @@ export function BankKobling() {
   const [venter, settVenter] = useState<string | null>(null);
   const [melding, settMelding] = useState<string | null>(null);
   const h = useHandling();
-  const admin = erAdmin(org?.rolle);
+  const admin = erAdmin(org);
 
   // Hvilke kontoer som leses, følger kontonumrene som er lagt inn.
   useEffect(() => {
@@ -777,7 +777,7 @@ export function BankTilbake() {
           const k = (await hent<BankStatus>(`/org/${orgId}/bank`)).koblinger.find((x) => x.id === r.kobling_id);
           if (!k) throw new Error("Banken er fjernet. Legg den til på nytt under Innstillinger → Faktura.");
           if (k.siste_feil) throw new Error(k.siste_feil);
-          if (k.tilkoblet && k.fullfort !== r.forrige) return nav(`/innstillinger?fane=betaling&bank=ok&kobling=${k.id}`, { replace: true });
+          if (k.tilkoblet && k.fullfort !== r.forrige) return nav(`/innstillinger?fane=faktura&del=bank&bank=ok&kobling=${k.id}`, { replace: true });
         }
         throw new Error("Banken svarte ikke i tide. Se statusen under Innstillinger → Faktura.");
       } catch (e) {
@@ -793,8 +793,8 @@ export function BankTilbake() {
       {feil ? (
         <>
           <Feil melding={feil} />
-          <Link className="knapp" to="/innstillinger?fane=betaling">
-            Til Innstillinger → Faktura
+          <Link className="knapp" to="/innstillinger?fane=faktura&del=bank">
+            Til Innstillinger → Faktura → Bank
           </Link>
         </>
       ) : (
@@ -824,7 +824,7 @@ export function Innbetalinger() {
   const [henter, settHenter] = useState(false);
   const [spor, settSpor] = useState<string | null>(null); // innbetalingen AI-en ser på
   const [aiSvar, settAiSvar] = useState<Record<string, string>>({}); // når AI-en ikke fant noen faktura
-  const bokfore = kanBokfore(org?.rolle);
+  const bokfore = kanBokfore(org);
   const henterSelv = useHentVedApning();
 
   const handling = async (sti: string, kropp?: unknown) => {
@@ -879,7 +879,7 @@ export function Innbetalinger() {
       {bank.data && (
         <p className="undertittel">
           {aktive.length ? `Fra ${navnListe(aktive.map((k) => k.bank))}.` : "Banken er ikke koblet til."}{" "}
-          {!aktive.length && erAdmin(org?.rolle) && <Link to="/innstillinger?fane=betaling">Koble til under Innstillinger → Faktura</Link>}
+          {!aktive.length && erAdmin(org) && <Link to="/innstillinger?fane=faktura&del=bank">Koble til under Innstillinger → Faktura → Bank</Link>}
         </p>
       )}
       {bank.data && aktive.some((k) => k.kontoer.length > 0) && (
@@ -904,10 +904,10 @@ export function Innbetalinger() {
         .map((k) => (
           <div key={k.id} className="melding feil">
             {k.bank}: {k.siste_feil}
-            {erAdmin(org?.rolle) && (
+            {erAdmin(org) && (
               <>
                 {" "}
-                <Link to="/innstillinger?fane=betaling">Til Innstillinger → Faktura</Link>
+                <Link to="/innstillinger?fane=faktura&del=bank">Til Innstillinger → Faktura → Bank</Link>
               </>
             )}
           </div>

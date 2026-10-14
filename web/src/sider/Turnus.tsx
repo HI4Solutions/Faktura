@@ -1303,7 +1303,7 @@ function ReglerSkjema({ regler, endret }: { regler: TurnusRegler; endret: () => 
         </label>
       </div>
       <p className="liten dempet">
-        I tillegg: én vakt per døgn, ikke mer enn grensen for alminnelig arbeidstid i uka (Innstillinger → Ansatte og timer), minst 35 timer sammenhengende fri i uka,
+        I tillegg: én vakt per døgn, ikke mer enn grensen for alminnelig arbeidstid i uka (Innstillinger → Personal), minst 35 timer sammenhengende fri i uka,
         og ikke mer enn den avtalte arbeidstiden (stillingsprosenten).
       </p>
       {melding && <div className="melding ok">{melding}</div>}

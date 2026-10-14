@@ -53,7 +53,7 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
 
 ## Hos kunden
 
-1. **Innstillinger → Ansatte og timer → A-melding:** organisasjonsnummeret til virksomheten
+1. **Innstillinger → Lønn → A-melding:** organisasjonsnummeret til virksomheten
    (underenheten i Enhetsregisteret; appen foreslår den når det bare er én) og til
    pensjonsleverandøren når de har OTP.
 2. **På hver ansatt** (Arbeidsforhold i a-meldingen): yrkeskoden (7 siffer, SSBs yrkeskoder
@@ -91,8 +91,8 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
    a-melding, som erstatter den forrige. Rapportene «Avstemming per termin» og «Årsavstemming»
    (Rapporter → Lønn) sammenligner lønnskjøringene, a-meldingene som er levert, og bokføringen.
 4. **Tilgang for innsending fra appen** (når den er slått på): kunder som allerede har koblet til
-   Skatteetaten for skattekortene, trykker «Utvid tilgangen i Altinn» under Innstillinger → Ansatte
-   og timer, og daglig leder godkjenner tilgangspakken «A-ordningen» i Altinn. Nye kunder får den
+   Skatteetaten for skattekortene, trykker «Utvid tilgangen i Altinn» under Innstillinger → Lønn →
+   Skattekort, og daglig leder godkjenner tilgangspakken «A-ordningen» i Altinn. Nye kunder får den
    med en gang de kobler til.
 
 ## Oppsett hos Medinnova (din del)

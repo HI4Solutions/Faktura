@@ -144,7 +144,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten for personal", () => 
 
   it("avspasering: assistenten åpner timebanken (0073) i stedet for å foreslå fravær uten timer", async () => {
     expect(await spor({ handling: "fravaer", fravaerstype: "avspasering", fra_dato: dag }, ola)).toMatchObject({
-      tekst: "Timebanken er ikke slått på (Innstillinger → Ansatte og timer).",
+      tekst: "Timebanken er ikke slått på (Innstillinger → Personal → Timebank).",
       forslag: [],
       gaa_til: null,
     });

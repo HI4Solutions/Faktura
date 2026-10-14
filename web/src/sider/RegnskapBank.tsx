@@ -192,7 +192,7 @@ export function Bank({ apen, apne }: { apen: string | null; apne: (id: string | 
         <div className="kort">
           <Tom ikon={<IkonRegnskap storrelse={22} />} tittel="Ingen bankposter ennå">
             <p>
-              Koble til banken under <Link to="/innstillinger?fane=betaling">Innstillinger → Faktura</Link>. Transaksjonene hentes på de faste hentetidene og når du
+              Koble til banken under <Link to="/innstillinger?fane=faktura&del=bank">Innstillinger → Faktura → Bank</Link>. Transaksjonene hentes på de faste hentetidene og når du
               henter selv, og føres her.
             </p>
           </Tom>

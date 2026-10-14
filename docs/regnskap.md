@@ -426,7 +426,7 @@ Månedsavslutningen går av seg selv (`server/src/maanedsavslutning.ts`, `0092_m
   kladder), lønnen med utbetaling i måneden (godkjent, bokført og levert i a-meldingen, med fristen),
   avskrivningene og periodiseringene (også periodiseringer som venter på starten). Et punkt er bare
   med når organisasjonen bruker det.
-- **Varselet** (push, typen «Månedsavslutningen i regnskapet» under Innstillinger → App) går til
+- **Varselet** (push, typen «Månedsavslutningen i regnskapet» under Innstillinger → App → Varsler) går til
   eier, administrator og regnskapsføreren: det som ble bokført og det som gjenstår.
 - **Månedsrapportene** til regnskapsføreren sendes etter månedsavslutningen, så de får med det som ble
   bokført.

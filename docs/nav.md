@@ -38,7 +38,7 @@ arbeidsgiver).
    den (vanligvis noen minutter). Statusen står på forespørselen: sendt, godkjent eller avvist
    (med årsaken, f.eks. at inntekten avviker fra a-ordningen). En godkjent inntektsmelding kan
    korrigeres: hele meldingen sendes på nytt.
-4. **Lønnen.** Valget under Innstillinger → Ansatte og timer → Lønn («Lønn under sykdom etter
+4. **Lønnen.** Valget under Innstillinger → Lønn → Lønn («Lønn under sykdom etter
    arbeidsgiverperioden») styrer lønnskjøringen:
    - «Vi betaler lønnen og krever refusjon»: fastlønnen går som vanlig, og de med timelønn får de
      planlagte timene (den sykmeldte delen ved gradert sykmelding);
@@ -62,13 +62,13 @@ Koden: `server/src/navSykepenger.ts` (workeren: hentingen, innsendingen og statu
 
 ## Hos kunden
 
-1. **Virksomheten** (underenheten der de ansatte jobber) under Innstillinger → Ansatte og timer →
+1. **Virksomheten** (underenheten der de ansatte jobber) under Innstillinger → Lønn →
    A-melding, og **fødselsnummeret** på de ansatte.
 2. **Tilgang i Altinn.** Kunder som allerede har koblet til Skatteetaten, trykker «Utvid
-   tilgangen i Altinn» under Innstillinger → Ansatte og timer, og daglig leder godkjenner
+   tilgangen i Altinn» under Innstillinger → Lønn → Skattekort, og daglig leder godkjenner
    tilgangspakken «Lønn med personopplysninger av særlig kategori» i Altinn. Nye kunder får den
    med en gang de kobler til.
-3. **Valget for lønn under sykdom** under Innstillinger → Ansatte og timer → Lønn.
+3. **Valget for lønn under sykdom** under Innstillinger → Lønn → Lønn.
 
 ## Oppsett hos Medinnova (din del)
 

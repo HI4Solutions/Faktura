@@ -236,9 +236,9 @@ export function Importer({ type }: { type: Importtype }) {
     }
   }
 
-  if (!(type === "ansatte" ? kanPersonal(org?.rolle) : kanSkrive(org?.rolle))) return <Feil melding={`Du har ikke tilgang til å importere ${o.flere}.`} />;
+  if (!(type === "ansatte" ? kanPersonal(org) : kanSkrive(org))) return <Feil melding={`Du har ikke tilgang til å importere ${o.flere}.`} />;
   if (type === "ansatte" && !org?.personal)
-    return <Feil melding="Ansatte og timer er ikke slått på. Slå det på under Innstillinger → Ansatte og timer." />;
+    return <Feil melding="Ansatte og timer er ikke slått på. Slå det på under Innstillinger → Personal." />;
 
   const tittel = <h1>Importer {o.flere}</h1>;
 

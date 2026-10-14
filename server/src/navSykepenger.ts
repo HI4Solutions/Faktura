@@ -168,7 +168,7 @@ async function ansatteEtterFnr(org: string): Promise<Map<string, { id: string; n
 
 // Varsel til eier og administrator.
 async function varsle(org: string, tittel: string, tekst: string, url: string, tag: string) {
-  const mottakere = await somSystem((db) => alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and rolle in ('eier', 'admin')", [org]));
+  const mottakere = await somSystem((db) => alle<{ bruker_id: string }>(db, "select bruker_id from faktura.medlemmer where org_id = $1 and (rolle in ('eier', 'admin') or faktura.tilpasset_har(org_id, bruker_id, 'lonn'))", [org]));
   if (mottakere.length)
     await leggIKo({ type: "varsel", varsel: { hendelse: "fravaer", org_id: org, bruker_ider: mottakere.map((m) => m.bruker_id), tittel, tekst, url, tag } }).catch(() => undefined);
 }

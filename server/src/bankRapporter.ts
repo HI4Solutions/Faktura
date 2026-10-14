@@ -35,7 +35,7 @@ export const bankRapporter: Rapportdef[] = [
               ].join(" "),
             )
             .join(" ")
-        : "Ingen bankposter er hentet. Koble til banken under Innstillinger → Faktura.";
+        : "Ingen bankposter er hentet. Koble til banken under Innstillinger → Faktura → Bank.";
       return {
         merknad,
         kolonner: [

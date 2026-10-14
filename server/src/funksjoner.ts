@@ -1,15 +1,21 @@
 // Funksjoner per organisasjon (0041_funksjoner.sql): plattformadministratoren velger hvilke
 // organisasjoner som har tilgang til hvilke funksjoner. Rutene under /org/:org som hører til en
 // funksjon, avvises når organisasjonen ikke har den (mellomvaren under), og bakgrunnsjobbene
-// hopper over organisasjonene (harFunksjon). Appen skjuler det som ikke er slått på.
+// hopper over organisasjonene (harFunksjon). Appen skjuler det som ikke er slått på. Modulene
+// (0110_moduler.sql) er kjernefunksjonene: fakturaene (faktura), personalet (ansatte), lønnen
+// og regnskapet. Mellomvaren sier også hvilken modul forespørselen gjelder (modulKontekst i
+// db.ts), så de egne rollene får tilgangen fra riktig modul (0111_tilgangsroller.sql).
 import { Hono, type Context, type Next } from "hono";
 import { z } from "zod";
-import { alle, en, somBetrodd, somBruker, somSystem } from "./db.js";
+import { alle, en, modulKontekst, somBetrodd, somBruker, somSystem } from "./db.js";
 import { ApiFeil } from "./feil.js";
 
 // Rutene (stien etter /org/:org) og funksjonene de krever. En rute kan kreve flere (AI-forslag
 // på en innbetaling krever både AI og bank).
 const RUTER: [RegExp, string][] = [
+  // Fakturaene, kundene og produktene (og AI-fakturaen): modulen Faktura.
+  [/^\/(fakturaer|kunder|produkter|vedlegg|startnummer)(\/|$)/, "faktura"],
+  [/^\/ai\/faktura(\/|$)/, "faktura"],
   [/^\/ehf(\/|$)/, "ehf"],
   [/^\/kunder\/[^/]+\/ehf$/, "ehf"],
   [/^\/fakturaer\/[^/]+\/ehf$/, "ehf"],
@@ -39,24 +45,36 @@ const RUTER: [RegExp, string][] = [
 export const funksjonerFor = (sti: string) => [...new Set(RUTER.filter(([re]) => re.test(sti)).map(([, kode]) => kode))];
 // Funksjonene som bygger på en annen (som i funksjoner.krever): den andre sjekkes først, så
 // feilmeldingen sier hva som mangler.
-const KREVER: Record<string, string> = { vaktplan: "ansatte", lonn: "ansatte" };
+export const KREVER: Record<string, string> = {
+  vaktplan: "ansatte",
+  lonn: "ansatte",
+  ehf: "faktura",
+  gjentakende: "faktura",
+  flere: "faktura",
+  paaminnelser: "faktura",
+  rapporter: "faktura",
+  google_disk: "faktura",
+};
 const medKrav = (koder: string[]) => [...new Set(koder.flatMap((k) => (KREVER[k] ? [KREVER[k]!, k] : [k])))];
 
 // Funksjonene en organisasjon har, husket en liten stund (en endring i administrasjonen tømmer
 // minnet her; andre instanser ser den innen et halvt minutt).
 const MINNE_MS = 30_000;
-const minne = new Map<string, { tid: number; koder: Set<string> }>();
+const minne = new Map<string, { tid: number; koder: Set<string> | null }>();
 export const glemFunksjoner = (org?: string) => (org ? minne.delete(org) : minne.clear());
 
+// null: organisasjonen finnes ikke (er slettet).
 async function funksjonerTil(brukerId: string, org: string) {
   const husket = minne.get(org);
   if (husket && Date.now() - husket.tid < MINNE_MS) return husket.koder;
-  const koder = new Set((await somBruker(brukerId, (db) => en<{ k: string[] }>(db, "select faktura.org_funksjonsliste($1) as k", [org])))!.k);
+  const liste = (await somBruker(brukerId, (db) => en<{ k: string[] | null }>(db, "select faktura.org_funksjonsliste($1) as k", [org])))!.k;
+  const koder = liste ? new Set(liste) : null;
   minne.set(org, { tid: Date.now(), koder });
   return koder;
 }
 
 const NAVN: Record<string, string> = {
+  faktura: "Faktura",
   ehf: "EHF",
   bank: "Bank",
   ai: "AI",
@@ -73,18 +91,31 @@ const NAVN: Record<string, string> = {
 };
 export const ikkePaa = (kode: string) => new ApiFeil(403, `${NAVN[kode] ?? kode} er ikke slått på for organisasjonen`);
 
-// Mellomvare for /org/:org: avviser rutene til funksjoner organisasjonen ikke har.
+// Modulen en rute gjelder, for tilgangen med de egne rollene (faktura.kan): lønnen (og reisene,
+// skattekortene, a-meldingen og NAV) og regnskapet, med rapportene deres. Ellers ingen: da er
+// det Personal som gir tilgangen til personaldataene.
+export function modulFor(sti: string): "lonn" | "regnskap" | null {
+  if (/^\/(lonn|skattekort|amelding|amelding-virksomheter|nav|reiser)(\/|$)/.test(sti) || /^\/rapportmodul\/lonn\./.test(sti)) return "lonn";
+  if (/^\/regnskap(\/|$)/.test(sti) || /^\/rapportmodul\/regnskap\./.test(sti)) return "regnskap";
+  return null;
+}
+
+// Mellomvare for /org/:org: avviser rutene til funksjoner organisasjonen ikke har, og sier
+// hvilken modul forespørselen gjelder.
 export function krevFunksjoner() {
   return async (c: Context, next: Next) => {
     const org = c.req.param("org");
     const sti = c.req.path.replace(/^.*?\/org\/[^/]+/, "") || "/";
     const krever = medKrav(funksjonerFor(sti));
     if (krever.length && org && z.string().uuid().safeParse(org).success) {
+      // Finnes ikke organisasjonen, avgjør tilgangen at det ikke er noe å se (som før).
       const har = await funksjonerTil(c.get("bruker").id, org);
-      const mangler = krever.find((k) => !har.has(k));
+      const mangler = har && krever.find((k) => !har.has(k));
       if (mangler) throw ikkePaa(mangler);
     }
-    await next();
+    const modul = modulFor(sti);
+    if (modul) await modulKontekst.run(modul, next);
+    else await next();
   };
 }
 

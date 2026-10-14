@@ -156,16 +156,20 @@ export function periodeTekst(p: Parameter, v: Valg): string {
 // --- Kjøringen ------------------------------------------------------------------------------------
 
 // Rapportene brukeren kan se i organisasjonen (funksjonen slått på og tilgangen), per modul.
+// Rapportene brukeren kan se: funksjonen er slått på, og brukeren kan det rapporten krever, i
+// modulen rapporten hører til (med en egen rolle gir Lønn tilgangen til lønnsrapportene,
+// 0111_tilgangsroller.sql).
 export async function tilgjengelige(db: Db, org: string): Promise<Rapportdef[]> {
-  const par = [...new Set(RAPPORTER.map((r) => `${r.funksjon}|${r.tilgang}`))];
+  const nokkel = (r: Rapportdef) => `${r.funksjon}|${r.tilgang}|${r.modul}`;
+  const par = [...new Set(RAPPORTER.map(nokkel))];
   const svar = await alle<{ par: string; ok: boolean }>(
     db,
-    `select p as par, faktura.har_funksjon($1, split_part(p, '|', 1)) and faktura.kan($1, split_part(p, '|', 2)) as ok
+    `select p as par, faktura.har_funksjon($1, split_part(p, '|', 1)) and faktura.kan_i_modul($1, split_part(p, '|', 2), split_part(p, '|', 3)) as ok
        from unnest($2::text[]) p`,
     [org, par],
   );
   const ok = new Set(svar.filter((x) => x.ok).map((x) => x.par));
-  return RAPPORTER.filter((r) => ok.has(`${r.funksjon}|${r.tilgang}`));
+  return RAPPORTER.filter((r) => ok.has(nokkel(r)));
 }
 
 export async function kjorRapport(db: Db, org: string, def: Rapportdef, inn: ValgInn): Promise<Rapportresultat> {

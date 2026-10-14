@@ -12,7 +12,7 @@ Funksjonen er skjult til klient-ID-en til Maskinporten er satt (GitHub-variabele
 1. Medinnova har én klient i Maskinporten og ett system i Altinns systemregister (system-ID
    `936564046_lonn`, tilgangspakken «Lønn», `urn:altinn:accesspackage:lonn`). Når a-meldingen
    sendes fra appen, ber systemet også om «A-ordningen» (se [amelding.md](amelding.md)).
-2. Kunden trykker «Koble til Skatteetaten» under Innstillinger → Ansatte og timer. Appen lager en
+2. Kunden trykker «Koble til Skatteetaten» under Innstillinger → Lønn → Skattekort. Appen lager en
    forespørsel om systemtilgang i Altinn, og daglig leder (eller den som har tilgangsstyring i
    Altinn) godkjenner den. Altinn sender brukeren tilbake til `<APP_URL>/skattekort/godkjent`.
 3. Workeren henter et token fra Maskinporten for kundens systembruker, bestiller skattekortene til
@@ -78,7 +78,7 @@ deretter i produksjon.
    Kjør så workflowen «Infrastruktur» (Actions → Infrastruktur → Run workflow).
 6. **Systemet i Altinn.** Plattform → Drift → «Skattekort (Skatteetaten)» → «Registrer
    systemet i Altinn». Det samme oppdaterer navnet og klient-ID-en senere.
-7. **Test.** En testorganisasjon i TT02 kobler til under Innstillinger → Ansatte og timer,
+7. **Test.** En testorganisasjon i TT02 kobler til under Innstillinger → Lønn → Skattekort,
    godkjenner i Altinn TT02 og henter skattekortene til Skatteetatens testpersoner
    (regnearket med testpersoner i dokumentasjonen til API-et). Skattekortene i testmiljøet
    oppdateres hver dag kl. 06.

@@ -733,7 +733,7 @@ export function Bytter({
       <Feil melding={h.feil} />
       {svar.innstilling === "av" && (
         <p className="melding info">
-          Vaktbytte er slått av{leder ? " (Innstillinger → Ansatte og timer)" : ""}. Byttene under er fra før.
+          Vaktbytte er slått av{leder ? " (Innstillinger → Personal → Vaktbytte)" : ""}. Byttene under er fra før.
         </p>
       )}
       {seksjon("Til godkjenning", tilGodkjenning, (b) =>

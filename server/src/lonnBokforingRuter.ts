@@ -1,5 +1,5 @@
 // Bokføringen av lønnen i appen (0078_lonn_bokforing.sql, lonnBokforing.ts): kontoene og valgene
-// (Innstillinger → Ansatte og timer → Bokføring av lønn), og lønnsbilagene for en kjøring (det
+// (Innstillinger → Lønn → Bokføring), og lønnsbilagene for en kjøring (det
 // gjeldende og de som er reversert), med det bilaget blir når kjøringen er godkjent, men ikke
 // bokført (godkjent før bokføringen kom). Eier, administrator og regnskap ser alt; eier og
 // administrator endrer kontoene og bokfører.

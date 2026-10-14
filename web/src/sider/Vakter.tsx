@@ -160,7 +160,7 @@ export function Vakter() {
   const [versjon, settVersjon] = useState(0);
   const endret = () => settVersjon((v) => v + 1);
   useNarDataEndres(endret); // f.eks. vakter, fravær og vikarer fra AI-assistenten
-  const seHelePlanen = kanSePersonal(org?.rolle);
+  const seHelePlanen = kanSePersonal(org);
   const egen = org?.ansatt_id ?? null;
   // Rollene som vises i vaktplanen (dagen, uka og måneden), husket på enheten.
   const rollevalget = useRollevalg(org?.id);
@@ -188,8 +188,8 @@ export function Vakter() {
   const kollegaTilbud = fraKolleger(bytter.data?.bytter, egen);
   const tilSvar =
     (bytter.data?.bytter ?? []).filter((b) => b.status === "tilbudt" && !!egen && b.til_ansatt === egen).length +
-    (kanPersonal(org?.rolle) ? (bytter.data?.bytter ?? []).filter((b) => b.status === "akseptert").length : 0);
-  const tilGodkjenning = kanPersonal(org?.rolle) ? (bytter.data?.bytter ?? []).filter((b) => b.status === "akseptert").length : 0;
+    (kanPersonal(org) ? (bytter.data?.bytter ?? []).filter((b) => b.status === "akseptert").length : 0);
+  const tilGodkjenning = kanPersonal(org) ? (bytter.data?.bytter ?? []).filter((b) => b.status === "akseptert").length : 0;
 
   const faner: [string, ReactNode][] = [];
   // Vaktplanen har dagen, uka og måneden (måneden er bemanningskalenderen, Bemanning.tsx).
@@ -278,9 +278,9 @@ export function Vakter() {
         <h1>Vaktplan</h1>
         <div className="kort">
           <Tom ikon={<IkonKalender storrelse={22} />} tittel={!org?.personal ? "Vaktplanen er ikke slått på" : "Du har ingen vakter her"}>
-            {!org?.personal && erAdmin(org?.rolle) ? (
+            {!org?.personal && erAdmin(org) ? (
               <p>
-                Slå på ansatte og timer under <Link to="/innstillinger?fane=personal">Innstillinger → Ansatte og timer</Link>.
+                Slå på ansatte og timer under <Link to="/innstillinger?fane=personal">Innstillinger → Personal</Link>.
               </p>
             ) : (
               <p>Ta kontakt med den som administrerer {org?.navn}.</p>
@@ -308,7 +308,7 @@ export function Vakter() {
         <Bemanning
           maaned={maaned}
           velgMaaned={(m) => ga({ maaned: m === iDag().slice(0, 7) ? null : m })}
-          kanEndre={kanPersonal(org.rolle)}
+          kanEndre={kanPersonal(org)}
           seAlle={seHelePlanen}
           visningsvalg={<Visningsvalg visning={visning} velg={velgVisning} />}
           tilDag={(d) => velgVisning("dag", d)}
@@ -321,7 +321,7 @@ export function Vakter() {
           start={turnusStart}
           uker={turnusUker}
           velg={(start, uker) => ga({ turnus: start === mandag(iDag()) ? null : start, uker: uker === 4 ? null : String(uker) })}
-          kanPlanlegge={kanPersonal(org.rolle)}
+          kanPlanlegge={kanPersonal(org)}
           seAlle={seHelePlanen}
           versjon={versjon}
           endret={endret}
@@ -340,7 +340,7 @@ export function Vakter() {
           tilTavle={(d) => ga({ fane: "tavle", dato: d === idag ? null : d })}
           uke={uke}
           velgUke={(u) => ga({ uke: u === mandag(iDag()) ? null : u })}
-          kanPlanlegge={kanPersonal(org.rolle)}
+          kanPlanlegge={kanPersonal(org)}
           seAlle={seHelePlanen}
           versjon={versjon}
           endret={endret}
@@ -349,7 +349,7 @@ export function Vakter() {
           rollevalget={rollevalget}
         />
       )}
-      {fane === "tavle" && <Tavle dato={dato} velgDato={(d) => ga({ dato: d === idag ? null : d })} kanEndre={kanPersonal(org.rolle)} />}
+      {fane === "tavle" && <Tavle dato={dato} velgDato={(d) => ga({ dato: d === idag ? null : d })} kanEndre={kanPersonal(org)} />}
       {fane === "fravaer" && <FravaerListe versjon={versjon} endret={endret} />}
       {fane === "mine" && (
         <MineVakter
@@ -372,7 +372,7 @@ export function Vakter() {
         <LedigeVakter vakter={egne.data ? ledige : undefined} tilbud={kollegaTilbud} innstilling={innstilling} feil={egne.feil} endret={endret} />
       )}
       {fane === "bytter" && (
-        <Bytter svar={bytter.data ?? undefined} feil={bytter.feil} egen={egen} leder={kanPersonal(org.rolle)} seAlle={seHelePlanen} endret={endret} />
+        <Bytter svar={bytter.data ?? undefined} feil={bytter.feil} egen={egen} leder={kanPersonal(org)} seAlle={seHelePlanen} endret={endret} />
       )}
     </>
   );
