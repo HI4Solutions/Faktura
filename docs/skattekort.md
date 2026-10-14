@@ -32,14 +32,17 @@ deretter i produksjon.
 1. **Tilgang hos Digdir.** Medinnova må ha tilgang til Samarbeidsportalen (selvbetjening for
    Maskinporten). Når Digdir har opprettet tilgangen for virksomheten, registrerer den som skal
    signere seg med sin @medinnova.no-adresse på <https://minside-samarbeid.digdir.no/>, går til
-   «Virksomhetens bruksvilkår» og signerer «Bruksvilkår for private virksomheter». Test:
-   <https://sjolvbetjening.test.samarbeid.digdir.no>.
+   «Virksomhetens bruksvilkår» og signerer to av dem: «Bruksvilkår for private virksomheter»
+   (Maskinporten) og «Bruksvilkår sluttbrukersystemleverandører» (systembrukeren i Altinn; NAV
+   krever dem også, se [nav.md](nav.md)). De andre trengs ikke: de er for offentlige virksomheter
+   og leverandørene deres, for eInnsyn og for tjenesteleverandører i ELMA (aksesspunktene i
+   PEPPOL; EHF går gjennom Recommand). Test: <https://sjolvbetjening.test.samarbeid.digdir.no>.
 2. **Scopene.** Ingen av dem er åpne for alle; de bestilles for Medinnovas organisasjonsnummer
    (test og produksjon). Før de er godkjent, står de ikke i lista over scopes i portalen, eller
    de er merket «Tilgang mangler».
-   - Fra Digdir (Altinn): godta bruksvilkårene for sluttbrukersystemleverandører i Altinn, og
-     fyll ut registreringsskjemaet for sluttbrukersystemleverandør med «Systembruker» krysset av
-     (begge lenket fra <https://docs.altinn.studio/nb/authorization/getting-started/systemuser/>).
+   - Fra Digdir (Altinn): når bruksvilkårene for sluttbrukersystemleverandører er signert (punkt
+     1), fyll ut registreringsskjemaet for sluttbrukersystemleverandør med «Systembruker» krysset
+     av (lenket fra <https://docs.altinn.studio/nb/authorization/getting-started/systemuser/>).
      Det gir `altinn:authentication/systemregister.write`,
      `altinn:authentication/systemuser.request.read` og
      `altinn:authentication/systemuser.request.write`. Klientdelegering og samtykke trengs ikke.
