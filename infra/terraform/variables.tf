@@ -82,9 +82,9 @@ variable "app_domain" {
 }
 
 variable "epost_avsender" {
-  description = "Avsenderadressen for fakturaer. Domenet må være verifisert i Resend. Selgerens navn settes foran, og svar går til selgeren."
+  description = "Avsenderadressen for e-post fra appen (fakturaer, bekreftelser, varsler). Domenet må være verifisert i Resend; ellers sendes e-posten fra reserveadressen (EPOST_AVSENDER_RESERVE, faktura@hi4.no). På fakturaene settes selgerens navn foran, og svar går til selgeren."
   type        = string
-  default     = "faktura@hi4.no"
+  default     = "post@adminkonsoll.no"
 }
 
 variable "admin_eposter" {
