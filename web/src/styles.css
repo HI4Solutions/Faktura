@@ -2924,5 +2924,68 @@ table.forslag-tabell td.under { color: var(--advarsel); font-weight: 600; }
 /* Koden til vakttypen i månedsvisningen (Bemanning.tsx) */
 .bemanning td.bm-rute.turnus-kode button { background: var(--vt-lys); color: var(--vt); font-weight: 750; }
 .bemanning td.bm-rute.turnus-kode.utkast button { background: transparent; outline: 1px dashed color-mix(in srgb, var(--vt) 60%, transparent); outline-offset: -3px; }
+/* Turnus for én person (PersonTurnus.tsx): uke for uke, med hvem personen er på jobb sammen med */
+.turnus-person { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.83rem; }
+.turnus-person select { width: auto; max-width: 240px; margin: 0; padding-top: 7px; padding-bottom: 7px; }
+.pt-topp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: -2px 0 12px; font-size: 0.88rem; color: var(--tekst-2); }
+.pt-topp strong { color: var(--tekst); }
+.pt-topp .pt-typer { display: inline-flex; flex-wrap: wrap; gap: 10px; font-variant-numeric: tabular-nums; }
+.pt-kort { padding: 0; overflow: hidden; }
+table.pt-kalender { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+table.pt-kalender th { padding: 8px 4px; text-align: center; font-size: 0.72rem; font-weight: 650; text-transform: none; letter-spacing: 0; }
+table.pt-kalender th.pt-uke { width: 44px; color: var(--dempet); font-variant-numeric: tabular-nums; }
+table.pt-kalender tbody th.pt-uke { padding-top: 10px; vertical-align: top; background: var(--flate); border-right: 1px solid var(--kant); }
+table.pt-kalender td { height: 108px; padding: 0; vertical-align: top; border-left: 1px solid var(--kant); }
+table.pt-kalender td:first-of-type { border-left: 0; }
+table.pt-kalender tbody tr:last-child > * { border-bottom: 0; }
+table.pt-kalender td.helg { background: var(--flate-2); }
+table.pt-kalender td.utenfor { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--kant) 6px 7px); }
+button.pt-dag {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; height: 100%; min-height: 108px; padding: 6px 6px 8px; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; color: var(--tekst); font-weight: 500; text-align: left; cursor: pointer;
+}
+button.pt-dag:hover:not(:disabled) { background: var(--aksent-lys); }
+button.pt-dag:active:not(:disabled) { transform: none; }
+button.pt-dag:focus-visible { outline: 2px solid var(--aksent); outline-offset: -2px; box-shadow: none; }
+.pt-dato { align-self: flex-start; min-width: 22px; padding: 1px 4px; border-radius: 999px; font-size: 0.76rem; font-weight: 650; color: var(--tekst-2); text-align: center; font-variant-numeric: tabular-nums; }
+.pt-dato.helligdag { color: var(--fare); }
+td.idag .pt-dato { background: var(--aksent); color: var(--aksent-tekst); }
+.pt-vakt {
+  display: flex; align-items: baseline; gap: 6px; padding: 3px 7px; border-radius: 6px; background: var(--flate-2); box-shadow: inset 0 0 0 1px var(--kant);
+  color: var(--tekst); font-size: 0.8rem; line-height: 1.3; white-space: nowrap; overflow: hidden;
+}
+.pt-vakt b { font-weight: 750; }
+.pt-vakt .pt-tid { font-size: 0.72rem; font-variant-numeric: tabular-nums; opacity: 0.85; }
+.pt-vakt.vt { background: var(--vt-lys); color: var(--vt); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vt) 25%, transparent); }
+.pt-vakt.fast { color: var(--tekst-2); }
+.pt-vakt.merke-fravaer { background: var(--fv-lys); color: var(--fv); box-shadow: none; }
+.pt-vakt.utkast { outline: 1px dashed color-mix(in srgb, var(--vt, var(--dempet)) 60%, transparent); outline-offset: -3px; }
+.pt-med { display: flex; flex-wrap: wrap; gap: 3px; margin-top: auto; }
+.pt-fork {
+  padding: 0 4px; border-radius: 4px; background: var(--flate); box-shadow: inset 0 0 0 1px var(--kant); color: var(--tekst-2);
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.02em; line-height: 1.55;
+}
+.pt-fork.pluss { color: var(--dempet); }
+.pt-dagen h3 { margin: 14px 0 4px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dempet); }
+.pt-dagen > p { margin: 0 0 6px; }
+.pt-liste { list-style: none; margin: 0 0 6px; padding: 0; }
+.pt-liste li { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--kant); }
+.pt-liste li:last-child { border-bottom: 0; }
+.pt-liste li .dempet { margin-left: auto; font-size: 0.84rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pt-dagen .knapper { margin-top: 14px; }
+.mine-kalender { margin: 0 0 12px; }
+.mine-kalender .lenke { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 700px) {
+  .turnus-person { flex: 1 1 auto; }
+  .turnus-person select { flex: 1; max-width: none; }
+  table.pt-kalender th.pt-uke { width: 24px; padding-left: 0; padding-right: 0; font-size: 0.62rem; }
+  table.pt-kalender td { height: 96px; }
+  button.pt-dag { align-items: center; gap: 3px; min-height: 96px; padding: 4px 2px 6px; text-align: center; }
+  .pt-dato { align-self: center; font-size: 0.7rem; }
+  .pt-vakt { flex-direction: column; align-items: center; gap: 0; width: 100%; padding: 2px 1px; font-size: 0.74rem; }
+  .pt-vakt .pt-tid { font-size: 0.56rem; }
+  .pt-med { justify-content: center; gap: 2px; }
+  .pt-fork { padding: 0 2px; font-size: 0.54rem; }
+}
 /* Hjelpen om tastene vises ikke på berøringsskjermer. */
 @media (hover: none) { .kun-tastatur { display: none; } }

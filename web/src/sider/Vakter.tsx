@@ -324,6 +324,8 @@ export function Vakter() {
           endret={endret}
           visningsvalg={<Visningsvalg visning={visning} velg={velgVisning} />}
           rollevalget={rollevalget}
+          person={sok.get("person")}
+          velgPerson={(p) => ga({ person: p })}
         />
       )}
       {fane === "plan" && (visning === "dag" || visning === "uke") && (
@@ -357,6 +359,9 @@ export function Vakter() {
           bytter={bytter.data?.bytter}
           innstilling={innstilling}
           tilBytter={() => ga({ fane: "bytter" })}
+          tilKalender={
+            ansattSerPlanen || seHelePlanen ? () => ga({ fane: "plan", visning: "turnus", turnus: null, person: seHelePlanen ? egen : null }) : undefined
+          }
           endret={endret}
         />
       )}
@@ -1644,6 +1649,7 @@ function MineVakter({
   bytter,
   innstilling,
   tilBytter,
+  tilKalender,
   endret,
 }: {
   svar?: VaktSvar;
@@ -1655,6 +1661,7 @@ function MineVakter({
   bytter?: Bytte[];
   innstilling: Innstilling;
   tilBytter: () => void;
+  tilKalender?: () => void; // turnusen din i kalenderen, med hvem du jobber sammen med (Turnus.tsx)
   endret: () => void;
 }) {
   // Vakten (eller den faste arbeidsdagen) som gis bort eller byttes (Vaktbytte.tsx).
@@ -1710,6 +1717,13 @@ function MineVakter({
         </div>
       )}
       <MittFravaer ansattId={egen} versjon={svar} endret={endret} />
+      {tilKalender && (
+        <div className="mine-kalender">
+          <button type="button" className="lenke" onClick={tilKalender}>
+            <IkonKalender storrelse={16} /> Se turnusen din i kalenderen, og hvem du jobber sammen med
+          </button>
+        </div>
+      )}
       {ledige > 0 && (
         <div className="melding info venter">
           <span>{ledige === 1 ? "Én ledig vakt" : `${ledige} ledige vakter`} de neste ukene.</span>

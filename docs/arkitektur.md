@@ -301,7 +301,15 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   stiplet kant og en prikk ved advarsler, timene planlagt mot avtalt, og nederst de ledige vaktene
   og bemanningen mot behovet per vakttype. En rute fylles ved å trykke på den eller (på PC) skrive
   koden; Delete fjerner og pilene flytter. De ansatte ser den publiserte turnusen, uten
-  bemanningsradene. Oppsettet (vakttyper, behov, hvem går hva og regler) ligger i visningen, og
+  bemanningsradene. «Turnus for» viser turnusen til én person i stedet (`PersonTurnus.tsx`,
+  `?person=<id>`, eller `alle`): kalenderen uke for uke med vakten hver dag, fraværet og de faste
+  dagene, og under vakten forkortelsene til dem som er på jobb samtidig (vakter eller faste dager som
+  overlapper minst en time, også over midnatt). Trykk på en dag viser hvem som går sammen med
+  personen, de andre vaktene den dagen og hvem som er borte, og et navn åpner kalenderen til den
+  personen. De ansatte ser sin egen turnus som standard (også fra «Mine vakter»), og kan velge
+  kollegaene eller alle; de ser bare det publiserte, og andres fravær som «F». Eier og
+  administrator ser alle som standard, og kan endre vakten fra dagen. Oppsettet (vakttyper, behov,
+  hvem går hva og regler) ligger i visningen, og
   «Legg inn dag, kveld og natt» lager tre vanlige vakttyper å begynne med. Automatisk turnus
   (`POST /turnus/forslag`, `planlegg` i `turnusplan.ts`, en ren funksjon) fordeler de ansatte på
   plassene for en periode på høyst 13 uker, uansett hvilke ukedager de pleier å jobbe: dag for

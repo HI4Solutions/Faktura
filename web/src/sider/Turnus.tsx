@@ -5,6 +5,10 @@
 // lage et forslag for en periode, som legges inn som utkast og publiseres som før. Oppsettet
 // (vakttypene, behovet per ukedag og rolle, hvem som går hvilke vakttyper og reglene) står under
 // «Oppsett». De ansatte ser den publiserte turnusen.
+//
+// «Turnus for» viser turnusen til én person i stedet (PersonTurnus.tsx): kalenderen uke for uke med
+// hvem personen er på jobb sammen med. De ansatte ser sin egen som standard, og kan velge kollegaene
+// eller alle (?person=alle eller id-en); eier og administrator ser alle som standard.
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles";
@@ -16,6 +20,7 @@ import { helligdag } from "../helligdager";
 import { fravaerKlasse, fravaerKode, fravaerTekst, type FravaerType } from "./Fravaer";
 import { rollevalg, Rollevalg, type Rolle, type Rollevalget } from "./Roller";
 import { Periodevelger, type Fast, type Vakt, type VaktSvar } from "./Vakter";
+import { PersonTurnus } from "./PersonTurnus";
 
 export type Vakttype = { id: string; navn: string; kode: string; fra: string; til: string; pause_min: number; timer: number; farge: number; aktiv: boolean; rekkefolge: number };
 export type TurnusBehov = { vakttype_id: string; ukedag: number; rolle_id: string | null; antall: number };
@@ -75,6 +80,8 @@ export function Turnus({
   endret,
   visningsvalg,
   rollevalget,
+  person,
+  velgPerson,
 }: {
   start: string; // mandagen perioden begynner
   uker: number;
@@ -85,6 +92,8 @@ export function Turnus({
   endret: () => void;
   visningsvalg: ReactNode;
   rollevalget: Rollevalget;
+  person: string | null; // «alle», id-en til en person, eller null: standard
+  velgPerson: (person: string | null) => void;
 }) {
   const { org } = useKonto();
   const fra = start;
@@ -117,6 +126,11 @@ export function Turnus({
   const dager = Array.from({ length: uker * 7 }, (_, i) => leggTilDager(fra, i));
   const idag = iDag();
   const rv = rollevalg(rollevalget.valgt, grupper.data, personer.data);
+  // Turnusen til én person: de ansatte ser sin egen som standard, de andre alle.
+  const egen = org?.ansatt_id ?? null;
+  const standardPerson = egen && !seAlle ? egen : "alle";
+  const valgtPerson = (person ?? standardPerson) === "alle" ? undefined : personer.data.find((p) => p.id === (person ?? standardPerson));
+  const velgEn = (p: string) => velgPerson(p === standardPerson ? null : p);
 
   // Folkene i perioden, rolle for rolle (rekkefølgen og fargene fra rollene).
   const iPerioden = (p: Person) => (p.aktiv && p.ansatt_fra <= til && (!p.ansatt_til || p.ansatt_til >= fra)) || data.vakter.some((v) => v.ansatt_id === p.id);
@@ -132,6 +146,16 @@ export function Turnus({
       ),
     }))
     .filter((s) => s.folk.length);
+  const meg = egen ? personer.data.find((p) => p.id === egen) : undefined;
+  const iValget = [
+    ...grupper.data.map((g) => ({ id: g.id as string | null, navn: g.navn })),
+    { id: null, navn: "Uten rolle" },
+  ]
+    .map((g) => ({
+      ...g,
+      folk: personer.data!.filter((p) => p.id !== egen && iPerioden(p) && (g.id ? p.gruppe_id === g.id : !(p.gruppe_id && rollenr.has(p.gruppe_id)))),
+    }))
+    .filter((g) => g.folk.length);
 
   const vakterPaa = new Map<string, Vakt[]>();
   for (const v of data.vakter) if (v.ansatt_id) vakterPaa.set(`${v.ansatt_id}|${v.dato}`, [...(vakterPaa.get(`${v.ansatt_id}|${v.dato}`) ?? []), v]);
@@ -232,6 +256,34 @@ export function Turnus({
           ))}
         </select>
       </label>
+      <label className="turnus-person">
+        <span>Turnus for</span>
+        <select value={valgtPerson?.id ?? "alle"} onChange={(e) => velgEn(e.target.value)}>
+          <option value="alle">Alle</option>
+          {meg && (
+            <option value={meg.id}>
+              Meg ({meg.fornavn} {meg.etternavn})
+            </option>
+          )}
+          {grupper.data.length
+            ? iValget.map((g) => (
+                <optgroup key={g.id ?? "uten"} label={g.navn}>
+                  {g.folk.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.fornavn} {p.etternavn}
+                    </option>
+                  ))}
+                </optgroup>
+              ))
+            : iValget.flatMap((g) =>
+                g.folk.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.fornavn} {p.etternavn}
+                  </option>
+                )),
+              )}
+        </select>
+      </label>
       {kanPlanlegge && (
         <div className="knapper">
           <button type="button" onClick={() => settOppsett(true)}>
@@ -260,7 +312,28 @@ export function Turnus({
       {verktoy}
       {melding && <div className="melding ok">{melding}</div>}
       <Feil melding={h.feil} />
-      {!typer.length ? (
+      {valgtPerson ? (
+        <>
+          {aktiveTyper.length > 0 && (
+            <div className="turnus-forklaring">
+              {aktiveTyper.map((t) => (
+                <span key={t.id}>
+                  <VakttypeMerke t={t} /> {t.navn} <span className="dempet">{tid(t)}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <PersonTurnus
+            person={valgtPerson}
+            dager={dager}
+            data={data}
+            personer={personer.data}
+            typeAv={typeAv}
+            velgPerson={velgEn}
+            endre={kanPlanlegge ? (ansatt, dato) => settRute({ ansatt, dato }) : undefined}
+          />
+        </>
+      ) : !typer.length ? (
         <div className="kort">
           <Tom ikon={<IkonKalender storrelse={22} />} tittel="Turnus med dag-, kveld- og nattevakter">
             {kanPlanlegge ? (
