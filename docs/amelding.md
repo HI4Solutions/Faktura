@@ -112,7 +112,7 @@ skattekortene (se `docs/skattekort.md`); de må være satt opp først.
    `AMELDING_INNSENDING` = `true`. Kjør så workflowen «Infrastruktur» (Actions → Infrastruktur →
    Run workflow). Adressen til API-et følger `SKATTEETATEN_MILJO`; den kan overstyres med
    `AMELDING_URL`.
-4. **Systemet i Altinn.** Administrasjon → Drift → «Skattekort (Skatteetaten)» → «Oppdater i
+4. **Systemet i Altinn.** Plattform → Drift → «Skattekort (Skatteetaten)» → «Oppdater i
    Altinn». Systemet ber da om tilgangspakkene «Lønn» og «A-ordningen»
    (`urn:altinn:accesspackage:a-ordning`; «Lønn» alene godtas ikke for a-meldingen).
 5. **Test.** En testorganisasjon i TT02 (fra Tenor testdatasøk) kobler til eller trykker «Utvid

@@ -425,7 +425,7 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 .velkommen h1 { margin: 0 0 2px; }
 .velkommen p { margin: 0; color: var(--dempet); }
 .dash-rad { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
-@media (max-width: 1020px) { .dash-rad { grid-template-columns: 1fr; } }
+@media (max-width: 1020px) { .dash-rad { grid-template-columns: 1fr; row-gap: 0; } } /* kortene har avstanden under seg */
 .kort-topp { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .kort-topp h2 { margin: 0; }
 .stolpe-diagram { position: relative; }
@@ -443,6 +443,36 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 .liste-enkel li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--kant); }
 .liste-enkel li:last-child { border-bottom: 0; }
 .liste-enkel .tittel { font-weight: 550; }
+
+/* Oversiktene (OversiktDeler.tsx): nøkkeltall som lenker, «Til oppfølging» med én linje per ting
+   som venter, og den siste lønnsslippen. */
+.nokkeltall a.tall-lenke { display: block; color: inherit; text-decoration: none; transition: border-color .15s, box-shadow .15s; }
+.nokkeltall a.tall-lenke:hover { border-color: var(--aksent); box-shadow: var(--skygge-2); text-decoration: none; }
+.oppfolging .kort-topp { align-items: center; }
+.oppfolging .liste-enkel li { padding: 0; }
+.oppfolging-punkt { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 11px 0; color: var(--tekst); text-decoration: none; }
+.oppfolging-punkt:hover { color: var(--aksent); text-decoration: none; }
+.oppfolging-punkt svg { flex: none; color: var(--dempet); }
+.oppfolging-punkt.fare > span::before {
+  content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 99px; background: var(--fare); margin-right: 8px; vertical-align: 1px;
+}
+.lonn-siste { display: flex; flex-direction: column; gap: 4px; color: inherit; text-decoration: none; }
+.lonn-siste strong { font-size: 1.6rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.lonn-siste:hover { text-decoration: none; }
+.lonn-siste:hover strong { color: var(--aksent); }
+.beskjed-utdrag li { align-items: flex-start; }
+/* Plattformoversikten: funksjonene i bruk, med en stolpe for andelen av organisasjonene. */
+.funksjoner-i-bruk { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 28px; }
+.funksjoner-i-bruk h3 { margin: 6px 0 4px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dempet); }
+.funksjoner-i-bruk ul { list-style: none; margin: 0; padding: 0; }
+.funksjoner-i-bruk li { display: grid; grid-template-columns: minmax(0, 1fr) 90px 2.5em; align-items: center; gap: 10px; padding: 6px 0; font-size: 0.9rem; }
+.funksjoner-i-bruk .tall { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.bruk-stolpe { height: 6px; border-radius: 99px; background: var(--flate-2); overflow: hidden; }
+.bruk-stolpe > span { display: block; height: 100%; border-radius: 99px; background: var(--aksent); }
+/* Plattformoversikten: fem nøkkeltall på én rad på PC; på mobil tar det siste hele bredden. */
+@media (min-width: 701px) { .nokkeltall.fem { grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); } }
+/* Det som venter, først når kortene ligger under hverandre. */
+@media (max-width: 1020px) { .dash-rad > .oppfolging.har-oppgaver { order: -1; } }
 
 .tom {
   text-align: center; padding: 36px 16px; color: var(--dempet);
@@ -686,7 +716,8 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
   .nokkeltall .ikonboks svg { width: 16px; height: 16px; }
   .nokkeltall .verdi { font-size: 1.2rem; margin-top: 8px; }
   .nokkeltall .under { font-size: 0.74rem; }
-  .dash-rad { gap: 14px; }
+  .nokkeltall.fem > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .dash-rad { gap: 0 14px; }
 
   /* Faner sveipes sidelengs i stedet for å bryte over flere linjer */
   .faner { display: flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; margin-bottom: 14px; }

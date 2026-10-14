@@ -88,7 +88,7 @@ Maskinporten-klienten og systemet i Altinn er de samme som for skattekortene (se
    workflow). Adressen til API-et følger `SKATTEETATEN_MILJO` (test:
    `sykepenger-api.ekstern.dev.nav.no`, produksjon: `sykepenger-api.nav.no`); den kan overstyres
    med `NAV_SYKEPENGER_URL`.
-4. **Systemet i Altinn.** Administrasjon → Drift → «Skattekort (Skatteetaten)» → «Oppdater i
+4. **Systemet i Altinn.** Plattform → Drift → «Skattekort (Skatteetaten)» → «Oppdater i
    Altinn». Systemet ber da også om tilgangspakken «Lønn med personopplysninger av særlig
    kategori» (`urn:altinn:accesspackage:lonn-personopplysninger-saerlig-kategori`), som gir
    sykmeldinger, søknader, forespørsler og inntektsmeldinger hos NAV.

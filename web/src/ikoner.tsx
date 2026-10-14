@@ -307,6 +307,80 @@ export const IkonReise = (p: P) => (
     <circle cx="12" cy="10.4" r="2.3" />
   </Ikon>
 );
+// Regnskapet: bilag (en kvittering med linjer), utgifter (kvittering med minus), bank, mva
+// (prosent), saldobalanse (vekt), årsoppgjør (bok), anleggsmidler (bygning), periodiseringer
+// (tidslinje), saldoavskrivninger (synkende kurve) og kontoene (nummerert liste).
+export const IkonBilag = (p: P) => (
+  <Ikon {...p}>
+    <path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z" />
+    <path d="M9 8h6M9 12h6M9 16h3" />
+  </Ikon>
+);
+export const IkonUtgift = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3.5" y="6" width="17" height="12.5" rx="2.2" />
+    <path d="M3.5 10h17" />
+    <path d="M9 14.5h6" />
+  </Ikon>
+);
+export const IkonBank = (p: P) => (
+  <Ikon {...p}>
+    <path d="M3 9.5 12 4l9 5.5" />
+    <path d="M5 10v7.5M9.7 10v7.5M14.3 10v7.5M19 10v7.5" />
+    <path d="M3 20.5h18" />
+  </Ikon>
+);
+export const IkonMva = (p: P) => (
+  <Ikon {...p}>
+    <circle cx="7.8" cy="7.8" r="2.4" />
+    <circle cx="16.2" cy="16.2" r="2.4" />
+    <path d="M18 6 6 18" />
+  </Ikon>
+);
+export const IkonBalanse = (p: P) => (
+  <Ikon {...p}>
+    <path d="M12 4v16M7.5 20h9M5 7.5h14" />
+    <path d="M5 7.5 2.8 13a2.3 2.3 0 0 0 4.4 0z" />
+    <path d="M19 7.5 16.8 13a2.3 2.3 0 0 0 4.4 0z" />
+  </Ikon>
+);
+export const IkonAarsoppgjor = (p: P) => (
+  <Ikon {...p}>
+    <path d="M5 5.2A2.2 2.2 0 0 1 7.2 3H19v15H7.2A2.2 2.2 0 0 0 5 20.2z" />
+    <path d="M5 20.2A.8.8 0 0 0 5.8 21H19v-3" />
+    <path d="M9 7.5h6M9 11h4" />
+  </Ikon>
+);
+export const IkonAnlegg = (p: P) => (
+  <Ikon {...p}>
+    <path d="M3.5 20.5V10l5 3v-3l5 3V5.5l7 3v12z" />
+    <path d="M2.5 20.5h19" />
+  </Ikon>
+);
+export const IkonPeriodisering = (p: P) => (
+  <Ikon {...p}>
+    <path d="M3.5 12h17" />
+    <path d="M4.5 8v8M9.5 9.5v5M14.5 9.5v5M19.5 8v8" />
+  </Ikon>
+);
+export const IkonAvskrivning = (p: P) => (
+  <Ikon {...p}>
+    <path d="M3.5 6.5 9 12l3.5-3.5 8 8" />
+    <path d="M20.5 11.5v5h-5" />
+  </Ikon>
+);
+export const IkonKontoplan = (p: P) => (
+  <Ikon {...p}>
+    <path d="M9.5 6h11M9.5 12h11M9.5 18h11" />
+    <path d="M4 6h1.5M4 12h1.5M4 18h1.5" />
+  </Ikon>
+);
+// Drift (plattformen): en pulslinje.
+export const IkonDrift = (p: P) => (
+  <Ikon {...p}>
+    <path d="M3 12h4l2.5-6 5 12 2.5-6h4" />
+  </Ikon>
+);
 // Min side: en person.
 export const IkonPerson = (p: P) => (
   <Ikon {...p}>

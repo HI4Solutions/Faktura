@@ -45,7 +45,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
 - `brukere.status`: en ny konto venter (`venter`) til plattformadministratoren har godkjent
   den (`godkjent`) eller avvist den (`avvist`, med begrunnelse). Når e-postadressen er
   bekreftet og navnet skrevet inn, går forespørselen på e-post til administratorene (én gang,
-  `varslet_at`), og de godkjenner eller avviser i Administrasjon → Oversikt; brukeren får
+  `varslet_at`), og de godkjenner eller avviser i Plattform → Plattformoversikt; brukeren får
   e-post om utfallet. Til da slipper API-et bare gjennom `/meg` og invitasjoner
   (`server/src/kontoer.ts`), og appen viser bare at kontoen venter (eller begrunnelsen for
   avslaget). Den som tar imot en invitasjon fra en organisasjon (sendt til e-postadressen
@@ -63,7 +63,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   én i minuttet og åtte i døgnet, `POST /api/meg/bekreftelse`). Får ikke serveren sendt den,
   ber appen Identity Platform sende den som før. `registrer_bruker` husker fra tokenet om
   adressen er bekreftet (et eldre token gjør den ikke ubekreftet igjen). Plattformadministratoren
-  ser under Administrasjon → Oversikt om en ny konto har bekreftet adressen og hvordan det gikk
+  ser under Plattform → Plattformoversikt om en ny konto har bekreftet adressen og hvordan det gikk
   med den siste lenken, og kan sende en ny eller bekrefte adressen for brukeren (også i
   Identity Platform; hvem og når lagres) når hen vet at den er riktig
   (`0105_epostbekreftelse.sql`, `server/src/epostbekreftelse.ts`)
@@ -72,7 +72,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   modul. Den som lager en konto, krysser av for modulene den trenger (lagres rett fra
   registreringen, også før e-postadressen er bekreftet, eller på venteskjermen), og
   forespørselen til administratorene går først når navn og moduler er på plass, med modulene i
-  e-posten. Administratoren godkjenner med de modulene eller andre (Administrasjon → Oversikt),
+  e-posten. Administratoren godkjenner med de modulene eller andre (Plattform → Plattformoversikt),
   og etter godkjenningen er det bare administratoren som endrer dem. Organisasjonene brukeren
   lager, får bare funksjonene i modulene (av standarden for nye organisasjoner), og med
   Bemanning er ansatte og timer slått på fra start. Brukere uten moduler (fra før, eller
@@ -612,7 +612,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter, import, Google
   Disk, ansatte og timer, vaktplan og bemanning, lønn; vaktplanen og lønnen bygger på ansatte og timer),
   gruppert i modulene Faktura og Bemanning. Fakturaer, kunder og produkter har alle. Plattformadministratoren slår dem av og på i
-  detaljene for organisasjonen (Administrasjon → Organisasjoner) og velger standarden for nye
+  detaljene for organisasjonen (Plattform → Organisasjoner) og velger standarden for nye
   organisasjoner nederst samme sted; de som fantes da funksjonene kom, beholdt alt. API-et avviser rutene
   til en funksjon organisasjonen ikke har (`server/src/funksjoner.ts`, med svaret husket et
   halvt minutt), bakgrunnsjobbene hopper over organisasjonen (bankhenting, gjentakende
@@ -628,15 +628,48 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (`PATCH /org/:id` tar imot deler av organisasjonen), og det som ikke er lagret, blir med
   mellom fanene. Gamle lenker og varsler (`?fane=betaling`, `?fane=ehf`, `?fane=brukere`) går
   til fanen og stedet der delen er nå
-- Administrasjonen har tre faner. Oversikt: bruken, og kontoer og organisasjoner som venter på
-  godkjenning (antallet står på fanen). Organisasjoner: alle organisasjonene med brukerne under
+- Sidemenyen (`App.tsx`) har Oversikt øverst, forsiden for hver rolle (se under), og resten i
+  seksjoner: Plattform (bare for plattformadministratorene), Faktura (Fakturaer, Kunder og
+  Produkter), Personal (Ansatte, Vaktplan, Timer eller «Timer og ferie», Lønn og Beskjeder),
+  Regnskap (delene av Regnskap som egne punkter: Bilag, Utgifter, Bank, Mva, Saldobalanse,
+  Årsoppgjør, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer, som `?fane=` på
+  `/regnskap`), Rapporter og Konto (Innstillinger, Verifiser organisasjon og Installer appen). Det
+  rollen og funksjonene ikke gir tilgang til, er ikke med. De ansatte har sin egen meny (under
+  Roller). Et regnskapsbyrå har Klienter i stedet for Oversikt og ikke Faktura.
+- Hver har sin egen oversikt, satt sammen av de samme delene (`OversiktDeler.tsx`: hilsenen,
+  nøkkeltallene, som lenker til siden de hører til, og «Til oppfølging» med én linje per ting som
+  venter). Hvert kort henter sitt fra de samme rutene som sidene, så et kort som er tregt eller
+  feiler, ikke stopper resten:
+  - Organisasjonen (`Oversikt.tsx`, eier, administrator og de andre rollene utenom de ansatte):
+    nøkkeltallene for fakturaene, «Til oppfølging» (forfalte fakturaer, utkast som kan sendes,
+    timer som venter på godkjenning, vaktbytter, søknader om å overføre ferie og om
+    avspasering, vakter uten ansatt de neste sju dagene, lønnskjøringer som ikke er godkjent, og
+    punktene i månedsavslutningen for forrige måned som ikke er i orden), «I dag» (hvem som er
+    på jobb og borte, og vaktene uten ansatt), fakturert per måned, det som forfaller snart og de
+    siste fakturaene. Det rollen og funksjonene ikke gir tilgang til, hentes ikke.
+  - Den ansatte (`AnsattOversikt.tsx`): neste vakt, timene denne uka med status, ferien som er
+    igjen og timebanken (eller de ledige vaktene), de neste vaktene, «Venter på deg» (vakter
+    kollegaer vil gi deg eller bytte med deg, avviste timer, ledige vakter, nye beskjeder og
+    søknaden om å overføre ferie), beskjedene og den siste lønnsslippen, og knappene «Meld deg
+    syk» og «Send ekstra timer». Adresser den ansatte ikke har, går hit.
+  - Plattformadministratoren (`/admin`, Plattformoversikt): det som venter (kontoer og
+    organisasjoner til godkjenning, driftsproblemer), nøkkeltallene (organisasjoner, brukere,
+    fakturaer, integrasjoner og ansatte), funksjonene i bruk modul for modul (hvor mange
+    organisasjoner som har hver) og de nyeste organisasjonene (`admin_oversikt()`,
+    `0109_plattformoversikt.sql`). En plattformadministrator uten organisasjon kommer rett hit
+    og kan lage en organisasjon fra velgeren.
+
+  På smale skjermer står «Til oppfølging» først når noe venter.
+- Plattform (plattformadministratorene, GitHub-variabelen `ADMIN_EPOSTER`) har tre punkter i
+  menyen, som også er fanene på siden. Plattformoversikt: se over (antallet som venter på
+  godkjenning, står på fanen). Organisasjoner: alle organisasjonene med brukerne under
   organisasjonen de er med i (søket finner også en bruker), detaljer med behandling,
   funksjonene, brukerne (moduler, passkeys og de andre organisasjonene de er med i), bruk,
   integrasjoner, logg og sletting, og nederst brukere uten organisasjon, funksjonene for nye
   organisasjoner og de slettede. Drift: e-post, EHF, AI, trekktabellene, banker og utboksen. Gamle lenker til
-  Venter, Funksjoner og Brukere går til Oversikt og Organisasjoner
+  Venter, Funksjoner og Brukere går til Plattformoversikt og Organisasjoner
 - `slettede_organisasjoner` og `organisasjoner.slettet_at`: sletting av organisasjoner. Eieren
-  (Innstillinger → Organisasjon) eller plattformadministratoren (detaljene i Administrasjon)
+  (Innstillinger → Organisasjon) eller plattformadministratoren (detaljene under Plattform → Organisasjoner)
   sletter, alltid med en grunn, og bekrefter med navnet; eieren må ha totrinnsinnlogging. Uten
   utstedte fakturaer eller kreditnotaer slettes alt med en gang (kunder, produkter, utkast,
   ansatte, timer, vaktplan, revisjonsloggen, og filene ryddes av workeren). Utstedte fakturaer
@@ -646,7 +679,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   stoppes, og `har_funksjon` er av, så bakgrunnsjobbene hopper over den. Fakturaene, kundene og
   betalingene blir liggende til `oppbevares_til` (31.12. fem år etter siste faktura); selve
   slettingen etter det er ikke laget ennå. Hver sletting logges med grunnen, også når alt er
-  borte, og vises under Administrasjon → Organisasjoner → Slettede organisasjoner. Sletter
+  borte, og vises under Plattform → Organisasjoner → Slettede organisasjoner. Sletter
   eieren, får plattformadministratorene e-post med grunnen; sletter plattformadministratoren,
   får eierne det (`0046_slett_organisasjon.sql`, `server/src/slettOrg.ts`)
 - `lonnskjoringer`, `lonnsslipper`, `lonnslinjer` (`0065_lonn.sql`, `server/src/lonn.ts`,
@@ -664,7 +697,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   sluttoppgjør med feriepengene for den som slutter i måneden. Skattetrekket følger skattekortet
   på den ansatte (`ansatte.skattekort`, `skatt_tabell`, `skatt_prosent`, `skatt_frikort`,
   `skattekort_aar`): tabelltrekk etter Skatteetatens trekktabeller (`trekktabeller`, månedstabellene
-  for lønn, som plattformadministratoren laster inn fra tekstfila under Administrasjon → Drift;
+  for lønn, som plattformadministratoren laster inn fra tekstfila under Plattform → Drift;
   `trekktabell_last`), halvt trekk i november eller desember, ikke tabelltrekk av feriepenger i
   ferieåret, og prosentsatsen i ekstra kjøringer og når tabellene for året mangler (med merknad);
   prosenttrekk; frikort til beløpet er brukt opp i året, deretter 50 %; og 50 % uten skattekort.
@@ -717,7 +750,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   kan varsle dem igjen. Trekktabellene: den daglige jobben sender plattformadministratorene
   (`ADMIN_EPOSTER`) e-post på mandager fra 10. desember om tabellene for neste år og i januar
   om årets, så lenge de mangler og en organisasjon med lønn har en ansatt med tabelltrekk
-  (`trekktabeller_mangler`, `server/src/trekktabeller.ts`); Administrasjon → Drift viser det også
+  (`trekktabeller_mangler`, `server/src/trekktabeller.ts`); Plattform → Drift viser det også
 - Eget regnskap: `bilag`, `posteringer` og `bilagserier` (`0078_lonn_bokforing.sql`,
   `server/src/lonnBokforing.ts`, `server/src/lonnBokforingRuter.ts`, `web/src/sider/LonnBokforing.tsx`).
   Grunnlaget for regnskapsmodulen (plattformen kobles ikke til andre regnskapssystemer): bilag i
@@ -1188,7 +1221,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `docs/skattekort.md`): skattekort fra Skatteetaten («Skattekort til arbeidsgiver») med
   systembruker i Altinn. Leverandøren (Medinnova AS) har én Maskinporten-klient og ett system i
   Altinns systemregister (tilgangspakken «Lønn»), som plattformadministratoren registrerer under
-  Administrasjon → Drift (`altinn_system`). Eier og administrator ber om tilgang
+  Plattform → Drift (`altinn_system`). Eier og administrator ber om tilgang
   (`be_om_skattekorttilgang`, med totrinn); workeren lager forespørselen i Altinn, og daglig
   leder godkjenner den (`skattekort_tilgang`: venter, ny, godkjent, avslått, avvist, utløpt
   eller feil). Hjerteslaget sjekker forespørsler som venter (hvert andre minutt den første timen,
@@ -1302,8 +1335,9 @@ og til alle (`ser_beskjed`; `faktura.kan(org,
 'medlem')`, `faktura.kan(org, 'plan')`, `faktura.er_meg` og `faktura.min_ansatt`), aldri
 fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, timebank, notater og typen fravær,
 utkast i vaktplanen eller revisjonsloggen. Varsler til hele organisasjonen og
-Google Disk-kopier går ikke til ansatte. Sidemenyen deres (`App.tsx`) har det som ellers ligger
-i faner på sidene, som egne punkter i grupper:
+Google Disk-kopier går ikke til ansatte. Sidemenyen deres (`App.tsx`) har Oversikt øverst (deres
+egen forside, `AnsattOversikt.tsx`) og det som ellers ligger i faner på sidene, som egne punkter i
+grupper:
 
 - Vakter: Kalender (`/vakter?fane=plan&visning=turnus`, med turnusen deres som standard og hele
   kalenderen), Mine vakter, Ledige vakter, Bytte vakter (bare når vaktbytte er slått på,
@@ -1319,8 +1353,8 @@ i faner på sidene, som egne punkter i grupper:
   `/ansatte/meg`; bare lesing) og Beskjeder (med tallet på de nye).
 
 Innstillinger (egen konto og app) ligger under Konto. Punktet for siden og fanen man står på, er
-valgt, og fanene på sidene er der fortsatt. Bunnmenyen på mobil har Kalender, Ekstra timer,
-Fravær og Min side, og resten under «Mer» (med en prikk når det er nye beskjeder).
+valgt, og fanene på sidene er der fortsatt. Bunnmenyen på mobil har Oversikt, Kalender, Ekstra
+timer og Fravær, og resten under «Mer» (med en prikk når det er nye beskjeder).
 
 Eier og administrator har Timer og Ferie som ett punkt, «Timer og ferie» (`timerOgFerie` i
 `konto.tsx`): Ferie er siste fane på Timer og åpner `/ferie`, som har de samme fanene

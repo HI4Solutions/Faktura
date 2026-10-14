@@ -9,6 +9,7 @@ import { Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
 import { BekreftEpost, BekreftLenke } from "./sider/Bekreftelse";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
+import { AnsattOversikt } from "./sider/AnsattOversikt";
 import { Kunder, Produkter } from "./sider/Register";
 import { Importer } from "./sider/Importer";
 import { FakturaSkjema, FakturaVisning, Fakturaliste } from "./sider/Fakturaer";
@@ -38,9 +39,9 @@ import { Assistent } from "./assistent";
 import { iFakturadelen } from "./fakturameny";
 import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
-  IkonAnsatte, IkonBjelle, IkonBytte, IkonEkstraTimer, IkonFaktura, IkonFerie, IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLedigeVakter,
-  IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonNokkel, IkonOversikt, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonRegnskap, IkonReise, IkonSkjold, IkonTavle,
-  IkonTimebank, IkonVelg,
+  IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
+  IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva,
+  IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSkjold, IkonTavle, IkonTimebank, IkonUtgift, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -270,7 +271,7 @@ function Ramme() {
           [
             "Meg",
             [
-              { til: "/meg", Ikon: IkonPerson, tekst: "Min side", aktiv: sted.pathname === "/meg", bunn: true },
+              { til: "/meg", Ikon: IkonPerson, tekst: "Min side", aktiv: sted.pathname === "/meg" },
               visBeskjeder && { til: "/beskjeder", Ikon: IkonBjelle, tekst: "Beskjeder", aktiv: sted.pathname === "/beskjeder", teller: nyeBeskjeder },
             ],
           ],
@@ -289,12 +290,43 @@ function Ramme() {
     );
   };
   const personalmeny = !ansatt && iPersonal && (visAnsatte || visTimer || visBeskjeder);
+  // En fane på en side som eget punkt i menyen (Regnskap og Plattform).
+  const fanePunkt = (til: string, aktiv: boolean, Ikon: (p: { storrelse?: number }) => ReactNode, tekst: string) => (
+    <Link key={til} to={til} className={aktiv ? "active" : undefined} aria-current={aktiv ? "page" : undefined}>
+      <Ikon />
+      {tekst}
+    </Link>
+  );
+  // Regnskapet er en egen seksjon i menyen, med fanene på Regnskap som punkter (Regnskap.tsx; uten
+  // fane i adressen er det bilagene).
+  const regnskapFane = sted.pathname === "/regnskap" ? (her.get("fane") ?? "bilag") : null;
+  const regnskapPunkter: [string, string, (p: { storrelse?: number }) => ReactNode][] = [
+    ["bilag", "Bilag", IkonBilag],
+    ["utgifter", "Utgifter", IkonUtgift],
+    ["bank", "Bank", IkonBank],
+    ["mva", "Mva", IkonMva],
+    ["saldobalanse", "Saldobalanse", IkonBalanse],
+    ["aarsoppgjor", "Årsoppgjør", IkonAarsoppgjor],
+    ["anlegg", "Anleggsmidler", IkonAnlegg],
+    ["periodiseringer", "Periodiseringer", IkonPeriodisering],
+    ["saldo", "Saldoavskrivninger", IkonAvskrivning],
+    ["kontoer", "Kontoer", IkonKontoplan],
+  ];
+  // Plattformadministratoren (GitHub-variabelen ADMIN_EPOSTER) har sin egen oversikt over plattformen,
+  // organisasjonene og driften (fanene i Admin.tsx).
+  const adminFane = sted.pathname === "/admin" ? (her.get("fane") ?? "oversikt") : null;
+  const plattformPunkter: [string, string, string[], (p: { storrelse?: number }) => ReactNode][] = [
+    ["/admin", "Plattformoversikt", ["oversikt"], IkonNokkel],
+    ["/admin?fane=organisasjoner", "Organisasjoner", ["organisasjoner", "funksjoner", "brukere"], IkonSkjold],
+    ["/admin?fane=drift", "Drift", ["drift"], IkonDrift],
+  ];
 
-  if (ny || orgs.length === 0) {
+  // Plattformadministratoren kommer inn også uten organisasjon (til sin egen oversikt).
+  if (ny || (orgs.length === 0 && !meg?.plattformadmin)) {
     return (
       <div className="innhold frittstaende" style={{ margin: "0 auto" }}>
-        <h1>{orgs.length === 0 ? "Velkommen til Admin Konsoll" : "Ny organisasjon"}</h1>
-        {orgs.length === 0 && (
+        <h1>{orgs.length === 0 && !meg?.plattformadmin ? "Velkommen til Admin Konsoll" : "Ny organisasjon"}</h1>
+        {orgs.length === 0 && !meg?.plattformadmin && (
           <p className="dempet">
             {/* Uten Faktura blant modulene (bare Bemanning) er det ikke fakturering det handler om. */}
             {meg?.bruker.moduler?.length && !meg.bruker.moduler.includes("faktura")
@@ -302,7 +334,7 @@ function Ramme() {
               : "Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt."}
           </p>
         )}
-        <NyOrganisasjon avbryt={orgs.length ? () => settNy(false) : undefined} />
+        <NyOrganisasjon avbryt={orgs.length || meg?.plattformadmin ? () => settNy(false) : undefined} />
         <p className="liten dempet">
           Fått en invitasjon? Åpne lenken i e-posten. · <button className="lenke" onClick={loggUt}>Logg ut</button>
         </p>
@@ -332,8 +364,19 @@ function Ramme() {
         </div>
       </header>
       <nav className="bunnmeny" aria-label="Hovedmeny">
-        {ansatt ? (
-          <>{ansattGrupper.flatMap(([, punkter]) => punkter.filter((x) => x.bunn)).map((x) => ansattLenke(x, true))}</>
+        {!org ? (
+          <NavLink to="/admin">
+            <IkonNokkel storrelse={22} />
+            <span>Plattform</span>
+          </NavLink>
+        ) : ansatt ? (
+          <>
+            <NavLink to="/" end>
+              <IkonOversikt storrelse={22} />
+              <span>Oversikt</span>
+            </NavLink>
+            {ansattGrupper.flatMap(([, punkter]) => punkter.filter((x) => x.bunn)).map((x) => ansattLenke(x, true))}
+          </>
         ) : (
           <NavLink to="/" end>
             <IkonOversikt storrelse={22} />
@@ -362,7 +405,7 @@ function Ramme() {
             )}
           </>
         )}
-        {!ansatt && !personalmeny && org?.type !== "regnskapsbyraa" && (
+        {org && !ansatt && !personalmeny && org.type !== "regnskapsbyraa" && (
           <>
             <NavLink to="/fakturaer" end={false} className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
               <IkonFaktura storrelse={22} />
@@ -410,16 +453,21 @@ function Ramme() {
         <div className="orgvelger">
           <span className="avatar">{initialer(org?.navn ?? "?")}</span>
           <div style={{ minWidth: 0 }}>
-            <div className="navn">{org?.navn}</div>
+            <div className="navn">{org?.navn ?? "Ingen organisasjon"}</div>
             <div className="type">
-              {org ? (ansatt ? "Ansatt" : orgType[org.type] ?? org.type) : ""}
+              {org ? (ansatt ? "Ansatt" : orgType[org.type] ?? org.type) : "Plattformadministrator"}
               {org && !org.direkte_medlem ? " · klient" : ""}
             </div>
           </div>
           <span className="pil">
             <IkonVelg storrelse={16} />
           </span>
-          <select value={org?.id} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
+          <select value={org?.id ?? ""} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
+            {!org && (
+              <option value="" disabled>
+                Ingen organisasjon
+              </option>
+            )}
             {orgs.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.navn}
@@ -429,100 +477,114 @@ function Ramme() {
             <option value="__ny">+ Ny organisasjon</option>
           </select>
         </div>
-        {!ansatt && <div className="meny-seksjon">Meny</div>}
-        {ansatt ? (
-          ansattGrupper.map(([navn, punkter]) => (
-            <Fragment key={navn}>
-              <div className="meny-seksjon">{navn}</div>
-              {punkter.map((x) => ansattLenke(x))}
-            </Fragment>
-          ))
-        ) : (
+        {/* Oversikt øverst: forsiden for hver rolle (de ansatte har sin egen, AnsattOversikt.tsx; et
+            regnskapsbyrå ser klientene). Resten i seksjoner. */}
+        {org && (
           <NavLink to="/" end>
             <IkonOversikt />
-            {org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}
+            {org.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}
           </NavLink>
         )}
-        {!ansatt && org?.type !== "regnskapsbyraa" && (
+        {meg?.plattformadmin && (
           <>
-            {/* Gjentakende og innbetalinger ligger under Fakturaer (fakturameny.tsx). */}
-            <NavLink to="/fakturaer" className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
-              <IkonFaktura />
-              Fakturaer
-            </NavLink>
-            <NavLink to="/kunder">
-              <IkonKunder />
-              Kunder
-            </NavLink>
-            <NavLink to="/produkter">
-              <IkonProdukter />
-              Produkter
-            </NavLink>
-            {visRapporter && (
-              <NavLink to="/rapporter">
-                <IkonRapport />
-                Rapporter
-              </NavLink>
-            )}
-            {visRegnskap && (
-              <NavLink to="/regnskap">
-                <IkonRegnskap />
-                Regnskap
-              </NavLink>
-            )}
+            <div className="meny-seksjon">Plattform</div>
+            {plattformPunkter.map(([til, tekst, faner, Ikon]) => fanePunkt(til, !!adminFane && faner.includes(adminFane), Ikon, tekst))}
           </>
         )}
-        {!ansatt && (visAnsatte || visTimer || visBeskjeder) && (
-          <>
-            <div className="meny-seksjon">Personal</div>
-            {visAnsatte && (
-              <NavLink to="/ansatte">
-                <IkonAnsatte />
-                Ansatte
-              </NavLink>
-            )}
-            {visTimer && visVakter && (
-              <NavLink to="/vakter">
-                <IkonKalender />
-                Vaktplan
-              </NavLink>
-            )}
-            {visTimer && (
-              <NavLink to="/timer" className={({ isActive }) => (isActive || iTimerOgFerie ? "active" : undefined)}>
-                <IkonKlokke />
-                {timerOgFerie(org) ? "Timer og ferie" : "Timer"}
-              </NavLink>
-            )}
-            {visLonn && (
-              <NavLink to="/lonn">
-                <IkonLonn />
-                Lønn
-              </NavLink>
-            )}
-            {visBeskjeder && (
-              <NavLink to="/beskjeder">
-                <IkonBjelle />
-                Beskjeder
-                <UlesteTall n={nyeBeskjeder} />
-              </NavLink>
-            )}
-          </>
+        {org &&
+          (ansatt ? (
+            ansattGrupper.map(([navn, punkter]) => (
+              <Fragment key={navn}>
+                <div className="meny-seksjon">{navn}</div>
+                {punkter.map((x) => ansattLenke(x))}
+              </Fragment>
+            ))
+          ) : (
+            <>
+              {org.type !== "regnskapsbyraa" && (
+                <>
+                  <div className="meny-seksjon">Faktura</div>
+                  {/* Gjentakende og innbetalinger ligger under Fakturaer (fakturameny.tsx). */}
+                  <NavLink to="/fakturaer" className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
+                    <IkonFaktura />
+                    Fakturaer
+                  </NavLink>
+                  <NavLink to="/kunder">
+                    <IkonKunder />
+                    Kunder
+                  </NavLink>
+                  <NavLink to="/produkter">
+                    <IkonProdukter />
+                    Produkter
+                  </NavLink>
+                </>
+              )}
+              {(visAnsatte || visTimer || visBeskjeder) && (
+                <>
+                  <div className="meny-seksjon">Personal</div>
+                  {visAnsatte && (
+                    <NavLink to="/ansatte">
+                      <IkonAnsatte />
+                      Ansatte
+                    </NavLink>
+                  )}
+                  {visTimer && visVakter && (
+                    <NavLink to="/vakter">
+                      <IkonKalender />
+                      Vaktplan
+                    </NavLink>
+                  )}
+                  {visTimer && (
+                    <NavLink to="/timer" className={({ isActive }) => (isActive || iTimerOgFerie ? "active" : undefined)}>
+                      <IkonKlokke />
+                      {timerOgFerie(org) ? "Timer og ferie" : "Timer"}
+                    </NavLink>
+                  )}
+                  {visLonn && (
+                    <NavLink to="/lonn">
+                      <IkonLonn />
+                      Lønn
+                    </NavLink>
+                  )}
+                  {visBeskjeder && (
+                    <NavLink to="/beskjeder">
+                      <IkonBjelle />
+                      Beskjeder
+                      <UlesteTall n={nyeBeskjeder} />
+                    </NavLink>
+                  )}
+                </>
+              )}
+              {/* Regnskap og Rapporter: ikke for byrået selv (klientene har sine). */}
+              {visRegnskap && org.type !== "regnskapsbyraa" && (
+                <>
+                  <div className="meny-seksjon">Regnskap</div>
+                  {regnskapPunkter.map(([fane, tekst, Ikon]) => fanePunkt(fane === "bilag" ? "/regnskap" : `/regnskap?fane=${fane}`, regnskapFane === fane, Ikon, tekst))}
+                </>
+              )}
+              {visRapporter && org.type !== "regnskapsbyraa" && (
+                <>
+                  <div className="meny-seksjon">Rapporter</div>
+                  <NavLink to="/rapporter">
+                    <IkonRapport />
+                    Rapporter
+                  </NavLink>
+                </>
+              )}
+            </>
+          ))}
+        {/* Uten organisasjon (plattformadministratoren) er det ikke noe under Konto, bortsett fra å installere appen. */}
+        {(org || kanInstallere) && <div className="meny-seksjon">Konto</div>}
+        {org && (
+          <NavLink to="/innstillinger">
+            <IkonInnstillinger />
+            Innstillinger
+          </NavLink>
         )}
-        <div className="meny-seksjon">Konto</div>
-        <NavLink to="/innstillinger">
-          <IkonInnstillinger />
-          Innstillinger
-        </NavLink>
         {org?.verifisering === "ny" && org.direkte_medlem && !ansatt && (
           <NavLink to="/verifisering">
             <IkonSkjold />
             Verifiser organisasjon
-          </NavLink>
-        )}
-        {meg?.plattformadmin && (
-          <NavLink to="/admin">
-            <IkonNokkel />
-            Administrasjon
           </NavLink>
         )}
         {kanInstallere && (
@@ -559,7 +621,8 @@ function Ramme() {
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
-            <Route path="*" element={<Navigate to={visVakter ? "/vakter?fane=plan&visning=turnus" : "/meg"} replace />} />
+            <Route path="/" element={<AnsattOversikt />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         )}
         {org && !ansatt && (
@@ -594,6 +657,12 @@ function Ramme() {
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
             <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        )}
+        {!org && meg?.plattformadmin && (
+          <Routes>
+            <Route path="/admin" element={<Admin />} />
+            <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         )}
       </main>

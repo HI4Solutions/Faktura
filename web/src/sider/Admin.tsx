@@ -1,12 +1,16 @@
-// Plattformadministrasjon i tre faner: Oversikt (bruken, og kontoer og organisasjoner som venter
-// på godkjenning), Organisasjoner (alle organisasjonene med brukerne de har, søk, detaljer med
-// funksjonene, eksport, og standarden for nye) og Drift. På smale skjermer vises listene som kort.
+// Plattformadministrasjon i tre faner, som også er egne punkter i menyen (Plattform): Oversikt
+// (plattformadministratorens egen oversikt: kontoer og organisasjoner som venter på godkjenning,
+// driftsproblemer, bruken og funksjonene i bruk), Organisasjoner (alle organisasjonene med brukerne
+// de har, søk, detaljer med funksjonene, eksport, og standarden for nye) og Drift. På smale skjermer
+// vises listene som kort.
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
 import { dato, orgnr } from "../format";
-import { IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
+import { IkonAnsatte, IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
+import { useKonto } from "../konto";
+import { hilsen } from "./OversiktDeler";
 import { ModulValg, modulnavn, opplisting, useModuler, type Modul } from "../moduler";
 import { SlettOrganisasjon } from "../slettOrg";
 import { aarFraFilnavn, lesTrekktabellFil } from "../trekktabeller";
@@ -135,6 +139,7 @@ const OrgStatus = ({ o }: { o: Pick<Org, "verifisering" | "venter_manuell"> }) =
 const kontonrTekst = (k: string | null | undefined) => k?.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3") ?? null;
 
 export function Admin() {
+  const { meg } = useKonto();
   const [sok, settSok] = useSearchParams();
   // Venter, Funksjoner og Brukere er nå en del av Oversikt og Organisasjoner (gamle lenker virker).
   const valgtFane = sok.get("fane") ?? "";
@@ -150,14 +155,23 @@ export function Admin() {
   if (orgs.feil) return <Feil melding={orgs.feil} />;
   const venter = (orgs.data ?? []).filter((o) => o.venter_manuell).length + (kontoer.data?.length ?? 0);
   const faner: [Fane, string][] = [
-    ["oversikt", `Oversikt${venter ? ` (${venter})` : ""}`],
+    ["oversikt", `Plattformoversikt${venter ? ` (${venter})` : ""}`],
     ["organisasjoner", "Organisasjoner"],
     ["drift", "Drift"],
   ];
 
   return (
     <div className="admin">
-      <h1>Administrasjon</h1>
+      {fane === "oversikt" ? (
+        <div className="velkommen">
+          <div>
+            <h1>{hilsen(meg?.bruker.navn)}</h1>
+            <p>Plattformoversikten: det som venter på deg, bruken og driften av Admin Konsoll.</p>
+          </div>
+        </div>
+      ) : (
+        <h1>{fane === "drift" ? "Drift" : "Organisasjoner"}</h1>
+      )}
       <div className="faner" role="tablist">
         {faner.map(([v, t]) => (
           <button key={v} role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : ""} onClick={() => velgFane(v)}>
@@ -238,7 +252,7 @@ function Oversikt({ orgs, apne, velgFane }: { orgs: Org[]; apne: (id: string) =>
           </button>
         </div>
       )}
-      <div className="nokkeltall">
+      <div className="nokkeltall fem">
         <div className="kort">
           <div className="etikett">
             <span className="ikonboks"><IkonSkjold /></span> Organisasjoner
@@ -275,7 +289,19 @@ function Oversikt({ orgs, apne, velgFane }: { orgs: Org[]; apne: (id: string) =>
             EHF hos {data.integrasjoner.ehf} · bank hos {data.integrasjoner.bank}
           </div>
         </div>
+        {data.personal && (
+          <div className="kort">
+            <div className="etikett">
+              <span className="ikonboks ok"><IkonAnsatte /></span> Ansatte
+            </div>
+            <div className="verdi">{data.personal.ansatte}</div>
+            <div className="under">
+              {data.personal.med_innlogging} logger inn · i {data.personal.organisasjoner} org. · {data.personal.lonnskjoringer_30} lønnskjøringer siste 30 dager
+            </div>
+          </div>
+        )}
       </div>
+      {data.moduler && <FunksjonerIBruk moduler={data.moduler} totalt={o.totalt} />}
       <div className="kort tabell">
         <div className="kort-topp">
           <h2>Nyeste organisasjoner</h2>
@@ -286,6 +312,38 @@ function Oversikt({ orgs, apne, velgFane }: { orgs: Org[]; apne: (id: string) =>
         <OrgListe rader={nyeste} apne={apne} enkel />
       </div>
     </>
+  );
+}
+
+// Funksjonene i bruk, modul for modul: hvor mange av organisasjonene som har hver (som stolpe).
+function FunksjonerIBruk({ moduler, totalt }: { moduler: { kode: string; navn: string; funksjoner: { kode: string; navn: string; antall: number }[] }[]; totalt: number }) {
+  return (
+    <div className="kort">
+      <div className="kort-topp">
+        <h2>Funksjonene i bruk</h2>
+        <span className="dempet liten">Organisasjoner av {totalt}</span>
+      </div>
+      <div className="funksjoner-i-bruk">
+        {moduler
+          .filter((m) => m.funksjoner.length)
+          .map((m) => (
+            <section key={m.kode}>
+              <h3>{m.navn}</h3>
+              <ul>
+                {m.funksjoner.map((f) => (
+                  <li key={f.kode}>
+                    <span>{f.navn}</span>
+                    <span className="bruk-stolpe" aria-hidden="true">
+                      <span style={{ width: `${totalt ? Math.round((f.antall / totalt) * 100) : 0}%` }} />
+                    </span>
+                    <span className="tall">{f.antall}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+      </div>
+    </div>
   );
 }
 

@@ -1,12 +1,23 @@
+// Oversikten for organisasjonen (forsiden for eier, administrator og de andre rollene utenom de
+// ansatte, som har sin egen i AnsattOversikt.tsx): det som venter på deg i fakturaene, personalet,
+// lønnen og regnskapet («Til oppfølging»), hvem som er på jobb og borte i dag, og fakturaene med
+// nøkkeltall, fakturert per måned og det som forfaller snart. Det rollen og funksjonene ikke gir
+// tilgang til, hentes ikke og vises ikke. Et regnskapsbyrå ser klientene.
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { hent } from "../api";
 import { Feil, Laster, Tom, useData } from "../felles";
-import { harFunksjon, kanBokfore, kanSkrive, useKonto } from "../konto";
-import { dato, kr } from "../format";
-import { IkonFaktura, IkonHake, IkonKlokke, IkonKroner, IkonKunder, IkonPluss, IkonUtkast, IkonVarsel } from "../ikoner";
+import { harFunksjon, kanBokfore, kanPersonal, kanSePersonal, kanSeRegnskap, kanSkrive, useKonto } from "../konto";
+import { dato, iDag, kr, leggTilDager } from "../format";
+import { visDag } from "../uke";
+import { maaned } from "../lonn";
+import { IkonFaktura, IkonHake, IkonKalender, IkonKlokke, IkonKroner, IkonKunder, IkonPluss, IkonUtkast, IkonVarsel } from "../ikoner";
 import { Fakturatabell } from "./Fakturaer";
 import { dagerTil, navnListe, useHentVedApning, type BankStatus } from "./Bank";
+import type { VaktSvar } from "./Vakter";
+import type { ByttSvar } from "./Vaktbytte";
+import { fravaerTekst } from "./Fravaer";
+import { antall, hilsen, Oppfolging, type Oppgave } from "./OversiktDeler";
 
 export function Oversikt() {
   const { org, meg, velgOrg } = useKonto();
@@ -19,6 +30,8 @@ export function Oversikt() {
   );
   // Nye innbetalinger fra banken når oversikten åpnes.
   useHentVedApning();
+  const personal = usePersonal();
+  const regnskap = useRegnskap();
 
   // Regnskapsbyrå: felles oversikt over klientene.
   if (org?.type === "regnskapsbyraa") {
@@ -102,18 +115,24 @@ export function Oversikt() {
     };
   });
 
-  const time = Number(new Intl.DateTimeFormat("nb-NO", { hour: "numeric", timeZone: "Europe/Oslo" }).format(new Date()));
-  const hilsen = time < 5 ? "God natt" : time < 10 ? "God morgen" : time < 18 ? "God dag" : "God kveld";
-  const fornavn = (meg?.bruker.navn ?? "").split(" ")[0];
+  // Det som venter: fakturaene først (utkast som kan sendes, forfalte), så personalet, lønnen og
+  // regnskapet.
+  const oppgaver: Oppgave[] = [
+    ...(forfalt.length
+      ? [{ nokkel: "forfalt", tekst: `${antall(forfalt.length, "faktura", "fakturaer")} har passert forfall (${kr(sumForfalt)} kr)`, til: "/fakturaer?status=utstedt", fare: true }]
+      : []),
+    ...(utkast.length && kanSkrive(org?.rolle)
+      ? [{ nokkel: "utkast", tekst: `${antall(utkast.length, "fakturautkast", "fakturautkast")} er klare til å sendes`, til: "/fakturaer?status=utkast" }]
+      : []),
+    ...personal.oppgaver,
+    ...regnskap.oppgaver,
+  ];
 
   return (
     <>
       <div className="velkommen">
         <div>
-          <h1>
-            {hilsen}
-            {fornavn ? `, ${fornavn}` : ""}
-          </h1>
+          <h1>{hilsen(meg?.bruker.navn)}</h1>
           <p>Her er status for {org?.navn}.</p>
         </div>
         {kanSkrive(org?.rolle) && (
@@ -165,6 +184,15 @@ export function Oversikt() {
           <div className="under">{utkast.length ? "Klare til å sendes" : "Ingen utkast"}</div>
         </div>
       </div>
+
+      {personal.idag ? (
+        <div className="dash-rad">
+          <Oppfolging oppgaver={oppgaver} laster={personal.laster || regnskap.laster} />
+          <IDag {...personal.idag} />
+        </div>
+      ) : (
+        <Oppfolging oppgaver={oppgaver} laster={personal.laster || regnskap.laster} />
+      )}
 
       <div className="dash-rad">
         <div className="kort">
@@ -322,5 +350,142 @@ function BankMelding({ s }: { s: BankStatus }) {
         </div>
       )}
     </>
+  );
+}
+
+// --- Personalet, lønnen og regnskapet ------------------------------------------------------------
+
+type KjoringRad = { id: string; periode: string; type: "ordinar" | "ekstra"; utbetalingsdato: string; status: "utkast" | "godkjent" };
+type Kollega = { id: string; fornavn: string; etternavn: string };
+type IDagData = { dato: string; paJobb: { navn: string; tid: string }[]; borte: { navn: string; hva: string }[]; ledige: number };
+const dagerMellom = (fra: string, til: string) => Math.round((Date.parse(`${til}T12:00:00Z`) - Date.parse(`${fra}T12:00:00Z`)) / 86_400_000);
+
+// Det som venter i personalet og lønnen: timer, vaktbytter, feriesøknader og søknader om avspasering
+// til godkjenning (eier og administrator), ledige vakter de neste sju dagene og lønnskjøringer som
+// ikke er godkjent. Og hvem som er på jobb og borte i dag, for dem som ser vaktplanen.
+function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData | null } {
+  const { org } = useKonto();
+  const se = !!org?.personal && kanSePersonal(org.rolle);
+  const leder = se && kanPersonal(org!.rolle);
+  const vaktplan = se && harFunksjon(org, "vaktplan");
+  const lonn = se && harFunksjon(org, "lonn");
+  const bytte = leder && vaktplan && org?.vaktbytte !== "av";
+  const idag = iDag();
+  const sti = `/org/${org?.id}`;
+  const valg = { oppdater: true };
+  const ingen = () => Promise.resolve(null);
+  const timer = useData(
+    () => (leder ? hent<{ uker: unknown[] }>(`${sti}/timer?fra=${leggTilDager(idag, -366)}&til=${leggTilDager(idag, 62)}&status=levert`).catch(() => null) : ingen()),
+    [sti, leder],
+    valg,
+  );
+  const vakter = useData(() => (vaktplan ? hent<VaktSvar>(`${sti}/vakter?fra=${idag}&til=${leggTilDager(idag, 6)}`).catch(() => null) : ingen()), [sti, vaktplan, idag], valg);
+  const kolleger = useData(() => (vaktplan ? hent<Kollega[]>(`${sti}/kolleger`).catch(() => null) : ingen()), [sti, vaktplan]);
+  const bytter = useData(() => (bytte ? hent<ByttSvar>(`${sti}/vaktbytter`).catch(() => null) : ingen()), [sti, bytte], valg);
+  const ferie = useData(() => (leder && vaktplan ? hent<unknown[]>(`${sti}/ferie/overforinger?status=venter`).catch(() => null) : ingen()), [sti, leder, vaktplan], valg);
+  const timebank = useData(() => (leder && org?.timebank ? hent<{ soknader: { status: string }[] }>(`${sti}/timebank`).catch(() => null) : ingen()), [sti, leder, org?.timebank], valg);
+  const kjoringer = useData(() => (lonn ? hent<KjoringRad[]>(`${sti}/lonn/kjoringer`).catch(() => null) : ingen()), [sti, lonn], valg);
+
+  const oppgaver: Oppgave[] = [];
+  const uker = timer.data?.uker.length ?? 0;
+  if (uker) oppgaver.push({ nokkel: "timer", tekst: `${antall(uker, "uke", "uker")} med timer venter på godkjenning`, til: "/timer?fane=godkjenning" });
+  const tilGodkjenning = (bytter.data?.bytter ?? []).filter((b) => b.status === "akseptert").length;
+  if (tilGodkjenning) oppgaver.push({ nokkel: "bytter", tekst: `${antall(tilGodkjenning, "vaktbytte venter", "vaktbytter venter")} på godkjenning`, til: "/vakter?fane=bytter" });
+  const soknader = ferie.data?.length ?? 0;
+  if (soknader) oppgaver.push({ nokkel: "ferie", tekst: `${antall(soknader, "søknad", "søknader")} om å overføre ferie`, til: "/ferie" });
+  const avspasering = (timebank.data?.soknader ?? []).filter((x) => x.status === "venter").length;
+  if (avspasering) oppgaver.push({ nokkel: "avspasering", tekst: `${antall(avspasering, "søknad", "søknader")} om avspasering`, til: "/timer?fane=timebank" });
+  const ledige = (vakter.data?.vakter ?? []).filter((v) => !v.ansatt_id && v.dato >= idag);
+  if (ledige.length) oppgaver.push({ nokkel: "ledige", tekst: `${antall(ledige.length, "vakt", "vakter")} uten ansatt de neste sju dagene`, til: "/vakter" });
+  for (const k of (kjoringer.data ?? []).filter((x) => x.status === "utkast")) {
+    const igjen = dagerMellom(idag, k.utbetalingsdato);
+    oppgaver.push({
+      nokkel: `lonn-${k.id}`,
+      tekst: `Lønnen for ${maaned(k.periode)}${k.type === "ekstra" ? " (ekstra)" : ""} er ikke godkjent (utbetales ${dato(k.utbetalingsdato)})`,
+      til: `/lonn?kjoring=${k.id}`,
+      fare: igjen <= 3,
+    });
+  }
+  const laster = [timer, vakter, bytter, ferie, timebank, kjoringer].some((d) => d.laster);
+
+  // I dag: vaktene og de faste arbeidsdagene i dag, og fraværet.
+  let idagData: IDagData | null = null;
+  if (vaktplan && vakter.data) {
+    const navn = new Map((kolleger.data ?? []).map((k) => [k.id, `${k.fornavn} ${k.etternavn}`]));
+    const tid = (fra: string | null, til: string | null) => (fra && til ? `${fra}–${til}` : "Hel dag");
+    const borteIdag = vakter.data.fravaer.filter((f) => f.fra <= idag && f.til >= idag);
+    const borteIder = new Set(borteIdag.map((f) => f.ansatt_id));
+    const paJobb = [
+      ...vakter.data.vakter.filter((v) => v.dato === idag && v.ansatt_id && !borteIder.has(v.ansatt_id)).map((v) => ({ navn: v.ansatt_navn ?? navn.get(v.ansatt_id!) ?? "", fra: v.fra, tid: tid(v.fra, v.til) })),
+      ...(vakter.data.faste ?? []).filter((f) => f.dato === idag && !f.fravaer && !borteIder.has(f.ansatt_id)).map((f) => ({ navn: navn.get(f.ansatt_id) ?? "", fra: f.fra, tid: tid(f.fra, f.til) })),
+    ]
+      .filter((x) => x.navn)
+      .sort((a, b) => (a.fra ?? "").localeCompare(b.fra ?? "") || a.navn.localeCompare(b.navn, "nb"));
+    idagData = {
+      dato: idag,
+      paJobb: paJobb.map(({ navn: n, tid: t }) => ({ navn: n, tid: t })),
+      borte: borteIdag.map((f) => ({ navn: f.ansatt_navn, hva: fravaerTekst[f.type] ?? "Borte" })),
+      ledige: ledige.filter((v) => v.dato === idag).length,
+    };
+  }
+  return { oppgaver, laster, idag: idagData };
+}
+
+// Regnskapet: punktene i månedsavslutningen for forrige måned som ikke er i orden (bankpostene,
+// utgiftene og resten), med lenke dit (RegnskapAvslutning.tsx).
+function useRegnskap(): { oppgaver: Oppgave[]; laster: boolean } {
+  const { org } = useKonto();
+  const se = harFunksjon(org, "regnskap") && kanSeRegnskap(org?.rolle) && org?.type !== "regnskapsbyraa";
+  const status = useData(
+    () =>
+      se
+        ? hent<{ navn: string; punkter: { nokkel: string; navn: string; ok: boolean; venter?: boolean; tekst: string; lenke: string }[] }>(
+            `/org/${org!.id}/regnskap/maanedsstatus`,
+          ).catch(() => null)
+        : Promise.resolve(null),
+    [org?.id, se],
+    { oppdater: true },
+  );
+  const s = status.data;
+  const oppgaver: Oppgave[] = (s?.punkter ?? [])
+    .filter((p) => !p.ok && !p.venter)
+    .map((p) => ({ nokkel: `regnskap-${p.nokkel}`, tekst: `${p.navn} (${s!.navn.toLowerCase()}): ${p.tekst}`, til: p.lenke }));
+  return { oppgaver, laster: status.laster };
+}
+
+// Hvem som er på jobb og borte i dag, og vaktene uten ansatt.
+function IDag({ dato: d, paJobb, borte, ledige }: IDagData) {
+  return (
+    <div className="kort idag">
+      <div className="kort-topp">
+        <h2>I dag</h2>
+        <Link to="/vakter?visning=dag" className="liten">
+          {visDag(d)}
+        </Link>
+      </div>
+      {paJobb.length || borte.length || ledige ? (
+        <ul className="liste-enkel">
+          {paJobb.map((p, i) => (
+            <li key={`p${i}`}>
+              <span>{p.navn}</span>
+              <span className="dempet liten">{p.tid}</span>
+            </li>
+          ))}
+          {borte.map((b, i) => (
+            <li key={`b${i}`}>
+              <span className="dempet">{b.navn}</span>
+              <span className="merke merke-noytral">{b.hva}</span>
+            </li>
+          ))}
+          {ledige > 0 && (
+            <li>
+              <Link to="/vakter?visning=dag">{antall(ledige, "vakt", "vakter")} uten ansatt i dag</Link>
+            </li>
+          )}
+        </ul>
+      ) : (
+        <Tom ikon={<IkonKalender />} tittel="Ingen på vakt i dag" />
+      )}
+    </div>
   );
 }

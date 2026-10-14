@@ -40,7 +40,7 @@ domenet og skal stå.
   `https://adminkonsoll.no/bank/tilbake`. Mangler den, sier appen fra med adressen når banken
   kobles til eller tilgangen fornyes.
 - **Altinn** (systemregisteret, når skattekortene er satt opp): trykk «Oppdater i Altinn» under
-  Administrasjon → Drift, så systemet har tilbakeadressen på domenet.
+  Plattform → Drift, så systemet har tilbakeadressen på domenet.
 - **Resend:** webhooken for e-postsporingen peker til `https://adminkonsoll.no/api/offentlig/resend`
   (hendelsene `email.delivered`, `email.delivery_delayed`, `email.bounced` og `email.complained`),
   og signeringsnøkkelen dens ligger i Secret Manager som `resend-webhook-secret`. API-et leser den

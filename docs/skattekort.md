@@ -76,7 +76,7 @@ deretter i produksjon.
      `LEVERANDOR_ORGNR` (standard 936564046).
 
    Kjør så workflowen «Infrastruktur» (Actions → Infrastruktur → Run workflow).
-6. **Systemet i Altinn.** Administrasjon → Drift → «Skattekort (Skatteetaten)» → «Registrer
+6. **Systemet i Altinn.** Plattform → Drift → «Skattekort (Skatteetaten)» → «Registrer
    systemet i Altinn». Det samme oppdaterer navnet og klient-ID-en senere.
 7. **Test.** En testorganisasjon i TT02 kobler til under Innstillinger → Ansatte og timer,
    godkjenner i Altinn TT02 og henter skattekortene til Skatteetatens testpersoner

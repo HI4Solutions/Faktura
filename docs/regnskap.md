@@ -8,7 +8,7 @@ reglene), mva-meldingen for hver termin med oppgjøret, årsoppgjøret og period
 avskrivninger, nedskrivning, salg og utrangering, periodiseringene over flere måneder og år,
 månedsavslutningen (som går av seg selv) og de skattemessige saldoavskrivningene.
 
-Modulen er funksjonen «Regnskap» (Administrasjon → Funksjoner) og menyen «Regnskap» med fanene
+Modulen er funksjonen «Regnskap» (Plattform → Organisasjoner, i organisasjonen) og menyen «Regnskap» med fanene
 Bilag, Utgifter, Bank, Mva, Saldobalanse, Årsoppgjør, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
 administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer og les ser den ikke.
 

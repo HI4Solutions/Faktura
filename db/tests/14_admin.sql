@@ -86,6 +86,12 @@ select test.er((faktura.admin_oversikt() -> 'fakturaer' ->> 'ehf_30')::int >= 1,
 select test.er(faktura.admin_oversikt() -> 'fakturaer' ?| array['sum', 'sum_30'], false, 'oversikten har ingen beløp');
 select test.er((faktura.admin_oversikt() -> 'brukere' ->> 'aktive_30')::int >= 1, true, 'aktive brukere');
 select test.er(faktura.admin_oversikt() -> 'problemer' ? 'banker', true, 'problemer per område');
+-- Funksjonene i bruk og personalet (0109_plattformoversikt.sql).
+select test.er((select count(*)::int from jsonb_array_elements(faktura.admin_oversikt() -> 'moduler')), (select count(*)::int from faktura.moduler),
+               'alle modulene er med');
+select test.er((select (f ->> 'antall')::int >= 1 from jsonb_array_elements(faktura.admin_oversikt() -> 'moduler') m,
+                       jsonb_array_elements(m -> 'funksjoner') f where f ->> 'kode' = 'ehf'), true, 'organisasjonene med EHF telles');
+select test.er(faktura.admin_oversikt() -> 'personal' ?& array['organisasjoner', 'ansatte', 'med_innlogging', 'lonnskjoringer_30'], true, 'personalet');
 select test.er(faktura.admin_drift() ?& array['utboks', 'epost', 'ehf', 'integrasjoner', 'banker'], true, 'driftsstatus');
 select test.er((select sist_aktiv is not null and antall_medlemmer = 1 from faktura.admin_organisasjoner() where id = :'org'), true,
                'organisasjonen sist aktiv');
