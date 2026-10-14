@@ -1,5 +1,5 @@
 # Bilde for Cloud Run-jobben faktura-migrate: kjører db/migrations mot Cloud SQL.
-FROM public.ecr.aws/docker/library/postgres:16-alpine
+FROM mirror.gcr.io/library/postgres:16-alpine
 RUN apk add --no-cache bash
 WORKDIR /app
 COPY db/migrations db/migrations

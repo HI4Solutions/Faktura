@@ -14,8 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        # Fra AWS sitt speil av de offisielle bildene: Docker Hub har vært utilgjengelig fra GitHub.
-        image: public.ecr.aws/docker/library/postgres:16
+        # Fra Googles speil av de offisielle bildene: Docker Hub har vært utilgjengelig fra GitHub, og
+        # AWS sitt speil (public.ecr.aws) avviste nedlastingene («Data limit exceeded»).
+        image: mirror.gcr.io/library/postgres:16
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
         ports: ["5432:5432"]
