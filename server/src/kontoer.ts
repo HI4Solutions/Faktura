@@ -3,12 +3,14 @@
 // inn og modulene valgt (0044_moduler.sql), får administratorene e-post om forespørselen; de
 // godkjenner (med modulene brukeren ba om, eller andre) eller avviser under Administrasjon →
 // Venter, og brukeren får e-post om utfallet. Til da slipper API-et bare gjennom /meg (status,
-// navn og moduler) og invitasjoner (en invitasjon fra en organisasjon godkjenner kontoen).
+// navn, moduler og lenken som bekrefter e-postadressen, epostbekreftelse.ts) og invitasjoner (en
+// invitasjon fra en organisasjon godkjenner kontoen).
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { config } from "./config.js";
 import { alle, en, somBetrodd, somBruker, somSystem, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
+import { adminBekreftEpost, adminSendBekreftelse } from "./epostbekreftelse.js";
 import { leggIKo } from "./tjenester.js";
 
 // Modulene (Faktura, Bemanning og de som kommer), for registreringen: åpent, og husket fem
@@ -40,6 +42,7 @@ const modulnavn = async (db: Db, bruker: string) =>
 const APNE: [string, string][] = [
   ["GET", "/api/meg"],
   ["PATCH", "/api/meg"],
+  ["POST", "/api/meg/bekreftelse"],
   ["POST", "/api/invitasjoner/aksepter"],
 ];
 
@@ -120,6 +123,11 @@ export function kontoAdminRuter() {
     }).catch((e) => console.warn("Kunne ikke sende e-post om kontoen", e));
     return c.json({ id: b.id, status: b.status, avvist_grunn: b.avvist_grunn, moduler: b.moduler });
   });
+
+  // En ny lenke som bekrefter e-postadressen, eller bekreft den for brukeren (når administratoren
+  // vet at adressen er riktig, f.eks. etter å ha snakket med brukeren).
+  r.post("/brukere/:id/epostbekreftelse", async (c) => c.json(await adminSendBekreftelse(c, id(c))));
+  r.post("/brukere/:id/bekreft-epost", async (c) => c.json(await adminBekreftEpost(c, id(c))));
 
   return r;
 }

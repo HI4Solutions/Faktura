@@ -51,6 +51,22 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   avslaget). Den som tar imot en invitasjon fra en organisasjon (sendt til e-postadressen
   sin), godkjennes da; organisasjonen går god for den. Plattformadministratorene og de som
   hadde konto fra før, er godkjent (`0043_kontogodkjenning.sql`)
+- `brukere.epost_bekreftet` og `epostbekreftelser`: lenken som bekrefter e-postadressen til en
+  ny konto. Identity Platform sendte den før selv, fra sin egen avsender
+  (noreply@<prosjekt>.firebaseapp.com), og hos noen kom den ikke fram eller havnet i
+  søppelposten. Nå lager API-et koden med firebase-admin (`generateEmailVerificationLink`;
+  API-ets tjenestekonto har `roles/firebaseauth.admin`), og workeren sender lenken
+  (`/bekreft-epost?kode=…`) fra Admin Konsoll gjennom Resend, med status fra webhooken (levert,
+  sprett, klage) som de andre e-postene. Siden i appen bekrefter adressen (`applyActionCode`),
+  og skjermen som venter på bekreftelsen, går videre av seg selv når lenken er åpnet, også på
+  en annen enhet. Den første lenken går rett fra registreringen; brukeren kan be om nye (høyst
+  én i minuttet og åtte i døgnet, `POST /api/meg/bekreftelse`). Får ikke serveren sendt den,
+  ber appen Identity Platform sende den som før. `registrer_bruker` husker fra tokenet om
+  adressen er bekreftet (et eldre token gjør den ikke ubekreftet igjen). Plattformadministratoren
+  ser under Administrasjon → Oversikt om en ny konto har bekreftet adressen og hvordan det gikk
+  med den siste lenken, og kan sende en ny eller bekrefte adressen for brukeren (også i
+  Identity Platform; hvem og når lagres) når hen vet at den er riktig
+  (`0105_epostbekreftelse.sql`, `server/src/epostbekreftelse.ts`)
 - `moduler` og `bruker_moduler`: plattformens moduler (foreløpig Faktura og Bemanning), og
   hvilke en bruker har bedt om eller fått. Hver funksjon (`funksjoner.modul`) hører til en
   modul. Den som lager en konto, krysser av for modulene den trenger (lagres rett fra

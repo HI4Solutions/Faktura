@@ -1014,9 +1014,15 @@ input.klokkeslett { font-variant-numeric: tabular-nums; }
 /* Nye kontoer som venter på godkjenning */
 .kontoer-venter h2 { margin-top: 0; }
 .kontoer-venter .admin-rader li { flex-wrap: wrap; gap: 8px 12px; }
-.kontoer-venter .admin-rader li .knapper { flex: none; }
+.kontoer-venter .admin-rader li .knapper { flex: 0 1 auto; max-width: 100%; }
+/* Teksten tar plassen ved siden av knappene og brytes der; knappene havner under bare på smale skjermer. */
+.kontoer-venter .admin-rader li > :first-child { flex: 1 1 320px; }
 .kort.venter-godkjenning { max-width: 480px; }
 .kontoer-venter .konto-moduler { display: block; margin-top: 4px; }
+/* E-postadressen er ikke bekreftet: status for lenken (0105_epostbekreftelse.sql). */
+.kontoer-venter .konto-epost { display: block; margin-top: 6px; }
+.kontoer-venter .konto-epost .merke { margin-right: 4px; }
+.kort.bekreft-epost { max-width: 480px; }
 .kontoer-venter fieldset.modul-valg.kompakt { margin-top: 6px; }
 .venter-godkjenning .valgte-moduler .lenke { margin-left: 4px; }
 

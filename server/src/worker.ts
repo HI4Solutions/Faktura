@@ -25,6 +25,7 @@ import { avsluttMaanederForAlle } from "./maanedsavslutning.js";
 import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmodul.js";
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
+import { sendEpostbekreftelse } from "./epostbekreftelse.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -176,6 +177,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "nav-hent") return hentFraNav(o.org_id);
   if (o.type === "nav-inntektsmelding") return sendInntektsmelding(o.org_id, o.inntektsmelding_id);
   if (o.type === "rapport-send") return sendRapporter(o);
+  if (o.type === "epostbekreftelse") return sendEpostbekreftelse(o);
   return sendEpost(o);
 }
 
@@ -529,6 +531,13 @@ export function lagWorker() {
       .object({ til: z.array(z.string().email()).min(1), emne: z.string(), tekst: z.string(), fra_navn: z.string().optional(), svar_til: z.string().optional(), oppgave_id: z.string() })
       .parse(await c.req.json());
     await sendEpost(o);
+    return c.json({ ok: true });
+  });
+
+  // Lenken som bekrefter e-postadressen til en ny konto (koden er laget av API-et).
+  app.post("/oppgaver/epostbekreftelse", async (c) => {
+    const o = z.object({ bekreftelse_id: z.string().uuid(), kode: z.string().min(1).max(2000), oppgave_id: z.string() }).parse(await c.req.json());
+    await sendEpostbekreftelse(o);
     return c.json({ ok: true });
   });
 

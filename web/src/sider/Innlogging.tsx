@@ -2,15 +2,14 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   createUserWithEmailAndPassword,
   getMultiFactorResolver,
-  sendEmailVerification,
   sendPasswordResetEmail,
-  updateProfile,
   signInWithEmailAndPassword,
   TotpMultiFactorGenerator,
   type MultiFactorError,
   type MultiFactorResolver,
 } from "firebase/auth";
 import { hentAuth } from "../firebase";
+import { fullforRegistrering } from "../epostbekreftelse";
 import { Feil, Laster } from "../felles";
 import { Logo } from "../Logo";
 import { IkonHake } from "../ikoner";
@@ -134,11 +133,11 @@ export function Innlogging() {
         if (navn.trim().length < 2) throw new Error("Skriv inn fullt navn.");
         if (moduler?.length && !valgte.length) throw new Error("Velg hva du trenger (minst én modul).");
         const { user } = await createUserWithEmailAndPassword(auth, epost, passord);
-        await updateProfile(user, { displayName: navn.trim() });
-        await sendEmailVerification(user, { url: window.location.origin });
-        // Navnet og modulene lagres med en gang; forespørselen går når e-postadressen er
-        // bekreftet. Feiler det, spør venteskjermen etter modulene i stedet.
-        if (valgte.length) await api("PATCH", "/meg", { navn: navn.trim(), moduler: valgte }).catch((e) => console.warn("Kunne ikke lagre modulene", e));
+        // Navnet og modulene lagres med en gang (forespørselen går når e-postadressen er
+        // bekreftet; feiler det, spør venteskjermen etter modulene i stedet), og lenken som
+        // bekrefter adressen sendes fra Admin Konsoll. Skjermen som kommer nå (BekreftEpost),
+        // viser hvordan det gikk.
+        fullforRegistrering(user, navn.trim(), valgte);
       } else {
         await sendPasswordResetEmail(auth, epost, { url: window.location.origin });
         settInfo("Hvis adressen har en konto, har vi sendt en lenke for å lage nytt passord.");
@@ -255,43 +254,6 @@ export function Innlogging() {
           </p>
         )}
       </form>
-      </div>
-    </div>
-  );
-}
-
-export function BekreftEpost({ epost, loggUt }: { epost: string; loggUt: () => void }) {
-  const [melding, settMelding] = useState<string | null>(null);
-  async function sjekk() {
-    const a = await hentAuth();
-    await a.currentUser?.reload();
-    if (a.currentUser?.emailVerified) {
-      await a.currentUser.getIdToken(true);
-      window.location.reload();
-    } else settMelding("E-postadressen er ikke bekreftet ennå.");
-  }
-  async function sendIgjen() {
-    const a = await hentAuth();
-    if (a.currentUser) await sendEmailVerification(a.currentUser, { url: window.location.origin });
-    settMelding("Ny lenke er sendt.");
-  }
-  return (
-    <div className="sentrert">
-      <div className="kort">
-        <h1>Bekreft e-postadressen</h1>
-        <p>
-          Vi har sendt en lenke til <strong>{epost}</strong>. Klikk på den, og kom tilbake hit.
-        </p>
-        {melding && <div className="melding info">{melding}</div>}
-        <div className="knapper">
-          <button className="primar" onClick={sjekk}>
-            Jeg har bekreftet
-          </button>
-          <button onClick={sendIgjen}>Send på nytt</button>
-          <button className="lenke" onClick={loggUt}>
-            Logg ut
-          </button>
-        </div>
       </div>
     </div>
   );

@@ -27,6 +27,33 @@ function firebase() {
   return getAuth();
 }
 
+// Det API-et gjør i Identity Platform utenom innloggingen (byttes ut i tester): lager lenken som
+// bekrefter e-postadressen (vi sender den selv, server/src/epostbekreftelse.ts), og merker
+// adressen som bekreftet når plattformadministratoren gjør det for brukeren.
+export interface Identitet {
+  // Koden (oobCode) i en ny lenke som bekrefter e-postadressen.
+  bekreftelseskode(epost: string): Promise<string>;
+  bekreftEpost(eksternId: string): Promise<void>;
+}
+
+export const identityPlatform: Identitet = {
+  async bekreftelseskode(epost) {
+    const lenke = await firebase().generateEmailVerificationLink(epost);
+    const kode = new URL(lenke).searchParams.get("oobCode");
+    if (!kode) throw new Error("Identity Platform ga ingen kode i lenken");
+    return kode;
+  },
+  async bekreftEpost(eksternId) {
+    await firebase().updateUser(eksternId, { emailVerified: true });
+  },
+};
+
+let aktivIdentitet: Identitet = identityPlatform;
+export const identitet = () => aktivIdentitet;
+export function settIdentitet(i: Identitet) {
+  aktivIdentitet = i;
+}
+
 async function verifiser(token: string) {
   if (config.testInnlogging && token.startsWith("test:")) {
     // test:<uid>:<epost>[:mfa[:navn[:venter[:ubekreftet]]]] – testbrukere godkjennes med en gang,
@@ -65,9 +92,15 @@ export const krevInnlogging: MiddlewareHandler = async (c, next) => {
     throw new ApiFeil(401, "Ugyldig eller utløpt innlogging");
   }
   if (!t.email) throw new ApiFeil(401, "Kontoen mangler e-postadresse");
-  // registrer_bruker kjøres uten bruker-id; den er en betrodd funksjon for API-et.
+  // registrer_bruker kjøres uten bruker-id; den er en betrodd funksjon for API-et. Den husker også
+  // om e-postadressen er bekreftet (for administrasjonen).
   const b = (await somSystem((db) =>
-    en<{ id: string; status: Innlogget["status"] }>(db, "select id, status from faktura.registrer_bruker($1, $2, $3)", [t.uid, t.email, t.navn ?? null]),
+    en<{ id: string; status: Innlogget["status"] }>(db, "select id, status from faktura.registrer_bruker($1, $2, $3, $4)", [
+      t.uid,
+      t.email,
+      t.navn ?? null,
+      t.email_verified,
+    ]),
   ))!;
   // Plattformadministratorene (med bekreftet e-post) trenger ingen godkjenning, og heller ikke
   // testbrukerne.
@@ -80,9 +113,14 @@ export const krevInnlogging: MiddlewareHandler = async (c, next) => {
 };
 
 // Endringer krever bekreftet e-postadresse, bortsett fra navnet og modulene på den nye kontoen
-// (de lagres rett fra registreringen; forespørselen går først når e-postadressen er bekreftet).
+// (de lagres rett fra registreringen; forespørselen går først når e-postadressen er bekreftet) og
+// lenken som bekrefter den.
+const UTEN_BEKREFTELSE: [string, string][] = [
+  ["PATCH", "/api/meg"],
+  ["POST", "/api/meg/bekreftelse"],
+];
 export const krevBekreftetEpost: MiddlewareHandler = async (c, next) => {
-  if (c.req.method !== "GET" && !c.get("bruker").epostBekreftet && !(c.req.method === "PATCH" && c.req.path === "/api/meg")) {
+  if (c.req.method !== "GET" && !c.get("bruker").epostBekreftet && !UTEN_BEKREFTELSE.some(([m, sti]) => m === c.req.method && sti === c.req.path)) {
     throw new ApiFeil(403, "Bekreft e-postadressen din først");
   }
   await next();

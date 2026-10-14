@@ -46,9 +46,37 @@ type Bruker = {
   avvist_grunn: string | null;
   // Modulene brukeren ba om, eller som ble godkjent (0044_moduler.sql).
   moduler: string[];
+  // Om e-postadressen er bekreftet (null: ikke sett siden 0105_epostbekreftelse.sql).
+  epost_bekreftet: boolean | null;
 };
-// En ny konto som venter på godkjenning, med modulene den ber om.
-type KontoVenter = { id: string; epost: string; navn: string | null; opprettet: string; varslet_at: string | null; moduler: string[] };
+// Den siste lenken som skal bekrefte e-postadressen til en ny konto, med status fra Resend.
+type Bekreftelse = {
+  opprettet: string;
+  status: "venter" | "sendt" | "levert" | "forsinket" | "sprett" | "klage" | "feilet";
+  detaljer: string | null;
+  av_admin: boolean;
+  antall: number;
+};
+// En ny konto som venter på godkjenning, med modulene den ber om og om e-postadressen er bekreftet.
+type KontoVenter = {
+  id: string;
+  epost: string;
+  navn: string | null;
+  opprettet: string;
+  varslet_at: string | null;
+  moduler: string[];
+  epost_bekreftet: boolean;
+  bekreftelse: Bekreftelse | null;
+};
+const bekreftelseStatus: Record<Bekreftelse["status"], string> = {
+  venter: "venter på å bli sendt",
+  sendt: "sendt",
+  levert: "levert",
+  forsinket: "forsinket hos mottakeren",
+  sprett: "kom ikke fram",
+  klage: "markert som søppelpost av mottakeren",
+  feilet: "kunne ikke sendes",
+};
 const kontoMerke = (s: Bruker["status"]) =>
   s === "venter" ? <span className="merke merke-info">Venter</span> : s === "avvist" ? <span className="merke merke-fare">Avvist</span> : null;
 type Fane = "oversikt" | "organisasjoner" | "drift";
@@ -154,7 +182,7 @@ export function Admin() {
           <Oversikt orgs={orgs.data} apne={settValgt} velgFane={velgFane} />
         </>
       ) : fane === "organisasjoner" ? (
-        <Organisasjoner orgs={orgs.data} brukere={brukere.data} brukerFeil={brukere.feil} apne={settValgt} />
+        <Organisasjoner orgs={orgs.data} brukere={brukere.data} brukerFeil={brukere.feil} apne={settValgt} brukereEndret={() => brukere.last()} />
       ) : (
         <Drift apne={settValgt} />
       )}
@@ -265,7 +293,19 @@ function Oversikt({ orgs, apne, velgFane }: { orgs: Org[]; apne: (id: string) =>
 // Organisasjoner
 // ---------------------------------------------------------------------------
 
-function Organisasjoner({ orgs, brukere, brukerFeil, apne }: { orgs: Org[]; brukere: Bruker[] | undefined; brukerFeil: string | null; apne: (id: string) => void }) {
+function Organisasjoner({
+  orgs,
+  brukere,
+  brukerFeil,
+  apne,
+  brukereEndret,
+}: {
+  orgs: Org[];
+  brukere: Bruker[] | undefined;
+  brukerFeil: string | null;
+  apne: (id: string) => void;
+  brukereEndret: () => void;
+}) {
   const moduler = useModuler();
   const [sok, settSok] = useState("");
   const [status, settStatus] = useState<"alle" | "venter" | "ny" | "verifisert" | "sperret">("alle");
@@ -346,7 +386,7 @@ function Organisasjoner({ orgs, brukere, brukerFeil, apne }: { orgs: Org[]; bruk
       <FunksjonerForNye />
       <SlettedeOrganisasjoner key={orgs.length} />
       <Dialog apen={bruker !== null} lukk={() => settBruker(null)} tittel={bruker?.navn ?? bruker?.epost ?? ""}>
-        {bruker && <BrukerDetaljer b={bruker} moduler={moduler} />}
+        {bruker && <BrukerDetaljer key={bruker.id} b={bruker} moduler={moduler} endret={brukereEndret} />}
       </Dialog>
     </>
   );
@@ -962,6 +1002,8 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
     h.kjor(async () => {
       let grunn: string | undefined;
       if (godkjent && moduler?.length && !valgte(k).length) throw new Error(`Velg minst én modul for ${k.navn ?? k.epost}.`);
+      if (godkjent && !k.epost_bekreftet && !confirm(`${k.navn ?? k.epost} har ikke bekreftet e-postadressen. Godkjenne kontoen likevel? Brukeren kommer ikke inn før adressen er bekreftet.`))
+        return;
       if (!godkjent) {
         const svar = prompt(`Avvise kontoen til ${k.navn ?? k.epost}? Skriv eventuelt en begrunnelse (den sendes til brukeren):`, "");
         if (svar === null) return;
@@ -977,6 +1019,20 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
           ? `${k.navn ?? k.epost} er godkjent${r.moduler?.length ? ` med ${opplisting(r.moduler)}` : ""} og har fått e-post om det.`
           : `${k.navn ?? k.epost} er avvist og har fått e-post om det.`,
       );
+      endret();
+    });
+  const sendLenke = (k: KontoVenter) =>
+    h.kjor(async () => {
+      const r = await api<{ til: string }>("POST", `/admin/brukere/${k.id}/epostbekreftelse`);
+      settMelding(`En ny lenke er sendt til ${r.til}.`);
+      endret();
+    });
+  const bekreftEpost = (k: KontoVenter) =>
+    h.kjor(async () => {
+      if (!confirm(`Bekrefte e-postadressen ${k.epost} for ${k.navn ?? "brukeren"}? Gjør det bare når du vet at adressen er riktig, for eksempel etter å ha snakket med personen.`))
+        return;
+      await api("POST", `/admin/brukere/${k.id}/bekreft-epost`);
+      settMelding(`E-postadressen ${k.epost} er bekreftet. ${k.navn ?? "Brukeren"} kommer videre neste gang appen er åpen.`);
       endret();
     });
   return (
@@ -1008,6 +1064,7 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
                     <span className="dempet">Har ikke valgt moduler ennå</span>
                   )}
                 </span>
+                {!k.epost_bekreftet && <EpostUbekreftet b={k.bekreftelse} />}
                 <ModulValg
                   kompakt
                   moduler={moduler}
@@ -1024,16 +1081,45 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
                 <button type="button" className="fare" disabled={h.opptatt} onClick={() => behandle(k, false)}>
                   Avvis
                 </button>
+                {!k.epost_bekreftet && (
+                  <>
+                    <button type="button" disabled={h.opptatt} onClick={() => sendLenke(k)}>
+                      Send ny lenke
+                    </button>
+                    <button type="button" disabled={h.opptatt} onClick={() => bekreftEpost(k)}>
+                      Bekreft e-posten
+                    </button>
+                  </>
+                )}
               </span>
             </li>
           ))}
         </ul>
       )}
       <p className="liten dempet" style={{ marginBottom: 0 }}>
-        Nye kontoer kommer ikke inn før de er godkjent. Organisasjonene de lager, får bare funksjonene i modulene de er godkjent med (du kan endre dem i
-        organisasjonen under Organisasjoner). Den som blir invitert av en organisasjon, godkjennes når invitasjonen tas imot.
+        Nye kontoer kommer ikke inn før de er godkjent og har bekreftet e-postadressen. Organisasjonene de lager, får bare funksjonene i modulene de er
+        godkjent med (du kan endre dem i organisasjonen under Organisasjoner). Den som blir invitert av en organisasjon, godkjennes når invitasjonen tas
+        imot. Lenken som bekrefter e-postadressen, sendes fra Admin Konsoll; her ser du om den kom fram.
       </p>
     </div>
+  );
+}
+
+// E-postadressen er ikke bekreftet: hvordan det gikk med den siste lenken.
+function EpostUbekreftet({ b }: { b: Bekreftelse | null }) {
+  return (
+    <span className="liten konto-epost">
+      <span className="merke merke-advarsel">E-post ikke bekreftet</span>{" "}
+      {b ? (
+        <span className={["sprett", "klage", "feilet"].includes(b.status) ? "felt-feil" : "dempet"}>
+          {b.antall > 1 ? `${b.antall} lenker sendt, den siste` : "Lenke sendt"} {siden(b.opprettet)}
+          {b.av_admin ? " (av en administrator)" : ""}: {bekreftelseStatus[b.status]}
+          {b.detaljer && ["sprett", "klage", "feilet"].includes(b.status) ? ` (${b.detaljer})` : ""}.
+        </span>
+      ) : (
+        <span className="dempet">Lenken ble sendt fra Firebase da kontoen ble laget, og kan ha havnet i søppelposten.</span>
+      )}
+    </span>
   );
 }
 
@@ -1069,12 +1155,29 @@ function BrukereUtenOrg({ brukere, apne, apen }: { brukere: Bruker[]; apne: (b: 
   );
 }
 
-function BrukerDetaljer({ b, moduler }: { b: Bruker; moduler: Modul[] | null }) {
+function BrukerDetaljer({ b, moduler, endret }: { b: Bruker; moduler: Modul[] | null; endret: () => void }) {
+  const h = useHandling();
+  const [melding, settMelding] = useState<string | null>(null);
+  const [bekreftet, settBekreftet] = useState(b.epost_bekreftet === true);
+  const sendLenke = () =>
+    h.kjor(async () => {
+      const r = await api<{ til: string }>("POST", `/admin/brukere/${b.id}/epostbekreftelse`);
+      settMelding(`En ny lenke er sendt til ${r.til}.`);
+    });
+  const bekreftEpost = () =>
+    h.kjor(async () => {
+      if (!confirm(`Bekrefte e-postadressen ${b.epost}? Gjør det bare når du vet at adressen er riktig, for eksempel etter å ha snakket med personen.`)) return;
+      await api("POST", `/admin/brukere/${b.id}/bekreft-epost`);
+      settBekreftet(true);
+      settMelding(`E-postadressen ${b.epost} er bekreftet.`);
+      endret();
+    });
   return (
     <div className="admin-detaljer">
       <Fakta
         rader={[
           ["E-post", <a href={`mailto:${b.epost}`}>{b.epost}</a>],
+          ["E-post bekreftet", bekreftet ? "Ja" : b.epost_bekreftet === false ? "Nei" : "Ikke sett ennå"],
           ["Konto", { venter: "Venter på godkjenning", godkjent: "Godkjent", avvist: "Avvist" }[b.status] ?? b.status],
           ...(b.status === "avvist" ? ([["Avvist fordi", b.avvist_grunn]] as [string, ReactNode][]) : []),
           ["Registrert", dato(b.opprettet)],
@@ -1083,6 +1186,22 @@ function BrukerDetaljer({ b, moduler }: { b: Bruker; moduler: Modul[] | null }) 
           ["Passkeys", b.antall_passkeys ? `${b.antall_passkeys} (sist brukt ${siden(b.sist_passkey)})` : "Ingen"],
         ]}
       />
+      {melding && (
+        <div className="melding ok" role="status">
+          {melding}
+        </div>
+      )}
+      <Feil melding={h.feil} />
+      {!bekreftet && (
+        <div className="knapper">
+          <button type="button" disabled={h.opptatt} onClick={sendLenke}>
+            Send ny lenke
+          </button>
+          <button type="button" disabled={h.opptatt} onClick={bekreftEpost}>
+            Bekreft e-posten
+          </button>
+        </div>
+      )}
       <p className="liten dempet">Ikke med i noen organisasjon. Brukerne i organisasjonene står under organisasjonen de er med i.</p>
     </div>
   );

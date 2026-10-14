@@ -70,6 +70,8 @@ export type Oppgave =
   | { type: "disk-slett"; org_id: string; faktura_ider: string[] }
   | { type: "varsel"; varsel: Varsel }
   | { type: "epost"; til: string[]; emne: string; tekst: string; fra_navn?: string; svar_til?: string }
+  // Lenken som bekrefter e-postadressen til en ny konto (koden er laget av API-et).
+  | { type: "epostbekreftelse"; bekreftelse_id: string; kode: string }
   // Bank (Enable Banking): ny BankID-adresse, fullfør koblingen, hent innbetalinger, koble fra.
   | { type: "bank-auth"; org_id: string; kobling_id: string; app_url?: string } // app_url: domenet BankID sender tilbake til
   | { type: "bank-okt"; org_id: string; kobling_id: string; kode: string; psu?: { ip: string; agent: string } }

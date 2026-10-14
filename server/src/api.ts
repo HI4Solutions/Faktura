@@ -59,6 +59,7 @@ import { skattekortRuter } from "./skattekortRuter.js";
 import { rapportmodulRuter } from "./rapportmodul.js";
 import { krevFunksjoner } from "./funksjoner.js";
 import { hentModuler, krevGodkjentKonto, meldNyKonto, modulKoder } from "./kontoer.js";
+import { sendBekreftelse } from "./epostbekreftelse.js";
 import { aiPaa } from "./ai.js";
 import { grunnSkjema, meldSlettingTilAdmin, slettOrganisasjon } from "./slettOrg.js";
 
@@ -345,6 +346,10 @@ export function lagApi() {
     await meldNyKonto(c);
     return c.json(svar);
   });
+
+  // En ny lenke som bekrefter e-postadressen (også før kontoen er godkjent); den første kommer rett
+  // fra registreringen. Vi sender den selv, fra Admin Konsoll (epostbekreftelse.ts).
+  api.post("/meg/bekreftelse", async (c) => c.json(await sendBekreftelse(c)));
 
   api.post("/organisasjoner", async (c) => {
     const b = await kropp(c, z.object({ navn: tekstS(200).min(1), orgnr: z.string().regex(/^\d{9}$/).nullish(), type: z.enum(["foretak", "regnskapsbyraa", "privatperson"]).optional() }));

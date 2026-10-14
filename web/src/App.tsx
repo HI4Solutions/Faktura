@@ -5,7 +5,8 @@ import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, use
 import { api } from "./api";
 import { Feil, Laster, Tom } from "./felles";
 import { KontoProvider, erAdmin, erAnsatt, harFunksjon, kanSePersonal, kanSeRegnskap, kanSkrive, useKonto, type Funksjon } from "./konto";
-import { BekreftEpost, Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
+import { Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
+import { BekreftEpost, BekreftLenke } from "./sider/Bekreftelse";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { Oversikt } from "./sider/Oversikt";
 import { Kunder, Produkter } from "./sider/Register";
@@ -573,6 +574,9 @@ function Ramme() {
 
 function Sider() {
   const { laster, bruker, meg, loggUt } = useKonto();
+  const sted = useLocation();
+  // Lenken i e-posten som bekrefter adressen, virker både innlogget og ikke.
+  if (sted.pathname === "/bekreft-epost") return <BekreftLenke />;
   if (laster) return <div className="sentrert"><Laster /></div>;
   if (!bruker) return <Innlogging />;
   if (!bruker.emailVerified) return <BekreftEpost epost={bruker.email ?? ""} loggUt={loggUt} />;

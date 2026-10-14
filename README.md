@@ -25,6 +25,7 @@ er vårt eget (modulen «Regnskap»); plattformen kobles ikke til andre regnskap
 | Innlogging: passord, TOTP-MFA og passkeys | Ferdig |
 | Verifisering av organisasjoner og adminside | Ferdig (admin via GitHub-variabelen `ADMIN_EPOSTER`) |
 | Godkjenning av nye kontoer: forespørselen går til administratorene når e-postadressen er bekreftet, med modulene brukeren krysset av for (Faktura, Bemanning og de som kommer), og kontoen kommer ikke inn før den er godkjent | Ferdig (Administrasjon → Oversikt) |
+| Bekreftelse av e-postadressen: lenken sendes fra Admin Konsoll (Resend) og spores, brukeren kan be om en ny, og administratoren ser om den kom fram og kan sende en ny eller bekrefte adressen for brukeren | Ferdig (Administrasjon → Oversikt) |
 | Sletting av organisasjoner, alltid med grunn: alt slettes, eller organisasjonen stenges når utstedte fakturaer må oppbevares (bokføringsloven) | Ferdig (eieren under Innstillinger → Organisasjon, plattformadministratoren i Administrasjon) |
 | Funksjoner per organisasjon: administratoren velger hvilke organisasjoner som har EHF, bank, AI, ansatte og timer, vaktplan osv., og standarden for nye | Ferdig (Administrasjon → Organisasjoner, i organisasjonen) |
 | Gjentakende fakturaer, purring og inkassovarsel | Ferdig |
