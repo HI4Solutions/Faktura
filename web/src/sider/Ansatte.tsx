@@ -14,6 +14,7 @@ import { dato, iDag } from "../format";
 import { fnrGyldig, fodselsdato, kontonrGyldig, visKontonr } from "../personnummer";
 import { IkonAnsatte, IkonGnist, IkonLukk } from "../ikoner";
 import { slippBlob, SLIPP_ACCEPT, type Lonnsslipper } from "../importer";
+import { SortTh, SorterValg, sorter, useSortering, type Kolonne } from "../sortering";
 import { tallformat } from "../uke";
 import { ArbeidsplanFelt, dagerTekst, endret, lagUtkast, tilLagring, type Plan, type PlanUtkast } from "./Arbeidsplan";
 import { AnsattFravaer, FravaerDialog, type Fravaer } from "./Fravaer";
@@ -166,6 +167,23 @@ const tilleggKort = (a: Ansatt) => {
   return t.length === 1 ? `+ ${t[0]!.navn} ${belop.format(t[0]!.belop)} kr/${t[0]!.per === "time" ? "t" : "mnd"}` : `+ ${t.length} faste tillegg`;
 };
 
+// Kolonnene listen kan sorteres etter (sortering.tsx). Navnet sorteres etter etternavnet, som
+// listen kommer fra serveren, og lønnen etter beløpet, med månedslønn før timelønn; de som ikke er
+// ansatt (uten lønn), står sist.
+type AnsattKolonne = "nr" | "navn" | "stilling" | "prosent" | "dager" | "lonn" | "fra" | "rolle";
+const KOLONNER: Record<AnsattKolonne, Kolonne<Ansatt>> = {
+  nr: { navn: "Nr.", verdi: (a) => a.ansattnummer },
+  navn: { navn: "Navn", verdi: (a) => [a.etternavn, a.fornavn] },
+  stilling: { navn: "Stilling", verdi: (a) => a.stilling },
+  prosent: { navn: "Stilling %", verdi: (a) => a.stillingsprosent },
+  dager: { navn: "Faste dager", verdi: (a) => (a.arbeidsdager?.length ? [a.arbeidsdager.length, ...[...a.arbeidsdager].sort((x, y) => x - y)] : null) },
+  lonn: { navn: "Lønn", verdi: (a) => (!erAnsatt(a) ? null : a.lonnstype === "maaned" ? a.maanedslonn : a.timelonn), gruppe: (a) => (a.lonnstype === "maaned" ? 0 : 1) },
+  fra: { navn: "Ansatt fra", verdi: (a) => a.ansatt_fra },
+  rolle: { navn: "Rolle", verdi: (a) => a.rolle },
+};
+// Uten vaktplanen vises ikke de faste dagene.
+const UTEN_DAGER = Object.fromEntries(Object.entries(KOLONNER).filter(([k]) => k !== "dager")) as Partial<Record<AnsattKolonne, Kolonne<Ansatt>>>;
+
 function Merker({ a }: { a: Ansatt }) {
   return (
     <span className="merker">
@@ -195,6 +213,7 @@ export function Ansatte() {
   const smal = useSmal();
   const endre = kanPersonal(org?.rolle);
   const vaktplan = harFunksjon(org, "vaktplan");
+  const sortering = useSortering<AnsattKolonne>("faktura.ansatte.sortering", vaktplan ? KOLONNER : UTEN_DAGER, "navn");
   // Rollene (f.eks. lege og sekretær) settes opp her og i bemanningskalenderen.
   const [roller, settRoller] = useState(false);
   const [rolleVersjon, settRolleVersjon] = useState(0);
@@ -221,7 +240,12 @@ export function Ansatte() {
     );
 
   const s = sok.trim().toLowerCase();
-  const liste = (data ?? []).filter((a) => !s || `${a.fornavn} ${a.etternavn} ${a.ansattnummer} ${a.stilling ?? ""} ${a.epost ?? ""}`.toLowerCase().includes(s));
+  const liste = sorter(
+    (data ?? []).filter((a) => !s || `${a.fornavn} ${a.etternavn} ${a.ansattnummer} ${a.stilling ?? ""} ${a.epost ?? ""}`.toLowerCase().includes(s)),
+    KOLONNER[sortering.kolonne],
+    sortering.retning,
+    (a) => [a.etternavn, a.fornavn, a.ansattnummer],
+  );
   const lukk = () => {
     settApen(null);
     last();
@@ -278,6 +302,9 @@ export function Ansatte() {
             </button>
           ))}
         </div>
+        {smal && (data?.length ?? 0) > 1 && (
+          <SorterValg s={sortering} kolonner={(Object.keys(vaktplan ? KOLONNER : UTEN_DAGER) as AnsattKolonne[]).map((k) => [k, KOLONNER[k].navn])} />
+        )}
         {(data?.length ?? 0) > 6 && <input type="search" className="sok" placeholder="Søk etter navn eller stilling" value={sok} onChange={(e) => settSok(e.target.value)} />}
       </div>
       <Feil melding={feil} />
@@ -332,14 +359,32 @@ export function Ansatte() {
           <table>
             <thead>
               <tr>
-                <th>Nr.</th>
-                <th>Navn</th>
-                <th>Stilling</th>
-                <th className="tall">Stilling %</th>
-                {vaktplan && <th>Faste dager</th>}
-                <th className="tall">Lønn</th>
-                <th>Ansatt fra</th>
-                <th></th>
+                <SortTh k="nr" s={sortering}>
+                  Nr.
+                </SortTh>
+                <SortTh k="navn" s={sortering}>
+                  Navn
+                </SortTh>
+                <SortTh k="stilling" s={sortering}>
+                  Stilling
+                </SortTh>
+                <SortTh k="prosent" s={sortering} className="tall">
+                  Stilling %
+                </SortTh>
+                {vaktplan && (
+                  <SortTh k="dager" s={sortering}>
+                    Faste dager
+                  </SortTh>
+                )}
+                <SortTh k="lonn" s={sortering} className="tall">
+                  Lønn
+                </SortTh>
+                <SortTh k="fra" s={sortering}>
+                  Ansatt fra
+                </SortTh>
+                <SortTh k="rolle" s={sortering}>
+                  Rolle
+                </SortTh>
               </tr>
             </thead>
             <tbody>

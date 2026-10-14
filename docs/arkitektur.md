@@ -208,6 +208,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   opptak (der AI-en ikke skal finne noen tale)
 - `lonn_oppsett`, `ansatte`, `timeforinger`: ansatte og timer, slått på per organisasjon
   (Innstillinger → Ansatte og timer). Ansattregisteret har personalia, ansettelse og lønn.
+  Lista over de ansatte kan sorteres etter hver kolonne (nr., navn, stilling, stillingsprosent,
+  faste dager, lønn, ansatt fra og rolle): trykk på overskriften, og en gang til for motsatt vei;
+  på mobil velges det i «Sorter» (`web/src/sortering.tsx`). Navnet sorteres etter etternavnet,
+  med norsk alfabet (Æ, Ø, Å sist, og «Aa» som Å), tall som tall, og lønnen etter beløpet med
+  månedslønn før timelønn; tomme felt står sist begge veier. Valget huskes på enheten.
   Fødselsnummeret krypteres med KMS i API-et, som ikke kan lese det igjen (bare workeren kan,
   til lønn og a-melding senere); revisjonsloggen sier bare at det er registrert eller endret.
   Hver person kan ha en rolle som organisasjonen lager selv, med det navnet rollen faktisk har

@@ -1328,6 +1328,21 @@ table.foringer td:first-child { padding-left: 0; white-space: nowrap; }
 /* Ansatte */
 .liste-verktoy { display: flex; align-items: center; gap: 0 14px; flex-wrap: wrap; }
 .liste-verktoy input.sok { flex: 1 1 220px; }
+/* Kolonneoverskrifter som sorterer, og «Sorter» i listene på mobil (sortering.tsx) */
+th > button.sorter {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0; margin: 0; border: 0; border-radius: 4px; background: none; box-shadow: none;
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; line-height: inherit; white-space: nowrap; cursor: pointer;
+}
+th > button.sorter:hover:not(:disabled), th > button.sorter.aktiv { color: var(--tekst); }
+th > button.sorter:active:not(:disabled) { transform: none; }
+th.tall > button.sorter { flex-direction: row-reverse; }
+.sorter-pil { display: inline-block; min-width: 0.8em; text-align: center; font-size: 1.15em; line-height: 1; }
+th > button.sorter:not(.aktiv) .sorter-pil { opacity: 0; transition: opacity .12s; }
+th > button.sorter:not(.aktiv):hover .sorter-pil, th > button.sorter:not(.aktiv):focus-visible .sorter-pil { opacity: 0.55; }
+.sorter-valg { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.sorter-valg label { display: flex; align-items: center; gap: 8px; margin: 0; }
+.sorter-valg select { width: auto; margin: 0; padding-top: 6px; padding-bottom: 6px; }
+.sorter-valg button.ikon { min-width: 36px; justify-content: center; padding: 6px 8px; }
 .felt { display: block; font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); margin-bottom: 14px; }
 .felt-verdi {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 5px; min-height: 40px;
@@ -1359,7 +1374,7 @@ button.lenke.fare:hover:not(:disabled) { background: none; }
   .ukesum .summer .tall { font-weight: 600; }
   .uke-rad > .ukesum { margin-bottom: 14px; }
   .rad.tre { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.75fr); }
-  .liste-verktoy .faner { margin-bottom: 10px; }
+  .liste-verktoy .faner, .liste-verktoy .sorter-valg { margin-bottom: 10px; }
   .faner.tett button { padding-left: 10px; padding-right: 10px; }
   /* Føringene som venter: dag, tid og timer på én linje, beskrivelse og overtid under */
   table.foringer > tbody > tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 2px 10px; }
