@@ -1,7 +1,8 @@
 // Påminnelser om å lage fakturaer: et varsel på datoen du velger (hver måned, kvartal, år,
 // uke eller én gang), for fakturaer du må lage selv, for eksempel når beløpet varierer fra
 // gang til gang og en gjentakende faktura ikke passer. Varselet åpner en kort side der kunden
-// og produktene er fylt inn: skriv inn beløpet og send fakturaen derfra.
+// og produktene er fylt inn: skriv inn beløpet og send fakturaen derfra. Påminnelsen husker
+// kontoen og avsenderen fakturaen skal ha, så den ikke går til standardkontoen.
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
@@ -15,6 +16,7 @@ import { kundeValg, produktValg, Sokefelt } from "../sokefelt";
 import { hentAbonnement, pushStotte, slaPaVarsler } from "../pwa";
 import { IkonBjelle, IkonLukk } from "../ikoner";
 import { Klokkeslett } from "../uke";
+import { AvsenderKonto, useFasteValg } from "./AvsenderKonto";
 
 type Intervall = "maaned" | "kvartal" | "aar" | "uke" | "en_gang";
 export type Paaminnelse = {
@@ -34,7 +36,10 @@ export type Paaminnelse = {
   sist_varslet: string | null;
   opprettet_av_navn: string | null;
   min: boolean;
+  konto_id: string | null; // kontoen fakturaen skal betales til (null: standardkontoen)
+  avsender: "firma" | "innehaver" | null; // null: organisasjonens standard
 };
+type Valg = { konto_id: string | null; avsender: string | null };
 
 const INTERVALLER: [Intervall, string][] = [
   ["maaned", "Hver måned"],
@@ -258,8 +263,19 @@ function Skjema({ p, ferdig }: { p: Partial<Paaminnelse>; ferdig: () => void }) 
   const { org } = useKonto();
   const kunder = useData(() => hent<any[]>(`/org/${org!.id}/kunder?aktiv=true`), [org?.id]);
   const produkter = useData(() => hent<any[]>(`/org/${org!.id}/produkter?aktiv=true`), [org?.id]);
+  const orgData = useData(() => hent<any>(`/org/${org!.id}`), [org?.id]);
   const [kundeId, settKundeId] = useState<string | null>(p.kunde_id ?? null);
   const [valgte, settValgte] = useState<string[]>(p.produkter ?? []);
+  // Kontoen og avsenderen fakturaen skal ha. Produkter med fast konto eller avsender velger dem
+  // når de legges til (på en ny påminnelse også de som er fylt inn fra før).
+  const [kontovalg, settKontovalg] = useState<Valg>({ konto_id: p.konto_id ?? null, avsender: p.avsender ?? null });
+  const ulikeFasteValg = useFasteValg(
+    valgte.map((produkt_id) => ({ produkt_id })),
+    produkter.data,
+    true,
+    (v) => settKontovalg((x) => ({ ...x, ...v })),
+    !p.id,
+  );
   const [tekst, settTekst] = useState(p.tekst ?? "");
   const [egenTekst, settEgenTekst] = useState(Boolean(p.id)); // brukeren har skrevet teksten selv
   const [neste, settNeste] = useState(p.neste_dato && p.neste_dato >= iDag() ? p.neste_dato : forsteNesteMaaned());
@@ -290,7 +306,7 @@ function Skjema({ p, ferdig }: { p: Partial<Paaminnelse>; ferdig: () => void }) 
   async function lagre(e: FormEvent) {
     e.preventDefault();
     if (!tekst.trim()) return h.settFeil("Skriv hva påminnelsen gjelder.");
-    const kropp: Record<string, unknown> = { tekst, kunde_id: kundeId, produkter: valgte, intervall, klokkeslett: kl, hvem, epost, aktiv };
+    const kropp: Record<string, unknown> = { tekst, kunde_id: kundeId, produkter: valgte, intervall, klokkeslett: kl, hvem, epost, aktiv, ...kontovalg };
     if (!p.id || neste !== p.neste_dato || (aktiv && !p.aktiv)) kropp.neste_dato = neste;
     const r = await h.kjor(() => (p.id ? api("PATCH", `/org/${org!.id}/paaminnelser/${p.id}`, kropp) : api("POST", `/org/${org!.id}/paaminnelser`, kropp)));
     if (r) ferdig();
@@ -333,6 +349,8 @@ function Skjema({ p, ferdig }: { p: Partial<Paaminnelse>; ferdig: () => void }) 
           />
         )}
       </div>
+      <AvsenderKonto org={orgData.data} verdi={kontovalg} endre={(v) => settKontovalg({ konto_id: v.konto_id, avsender: v.avsender })} />
+      {ulikeFasteValg && <div className="melding info">{ulikeFasteValg}</div>}
       <label>
         Tekst i varselet
         <input
@@ -413,7 +431,7 @@ function Skjema({ p, ferdig }: { p: Partial<Paaminnelse>; ferdig: () => void }) 
 type Ekstra = "periode" | "rabatt" | "referanse" | "melding" | "vedlegg";
 type Felt = { fakturadato: string; forfallsdato: string; periode_fra: string; periode_til: string; deres_referanse: string; var_referanse: string; kommentar: string };
 // Det som tas med til det fulle skjemaet («Åpne i fullt skjema»).
-export type PaaminnelseUtkast = { kunde_id: string | null; f: Felt; linjer: LinjeUtkast[]; gebyr: boolean; vedlegg: Vedlegg[] };
+export type PaaminnelseUtkast = { kunde_id: string | null; f: Felt; linjer: LinjeUtkast[]; gebyr: boolean; vedlegg: Vedlegg[] } & Valg;
 
 const to = (n: number) => String(n).padStart(2, "0");
 const sisteDag = (a: number, m: number) => new Date(Date.UTC(a, m, 0)).getUTCDate(); // m: 1–12
@@ -460,18 +478,24 @@ export function SendFraPaaminnelse() {
   const [nyLinje, settNyLinje] = useState(false); // produktsøket for en ny linje
   const [vedlegg, settVedlegg] = useState<Vedlegg[]>([]);
   const [lasterOpp, settLasterOpp] = useState(false);
+  const [kontovalg, settKontovalg] = useState<Valg>({ konto_id: null, avsender: null }); // kontoen og avsenderen fra påminnelsen
   const utkastId = useRef<string | null>(null); // utkastet som er lagret (om sendingen feilet etterpå)
   const forstePris = useRef<HTMLInputElement | null>(null);
   const h = useHandling();
   const sjekkLinjer = useLinjefeil(linjer ?? [], h.settFeil);
+  // Produkter med fast konto eller avsender som legges til her, velger dem; ellers står det
+  // påminnelsen har.
+  const ulikeFasteValg = useFasteValg(linjer ?? [], produkter.data, Boolean(linjer), (v) => settKontovalg((x) => ({ ...x, ...v })));
   const p = paaminnelse.data;
   const o = orgData.data;
 
-  // Fyll inn kunden og produktene fra påminnelsen (én gang). Produkter uten fast pris får tom pris.
+  // Fyll inn kunden, produktene, kontoen og avsenderen fra påminnelsen (én gang). Produkter uten
+  // fast pris får tom pris.
   useEffect(() => {
     if (!p || !o || !kunder.data || !produkter.data || linjer) return;
     const utenMva = !o.mva_registrert;
     settKundeId(p.kunde_id && kunder.data.some((k) => k.id === p.kunde_id) ? p.kunde_id : null);
+    settKontovalg({ konto_id: p.konto_id ?? null, avsender: p.avsender ?? null });
     const fra = p.produkter
       .map((pid) => produkter.data!.find((x) => x.id === pid))
       .filter(Boolean)
@@ -545,6 +569,7 @@ export function SendFraPaaminnelse() {
     gebyr,
     linjer: tallLinjer,
     vedlegg: vedlegg.map((v) => v.id),
+    ...kontovalg,
   });
   async function lagre(send: boolean) {
     if (!kunde) return h.settFeil("Velg kunde.");
@@ -565,7 +590,7 @@ export function SendFraPaaminnelse() {
   }
   // Kopimottakere, gjentakelse o.l.: det fulle skjemaet, med alt som er skrevet her.
   const fulltSkjema = () =>
-    nav(`/fakturaer/ny?paaminnelse=${p.id}`, { state: { paaminnelseUtkast: { kunde_id: kundeId, f, linjer, gebyr, vedlegg } satisfies PaaminnelseUtkast } });
+    nav(`/fakturaer/ny?paaminnelse=${p.id}`, { state: { paaminnelseUtkast: { kunde_id: kundeId, f, linjer, gebyr, vedlegg, ...kontovalg } satisfies PaaminnelseUtkast } });
   const valg = periodeValg(p.intervall);
 
   return (
@@ -755,6 +780,8 @@ export function SendFraPaaminnelse() {
             Fakturagebyr ({kr(Number(o.standard_gebyr))} kr{utenMva ? "" : " eks. mva"})
           </label>
         )}
+        <AvsenderKonto org={o} verdi={kontovalg} endre={(v) => settKontovalg({ konto_id: v.konto_id, avsender: v.avsender })} />
+        {ulikeFasteValg && <div className="melding info">{ulikeFasteValg}</div>}
         <div className="hurtig-sum">
           <span>Å betale{!utenMva && sum.mva ? " inkl. mva" : ""}</span>
           <strong>{kr(sum.inkl)} kr</strong>

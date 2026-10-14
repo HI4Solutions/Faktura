@@ -99,7 +99,13 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   sender fakturaen derfra. Kortet kan også få flere linjer, periode (med hurtigvalg for
   forrige og denne måneden, kvartalet eller året), rabatt i prosent eller kroner,
   referanser, melding til kunden, vedlegg, datoer og fakturagebyr. Det fulle skjemaet
-  (kopimottakere, gjentakelse) åpnes med alt som er skrevet
+  (kopimottakere, gjentakelse) åpnes med alt som er skrevet. Påminnelsen husker kontoen og
+  avsenderen fakturaen skal ha (`konto_id`, `avsender`, null er organisasjonens standard;
+  `0107_paaminnelse_konto.sql`), slik gjentakelsene gjør: produkter med fast konto eller
+  avsender velger dem når de legges til, og siden for påminnelsen og det fulle skjemaet
+  starter med det påminnelsen har (det kan byttes der). En konto som slettes, gir
+  standardkontoen igjen. `PUT /fakturaer/:id` lar kontoen og avsenderen stå når de ikke er
+  med, så et utkast som lagres på nytt, ikke går tilbake til standardkontoen
 - `fakturaer`, `faktura_linjer`, `betalinger`
 - Makstak (`0049_makstak.sql`): en avtale om at kunden aldri faktureres mer enn et beløp å
   betale (inkl. mva) på én faktura, f.eks. en lege som betaler for flere produkter, men aldri

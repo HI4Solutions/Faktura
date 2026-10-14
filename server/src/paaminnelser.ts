@@ -2,7 +2,8 @@
 // beløpet varierer fra måned til måned og en gjentakende faktura ikke passer. Rutene brukes
 // av appen; workeren sender påminnelsene hvert minutt som push-varsel (og e-post om man har
 // valgt det). Varselet åpner en side i appen der kunden og produktene er fylt inn
-// (/paaminnelser/<id>): man skriver inn beløpet og sender fakturaen derfra.
+// (/paaminnelser/<id>): man skriver inn beløpet og sender fakturaen derfra. Påminnelsen
+// husker kontoen og avsenderen fakturaen skal ha (0107_paaminnelse_konto.sql).
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { config } from "./config.js";
@@ -31,6 +32,9 @@ const skjema = z.object({
   hvem: z.enum(["meg", "alle"]).optional(),
   epost: z.boolean().optional(),
   aktiv: z.boolean().optional(),
+  // Kontoen og avsenderen fakturaen skal ha (null: organisasjonens standard).
+  konto_id: uuid.nullish(),
+  avsender: z.enum(["firma", "innehaver"]).nullish(),
 });
 
 const UTVALG = `
@@ -39,6 +43,7 @@ const UTVALG = `
                                     order by array_position(p.produkter, pr.id))
                      from faktura.produkter pr where pr.id = any(p.produkter)), '[]'::jsonb) as produktliste,
          p.intervall, p.dag, p.neste_dato, to_char(p.klokkeslett, 'HH24:MI') as klokkeslett, p.hvem, p.epost, p.aktiv, p.sist_varslet,
+         p.konto_id, p.avsender,
          coalesce(b.navn, b.epost) as opprettet_av_navn, p.opprettet_av = faktura.bruker_id() as min
     from faktura.paaminnelser p
     left join faktura.kunder k on k.id = p.kunde_id
@@ -65,10 +70,10 @@ export function paaminnelseRuter() {
     const ny = await bruk(c, async (db) => {
       const rad = await en<{ id: string }>(
         db,
-        `insert into faktura.paaminnelser (org_id, tekst, kunde_id, produkter, intervall, dag, neste_dato, klokkeslett, hvem, epost, aktiv)
-         values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::time, '08:00'), coalesce($9, 'meg'), coalesce($10, false), coalesce($11, true)) returning id`,
+        `insert into faktura.paaminnelser (org_id, tekst, kunde_id, produkter, intervall, dag, neste_dato, klokkeslett, hvem, epost, aktiv, konto_id, avsender)
+         values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::time, '08:00'), coalesce($9, 'meg'), coalesce($10, false), coalesce($11, true), $12, $13) returning id`,
         [orgId(c), b.tekst, b.kunde_id ?? null, b.produkter ?? [], b.intervall, Number(b.neste_dato.slice(8, 10)), b.neste_dato, b.klokkeslett ?? null,
-         b.hvem ?? null, b.epost ?? null, b.aktiv ?? null],
+         b.hvem ?? null, b.epost ?? null, b.aktiv ?? null, b.konto_id ?? null, b.avsender ?? null],
       );
       return en(db, `${UTVALG} where p.id = $1`, [rad!.id]);
     });
@@ -89,6 +94,8 @@ export function paaminnelseRuter() {
       hvem: b.hvem,
       epost: b.epost,
       aktiv: b.aktiv,
+      konto_id: b.konto_id,
+      avsender: b.avsender,
     };
     const navn = Object.keys(felt).filter((k) => felt[k] !== undefined);
     if (!navn.length) throw new ApiFeil(400, "Ingen felt å endre");

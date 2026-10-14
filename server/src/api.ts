@@ -809,14 +809,17 @@ export function lagApi() {
     const b = await kropp(c, fakturaSkjema);
     const id = uuid.parse(c.req.param("id"));
     const f = await bruk(c, async (db) => {
+      // Kontoen og avsenderen står som de er når de ikke er med (null: organisasjonens standard).
       const r = await db.query(
         `update faktura.fakturaer set kunde_id = $3, fakturadato = $4, forfallsdato = $5, periode_fra = $6, periode_til = $7,
-                deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11, konto_id = $12, avsender = $13,
+                deres_referanse = $8, var_referanse = $9, notat = $10, planlagt_sending = $11,
+                konto_id = case when $19::boolean then konto_id else $12::uuid end, avsender = case when $20::boolean then avsender else $13 end,
                 kopi_til = coalesce($14, kopi_til), kommentar = $15, gjenta = $16, makstak = ${MAKSTAK_SQL(17, 3)}
           where id = $1 and org_id = $2 and status = 'utkast'`,
         [id, orgId(c), b.kunde_id, b.fakturadato ?? null, b.forfallsdato ?? null, b.periode_fra ?? null, b.periode_til ?? null,
          b.deres_referanse, b.var_referanse, b.notat, b.planlagt_sending ?? null, b.konto_id ?? null, b.avsender ?? null, b.kopi_til ?? null,
-         b.kommentar, b.gjenta ? JSON.stringify(b.gjenta) : null, b.makstak === undefined, b.makstak ?? null],
+         b.kommentar, b.gjenta ? JSON.stringify(b.gjenta) : null, b.makstak === undefined, b.makstak ?? null,
+         b.konto_id === undefined, b.avsender === undefined],
       );
       if (!r.rowCount) throw new ApiFeil(409, "Bare utkast kan endres");
       await skrivLinjer(db, orgId(c), id, b.linjer, b.gebyr ?? false);

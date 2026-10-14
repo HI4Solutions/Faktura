@@ -30,7 +30,7 @@ er vårt eget (modulen «Regnskap»); plattformen kobles ikke til andre regnskap
 | Funksjoner per organisasjon: administratoren velger hvilke organisasjoner som har EHF, bank, AI, ansatte og timer, vaktplan osv., og standarden for nye | Ferdig (Administrasjon → Organisasjoner, i organisasjonen) |
 | Gjentakende fakturaer, purring og inkassovarsel | Ferdig |
 | Makstak: kunden faktureres aldri mer enn et avtalt beløp; alle produktene står på fakturaen, og et fratrekk tar summen ned. Makstaket kan stå på kunden og kommer da på nye fakturaer, flere på én gang og gjentakelser, og kan fjernes per faktura | Ferdig |
-| Påminnelser om å lage fakturaer (push og e-post), for beløp som varierer | Ferdig |
+| Påminnelser om å lage fakturaer (push og e-post), for beløp som varierer; påminnelsen husker kontoen og avsenderen fakturaen skal ha, som gjentakelsene | Ferdig |
 | Rapporter: én side med en fane per modul (Faktura, Personal, Lønn): reskontro, mva, salg, fakturajournal og innbetalinger; timer per ansatt med overtid, timeliste, fravær, feriebank, timebank, ekstratimer og ansatte; lønnsjournal, sum per lønnsart, skattetrekk og arbeidsgiveravgift, feriepenger, årsoversikt og OTP. Alle som tabell, CSV og PDF, og på e-post til regnskapsføreren: når du vil, når en lønnskjøring godkjennes, eller den 1. hver måned | Ferdig (menyen «Rapporter»; regnskapsføreren under Rapporter → Utsending) |
 | E-postsporing (Resend-webhook) | Ferdig, krever webhook i Resend |
 | Google Disk | Ferdig, krever OAuth-klient (`GOOGLE_OAUTH_CLIENT_ID`) |

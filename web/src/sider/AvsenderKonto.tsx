@@ -72,24 +72,26 @@ export function fasteValg(linjer: { produkt_id: string | null }[], produkter: an
 export const fastKontoId = (konto: string) => (konto === STANDARD ? null : konto);
 
 // Når et produkt med fast avsender eller konto legges på, velges det på fakturaen. Det som
-// står fra før (et lagret utkast), endres ikke når skjemaet åpnes. Gir en advarsel når
+// står fra før (et lagret utkast), endres ikke når skjemaet åpnes, om ikke alleNye er satt (et
+// nytt skjema der produktene er fylt inn: de regnes som lagt på). Gir en advarsel når
 // produktene har ulike faste valg.
 export function useFasteValg(
   linjer: { produkt_id: string | null }[],
   produkter: any[] | undefined,
   klar: boolean,
   endre: (v: { avsender?: string; konto_id?: string | null }) => void,
+  alleNye = false,
 ): string | null {
   const ider = linjer.map((l) => l.produkt_id ?? "").join(",");
   const forrige = useRef<string[] | null>(null);
   useEffect(() => {
     if (!klar || !produkter) return;
     const naa = ider.split(",").filter(Boolean);
-    if (forrige.current === null) {
+    if (forrige.current === null && !alleNye) {
       forrige.current = naa;
       return;
     }
-    const nye = naa.filter((id) => !forrige.current!.includes(id));
+    const nye = naa.filter((id) => !(forrige.current ?? []).includes(id));
     forrige.current = naa;
     const f = fasteValg(nye.map((produkt_id) => ({ produkt_id })), produkter);
     if (f.avsender || f.konto) endre({ ...(f.avsender ? { avsender: f.avsender } : {}), ...(f.konto ? { konto_id: fastKontoId(f.konto) } : {}) });

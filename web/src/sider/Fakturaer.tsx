@@ -410,6 +410,9 @@ export function FakturaSkjema() {
   const [lasterOpp, settLasterOpp] = useState(false); // vedlegg som lastes opp
   const [aiKunde, settAiKunde] = useState<string | null>(null); // kunden AI-en ikke fant i registeret
   const [fraPaaminnelse, settFraPaaminnelse] = useState<{ tekst: string; manglerPris: boolean } | null>(null);
+  // Fra en påminnelse: produktenes faste konto og avsender slår først inn når skjemaet er fylt
+  // ut fra påminnelsen, så de ikke overstyrer kontoen og avsenderen påminnelsen har.
+  const [paaminnelseFylt, settPaaminnelseFylt] = useState(!paaminnelseId && !fraPaaminnelseSide);
   const aiFylt = useRef<Set<string>>(new Set()); // feltene forrige AI-utkast fylte ut
   const { opptatt, feil, settFeil, kjor } = useHandling();
 
@@ -504,7 +507,7 @@ export function FakturaSkjema() {
     settLinjer(linjer.map((l) => ({ ...l, rabatt: "" })));
   };
   // Produkter med fast avsender eller konto velger dem når de legges på.
-  const ulikeFasteValg = useFasteValg(linjer, produkter.data, lastet, (v) => settF((x: any) => ({ ...x, ...v })));
+  const ulikeFasteValg = useFasteValg(linjer, produkter.data, lastet && paaminnelseFylt, (v) => settF((x: any) => ({ ...x, ...v })));
 
   // Utkastet fra AI-en fyller skjemaet. Det som ikke ble sagt, blir stående, men felt et
   // tidligere utkast fylte ut, settes tilbake (et nytt utkast er en ny beskrivelse). Linjene
@@ -545,11 +548,12 @@ export function FakturaSkjema() {
     const u = fraPaaminnelseSide;
     if (!u || paaminnelseSideBrukt.current === sted.key) return;
     paaminnelseSideBrukt.current = sted.key;
-    settF((x: any) => ({ ...x, ...u.f, kunde_id: u.kunde_id ?? x.kunde_id }));
+    settF((x: any) => ({ ...x, ...u.f, kunde_id: u.kunde_id ?? x.kunde_id, konto_id: u.konto_id ?? null, avsender: u.avsender ?? null }));
     settLinjer(u.linjer.length ? u.linjer : [tomLinje()]);
     settGebyr(u.gebyr);
     settVedlegg(u.vedlegg);
     if (harRabatt(u.linjer)) settRabattValgt(true);
+    settPaaminnelseFylt(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sted.key]);
   const brukt = useRef<string | null>(null);
@@ -561,25 +565,34 @@ export function FakturaSkjema() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sted.key, Boolean(orgData.data)]);
 
-  // Åpnet fra en påminnelse: kunden og produktene fylles inn (én gang). Produkter uten fast
-  // pris får tom pris, som brukeren fyller inn; produkter og kunder som er tatt bort, hoppes over.
+  // Åpnet fra en påminnelse: kunden, produktene, kontoen og avsenderen fylles inn (én gang).
+  // Produkter uten fast pris får tom pris, som brukeren fyller inn; produkter og kunder som er
+  // tatt bort, hoppes over.
   const paaminnelseBrukt = useRef<string | null>(null);
   useEffect(() => {
     if (!paaminnelseId || !kunder.data || !produkter.data || paaminnelseBrukt.current === paaminnelseId) return;
     paaminnelseBrukt.current = paaminnelseId;
-    hent<{ tekst: string; kunde_id: string | null; produkter: string[] }>(`/org/${org!.id}/paaminnelser/${paaminnelseId}`).then(
+    hent<{ tekst: string; kunde_id: string | null; produkter: string[]; konto_id: string | null; avsender: string | null }>(
+      `/org/${org!.id}/paaminnelser/${paaminnelseId}`,
+    ).then(
       (p) => {
         // Fylt ut fra siden for påminnelsen: behold det som ble skrevet der.
         if (fraPaaminnelseSide) {
           settFraPaaminnelse({ tekst: p.tekst, manglerPris: fraPaaminnelseSide.linjer.some((l) => l.produkt_id && !l.enhetspris.trim()) });
           return;
         }
-        if (p.kunde_id && kunder.data!.some((k: any) => k.id === p.kunde_id)) settF((x: any) => ({ ...x, kunde_id: p.kunde_id }));
+        settF((x: any) => ({
+          ...x,
+          ...(p.kunde_id && kunder.data!.some((k: any) => k.id === p.kunde_id) ? { kunde_id: p.kunde_id } : {}),
+          konto_id: p.konto_id ?? null,
+          avsender: p.avsender ?? null,
+        }));
         const valgte = p.produkter.map((pid) => produkter.data!.find((x: any) => x.id === pid)).filter(Boolean);
         if (valgte.length) settLinjer(valgte.map((x: any) => ({ ...tomLinje(), ...fraProdukt(x) })));
         settFraPaaminnelse({ tekst: p.tekst, manglerPris: valgte.some((x: any) => x.enhetspris == null) });
+        settPaaminnelseFylt(true);
       },
-      () => undefined,
+      () => settPaaminnelseFylt(true),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paaminnelseId, Boolean(kunder.data), Boolean(produkter.data)]);
