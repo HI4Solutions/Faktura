@@ -2987,5 +2987,16 @@ td.idag .pt-dato { background: var(--aksent); color: var(--aksent-tekst); }
   .pt-med { justify-content: center; gap: 2px; }
   .pt-fork { padding: 0 2px; font-size: 0.54rem; }
 }
+/* Min turnus eller hele turnusen (de ansatte) */
+.uke-verktoy .faner.turnus-min { margin: 0; }
+/* Min side (MinSide.tsx): opplysningene om den ansatte */
+.min-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; margin-bottom: 8px; }
+.min-side > .kort { margin: 0; }
+.min-side h2 { margin: 0 0 10px; font-size: 1.02rem; }
+.min-side dl { margin: 0; }
+.min-rad { display: grid; grid-template-columns: minmax(110px, 40%) minmax(0, 1fr); gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--kant); font-size: 0.92rem; }
+.min-rad:last-child { border-bottom: 0; }
+.min-rad dt { color: var(--tekst-2); font-weight: 550; }
+.min-rad dd { margin: 0; overflow-wrap: anywhere; }
 /* Hjelpen om tastene vises ikke på berøringsskjermer. */
 @media (hover: none) { .kun-tastatur { display: none; } }

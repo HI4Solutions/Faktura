@@ -260,6 +260,21 @@ export const IkonMineVakter = (p: P) => (
     <path d="M9 15.2l2 2 4-4.2" />
   </Ikon>
 );
+// Fravær: kalenderen med et kryss.
+export const IkonFravaer = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3.5" y="5" width="17" height="15.5" rx="2.2" />
+    <path d="M3.5 10h17M8 3v4M16 3v4" />
+    <path d="m9.8 13.4 4.4 4.4M14.2 13.4l-4.4 4.4" />
+  </Ikon>
+);
+// Min side: en person.
+export const IkonPerson = (p: P) => (
+  <Ikon {...p}>
+    <circle cx="12" cy="8.3" r="3.6" />
+    <path d="M5 20a7 7 0 0 1 14 0" />
+  </Ikon>
+);
 export const IkonTavle = (p: P) => (
   <Ikon {...p}>
     <rect x="3" y="4" width="18" height="16" rx="2.2" />

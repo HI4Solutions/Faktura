@@ -305,10 +305,11 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `?person=<id>`, eller `alle`): kalenderen uke for uke med vakten hver dag, fraværet og de faste
   dagene, og under vakten forkortelsene til dem som er på jobb samtidig (vakter eller faste dager som
   overlapper minst en time, også over midnatt). Trykk på en dag viser hvem som går sammen med
-  personen, de andre vaktene den dagen og hvem som er borte, og et navn åpner kalenderen til den
-  personen. De ansatte ser sin egen turnus som standard (også fra «Mine vakter»), og kan velge
-  kollegaene eller alle; de ser bare det publiserte, og andres fravær som «F». Eier og
-  administrator ser alle som standard, og kan endre vakten fra dagen. Oppsettet (vakttyper, behov,
+  personen, de andre vaktene den dagen og hvem som er borte. De ansatte velger bare mellom sin egen
+  turnus («Min turnus», standard, også fra «Mine vakter») og hele turnusen, ikke kollegaenes
+  kalendere (en annen id i adressen gir deres egen); de ser bare det publiserte, og andres fravær
+  som «F». Eier og administrator ser alle som standard, velger hvem som helst («Turnus for», og et
+  navn i dagen åpner kalenderen til den personen) og kan endre vakten fra dagen. Oppsettet (vakttyper, behov,
   hvem går hva og regler) ligger i visningen, og
   «Legg inn dag, kveld og natt» lager tre vanlige vakttyper å begynne med. Automatisk turnus
   (`POST /turnus/forslag`, `planlegg` i `turnusplan.ts`, en ren funksjon) fordeler de ansatte på
@@ -1295,10 +1296,16 @@ og til alle (`ser_beskjed`; `faktura.kan(org,
 'medlem')`, `faktura.kan(org, 'plan')`, `faktura.er_meg` og `faktura.min_ansatt`), aldri
 fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, timebank, notater og typen fravær,
 utkast i vaktplanen eller revisjonsloggen. Varsler til hele organisasjonen og
-Google Disk-kopier går ikke til ansatte, og appen viser dem bare Timer, Vakter (Mine vakter,
-Ledige vakter og Bytter, og fanene Vaktplan og Tavle), Vaktplan og Tavle som egne punkter i
-sidemenyen (lenker til de samme fanene), Ferie, Lønnsslipper (sine egne, når kjøringen er godkjent),
-Beskjeder og Innstillinger (egen konto og app).
+Google Disk-kopier går ikke til ansatte. Menyen deres (sidemenyen og bunnmenyen, `App.tsx`) har
+fire punkter: Kalender (`/vakter`, med turnusen deres som standard og hele kalenderen; fanene
+Mine vakter, Ledige vakter, Tavle og Bytter ligger på siden), Send ekstra timer (`/timer?send=1`:
+skjemaet åpnes for i dag, og timene leveres til godkjenning når de er sendt, så lederen får
+varsel), Registrer fravær (`/fravaer?ny=1`, `MittFravaerSide` i `Fravaer.tsx`: «Meld deg syk»
+åpnes med en gang, med egenmelding, og fraværet det siste året står under) og Min side (`/meg`,
+`MinSide.tsx`: personalia, ansettelsen, lønnen med faste tillegg og skattekortet, feriebanken og
+inntekten med lønnsslippene og årsoversikten, fra `/ansatte/meg`; bare lesing), og Innstillinger
+(egen konto og app) under Konto. Sidene ellers (Timer, Ferie, Lønn og reiser, Beskjeder) finnes
+fortsatt og nås fra varslene.
 
 De ansatte ser planen (`0063_ansatte_ser_planen.sql`): `faktura.kan(org, 'plan')` er eier,
 administrator og regnskap, og de aktive ansatte med innlogging (`min_ansatt`; ikke etter at de har
@@ -1313,8 +1320,7 @@ og ansettelsestypen bare for dem som ser de ansatte og for den ansatte selv). Vi
 tabellene som eieren, så det er where-leddet i dem som avgjør hvem som ser hvem. API-et gir de
 ansatte personene i planen fra `/kolleger` (ikke `/ansatte`), notatet på en kollegas vakt er tomt,
 og advarslene, timene per uke og ekstratimene får bare de som ser de ansatte.
-`mine_organisasjoner.ser_planen` forteller appen om Vaktplan og Tavle skal vises (fanene og
-punktene i sidemenyen). AI-assistenten åpner vaktplanen, måneden og tavla også for de ansatte
+`mine_organisasjoner.ser_planen` forteller appen om kalenderen og tavla skal vises (fanene). AI-assistenten åpner vaktplanen, måneden og tavla også for de ansatte
 (`kan.plan`).
 
 ### Sikkerhet i databasen

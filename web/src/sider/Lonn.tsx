@@ -1190,7 +1190,7 @@ function TrekkSkjema({ s, lagre, opptatt }: { s: Slipp; lagre: (belop: number | 
 
 // --- Den ansatte: sine egne lønnsslipper -----------------------------------------------------
 
-function MineSlipper() {
+export function MineSlipper() {
   const { org } = useKonto();
   const liste = useData(() => hent<MinSlipp[]>(`/org/${org!.id}/lonn/mine`), [org?.id], { oppdater: true });
   const [valgt, settValgt] = useState<MinSlipp | null>(null);

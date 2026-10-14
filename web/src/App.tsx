@@ -24,6 +24,8 @@ import { Ansatte } from "./sider/Ansatte";
 import { Timer } from "./sider/Timer";
 import { Vakter } from "./sider/Vakter";
 import { Ferie } from "./sider/Ferie";
+import { MittFravaerSide } from "./sider/Fravaer";
+import { MinSide } from "./sider/MinSide";
 import { Beskjeder, useUlesteBeskjeder } from "./sider/Beskjeder";
 import { Lonn } from "./sider/Lonn";
 import { Regnskap } from "./sider/Regnskap";
@@ -36,8 +38,8 @@ import { Assistent } from "./assistent";
 import { iFakturadelen } from "./fakturameny";
 import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
-  IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonNokkel, IkonOversikt, IkonPluss,
-  IkonProdukter, IkonRapport, IkonRegnskap, IkonSkjold, IkonTavle, IkonVelg,
+  IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonLonn, IkonMeny, IkonNokkel, IkonOversikt,
+  IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonRegnskap, IkonSkjold, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -188,23 +190,29 @@ function Ramme() {
   const visRegnskap = !ansatt && harFunksjon(org, "regnskap") && kanSeRegnskap(org?.rolle);
   const visRapporter =
     !ansatt && (harFunksjon(org, "rapporter") || visRegnskap || (kanSePersonal(org?.rolle) && (harFunksjon(org, "ansatte") || harFunksjon(org, "lonn"))));
-  const uleste = useUlesteBeskjeder(org?.id, visBeskjeder);
+  const uleste = useUlesteBeskjeder(org?.id, visBeskjeder && !ansatt);
   const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
   // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
   // og bunnmenyen viser personaldelen i stedet for fakturadelen der.
-  const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder|lonn)(\/|$)/.test(sted.pathname);
-  // De ansatte har Vaktplan og Tavle som egne punkter i sidemenyen (fanene på /vakter), ved siden av
-  // Vakter (egne og ledige vakter og vaktbytter); ikke en som har sluttet (ser_planen).
-  const ansattSerPlanen = ansatt && visVakter && org?.ser_planen !== false;
-  const vakterFane = (() => {
-    if (sted.pathname !== "/vakter") return null;
-    const f = new URLSearchParams(sted.search).get("fane");
-    return f === "plan" || f === "kalender" ? "plan" : f === "tavle" ? "tavle" : "vakter";
-  })();
-  const vakterLenke = (til: string, hvilken: string, ikon: ReactNode, tekst: string) => (
-    <Link to={til} className={vakterFane === hvilken ? "active" : undefined} aria-current={vakterFane === hvilken ? "page" : undefined}>
-      {ikon}
-      {tekst}
+  const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder|lonn|fravaer|meg)(\/|$)/.test(sted.pathname);
+  // De ansatte har fire punkter i menyen: Kalender (turnusen deres og hele kalenderen, /vakter),
+  // Send ekstra timer (skjemaet åpnes med en gang, Timer.tsx), Registrer fravær («Meld deg syk»,
+  // Fravaer.tsx) og Min side (opplysningene, lønnen og inntekten, MinSide.tsx). Sidene ellers
+  // (f.eks. beskjedene og vaktbyttene) nås fra varslene og fanene på sidene.
+  // [lenken, siden, ikonet, teksten i sidemenyen, teksten i bunnmenyen]
+  type AnsattLenke = [string, string, (p: { storrelse?: number }) => ReactNode, string, string];
+  const ansattLenker: AnsattLenke[] = !ansatt
+    ? []
+    : [
+        visVakter ? (["/vakter?fane=plan&visning=turnus", "/vakter", IkonKalender, "Kalender", "Kalender"] as AnsattLenke) : null,
+        ["/timer?send=1", "/timer", IkonKlokke, "Send ekstra timer", "Ekstra timer"] as AnsattLenke,
+        visVakter ? (["/fravaer?ny=1", "/fravaer", IkonFravaer, "Registrer fravær", "Fravær"] as AnsattLenke) : null,
+        ["/meg", "/meg", IkonPerson, "Min side", "Min side"] as AnsattLenke,
+      ].filter((l): l is AnsattLenke => !!l);
+  const ansattLenke = ([til, sti, Ikon, tekst, kort]: AnsattLenke, bunn = false) => (
+    <Link key={sti} to={til} className={sted.pathname === sti ? "active" : undefined} aria-current={sted.pathname === sti ? "page" : undefined}>
+      <Ikon storrelse={bunn ? 22 : undefined} />
+      {bunn ? <span>{kort}</span> : tekst}
     </Link>
   );
   const personalmeny = !ansatt && iPersonal && (visAnsatte || visTimer || visBeskjeder);
@@ -252,27 +260,7 @@ function Ramme() {
       </header>
       <nav className="bunnmeny" aria-label="Hovedmeny">
         {ansatt ? (
-          <>
-            <NavLink to="/timer">
-              <IkonKlokke storrelse={22} />
-              <span>Timer</span>
-            </NavLink>
-            {visVakter && (
-              <NavLink to="/vakter">
-                <IkonMineVakter storrelse={22} />
-                <span>Vakter</span>
-              </NavLink>
-            )}
-            {visBeskjeder && (
-              <NavLink to="/beskjeder">
-                <span className="bunn-ikon">
-                  <IkonBjelle storrelse={22} />
-                  <UlesteTall n={nyeBeskjeder} />
-                </span>
-                <span>Beskjeder</span>
-              </NavLink>
-            )}
-          </>
+          <>{ansattLenker.map((l) => ansattLenke(l, true))}</>
         ) : (
           <NavLink to="/" end>
             <IkonOversikt storrelse={22} />
@@ -320,7 +308,7 @@ function Ramme() {
             </NavLink>
           </>
         )}
-        {(ansatt || org?.type === "regnskapsbyraa") && (
+        {org?.type === "regnskapsbyraa" && !ansatt && (
           <NavLink to="/innstillinger">
             <IkonInnstillinger storrelse={22} />
             <span>Innstillinger</span>
@@ -370,38 +358,7 @@ function Ramme() {
         </div>
         <div className="meny-seksjon">Meny</div>
         {ansatt ? (
-          <>
-            <NavLink to="/timer">
-              <IkonKlokke />
-              Timer
-            </NavLink>
-            {visVakter && vakterLenke("/vakter", "vakter", <IkonMineVakter />, "Vakter")}
-            {ansattSerPlanen && (
-              <>
-                {vakterLenke("/vakter?fane=plan", "plan", <IkonKalender />, "Vaktplan")}
-                {vakterLenke("/vakter?fane=tavle", "tavle", <IkonTavle />, "Tavle")}
-              </>
-            )}
-            {visFerie && (
-              <NavLink to="/ferie">
-                <IkonFerie />
-                Ferie
-              </NavLink>
-            )}
-            {visLonn && (
-              <NavLink to="/lonn">
-                <IkonLonn />
-                Lønn og reiser
-              </NavLink>
-            )}
-            {visBeskjeder && (
-              <NavLink to="/beskjeder">
-                <IkonBjelle />
-                Beskjeder
-                <UlesteTall n={nyeBeskjeder} />
-              </NavLink>
-            )}
-          </>
+          <>{ansattLenker.map((l) => ansattLenke(l))}</>
         ) : (
           <NavLink to="/" end>
             <IkonOversikt />
@@ -521,14 +478,16 @@ function Ramme() {
         {org && ansatt && (
           <Routes>
             <Route path="/timer" element={<Timer />} />
-            <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vakter"><Vakter /></Krever>} />
+            <Route path="/vakter" element={<Krever kode="vaktplan" navn="Kalender"><Vakter /></Krever>} />
+            <Route path="/fravaer" element={<Krever kode="vaktplan" navn="Fravær"><MittFravaerSide /></Krever>} />
+            <Route path="/meg" element={<MinSide />} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
             <Route path="/lonn" element={<Krever kode="lonn" navn="Lønn og reiser"><Lonn /></Krever>} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
-            <Route path="*" element={<Navigate to="/timer" replace />} />
+            <Route path="*" element={<Navigate to={visVakter ? "/vakter?fane=plan&visning=turnus" : "/meg"} replace />} />
           </Routes>
         )}
         {org && !ansatt && (

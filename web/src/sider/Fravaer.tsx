@@ -18,7 +18,7 @@
 // og for permitteringen datoen varselet ble gitt og lønnsplikten (standard de 15 første
 // arbeidsdagene). Permitteringen har sin egen knapp; varselet lastes ned som PDF.
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, hent, lastNed } from "../api";
 import { Dialog, Feil, Laster, Tom, useData, useHandling } from "../felles";
 import { kanPersonal, useKonto } from "../konto";
@@ -929,9 +929,27 @@ export function FravaerListe({ versjon, endret }: { versjon: number; endret: () 
 // Den ansattes eget fravær (i «Mine vakter»): meld deg syk, send egenmelding (også etterpå, for
 // sykdom de siste 16 dagene), friskmeld deg.
 // Fraværet hentes her (med dokumentasjonen), fra 16 dager tilbake; versjon: endret utenfra.
-export function MittFravaer({ ansattId, versjon: utenfra, endret }: { ansattId: string; versjon?: unknown; endret: () => void }) {
+export function MittFravaer({
+  ansattId,
+  versjon: utenfra,
+  endret,
+  nySyk,
+  nyApnet,
+}: {
+  ansattId: string;
+  versjon?: unknown;
+  endret: () => void;
+  nySyk?: boolean; // åpne «Meld deg syk» med en gang («Registrer fravær» i menyen)
+  nyApnet?: () => void;
+}) {
   const { org } = useKonto();
   const [apen, settApen] = useState<{ f: Partial<Fravaer>; egenmelding: boolean } | null>(null);
+  useEffect(() => {
+    if (!nySyk) return;
+    settApen({ f: {}, egenmelding: false });
+    nyApnet?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nySyk]);
   const [melding, settMelding] = useState<string | null>(null);
   const [versjon, settVersjon] = useState(0);
   const liste = useData(
@@ -999,6 +1017,71 @@ export function MittFravaer({ ansattId, versjon: utenfra, endret }: { ansattId: 
           />
         )}
       </Dialog>
+    </>
+  );
+}
+
+// Fraværet til den ansatte («Registrer fravær» i menyen, /fravaer): det som pågår eller kommer, med
+// «Meld deg syk» og «Send egenmelding» (MittFravaer; ?ny=1 åpner «Meld deg syk» med en gang), og
+// fraværet det siste året.
+export function MittFravaerSide() {
+  const { org } = useKonto();
+  const [sok, settSok] = useSearchParams();
+  const [versjon, settVersjon] = useState(0);
+  const egen = org?.ansatt_id ?? null;
+  const tidligere = useData(
+    () => (egen ? hent<Fravaer[]>(`/org/${org!.id}/fravaer?fra=${leggTilDager(iDag(), -365)}&til=${leggTilDager(iDag(), -1)}&ansatt=${egen}`) : Promise.resolve([])),
+    [org?.id, egen, versjon],
+  );
+  if (!egen)
+    return (
+      <>
+        <h1>Fravær</h1>
+        <div className="kort">
+          <Tom ikon={<IkonKalender storrelse={22} />} tittel="Du er ikke registrert som ansatt her">
+            <p>Ta kontakt med den som administrerer {org?.navn}.</p>
+          </Tom>
+        </div>
+      </>
+    );
+  const over = (tidligere.data ?? []).filter((f) => f.til < iDag()).sort((a, b) => b.fra.localeCompare(a.fra));
+  return (
+    <>
+      <div className="topp">
+        <h1>Fravær</h1>
+      </div>
+      <p className="dempet">Meld fra når du er syk eller har sykt barn, og send egenmelding. Ferie og permisjon avtaler du med lederen.</p>
+      <MittFravaer
+        ansattId={egen}
+        versjon={versjon}
+        endret={() => settVersjon((v) => v + 1)}
+        nySyk={sok.get("ny") === "1"}
+        nyApnet={() => {
+          const p = new URLSearchParams(sok);
+          p.delete("ny");
+          settSok(p, { replace: true });
+        }}
+      />
+      {over.length > 0 && (
+        <>
+          <h2 className="undertittel">Det siste året</h2>
+          <div className="kort liste">
+            {over.map((f) => (
+              <div key={f.id} className="liste-rad statisk">
+                <span className="linje">
+                  <span className="tittel">{fravaerNavn(f)}</span>
+                  <span className="under">{fravaerPeriode(f)}</span>
+                </span>
+                {dokumentasjonTekst(f) && (
+                  <span className="linje">
+                    <span className="merke merke-dok">{dokumentasjonTekst(f)}</span>
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </>
   );
 }

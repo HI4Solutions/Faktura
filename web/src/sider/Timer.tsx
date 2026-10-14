@@ -3,7 +3,9 @@
 // (server/src/arbeidstid.ts) etter grensene under Innstillinger → Ansatte og timer.
 //
 // Fanen står i adressen (?fane=mine|alle|godkjenning|timebank), uka med mandagen
-// (?uke=2026-10-05), og den ansatte man ser på under «Alle ansatte» med ?ansatt=.
+// (?uke=2026-10-05), og den ansatte man ser på under «Alle ansatte» med ?ansatt=. «Send ekstra
+// timer» i menyen til de ansatte (?send=1) åpner skjemaet for i dag, og timene leveres til
+// godkjenning med en gang de er lagret.
 //
 // Timebanken (0073_timebank.sql, Timebank.tsx): overtid og ekstratimer kan føres «til
 // timebanken» og avspaseres senere; fanen Timebank viser saldoen, søknadene og historikken.
@@ -137,7 +139,9 @@ export function Timer() {
       </>,
     ]);
   if (org?.timebank && (egen || seAlle)) faner.push(["timebank", "Timebank"]);
-  const fane = faner.find(([v]) => v === sok.get("fane"))?.[0] ?? (seAlle ? "alle" : egen ? "mine" : null);
+  // «Send ekstra timer» (?send=1): skjemaet åpnes i den ansattes egen uke.
+  const send = sok.get("send") === "1" && !!egen;
+  const fane = send ? "mine" : (faner.find(([v]) => v === sok.get("fane"))?.[0] ?? (seAlle ? "alle" : egen ? "mine" : null));
   const uke = mandag(gyldigDato(sok.get("uke")) ? sok.get("uke")! : iDag());
   const valgt = sok.get("ansatt");
 
@@ -183,7 +187,20 @@ export function Timer() {
           ))}
         </div>
       )}
-      {fane === "mine" && egen && <Ukeside key={egen} ansattId={egen} uke={uke} velgUke={velgUke} egen personal={personal} versjon={versjon} endret={endret} />}
+      {fane === "mine" && egen && (
+        <Ukeside
+          key={egen}
+          ansattId={egen}
+          uke={uke}
+          velgUke={velgUke}
+          egen
+          personal={personal}
+          versjon={versjon}
+          endret={endret}
+          send={send}
+          sendApnet={() => ga({ send: null, fane: null })}
+        />
+      )}
       {fane === "alle" &&
         (valgt ? (
           <Ukeside
@@ -261,6 +278,8 @@ function Ukeside({
   versjon,
   endret,
   tilbake,
+  send,
+  sendApnet,
 }: {
   ansattId: string;
   uke: string;
@@ -270,6 +289,8 @@ function Ukeside({
   versjon: number;
   endret: () => void;
   tilbake?: () => void;
+  send?: boolean; // åpne «Send ekstra timer» for i dag (menyen til de ansatte)
+  sendApnet?: () => void;
 }) {
   const { org } = useKonto();
   // Stengt i helgene (0064_helg.sql): mandag–fredag, og helgen bare med timer, vakter eller faste dager.
@@ -291,6 +312,8 @@ function Ukeside({
   const planlagt = [...iArbeid, ...fasteIArbeid].reduce((s, v) => s + Number(v.timer), 0);
   const fravaer = vaktsvar.data?.fravaer ?? [];
   const [apen, settApen] = useState<Partial<Foring> | null>(null);
+  // Skjemaet er åpnet med «Send ekstra timer»: timene leveres når de er lagret.
+  const [sender, settSender] = useState(false);
   const [avviser, settAvviser] = useState(false);
   const [melding, settMelding] = useState<string | null>(null);
   // Fravær og arbeidstid for den ansatte, rett fra timelista (samme som i ansattkortet).
@@ -318,6 +341,14 @@ function Ukeside({
   // den er avvist). Regnskap ser bare.
   const kanEndre = (f: Partial<Foring>) => personal || (kanFore && (!f.id || f.status === "utkast" || f.status === "avvist"));
   const nr = ukenr(uke).uke;
+  useEffect(() => {
+    if (!send || !a) return;
+    sendApnet?.();
+    if (!kanFore) return;
+    settSender(true);
+    settApen({ dato: iDag() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [send, !!a]);
 
   const lever = () =>
     h.kjor(async () => {
@@ -558,19 +589,25 @@ function Ukeside({
         Overtid: over {tallformat.format(data.regler.daglig_grense)} timer per dag eller {tallformat.format(data.regler.ukentlig_grense)} per uke, med{" "}
         {data.regler.overtid_prosent} % tillegg.
       </p>
-      <Dialog apen={!!apen} lukk={() => settApen(null)} tittel={!apen?.id ? "Før timer" : apen && kanEndre(apen) ? "Endre timer" : "Timer"}>
+      <Dialog
+        apen={!!apen}
+        lukk={() => (settApen(null), settSender(false))}
+        tittel={sender ? "Send ekstra timer" : !apen?.id ? "Før timer" : apen && kanEndre(apen) ? "Endre timer" : "Timer"}
+      >
         {apen && (
           <ForingSkjema
             foring={apen}
             ansatt={a}
             regler={data.regler}
             kanEndre={kanEndre(apen)}
+            send={sender}
             ferdig={() => {
               settApen(null);
-              settMelding(null);
+              settMelding(sender ? "Timene er sendt til godkjenning. Du får beskjed når de er godkjent." : null);
+              settSender(false);
               endret();
             }}
-            avbryt={() => settApen(null)}
+            avbryt={() => (settApen(null), settSender(false))}
           />
         )}
       </Dialog>
@@ -595,6 +632,7 @@ function ForingSkjema({
   ansatt,
   regler,
   kanEndre,
+  send,
   ferdig,
   avbryt,
 }: {
@@ -602,6 +640,7 @@ function ForingSkjema({
   ansatt: Ansatt;
   regler: Regler;
   kanEndre: boolean;
+  send?: boolean; // «Send ekstra timer»: leveres til godkjenning når de er lagret
   ferdig: () => void;
   avbryt: () => void;
 }) {
@@ -651,6 +690,8 @@ function ForingSkjema({
         : api("POST", `/org/${org!.id}/timer`, { ...kropp, ansatt_id: ansatt.id, ...(foring.vakt_id ? { vakt_id: foring.vakt_id } : {}) }),
     );
     if (!r) return;
+    // Sendes med en gang: timene den dagen leveres til godkjenning (lederen får varsel).
+    if (send && !(await h.kjor(async () => (await api("POST", `/org/${org!.id}/timer/lever`, { ansatt_id: ansatt.id, fra: f.dato, til: f.dato }), true)))) return;
     const sist = lesSist();
     huskSist(
       f.modus === "tid"
@@ -779,11 +820,12 @@ function ForingSkjema({
           <input value={f.beskrivelse} maxLength={500} placeholder="Hva du jobbet med (valgfritt)" onChange={(e) => sett({ beskrivelse: e.target.value })} />
         </label>
       </fieldset>
+      {send && <p className="liten dempet">Timene sendes til godkjenning med en gang, og lederen får beskjed.</p>}
       <Feil melding={h.feil} />
       <div className="knapper">
         {kanEndre && (
           <button className="primar" disabled={h.opptatt}>
-            Lagre
+            {send ? "Send" : "Lagre"}
           </button>
         )}
         <button type="button" onClick={avbryt}>

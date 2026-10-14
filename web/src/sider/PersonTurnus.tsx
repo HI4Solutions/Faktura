@@ -2,9 +2,9 @@
 // (koden i fargen til vakttypen og klokkeslettene), fraværet og de faste dagene, og hvem personen er
 // på jobb sammen med: de andre som har en vakt eller fast dag som overlapper minst en time (også over
 // midnatt). Trykk på en dag for hele dagen: hvem som går sammen med personen, hvem som går de andre
-// vaktene og hvem som er borte; trykk på et navn for kalenderen til den personen. De ansatte ser sin
-// egen og kollegaenes publiserte turnus (andres fravær bare som «F», som ellers i vaktplanen); eier og
-// administrator ser også utkastene og kan endre vakten fra dagen.
+// vaktene og hvem som er borte. De ansatte ser bare sin egen kalender (og hele turnusen), med det
+// publiserte og andres fravær bare som «F», som ellers i vaktplanen. Eier og administrator kan åpne
+// kalenderen til hvem som helst (trykk på et navn), ser også utkastene og kan endre vakten fra dagen.
 import { useState, type ReactNode } from "react";
 import { Dialog } from "../felles";
 import { iDag } from "../format";
@@ -56,7 +56,7 @@ export function PersonTurnus({
   data: VaktSvar;
   personer: PersonInfo[];
   typeAv: Map<string, Vakttype>;
-  velgPerson: (id: string) => void;
+  velgPerson?: (id: string) => void; // eier og administrator: kalenderen til en annen
   endre?: (ansatt: string, dato: string) => void; // eier og administrator: valget i ruten
 }) {
   const [dag, settDag] = useState<string | null>(null);
@@ -208,10 +208,14 @@ export function PersonTurnus({
             navnPaa={navnPaa}
             merke={merke}
             beskriv={beskriv}
-            velgPerson={(id) => {
-              settDag(null);
-              velgPerson(id);
-            }}
+            velgPerson={
+              velgPerson
+                ? (id) => {
+                    settDag(null);
+                    velgPerson(id);
+                  }
+                : undefined
+            }
             endre={endre ? () => (settDag(null), endre(person.id, dag)) : undefined}
           />
         )}
@@ -245,17 +249,24 @@ function Dagen({
   navnPaa: (a: Arbeid) => string;
   merke: (a: Arbeid) => ReactNode;
   beskriv: (a: Arbeid) => string;
-  velgPerson: (id: string) => void;
+  velgPerson?: (id: string) => void;
   endre?: () => void;
 }) {
   const ider = new Set(sammen.map((a) => a.ansatt_id));
   const resten = andre.filter((a) => !ider.has(a.ansatt_id));
+  // Navnet åpner kalenderen til personen (eier og administrator), ellers bare navnet.
+  const navnet = (id: string, tekst: ReactNode) =>
+    velgPerson ? (
+      <button type="button" className="lenke" onClick={() => velgPerson(id)} title={`Turnusen til ${tekst}`}>
+        {tekst}
+      </button>
+    ) : (
+      <span>{tekst}</span>
+    );
   const rad = (a: Arbeid) => (
     <li key={`${a.ansatt_id}-${a.start}`}>
       {merke(a)}
-      <button type="button" className="lenke" onClick={() => velgPerson(a.ansatt_id)} title={`Turnusen til ${navnPaa(a)}`}>
-        {navnPaa(a)}
-      </button>
+      {navnet(a.ansatt_id, navnPaa(a))}
       <span className="dempet">
         {tid(a)}
         {a.vakt && !a.vakt.publisert ? " · utkast" : ""}
@@ -289,9 +300,7 @@ function Dagen({
             {borte.map((f) => (
               <li key={`${f.ansatt_id}-${f.type}`}>
                 <span className={`vt-merke ${fravaerKlasse[f.type as FravaerType] ?? ""}`}>{fravaerKode[f.type as FravaerType] ?? "F"}</span>
-                <button type="button" className="lenke" onClick={() => velgPerson(f.ansatt_id)}>
-                  {f.ansatt_navn}
-                </button>
+                {navnet(f.ansatt_id, f.ansatt_navn)}
               </li>
             ))}
           </ul>

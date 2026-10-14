@@ -206,9 +206,12 @@ export function Vakter() {
       ],
     );
   // De ansatte ser hele den publiserte planen (også måneden) og tavla, bare til lesing (0063); ikke en
-  // som har sluttet (ser_planen).
+  // som har sluttet (ser_planen). For dem er planen «Kalender» (punktet i menyen), og den står først.
   const ansattSerPlanen = !seHelePlanen && !!egen && org?.ser_planen !== false;
-  if (ansattSerPlanen) faner.push(["plan", "Vaktplan"], ["tavle", "Tavle"]);
+  if (ansattSerPlanen) {
+    faner.unshift(["plan", "Kalender"]);
+    faner.push(["tavle", "Tavle"]);
+  }
   if (bytter.data && (bytter.data.innstilling !== "av" || (bytter.data.bytter?.length ?? 0) > 0))
     faner.push([
       "bytter",
@@ -290,7 +293,7 @@ export function Vakter() {
   return (
     <>
       <div className={faner.length > 1 ? "topp med-faner" : "topp"}>
-        <h1>{TITLER[fane] ?? "Vakter"}</h1>
+        <h1>{fane === "plan" && ansattSerPlanen ? "Kalender" : (TITLER[fane] ?? "Vakter")}</h1>
       </div>
       {faner.length > 1 && (
         <div className="faner tett" role="tablist">

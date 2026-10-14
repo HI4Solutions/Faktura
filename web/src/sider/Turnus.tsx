@@ -6,9 +6,10 @@
 // (vakttypene, behovet per ukedag og rolle, hvem som går hvilke vakttyper og reglene) står under
 // «Oppsett». De ansatte ser den publiserte turnusen.
 //
-// «Turnus for» viser turnusen til én person i stedet (PersonTurnus.tsx): kalenderen uke for uke med
-// hvem personen er på jobb sammen med. De ansatte ser sin egen som standard, og kan velge kollegaene
-// eller alle (?person=alle eller id-en); eier og administrator ser alle som standard.
+// Turnusen til én person (PersonTurnus.tsx): kalenderen uke for uke med hvem personen er på jobb
+// sammen med. De ansatte velger mellom sin egen («Min turnus», standard) og hele turnusen, ikke
+// kollegaenes kalendere; eier og administrator ser alle som standard og kan velge hvem som helst
+// («Turnus for»; ?person=alle eller id-en).
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling } from "../felles";
@@ -126,10 +127,12 @@ export function Turnus({
   const dager = Array.from({ length: uker * 7 }, (_, i) => leggTilDager(fra, i));
   const idag = iDag();
   const rv = rollevalg(rollevalget.valgt, grupper.data, personer.data);
-  // Turnusen til én person: de ansatte ser sin egen som standard, de andre alle.
+  // Turnusen til én person: de ansatte ser sin egen som standard (og bare den), de andre alle.
   const egen = org?.ansatt_id ?? null;
-  const standardPerson = egen && !seAlle ? egen : "alle";
-  const valgtPerson = (person ?? standardPerson) === "alle" ? undefined : personer.data.find((p) => p.id === (person ?? standardPerson));
+  const ansattvalg = !seAlle && !!egen;
+  const standardPerson = ansattvalg ? egen : "alle";
+  const onsket = person === "alle" || !ansattvalg ? (person ?? standardPerson) : egen;
+  const valgtPerson = onsket === "alle" ? undefined : personer.data.find((p) => p.id === onsket);
   const velgEn = (p: string) => velgPerson(p === standardPerson ? null : p);
 
   // Folkene i perioden, rolle for rolle (rekkefølgen og fargene fra rollene).
@@ -256,6 +259,20 @@ export function Turnus({
           ))}
         </select>
       </label>
+      {ansattvalg ? (
+        <div className="faner turnus-min" role="tablist" aria-label="Hvilken turnus">
+          {(
+            [
+              [egen, "Min turnus"],
+              ["alle", "Hele turnusen"],
+            ] as const
+          ).map(([v, tekst]) => (
+            <button key={v} type="button" role="tab" aria-selected={(valgtPerson?.id ?? "alle") === v} className={(valgtPerson?.id ?? "alle") === v ? "valgt" : undefined} onClick={() => velgEn(v)}>
+              {tekst}
+            </button>
+          ))}
+        </div>
+      ) : (
       <label className="turnus-person">
         <span>Turnus for</span>
         <select value={valgtPerson?.id ?? "alle"} onChange={(e) => velgEn(e.target.value)}>
@@ -284,6 +301,7 @@ export function Turnus({
               )}
         </select>
       </label>
+      )}
       {kanPlanlegge && (
         <div className="knapper">
           <button type="button" onClick={() => settOppsett(true)}>
@@ -329,7 +347,7 @@ export function Turnus({
             data={data}
             personer={personer.data}
             typeAv={typeAv}
-            velgPerson={velgEn}
+            velgPerson={ansattvalg ? undefined : velgEn}
             endre={kanPlanlegge ? (ansatt, dato) => settRute({ ansatt, dato }) : undefined}
           />
         </>
