@@ -26,6 +26,8 @@ export interface MinOrg {
   helg?: boolean;
   // Timebanken er slått på (0073_timebank.sql): overtid og ekstratimer kan avspaseres senere.
   timebank?: boolean;
+  // Vaktbytte (0060_vaktbytte.sql): av, med godkjenning eller fritt (0108_meny_vaktbytte.sql).
+  vaktbytte?: "av" | "godkjenning" | "fritt";
 }
 
 export type Funksjon = "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan" | "lonn" | "regnskap";
@@ -143,5 +145,9 @@ export const erAdmin = (rolle?: string) => ["eier", "admin"].includes(rolle ?? "
 export const erAnsatt = (rolle?: string) => rolle === "ansatt";
 export const kanPersonal = erAdmin;
 export const kanSePersonal = (rolle?: string) => ["eier", "admin", "regnskap"].includes(rolle ?? "");
+// Eier og administrator har Timer og Ferie som ett punkt i menyen, «Timer og ferie», med Ferie som
+// siste fane på Timer; de ansatte har dem som egne punkter.
+export const timerOgFerie = (org: MinOrg | null | undefined) =>
+  !!org?.personal && harFunksjon(org, "vaktplan") && !erAnsatt(org.rolle) && erAdmin(org.rolle);
 // Regnskapet (anleggsmidlene, bilagene): eier, administrator og regnskap.
 export const kanSeRegnskap = (rolle?: string) => ["eier", "admin", "regnskap"].includes(rolle ?? "");

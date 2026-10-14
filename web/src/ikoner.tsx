@@ -268,6 +268,45 @@ export const IkonFravaer = (p: P) => (
     <path d="m9.8 13.4 4.4 4.4M14.2 13.4l-4.4 4.4" />
   </Ikon>
 );
+// Ledige vakter: kalenderen med et pluss.
+export const IkonLedigeVakter = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3.5" y="5" width="17" height="15.5" rx="2.2" />
+    <path d="M3.5 10h17M8 3v4M16 3v4" />
+    <path d="M12 12.8v5M9.5 15.3h5" />
+  </Ikon>
+);
+// Bytte vakter: to piler hver sin vei.
+export const IkonBytte = (p: P) => (
+  <Ikon {...p}>
+    <path d="M7 3.5 3.5 7 7 10.5" />
+    <path d="M3.5 7h13" />
+    <path d="M17 13.5l3.5 3.5-3.5 3.5" />
+    <path d="M20.5 17h-13" />
+  </Ikon>
+);
+// Send ekstra timer: klokka med et pluss.
+export const IkonEkstraTimer = (p: P) => (
+  <Ikon {...p}>
+    <path d="M20.4 11.2A8.5 8.5 0 1 0 11.2 20.4" />
+    <path d="M11.5 7v4.6l2.8 1.7" />
+    <path d="M18 14.5v6M15 17.5h6" />
+  </Ikon>
+);
+// Timebank: et timeglass.
+export const IkonTimebank = (p: P) => (
+  <Ikon {...p}>
+    <path d="M6.5 3.5h11M6.5 20.5h11" />
+    <path d="M8 3.5c0 4.4 4 5.3 4 8.5s-4 4.1-4 8.5M16 3.5c0 4.4-4 5.3-4 8.5s4 4.1 4 8.5" />
+  </Ikon>
+);
+// Reiser: en kartnål.
+export const IkonReise = (p: P) => (
+  <Ikon {...p}>
+    <path d="M12 21s-6.5-5.6-6.5-10.6a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z" />
+    <circle cx="12" cy="10.4" r="2.3" />
+  </Ikon>
+);
 // Min side: en person.
 export const IkonPerson = (p: P) => (
   <Ikon {...p}>

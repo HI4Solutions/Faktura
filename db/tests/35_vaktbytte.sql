@@ -220,10 +220,13 @@ select (faktura.tilby_vaktbytte(:'org', :'v_ola5', null, :'siri', null, null, nu
 select set_config('app.bruker_id', :'u_siri', false);
 select test.er((faktura.svar_vaktbytte(:'org', :'b7', true)).status, 'godkjent', 'gjennom med en gang');
 select test.er((select ansatt_id from faktura.vakter where id = :'v_ola5'), :'siri'::uuid, 'vakten er Siris');
+select test.er((select vaktbytte from faktura.mine_organisasjoner where id = :'org'), 'fritt', 'appen ser innstillingen (fritt)');
 select set_config('app.bruker_id', :'u', false);
 update faktura.lonn_oppsett set vaktbytte = 'av' where org_id = :'org';
 select set_config('app.bruker_id', :'u_siri', false);
 select test.feiler(format($$select faktura.tilby_vaktbytte(%L, %L, null, null, null, null, null)$$, :'org', :'v_ola5'), 'FA403');
+-- Menyen til de ansatte har ikke «Bytter» når vaktbytte er slått av (0108_meny_vaktbytte.sql).
+select test.er((select vaktbytte from faktura.mine_organisasjoner where id = :'org'), 'av', 'den ansatte ser at vaktbytte er av');
 select set_config('app.bruker_id', :'u', false);
 update faktura.lonn_oppsett set vaktbytte = 'godkjenning' where org_id = :'org';
 

@@ -10,10 +10,10 @@
 // Timebanken (0073_timebank.sql, Timebank.tsx): overtid og ekstratimer kan føres «til
 // timebanken» og avspaseres senere; fanen Timebank viser saldoen, søknadene og historikken.
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
-import { erAdmin, harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
+import { erAdmin, harFunksjon, kanPersonal, kanSePersonal, timerOgFerie, useKonto } from "../konto";
 import { dato, iDag, leggTilDager } from "../format";
 import { IkonHake, IkonKlokke, IkonPluss, IkonVenstre } from "../ikoner";
 import { erHelg, gyldigDato, Klokkeslett, mandag, middag, regnTimer, tallformat, timer, ukedagFormat, ukedager, ukenr, ukePeriode, Ukevelger, visDag } from "../uke";
@@ -107,12 +107,10 @@ function huskSist(v: Sist) {
 
 // --- Siden ------------------------------------------------------------------------
 
-export function Timer() {
+// Fanene på Timer. For eier og administrator er Timer og Ferie ett punkt i menyen («Timer og
+// ferie»), og Ferie er siste fane (den åpner /ferie, som har de samme fanene).
+export function useTimerFaner(versjon = 0) {
   const { org } = useKonto();
-  const [sok, settSok] = useSearchParams();
-  const [versjon, settVersjon] = useState(0);
-  const endret = () => settVersjon((v) => v + 1);
-  useNarDataEndres(endret); // f.eks. timer som er ført eller godkjent med AI-assistenten
   const egen = org?.ansatt_id ?? null;
   const personal = kanPersonal(org?.rolle);
   const seAlle = kanSePersonal(org?.rolle);
@@ -139,9 +137,45 @@ export function Timer() {
       </>,
     ]);
   if (org?.timebank && (egen || seAlle)) faner.push(["timebank", "Timebank"]);
+  if (timerOgFerie(org)) faner.push(["ferie", "Ferie"]);
+  return { faner, venter, antallVenter };
+}
+
+// Fanene øverst på Timer og Ferie. velg: bytter fane på Timer uten å laste siden på nytt.
+export function TimerFaner({ faner, valgt, velg }: { faner: [string, ReactNode][]; valgt: string; velg?: (fane: string) => void }) {
+  const nav = useNavigate();
+  if (faner.length < 2) return null;
+  return (
+    <div className="faner tett" role="tablist">
+      {faner.map(([v, t]) => (
+        <button
+          key={v}
+          type="button"
+          role="tab"
+          aria-selected={valgt === v}
+          className={valgt === v ? "valgt" : undefined}
+          onClick={() => (v === "ferie" ? nav("/ferie") : velg ? velg(v) : nav(`/timer?fane=${v}`))}
+        >
+          {t}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Timer() {
+  const { org } = useKonto();
+  const [sok, settSok] = useSearchParams();
+  const [versjon, settVersjon] = useState(0);
+  const endret = () => settVersjon((v) => v + 1);
+  useNarDataEndres(endret); // f.eks. timer som er ført eller godkjent med AI-assistenten
+  const egen = org?.ansatt_id ?? null;
+  const personal = kanPersonal(org?.rolle);
+  const seAlle = kanSePersonal(org?.rolle);
+  const { faner, venter, antallVenter } = useTimerFaner(versjon);
   // «Send ekstra timer» (?send=1): skjemaet åpnes i den ansattes egen uke.
   const send = sok.get("send") === "1" && !!egen;
-  const fane = send ? "mine" : (faner.find(([v]) => v === sok.get("fane"))?.[0] ?? (seAlle ? "alle" : egen ? "mine" : null));
+  const fane = send ? "mine" : (faner.find(([v]) => v === sok.get("fane") && v !== "ferie")?.[0] ?? (seAlle ? "alle" : egen ? "mine" : null));
   const uke = mandag(gyldigDato(sok.get("uke")) ? sok.get("uke")! : iDag());
   const valgt = sok.get("ansatt");
 
@@ -176,17 +210,9 @@ export function Timer() {
   return (
     <>
       <div className="topp">
-        <h1>Timer</h1>
+        <h1>{timerOgFerie(org) ? "Timer og ferie" : "Timer"}</h1>
       </div>
-      {faner.length > 1 && (
-        <div className="faner tett" role="tablist">
-          {faner.map(([v, t]) => (
-            <button key={v} type="button" role="tab" aria-selected={fane === v} className={fane === v ? "valgt" : undefined} onClick={() => ga({ fane: v, ansatt: null })}>
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
+      <TimerFaner faner={faner} valgt={fane} velg={(v) => ga({ fane: v, ansatt: null })} />
       {fane === "mine" && egen && (
         <Ukeside
           key={egen}

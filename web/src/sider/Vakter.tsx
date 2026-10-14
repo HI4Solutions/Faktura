@@ -149,8 +149,8 @@ const TITLER: Record<string, string> = {
   plan: "Vaktplan",
   tavle: "Tavle",
   fravaer: "Fravær",
-  mine: "Vakter",
-  ledige: "Vakter",
+  mine: "Mine vakter",
+  ledige: "Ledige vakter",
   bytter: "Vaktbytte",
 };
 

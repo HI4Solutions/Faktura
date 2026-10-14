@@ -1,10 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { updateProfile } from "firebase/auth";
 import { hentAuth } from "./firebase";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 import { Feil, Laster, Tom } from "./felles";
-import { KontoProvider, erAdmin, erAnsatt, harFunksjon, kanSePersonal, kanSeRegnskap, kanSkrive, useKonto, type Funksjon } from "./konto";
+import { KontoProvider, erAdmin, erAnsatt, harFunksjon, kanSePersonal, kanSeRegnskap, kanSkrive, timerOgFerie, useKonto, type Funksjon } from "./konto";
 import { Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
 import { BekreftEpost, BekreftLenke } from "./sider/Bekreftelse";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
@@ -38,8 +38,9 @@ import { Assistent } from "./assistent";
 import { iFakturadelen } from "./fakturameny";
 import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
-  IkonAnsatte, IkonBjelle, IkonFaktura, IkonFerie, IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLoggUt, IkonLonn, IkonMeny, IkonNokkel, IkonOversikt,
-  IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonRegnskap, IkonSkjold, IkonVelg,
+  IkonAnsatte, IkonBjelle, IkonBytte, IkonEkstraTimer, IkonFaktura, IkonFerie, IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKunder, IkonLedigeVakter,
+  IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonNokkel, IkonOversikt, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonRegnskap, IkonReise, IkonSkjold, IkonTavle,
+  IkonTimebank, IkonVelg,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -190,31 +191,103 @@ function Ramme() {
   const visRegnskap = !ansatt && harFunksjon(org, "regnskap") && kanSeRegnskap(org?.rolle);
   const visRapporter =
     !ansatt && (harFunksjon(org, "rapporter") || visRegnskap || (kanSePersonal(org?.rolle) && (harFunksjon(org, "ansatte") || harFunksjon(org, "lonn"))));
-  const uleste = useUlesteBeskjeder(org?.id, visBeskjeder && !ansatt);
+  const uleste = useUlesteBeskjeder(org?.id, visBeskjeder);
   const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
   // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
   // og bunnmenyen viser personaldelen i stedet for fakturadelen der.
   const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder|lonn|fravaer|meg)(\/|$)/.test(sted.pathname);
-  // De ansatte har fire punkter i menyen: Kalender (turnusen deres og hele kalenderen, /vakter),
-  // Send ekstra timer (skjemaet åpnes med en gang, Timer.tsx), Registrer fravær («Meld deg syk»,
-  // Fravaer.tsx) og Min side (opplysningene, lønnen og inntekten, MinSide.tsx). Sidene ellers
-  // (f.eks. beskjedene og vaktbyttene) nås fra varslene og fanene på sidene.
-  // [lenken, siden, ikonet, teksten i sidemenyen, teksten i bunnmenyen]
-  type AnsattLenke = [string, string, (p: { storrelse?: number }) => ReactNode, string, string];
-  const ansattLenker: AnsattLenke[] = !ansatt
+  // Eier og administrator har Timer og Ferie som ett punkt, «Timer og ferie» (Ferie er en fane på Timer).
+  const iTimerOgFerie = sted.pathname === "/timer" || (timerOgFerie(org) && sted.pathname === "/ferie");
+  // Menyen til de ansatte: det som ellers ligger i faner på sidene (vaktene, timene, lønnen), er
+  // egne punkter, i grupper. Bunnmenyen på mobil har Kalender, Ekstra timer, Fravær og Min side,
+  // og resten under «Mer».
+  const her = new URLSearchParams(sted.search);
+  // På siden, med fanen (eller uten fane i adressen, når fanen er den siden viser først).
+  const paa = (sti: string, fane: string, forst = false) => sted.pathname === sti && (her.get("fane") === fane || (forst && !her.get("fane")));
+  // Kalenderen og tavla: ikke for en som har sluttet (ser_planen).
+  const ansattSerPlanen = ansatt && visVakter && org?.ser_planen !== false;
+  // bunn: med i bunnmenyen (bunnAktiv: valgt der, der et punkt står for flere i sidemenyen).
+  type AnsattPunkt = {
+    til: string;
+    Ikon: (p: { storrelse?: number }) => ReactNode;
+    tekst: string;
+    kort?: string;
+    aktiv: boolean;
+    teller?: number;
+    bunn?: boolean;
+    bunnAktiv?: boolean;
+  };
+  const ansattGrupper: [string, AnsattPunkt[]][] = !ansatt
     ? []
-    : [
-        visVakter ? (["/vakter?fane=plan&visning=turnus", "/vakter", IkonKalender, "Kalender", "Kalender"] as AnsattLenke) : null,
-        ["/timer?send=1", "/timer", IkonKlokke, "Send ekstra timer", "Ekstra timer"] as AnsattLenke,
-        visVakter ? (["/fravaer?ny=1", "/fravaer", IkonFravaer, "Registrer fravær", "Fravær"] as AnsattLenke) : null,
-        ["/meg", "/meg", IkonPerson, "Min side", "Min side"] as AnsattLenke,
-      ].filter((l): l is AnsattLenke => !!l);
-  const ansattLenke = ([til, sti, Ikon, tekst, kort]: AnsattLenke, bunn = false) => (
-    <Link key={sti} to={til} className={sted.pathname === sti ? "active" : undefined} aria-current={sted.pathname === sti ? "page" : undefined}>
-      <Ikon storrelse={bunn ? 22 : undefined} />
-      {bunn ? <span>{kort}</span> : tekst}
-    </Link>
-  );
+    : (
+        [
+          [
+            "Vakter",
+            visVakter
+              ? [
+                  ansattSerPlanen && {
+                    til: "/vakter?fane=plan&visning=turnus",
+                    Ikon: IkonKalender,
+                    tekst: "Kalender",
+                    aktiv: paa("/vakter", "plan", true) || paa("/vakter", "kalender"),
+                    bunn: true,
+                    bunnAktiv: sted.pathname === "/vakter",
+                  },
+                  { til: "/vakter?fane=mine", Ikon: IkonMineVakter, tekst: "Mine vakter", aktiv: paa("/vakter", "mine", !ansattSerPlanen) },
+                  { til: "/vakter?fane=ledige", Ikon: IkonLedigeVakter, tekst: "Ledige vakter", aktiv: paa("/vakter", "ledige") },
+                  org?.vaktbytte !== "av" && { til: "/vakter?fane=bytter", Ikon: IkonBytte, tekst: "Bytte vakter", aktiv: paa("/vakter", "bytter") },
+                  ansattSerPlanen && { til: "/vakter?fane=tavle", Ikon: IkonTavle, tekst: "Tavle", aktiv: paa("/vakter", "tavle") },
+                ]
+              : [],
+          ],
+          [
+            "Timer og fravær",
+            [
+              { til: "/timer", Ikon: IkonKlokke, tekst: "Timer", aktiv: paa("/timer", "mine", true) && her.get("send") !== "1" },
+              {
+                til: "/timer?send=1",
+                Ikon: IkonEkstraTimer,
+                tekst: "Send ekstra timer",
+                kort: "Ekstra timer",
+                aktiv: sted.pathname === "/timer" && her.get("send") === "1",
+                bunn: true,
+                bunnAktiv: sted.pathname === "/timer",
+              },
+              !!org?.timebank && { til: "/timer?fane=timebank", Ikon: IkonTimebank, tekst: "Timebank", aktiv: paa("/timer", "timebank") },
+              visVakter && { til: "/fravaer?ny=1", Ikon: IkonFravaer, tekst: "Registrer fravær", kort: "Fravær", aktiv: sted.pathname === "/fravaer", bunn: true },
+              visFerie && { til: "/ferie", Ikon: IkonFerie, tekst: "Ferie", aktiv: sted.pathname === "/ferie" },
+            ],
+          ],
+          [
+            "Lønn",
+            visLonn
+              ? [
+                  { til: "/lonn?fane=mine", Ikon: IkonLonn, tekst: "Lønnsslipper", aktiv: paa("/lonn", "mine", true) },
+                  { til: "/lonn?fane=reiser", Ikon: IkonReise, tekst: "Reiser", aktiv: paa("/lonn", "reiser") },
+                ]
+              : [],
+          ],
+          [
+            "Meg",
+            [
+              { til: "/meg", Ikon: IkonPerson, tekst: "Min side", aktiv: sted.pathname === "/meg", bunn: true },
+              visBeskjeder && { til: "/beskjeder", Ikon: IkonBjelle, tekst: "Beskjeder", aktiv: sted.pathname === "/beskjeder", teller: nyeBeskjeder },
+            ],
+          ],
+        ] as [string, (AnsattPunkt | false)[]][]
+      )
+        .map(([navn, punkter]): [string, AnsattPunkt[]] => [navn, punkter.filter((x): x is AnsattPunkt => !!x)])
+        .filter(([, punkter]) => punkter.length > 0);
+  const ansattLenke = (x: AnsattPunkt, bunn = false) => {
+    const aktiv = bunn ? (x.bunnAktiv ?? x.aktiv) : x.aktiv;
+    return (
+      <Link key={x.til} to={x.til} className={aktiv ? "active" : undefined} aria-current={aktiv ? "page" : undefined}>
+        <x.Ikon storrelse={bunn ? 22 : undefined} />
+        {bunn ? <span>{x.kort ?? x.tekst}</span> : x.tekst}
+        {!bunn && <UlesteTall n={x.teller ?? 0} />}
+      </Link>
+    );
+  };
   const personalmeny = !ansatt && iPersonal && (visAnsatte || visTimer || visBeskjeder);
 
   if (ny || orgs.length === 0) {
@@ -260,7 +333,7 @@ function Ramme() {
       </header>
       <nav className="bunnmeny" aria-label="Hovedmeny">
         {ansatt ? (
-          <>{ansattLenker.map((l) => ansattLenke(l, true))}</>
+          <>{ansattGrupper.flatMap(([, punkter]) => punkter.filter((x) => x.bunn)).map((x) => ansattLenke(x, true))}</>
         ) : (
           <NavLink to="/" end>
             <IkonOversikt storrelse={22} />
@@ -282,7 +355,7 @@ function Ramme() {
               </NavLink>
             )}
             {visTimer && (
-              <NavLink to="/timer">
+              <NavLink to="/timer" className={({ isActive }) => (isActive || iTimerOgFerie ? "active" : undefined)}>
                 <IkonKlokke storrelse={22} />
                 <span>Timer</span>
               </NavLink>
@@ -314,10 +387,10 @@ function Ramme() {
             <span>Innstillinger</span>
           </NavLink>
         )}
-        <button type="button" className={menyApen ? "aktiv" : ""} onClick={() => settMenyApen(true)} aria-label={!ansatt && nyeBeskjeder ? `Mer (${nyeBeskjeder} nye beskjeder)` : undefined}>
+        <button type="button" className={menyApen ? "aktiv" : ""} onClick={() => settMenyApen(true)} aria-label={nyeBeskjeder ? `Mer (${nyeBeskjeder} nye beskjeder)` : undefined}>
           <span className="bunn-ikon">
             <IkonMeny storrelse={22} />
-            {!ansatt && nyeBeskjeder > 0 && <span className="ulest-prikk" />}
+            {nyeBeskjeder > 0 && <span className="ulest-prikk" />}
           </span>
           <span>Mer</span>
         </button>
@@ -356,9 +429,14 @@ function Ramme() {
             <option value="__ny">+ Ny organisasjon</option>
           </select>
         </div>
-        <div className="meny-seksjon">Meny</div>
+        {!ansatt && <div className="meny-seksjon">Meny</div>}
         {ansatt ? (
-          <>{ansattLenker.map((l) => ansattLenke(l))}</>
+          ansattGrupper.map(([navn, punkter]) => (
+            <Fragment key={navn}>
+              <div className="meny-seksjon">{navn}</div>
+              {punkter.map((x) => ansattLenke(x))}
+            </Fragment>
+          ))
         ) : (
           <NavLink to="/" end>
             <IkonOversikt />
@@ -410,15 +488,9 @@ function Ramme() {
               </NavLink>
             )}
             {visTimer && (
-              <NavLink to="/timer">
+              <NavLink to="/timer" className={({ isActive }) => (isActive || iTimerOgFerie ? "active" : undefined)}>
                 <IkonKlokke />
-                Timer
-              </NavLink>
-            )}
-            {visFerie && (
-              <NavLink to="/ferie">
-                <IkonFerie />
-                Ferie
+                {timerOgFerie(org) ? "Timer og ferie" : "Timer"}
               </NavLink>
             )}
             {visLonn && (

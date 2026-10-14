@@ -1302,16 +1302,29 @@ og til alle (`ser_beskjed`; `faktura.kan(org,
 'medlem')`, `faktura.kan(org, 'plan')`, `faktura.er_meg` og `faktura.min_ansatt`), aldri
 fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, timebank, notater og typen fravær,
 utkast i vaktplanen eller revisjonsloggen. Varsler til hele organisasjonen og
-Google Disk-kopier går ikke til ansatte. Menyen deres (sidemenyen og bunnmenyen, `App.tsx`) har
-fire punkter: Kalender (`/vakter`, med turnusen deres som standard og hele kalenderen; fanene
-Mine vakter, Ledige vakter, Tavle og Bytter ligger på siden), Send ekstra timer (`/timer?send=1`:
-skjemaet åpnes for i dag, og timene leveres til godkjenning når de er sendt, så lederen får
-varsel), Registrer fravær (`/fravaer?ny=1`, `MittFravaerSide` i `Fravaer.tsx`: «Meld deg syk»
-åpnes med en gang, med egenmelding, og fraværet det siste året står under) og Min side (`/meg`,
-`MinSide.tsx`: personalia, ansettelsen, lønnen med faste tillegg og skattekortet, feriebanken og
-inntekten med lønnsslippene og årsoversikten, fra `/ansatte/meg`; bare lesing), og Innstillinger
-(egen konto og app) under Konto. Sidene ellers (Timer, Ferie, Lønn og reiser, Beskjeder) finnes
-fortsatt og nås fra varslene.
+Google Disk-kopier går ikke til ansatte. Sidemenyen deres (`App.tsx`) har det som ellers ligger
+i faner på sidene, som egne punkter i grupper:
+
+- Vakter: Kalender (`/vakter?fane=plan&visning=turnus`, med turnusen deres som standard og hele
+  kalenderen), Mine vakter, Ledige vakter, Bytte vakter (bare når vaktbytte er slått på,
+  `mine_organisasjoner.vaktbytte`, `0108_meny_vaktbytte.sql`) og Tavle. Kalenderen og tavla er
+  ikke med for en som har sluttet (`ser_planen`).
+- Timer og fravær: Timer (`/timer`), Send ekstra timer (`/timer?send=1`: skjemaet åpnes for i
+  dag, og timene leveres til godkjenning når de er sendt, så lederen får varsel), Timebank (når
+  den er slått på), Registrer fravær (`/fravaer?ny=1`, `MittFravaerSide` i `Fravaer.tsx`: «Meld
+  deg syk» åpnes med en gang, med egenmelding, og fraværet det siste året står under) og Ferie.
+- Lønn: Lønnsslipper (`/lonn?fane=mine`) og Reiser (`/lonn?fane=reiser`).
+- Meg: Min side (`/meg`, `MinSide.tsx`: personalia, ansettelsen, lønnen med faste tillegg og
+  skattekortet, feriebanken og inntekten med lønnsslippene og årsoversikten, fra
+  `/ansatte/meg`; bare lesing) og Beskjeder (med tallet på de nye).
+
+Innstillinger (egen konto og app) ligger under Konto. Punktet for siden og fanen man står på, er
+valgt, og fanene på sidene er der fortsatt. Bunnmenyen på mobil har Kalender, Ekstra timer,
+Fravær og Min side, og resten under «Mer» (med en prikk når det er nye beskjeder).
+
+Eier og administrator har Timer og Ferie som ett punkt, «Timer og ferie» (`timerOgFerie` i
+`konto.tsx`): Ferie er siste fane på Timer og åpner `/ferie`, som har de samme fanene
+(`TimerFaner` i `Timer.tsx`).
 
 De ansatte ser planen (`0063_ansatte_ser_planen.sql`): `faktura.kan(org, 'plan')` er eier,
 administrator og regnskap, og de aktive ansatte med innlogging (`min_ansatt`; ikke etter at de har

@@ -6,10 +6,11 @@ import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, tall, useData, useHandling, useNarDataEndres, useSmal } from "../felles";
-import { erAdmin, useKonto } from "../konto";
+import { erAdmin, timerOgFerie, useKonto } from "../konto";
 import { dato, iDag } from "../format";
 import { IkonHoyre, IkonVenstre } from "../ikoner";
 import { FravaerDialog, fravaerPeriode, type Fravaer } from "./Fravaer";
+import { TimerFaner, useTimerFaner } from "./Timer";
 
 export interface Saldo {
   ansatt_id: string;
@@ -98,6 +99,8 @@ export function Ferie() {
 function Ferieoversikt({ aar, velg }: { aar: number; velg: (aar: number) => void }) {
   const { org } = useKonto();
   const smal = useSmal();
+  // «Timer og ferie» er ett punkt i menyen: fanene fra Timer, med Ferie valgt (Timer.tsx).
+  const { faner } = useTimerFaner();
   const [versjon, settVersjon] = useState(0);
   const bank = useData(() => hent<Saldo[]>(`/org/${org!.id}/feriebank?aar=${aar}`), [org?.id, aar, versjon]);
   const soknader = useData(() => hent<Overforing[]>(`/org/${org!.id}/ferie/overforinger?status=venter`), [org?.id, versjon]);
@@ -109,9 +112,10 @@ function Ferieoversikt({ aar, velg }: { aar: number; velg: (aar: number) => void
   return (
     <>
       <div className="topp">
-        <h1>Ferie</h1>
+        <h1>{timerOgFerie(org) ? "Timer og ferie" : "Ferie"}</h1>
         <Aarsvelger aar={aar} velg={velg} />
       </div>
+      {timerOgFerie(org) && <TimerFaner faner={faner} valgt="ferie" />}
       <p className="undertittel">
         Feriedagene til hver ansatt, hva som er avviklet og planlagt, og hva som er igjen. Ferie registreres som fravær, og banken oppdateres av seg selv.
       </p>
