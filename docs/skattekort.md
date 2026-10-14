@@ -30,7 +30,10 @@ Gjør det først i testmiljøet (Maskinporten-test, Altinn TT02 og Skatteetatens
 deretter i produksjon.
 
 1. **Tilgang hos Digdir.** Medinnova må ha tilgang til Samarbeidsportalen (selvbetjening for
-   Maskinporten). Test: <https://sjolvbetjening.test.samarbeid.digdir.no>.
+   Maskinporten). Når Digdir har opprettet tilgangen for virksomheten, registrerer den som skal
+   signere seg med sin @medinnova.no-adresse på <https://minside-samarbeid.digdir.no/>, går til
+   «Virksomhetens bruksvilkår» og signerer «Bruksvilkår for private virksomheter». Test:
+   <https://sjolvbetjening.test.samarbeid.digdir.no>.
 2. **Scopene.** Ingen av dem er åpne for alle; de bestilles for Medinnovas organisasjonsnummer
    (test og produksjon). Før de er godkjent, står de ikke i lista over scopes i portalen, eller
    de er merket «Tilgang mangler».
