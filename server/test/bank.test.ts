@@ -52,18 +52,23 @@ describe("Enable Banking: signatur og transaksjoner", () => {
 
   it("oppsummerer hva banken sendte: innbetalinger, reserverte og den nyeste bokføringsdatoen", () => {
     expect(
-      oppsummer([
-        { transaction_amount: { amount: "100", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "BOOK", booking_date: "2026-10-07" },
-        { transaction_amount: { amount: "200", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG", transaction_date: "2026-10-09" },
-        { transaction_amount: { amount: "50", currency: "NOK" }, credit_debit_indicator: "DBIT", status: "BOOK", booking_date: "2026-10-08" },
-        { transaction_amount: { amount: "-20", currency: "NOK" }, value_date: "2026-10-06" },
-        { transaction_amount: { amount: "30", currency: "NOK" }, value_date: "2026-10-05T00:00:00" },
-      ]),
-    ).toEqual({ transaksjoner: 5, inn: 2, ventende: 1, nyeste: "2026-10-08" });
-    expect(oppsummer([])).toEqual({ transaksjoner: 0, inn: 0, ventende: 0, nyeste: null });
+      oppsummer(
+        [
+          { transaction_amount: { amount: "100", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "BOOK", booking_date: "2026-10-07" },
+          { transaction_amount: { amount: "200", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG", transaction_date: "2026-10-09" },
+          // En betaling som ligger klar i forfallsregisteret, sendt som ventende kreditt: ikke ventende inn.
+          { transaction_amount: { amount: "899", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG", transaction_date: "2026-10-20" },
+          { transaction_amount: { amount: "50", currency: "NOK" }, credit_debit_indicator: "DBIT", status: "BOOK", booking_date: "2026-10-08" },
+          { transaction_amount: { amount: "-20", currency: "NOK" }, value_date: "2026-10-06" },
+          { transaction_amount: { amount: "30", currency: "NOK" }, value_date: "2026-10-05T00:00:00" },
+        ],
+        "2026-10-09",
+      ),
+    ).toEqual({ transaksjoner: 6, inn: 2, ventende: 1, nyeste: "2026-10-08" });
+    expect(oppsummer([], "2026-10-09")).toEqual({ transaksjoner: 0, inn: 0, ventende: 0, nyeste: null });
   });
 
-  it("tar med reserverte innbetalinger for seg, men ikke kansellerte, avviste og utbetalinger", () => {
+  it("tar med reserverte innbetalinger for seg, men ikke kansellerte, avviste, holdte og utbetalinger", () => {
     const reservert = { transaction_amount: { amount: "2500.00", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG", transaction_date: "2026-10-08", debtor: { name: "FJORDLINE" }, remittance_information: ["Faktura 2"] };
     const r = tilReserverte(
       [
@@ -74,17 +79,58 @@ describe("Enable Banking: signatur og transaksjoner", () => {
         { transaction_amount: { amount: "400", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "RJCT", transaction_date: "2026-10-08" },
         { transaction_amount: { amount: "500", currency: "NOK" }, credit_debit_indicator: "DBIT", status: "PDNG", transaction_date: "2026-10-08" },
         { entry_reference: "h1", transaction_amount: { amount: "50", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "HOLD" },
+        { entry_reference: "u1", transaction_amount: { amount: "60", currency: "NOK" }, credit_debit_indicator: "CRDT", status: "PDNG" },
       ],
       "2026-10-09",
     );
     expect(r.map((t) => [t.ekstern_id.startsWith("fp:") ? "fp" : t.ekstern_id, t.dato, t.belop, t.betaler, t.melding])).toEqual([
       ["fp", "2026-10-08", 2500, "FJORDLINE", "Faktura 2"],
-      ["h1", "2026-10-09", 50, null, null], // uten dato fra banken: i dag
+      ["u1", "2026-10-09", 60, null, null], // uten dato fra banken: i dag
     ]);
     // Samme reservasjon får samme id ved neste henting.
     expect(tilReserverte([reservert], "2026-10-10")[0].ekstern_id).toBe(r[0].ekstern_id);
     // Og de bokførte tas ikke med blant de reserverte, eller omvendt.
     expect(tilInnbetalinger([reservert])).toEqual([]);
+  });
+
+  it("regner ikke betalinger som ligger klare i banken (forfallsregisteret) som reserverte innbetalinger", () => {
+    // Kontoen som hentes, og transaksjoner noen banker sender som ventende kreditt.
+    const egen = "86011117947";
+    const inn = (id: string, ekstra: Record<string, unknown>) => ({
+      entry_reference: id,
+      transaction_amount: { amount: "899.00", currency: "NOK" },
+      credit_debit_indicator: "CRDT",
+      status: "PDNG",
+      ...ekstra,
+    });
+    const r = tilReserverte(
+      [
+        // Skal betales om elleve dager (strøm, forfallsregisteret).
+        inn("forfall", { transaction_date: "2026-10-20", creditor: { name: "Strøm AS" } }),
+        // Fast betaling planlagt i banken.
+        inn("planlagt", { status: "SCHD", transaction_date: "2026-10-09" }),
+        // Sendt fra denne kontoen, eller til en annen konto, i dag.
+        inn("fra-egen", { transaction_date: "2026-10-09", debtor_account: { iban: "NO9386011117947" } }),
+        inn("til-annen", { transaction_date: "2026-10-09", creditor: { name: "Forsikring AS" }, creditor_account: { other: { identification: "1234.56.78903" } } }),
+        // Negativt beløp er penger ut, også når banken sier kreditt.
+        inn("negativ", { transaction_amount: { amount: "-450.00", currency: "NOK" }, transaction_date: "2026-10-09" }),
+        // Bare valuteringsdato langt fram: en betaling som skal gå senere.
+        inn("valutert-senere", { value_date: "2026-10-30" }),
+        // Ekte reserverte innbetalinger: til denne kontoen, og valutert over helgen.
+        inn("til-egen", { transaction_date: "2026-10-09", debtor: { name: "KARI HANSEN" }, debtor_account: { bban: "12345678903" }, creditor_account: { iban: "NO9386011117947" } }),
+        inn("helg", { value_date: "2026-10-12", debtor: { name: "OLA NORDMANN" } }),
+      ],
+      "2026-10-09",
+      egen,
+    );
+    expect(r.map((t) => [t.ekstern_id, t.dato, t.betaler])).toEqual([
+      ["til-egen", "2026-10-09", "KARI HANSEN"],
+      ["helg", "2026-10-12", "OLA NORDMANN"],
+    ]);
+    // Hentingsloggen teller de samme.
+    expect(oppsummer([inn("forfall", { transaction_date: "2026-10-20" }), inn("til-egen", { transaction_date: "2026-10-09" })], "2026-10-09", egen).ventende).toBe(1);
+    // Og ingen av dem regnes som bokførte innbetalinger.
+    expect(tilInnbetalinger([inn("forfall", { transaction_date: "2026-10-20" })])).toEqual([]);
   });
 
   it("gjør om en nøkkel limt inn på én linje til vanlig PEM", () => {
@@ -754,7 +800,19 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
       debtor: { name: "OLA RESERVERT" },
       remittance_information: ["Faktura 5"],
     };
-    svar["GET /accounts/:uid/transactions"] = (k) => json(200, { transactions: k.sti.includes("transaction_status") ? [] : [reservert] });
+    // En betaling fra kontoen som ligger klar i banken (forfallsregisteret), sendt som ventende
+    // kreditt med samme beløp og melding: den er ingen innbetaling og skal ikke holde igjen purringen.
+    const forfall = {
+      transaction_amount: { amount: "1500.00", currency: "NOK" },
+      credit_debit_indicator: "CRDT",
+      status: "PDNG",
+      transaction_date: dag,
+      debtor_account: { bban: "86011117947" },
+      creditor: { name: "STRØM AS" },
+      creditor_account: { bban: "12345678903" },
+      remittance_information: ["Faktura 5"],
+    };
+    svar["GET /accounts/:uid/transactions"] = (k) => json(200, { transactions: k.sti.includes("transaction_status") ? [] : [reservert, forfall] });
     const for_ = kall.length;
     expect(await hentInnbetalinger(org)).toEqual({ nye: 0, koblet: 0, forslag: 0 });
     // De faste hentetidene spør ikke etter de reserverte for seg.

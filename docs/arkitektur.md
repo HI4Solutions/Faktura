@@ -142,7 +142,12 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   hentetidene, der det ville brukt av grensen på fire hentinger i døgnet. Appen viser dem under
   Innbetalinger («Reservert i banken»), på fakturaen («Betaling reservert») og i oversikten, og
   den automatiske betalingspåminnelsen venter mens en reservert innbetaling trolig gjelder
-  fakturaen. De registreres aldri som betaling: en reservasjon kan ennå endres eller slettes
+  fakturaen. De registreres aldri som betaling: en reservasjon kan ennå endres eller slettes.
+  Bare ventende penger inn (PDNG) regnes med. Betalinger fra kontoen som ligger klare i banken
+  (forfallsregisteret og faste betalinger), sender noen banker som ventende kreditt. De holdes
+  utenfor: de er datert fram i tid, sendt fra kontoen selv eller går til en annen konto, eller de
+  er planlagte (SCHD) eller holdte (HOLD), og et negativt beløp er alltid penger ut
+  (`erReservertInn` i `enableBanking.ts`)
 - `bankhentinger`: hver henting fra en bank (`loggHenting` i `bank.ts`): hvorfor (de faste
   hentetidene, «Hent nå», appen åpnet eller etter BankID), hva banken sendte (transaksjonene,
   innbetalingene som er bokført og de som ikke er det ennå, den nyeste bokføringsdatoen), hva

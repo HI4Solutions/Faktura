@@ -188,28 +188,64 @@ export type Innbetaling = {
 
 const tekst = (x: unknown): string | null => (typeof x === "string" && x.trim() ? x.trim() : null);
 
-// Bokført (uten status regnes transaksjonen som bokført), eller reservert: ikke bokført ennå,
-// men heller ikke avvist eller kansellert (oftest PDNG).
+// Bokført (uten status regnes transaksjonen som bokført).
 const erBokfort = (t: any) => !t?.status || t.status === "BOOK";
-const erReservert = (t: any) => typeof t?.status === "string" && !["BOOK", "CNCL", "RJCT"].includes(t.status);
-const erInn = (t: any) => {
+
+// Retningen: et negativt beløp er alltid penger ut. Ellers avgjør indikatoren, og uten den er
+// beløpet penger inn.
+function retning(t: any): "inn" | "ut" | null {
   const belop = Number(t?.transaction_amount?.amount);
-  const inn = t?.credit_debit_indicator ? t.credit_debit_indicator === "CRDT" : belop > 0;
-  return inn && Number.isFinite(belop) && belop !== 0;
-};
+  if (!Number.isFinite(belop) || belop === 0) return null;
+  if (belop < 0 || t?.credit_debit_indicator === "DBIT") return "ut";
+  return "inn";
+}
+const erInn = (t: any) => retning(t) === "inn";
+
+// En reservert innbetaling: penger på vei inn som banken ikke har bokført ennå (PDNG). Betalinger
+// fra kontoen som ligger klare i banken (forfallsregisteret, faste betalinger), er ikke det, selv om
+// noen banker sender dem som ventende kreditt: de skal gå senere (datoen er fram i tid), er sendt
+// fra denne kontoen, eller går til en annen konto. Planlagte (SCHD) og holdte (HOLD) transaksjoner
+// er heller ikke innbetalinger. Valuteringsdatoen kan ligge noen dager fram for en innbetaling
+// (helg), så den teller bare når banken ikke sender transaksjonsdatoen.
+function erReservertInn(t: any, iDag: string, egenKonto?: string | null): boolean {
+  if (t?.status !== "PDNG" || !erInn(t)) return false;
+  const transaksjonsdato = tekst(t?.transaction_date)?.slice(0, 10);
+  if (transaksjonsdato) {
+    if (transaksjonsdato > iDag) return false;
+  } else {
+    const annen = (tekst(t?.value_date) ?? tekst(t?.booking_date))?.slice(0, 10);
+    if (annen && annen > leggTilDager(iDag, 3)) return false;
+  }
+  const egen = rentKontonr(egenKonto);
+  if (egen) {
+    const fra = rentKontonr(tekst(t?.debtor_account?.iban) ?? tekst(t?.debtor_account?.other?.identification) ?? tekst(t?.debtor_account?.bban));
+    const til = rentKontonr(tekst(t?.creditor_account?.iban) ?? tekst(t?.creditor_account?.other?.identification) ?? tekst(t?.creditor_account?.bban));
+    if (fra === egen || (til && til !== egen)) return false;
+  }
+  return true;
+}
+
+// Datoen (ÅÅÅÅ-MM-DD) et antall dager etter.
+function leggTilDager(dato: string, dager: number): string {
+  const d = new Date(`${dato}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dager);
+  return d.toISOString().slice(0, 10);
+}
 
 // Hva banken sendte (til hentingsloggen): alle transaksjonene, innbetalingene som er bokført og
 // de som er reservert (ikke bokført ennå), og den nyeste bokføringsdatoen.
-export function oppsummer(transaksjoner: any[]): { transaksjoner: number; inn: number; ventende: number; nyeste: string | null } {
+export function oppsummer(
+  transaksjoner: any[],
+  iDag: string,
+  egenKonto?: string | null,
+): { transaksjoner: number; inn: number; ventende: number; nyeste: string | null } {
   let inn = 0;
   let ventende = 0;
   let nyeste: string | null = null;
   for (const t of transaksjoner) {
     const bokfort = erBokfort(t);
-    if (erInn(t)) {
-      if (bokfort) inn++;
-      else if (erReservert(t)) ventende++;
-    }
+    if (bokfort && erInn(t)) inn++;
+    else if (!bokfort && erReservertInn(t, iDag, egenKonto)) ventende++;
     const dato = bokfort ? (tekst(t?.booking_date) ?? tekst(t?.value_date) ?? tekst(t?.transaction_date))?.slice(0, 10) : null;
     if (dato && (!nyeste || dato > nyeste)) nyeste = dato;
   }
@@ -283,11 +319,7 @@ export function rentKontonr(x: string | null | undefined): string | null {
   return /^[0-9A-Z]{5,34}$/.test(k) ? k : null;
 }
 
-const erUt = (t: any) => {
-  const belop = Number(t?.transaction_amount?.amount);
-  const ut = t?.credit_debit_indicator ? t.credit_debit_indicator === "DBIT" : belop < 0;
-  return ut && Number.isFinite(belop) && belop !== 0;
-};
+const erUt = (t: any) => retning(t) === "ut";
 
 // Utbetalingen i en transaksjon: som innbetalingen, med mottakeren (creditor) som motpart.
 function lesUtbetaling(t: any, dato: string): Omit<Innbetaling, "ekstern_id"> {
@@ -337,11 +369,14 @@ export async function hentSaldo(n: BankNokkel, kontoUid: string, psu: Psu, iDag:
   return null;
 }
 
-// Innbetalingene som er reservert i banken (ikke bokført ennå). Uten dato fra banken: i dag.
-export function tilReserverte(transaksjoner: any[], iDag: string): Innbetaling[] {
+// Innbetalingene som er reservert i banken (ikke bokført ennå), på kontoen egenKonto (se
+// erReservertInn). Uten dato fra banken: i dag.
+export function tilReserverte(transaksjoner: any[], iDag: string, egenKonto?: string | null): Innbetaling[] {
   return medId(
     transaksjoner.flatMap((t) =>
-      erReservert(t) && erInn(t) ? [{ t, i: lesInnbetaling(t, tekst(t?.transaction_date) ?? tekst(t?.value_date) ?? tekst(t?.booking_date) ?? iDag) }] : [],
+      erReservertInn(t, iDag, egenKonto)
+        ? [{ t, i: lesInnbetaling(t, tekst(t?.transaction_date) ?? tekst(t?.value_date) ?? tekst(t?.booking_date) ?? iDag) }]
+        : [],
     ),
   ).map((r) => r.x);
 }

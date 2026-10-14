@@ -542,15 +542,17 @@ export async function hentInnbetalinger(orgId: string, valg: { koblingId?: strin
         const hentet = regnskap.hentet?.[konto.kontonr] ?? null;
         const fraKall = tilbake && tilbake < fra && (!hentet || tilbake < hentet) ? tilbake : fra;
         const rader = await hentTransaksjoner(app.nokkel, konto.uid, fraKall, valg.psu);
-        const o = oppsummer(rader);
-        let reserverte: Innbetaling[] | null = tilReserverte(rader, iDag());
+        const o = oppsummer(rader, iDag(), konto.kontonr);
+        // Betalinger fra kontoen som ligger klare i banken, er ikke reserverte innbetalinger
+        // (erReservertInn i enableBanking.ts).
+        let reserverte: Innbetaling[] | null = tilReserverte(rader, iDag(), konto.kontonr);
         // Med brukeren til stede, og uten reserverte i svaret: spør etter dem for seg (ikke alle
         // banker sender dem uten at det bes om det). Aldri på de faste hentetidene, der det ville
         // brukt av bankens grense for hentinger uten brukeren. Går det galt, blir de reserverte
         // som er lagret fra før, stående.
         if (valg.psu && !reserverte.length) {
           try {
-            reserverte = tilReserverte(await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu, "PDNG"), iDag());
+            reserverte = tilReserverte(await hentTransaksjoner(app.nokkel, konto.uid, fra, valg.psu, "PDNG"), iDag(), konto.kontonr);
           } catch (e) {
             reserverte = null;
             logg("WARNING", "Kunne ikke hente reserverte innbetalinger", { org_id: orgId, bank: k.bank, feil: (e as Error).message });
