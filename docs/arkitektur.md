@@ -254,6 +254,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   aktive (samme e-post, ellers samme navn; appen viser hvem før det hentes), kobles den til kunden
   og får rollen, og det som mangler av e-post, telefon og adresse, fylles ut fra kunden.
   Ansattkortet viser kunden (med lenke til kundelista) og kan fjerne koblingen.
+  Enklere å legge inn ansatte (`0113_ansatte_enklere.sql`, `docs/ansatte.md`): «Ny ansatt» i tre
+  steg; den ansatte kan fylle ut fødselsnummer, kontonummer, adresse og nærmeste pårørende selv
+  fra Min side (`ansatt_utfylling`, med fødselsnummeret kryptert), og lederen godkjenner eller
+  avviser (`godkjenn_utfylling`, `avvis_utfylling`; ingenting skrives på den ansatte før det).
+  De ansatte kan også hentes fra a-ordningen (avstemmingsrapporten fra Skatteetaten, med
+  systembrukeren og tilgangspakken «A-ordningen»; `aordning_import`, der fødselsnumrene ligger
+  kryptert i en kolonne bare workeren leser), og arbeidsforholdID-en fra det forrige
+  lønnssystemet (`ansatte.arbeidsforhold_id`) brukes i a-meldingen, så arbeidsforholdet
+  fortsetter. Lista og ansattkortet sier hva som mangler før lønnen (`web/src/ansattMangler.ts`),
+  og yrkeskoden søkes opp i SSBs yrkeskatalog (`server/src/yrkeskoder.ts`).
   En ansatt kan få egen innlogging: invitasjonen (`inviter_ansatt`) gir rollen `ansatt` og
   kobler brukeren til ansattkortet, og er e-posten alt med i organisasjonen, kobles den med
   en gang. Timene føres med fra og til (over midnatt går fint) og pause, eller som antall

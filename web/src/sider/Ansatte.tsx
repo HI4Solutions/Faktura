@@ -6,7 +6,7 @@
 // AI leser (server/src/aiLonnsslipp.ts); regnskap ser. Fødselsnummeret lagres kryptert og vises
 // aldri igjen, bare at det er registrert.
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, hent, sendFil } from "../api";
 import { Dialog, Feil, Laster, Tom, tall, useData, useHandling, useSmal } from "../felles";
 import { harFunksjon, kanPersonal, kanSePersonal, useKonto } from "../konto";
@@ -24,6 +24,11 @@ import { LonnNaturalytelser } from "./LonnNaturalytelser";
 import { IKKE_ANSATT_HJELP, RollerOppsett, type Rolle } from "./Roller";
 import { SkattekortFraSkatteetaten, type Trekk } from "./Skattekort";
 import { Yrkesskader } from "./Yrkesskader";
+import { Aordning } from "./Aordning";
+import { NyAnsatt } from "./NyAnsatt";
+import { UtfyllingBoks, type Utfylling } from "./AnsattUtfylling";
+import { YrkeskodeFelt } from "./Yrkeskode";
+import { mangler, manglerTekst, tilFelt } from "../ansattMangler";
 
 type Ansatt = {
   id: string;
@@ -36,6 +41,9 @@ type Ansatt = {
   adresse: string | null;
   postnr: string | null;
   poststed: string | null;
+  // Nærmeste pårørende (0113).
+  parorende_navn: string | null;
+  parorende_telefon: string | null;
   fodselsdato: string | null;
   har_fnr: boolean;
   kontonr: string | null;
@@ -73,8 +81,10 @@ type Ansatt = {
   skattekort_utstedt: string | null;
   skattekort_tillegg: string[] | null;
   skattekort_trekk: Trekk[] | null;
-  // Arbeidsforholdet i a-meldingen (0077_amelding.sql).
+  // Arbeidsforholdet i a-meldingen (0077_amelding.sql), og arbeidsforholdID-en fra det forrige
+  // lønnssystemet (0113; null: ansattnummeret).
   yrkeskode: string | null;
+  arbeidsforhold_id: string | null;
   arbeidsforhold_type: string;
   arbeidstidsordning: string;
   aarsak_sluttdato: string | null;
@@ -90,6 +100,10 @@ type Ansatt = {
   // Virksomheten den ansatte jobber i (0101; null: hovedvirksomheten).
   virksomhet_id: string | null;
   arbeidsdager: number[]; // ukedagene i den faste arbeidsplanen som gjelder i dag
+  // Det den ansatte har fylt ut selv og som venter på godkjenning (eller er avvist), og når
+  // lederen ba om det (0113, AnsattUtfylling.tsx).
+  utfylling: Utfylling | null;
+  utfylling_bedt: string | null;
   meg: boolean;
   tilgang: "koblet" | "invitert" | null;
 };
@@ -184,9 +198,16 @@ const KOLONNER: Record<AnsattKolonne, Kolonne<Ansatt>> = {
 // Uten vaktplanen vises ikke de faste dagene.
 const UTEN_DAGER = Object.fromEntries(Object.entries(KOLONNER).filter(([k]) => k !== "dager")) as Partial<Record<AnsattKolonne, Kolonne<Ansatt>>>;
 
-function Merker({ a }: { a: Ansatt }) {
+function Merker({ a, lonn }: { a: Ansatt; lonn: boolean }) {
+  const m = mangler(a, { lonn });
   return (
     <span className="merker">
+      {a.utfylling?.status === "levert" && <span className="merke merke-info">Til godkjenning</span>}
+      {m.length > 0 && (
+        <span className="merke merke-advarsel" title={`Mangler ${manglerTekst(m)}`}>
+          Mangler {m.length === 1 ? m[0]!.navn : m.length}
+        </span>
+      )}
       {a.rolle && (
         <span className={`merke ${erAnsatt(a) ? "merke-noytral" : "merke-info"}`} title={erAnsatt(a) ? undefined : "Ikke ansatt"}>
           {a.rolle}
@@ -209,10 +230,26 @@ export function Ansatte() {
   const [alle, settAlle] = useState(false);
   const [sok, settSok] = useState("");
   const [apen, settApen] = useState<Partial<Ansatt> | null>(null);
+  // Ansattkortet lages på nytt når det som er lagret, endres utenfra (godkjente opplysninger).
+  const [kortVersjon, settKortVersjon] = useState(0);
+  // Ny ansatt i steg (NyAnsatt.tsx), og hentingen fra a-ordningen (Aordning.tsx).
+  const [ny, settNy] = useState(false);
+  const [aordning, settAordning] = useState(false);
   const { data, feil, last } = useData(() => hent<Ansatt[]>(`/org/${org!.id}/ansatte${alle ? "" : "?aktiv=true"}`), [org?.id, alle]);
   const smal = useSmal();
   const endre = kanPersonal(org);
   const vaktplan = harFunksjon(org, "vaktplan");
+  const medLonn = harFunksjon(org, "lonn");
+  // Lenker fra varsler og oversikten: ?ansatt=<id> åpner den ansatte, ?aordning=1 hentingen.
+  const [params, settParams] = useSearchParams();
+  useEffect(() => {
+    const id = params.get("ansatt");
+    if (params.get("aordning")) settAordning(true);
+    if (!id && !params.get("aordning")) return;
+    settParams({}, { replace: true });
+    if (id) void hent<Ansatt>(`/org/${org!.id}/ansatte/${id}`).then(settApen).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
   const sortering = useSortering<AnsattKolonne>("faktura.ansatte.sortering", vaktplan ? KOLONNER : UTEN_DAGER, "navn");
   // Rollene (f.eks. lege og sekretær) settes opp her og i bemanningskalenderen.
   const [roller, settRoller] = useState(false);
@@ -268,12 +305,32 @@ export function Ansatte() {
                 Importer
               </Link>
             )}
-            <button type="button" className="primar" onClick={() => settApen({})}>
+            {medLonn && (
+              <button type="button" onClick={() => settAordning(true)}>
+                Hent fra a-ordningen
+              </button>
+            )}
+            <button type="button" className="primar" onClick={() => settNy(true)}>
               Ny ansatt
             </button>
           </div>
         )}
       </div>
+      <Dialog apen={ny} lukk={() => (settNy(false), last())} tittel="Ny ansatt" bred>
+        {ny && (
+          <NyAnsatt
+            heleSkjemaet={() => (settNy(false), settApen({}))}
+            ferdig={async (a) => {
+              settNy(false);
+              last();
+              if (a) settApen(await hent<Ansatt>(`/org/${org!.id}/ansatte/${a.id}`).catch(() => null));
+            }}
+          />
+        )}
+      </Dialog>
+      <Dialog apen={aordning} lukk={() => (settAordning(false), last())} tittel="Ansatte fra a-ordningen" bred>
+        {aordning && <Aordning endret={last} />}
+      </Dialog>
       <Dialog apen={roller} lukk={() => (settRoller(false), last())} tittel={vaktplan ? "Roller og behov" : "Roller"} bred>
         {roller && !rolleliste.data && (rolleliste.feil ? <Feil melding={rolleliste.feil} /> : <Laster />)}
         {roller && rolleliste.data && (
@@ -319,9 +376,14 @@ export function Ansatte() {
             </p>
             {endre && (
               <div className="knapper" style={{ justifyContent: "center" }}>
-                <button type="button" className="primar" onClick={() => settApen({})}>
+                <button type="button" className="primar" onClick={() => settNy(true)}>
                   Ny ansatt
                 </button>
+                {medLonn && (
+                  <button type="button" onClick={() => settAordning(true)}>
+                    Hent fra a-ordningen
+                  </button>
+                )}
                 {harFunksjon(org, "import") && (
                   <Link className="knapp" to="/ansatte/importer">
                     Importer fra et annet system
@@ -348,7 +410,7 @@ export function Ansatte() {
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
-                <Merker a={a} />
+                <Merker a={a} lonn={medLonn} />
               </span>
             </button>
           ))}
@@ -405,7 +467,7 @@ export function Ansatte() {
                   </td>
                   <td>{dato(a.ansatt_fra)}</td>
                   <td>
-                    <Merker a={a} />
+                    <Merker a={a} lonn={medLonn} />
                   </td>
                 </tr>
               ))}
@@ -423,10 +485,16 @@ export function Ansatte() {
       <Dialog apen={!!apen} lukk={lukk} tittel={apen?.id ? `${apen.fornavn} ${apen.etternavn}` : "Ny ansatt"} bred>
         {apen && (
           <AnsattSkjema
+            key={kortVersjon}
             ansatt={apen}
             kanEndre={endre}
             oppdatert={(a) => {
               settApen(a);
+              last();
+            }}
+            nyttKort={(a) => {
+              settApen(a);
+              settKortVersjon((v) => v + 1);
               last();
             }}
             lukk={lukk}
@@ -442,7 +510,19 @@ type TilleggUtkast = { id?: string; navn: string; belop: string; per: "maaned" |
 const tilUtkast = (liste: Tillegg[] | undefined): TilleggUtkast[] =>
   (liste ?? []).map((t) => ({ id: t.id, navn: t.navn, belop: tekstTall(t.belop), per: t.per, fra: t.fra ?? "", til: t.til ?? "" }));
 
-function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<Ansatt>; kanEndre: boolean; oppdatert: (a: Ansatt) => void; lukk: () => void }) {
+function AnsattSkjema({
+  ansatt,
+  kanEndre,
+  oppdatert,
+  nyttKort,
+  lukk,
+}: {
+  ansatt: Partial<Ansatt>;
+  kanEndre: boolean;
+  oppdatert: (a: Ansatt) => void;
+  nyttKort: (a: Ansatt) => void; // lagret utenfra (godkjente opplysninger): skjemaet lages på nytt
+  lukk: () => void;
+}) {
   const { org } = useKonto();
   const [tillegg, settTillegg] = useState<TilleggUtkast[]>(() => tilUtkast(ansatt.tillegg));
   const [lagretTillegg, settLagretTillegg] = useState(() => JSON.stringify(tilUtkast(ansatt.tillegg)));
@@ -456,6 +536,8 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     adresse: ansatt.adresse ?? "",
     postnr: ansatt.postnr ?? "",
     poststed: ansatt.poststed ?? "",
+    parorende_navn: ansatt.parorende_navn ?? "",
+    parorende_telefon: ansatt.parorende_telefon ?? "",
     fodselsdato: ansatt.fodselsdato ?? "",
     fnr: "",
     endreFnr: !ansatt.har_fnr,
@@ -483,6 +565,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
     skattekort_aar: String(ansatt.skattekort_aar ?? iDag().slice(0, 4)),
     biarbeidsgiver: ansatt.biarbeidsgiver ?? false,
     yrkeskode: ansatt.yrkeskode ?? "",
+    arbeidsforhold_id: ansatt.arbeidsforhold_id ?? "",
     arbeidsforhold_type: ansatt.arbeidsforhold_type ?? "ordinaertArbeidsforhold",
     honorar_art: ansatt.honorar_art ?? "honorar",
     otp_innmeldt: ansatt.otp_innmeldt ?? "",
@@ -700,6 +783,17 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
         ? "F.eks. lege eller sekretær. Vaktplanen viser hvor mange med hver rolle som er på jobb, mot behovet."
         : "F.eks. lege eller sekretær.") + (vaktplan && !nyRolle && valgtRolle?.tavle === false ? " Rollen er ikke med på tavla." : "");
 
+  // Det som mangler (det som er lagret), og om den ansatte kan bes om å fylle ut selv.
+  const manglerNa = ansatt.id ? mangler(ansatt as Ansatt, { lonn: medLonn }) : [];
+  const beOmKan =
+    !!ansatt.epost && !!ansatt.aktiv && !ansatt.utfylling && manglerNa.some((m) => m.felt === "fnr" || m.felt === "kontonr") && (a.epost.trim().toLowerCase() || null) === (ansatt.epost ?? null);
+  const beOm = () =>
+    h.kjor(async () => {
+      const r = await api<{ koblet: boolean; sendt_til: string | null }>("POST", `/org/${org!.id}/ansatte/${ansatt.id}/inviter`, { utfylling: true });
+      settMelding(`${ansatt.fornavn} har fått beskjed${r.sendt_til ? ` på e-post (${r.sendt_til})` : ""} om å fylle ut opplysningene sine. Du får varsel når det er klart til godkjenning.`);
+      oppdatert(await hent<Ansatt>(`/org/${org!.id}/ansatte/${ansatt.id}`));
+    });
+
   async function lagre(e: FormEvent) {
     e.preventDefault();
     settMelding(null);
@@ -711,6 +805,8 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       adresse: a.adresse,
       postnr: a.postnr,
       poststed: a.poststed,
+      parorende_navn: a.parorende_navn,
+      parorende_telefon: a.parorende_telefon,
       kontonr: a.kontonr,
       stilling: a.stilling,
       ansatt_fra: a.ansatt_fra,
@@ -753,6 +849,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
       if (virksomheter.data?.andre.length || ansatt.virksomhet_id) kropp.virksomhet_id = a.virksomhet_id || null;
       // Arbeidsforholdet i a-meldingen.
       kropp.yrkeskode = a.yrkeskode.replace(/\s/g, "") || null;
+      kropp.arbeidsforhold_id = a.arbeidsforhold_id.trim() || null;
       kropp.arbeidsforhold_type = a.arbeidsforhold_type;
       kropp.honorar_art = a.honorar_art;
       if (a.otp_innmeldt && a.otp_utmeldt && a.otp_utmeldt < a.otp_innmeldt) return h.settFeil("Datoen den ansatte ble meldt ut av OTP, kan ikke være før innmeldingen.");
@@ -846,6 +943,24 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           ))}
         </div>
       )}
+      {ansatt.id && <UtfyllingBoks ansatt={ansatt as Ansatt} kanEndre={kanEndre} oppdatert={nyttKort} />}
+      {ansatt.id && manglerNa.length > 0 && (
+        <div className="melding advarsel mangler-boks">
+          <span>Mangler {manglerTekst(manglerNa)}:</span>
+          <span className="knapper">
+            {manglerNa.map((m) => (
+              <button key={m.felt} type="button" className="lenke" onClick={() => tilFelt(m.felt)}>
+                {m.navn.charAt(0).toUpperCase() + m.navn.slice(1)}
+              </button>
+            ))}
+            {kanEndre && beOmKan && (
+              <button type="button" className="lenke" disabled={h.opptatt} onClick={beOm}>
+                Be {ansatt.fornavn} fylle ut selv
+              </button>
+            )}
+          </span>
+        </div>
+      )}
       <fieldset className="naken" disabled={!kanEndre}>
         <div className="rad navn-rad">
           <label>
@@ -892,10 +1007,21 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
           </label>
         </div>
         <div className="rad">
+          <label>
+            Nærmeste pårørende
+            <input autoComplete="off" placeholder="Navn" {...felt("parorende_navn")} />
+          </label>
+          <label>
+            Telefon til pårørende
+            <input type="tel" autoComplete="off" {...felt("parorende_telefon")} />
+          </label>
+        </div>
+        <div className="rad">
           {!arbeidstaker ? null : a.endreFnr ? (
             <label>
               Fødselsnummer
               <input
+                id="felt-fnr"
                 inputMode="numeric"
                 autoComplete="off"
                 spellCheck={false}
@@ -951,7 +1077,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
         {arbeidstaker && (
           <label>
             Kontonummer for lønn
-            <input inputMode="numeric" autoComplete="off" spellCheck={false} aria-invalid={!!kontonrFeil || undefined} placeholder="1234 56 78903" {...felt("kontonr")} />
+            <input id="felt-kontonr" inputMode="numeric" autoComplete="off" spellCheck={false} aria-invalid={!!kontonrFeil || undefined} placeholder="1234 56 78903" {...felt("kontonr")} />
             {kontonrFeil && <span className="felt-feil">{kontonrFeil}</span>}
           </label>
         )}
@@ -1106,13 +1232,13 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
             {a.lonnstype === "maaned" ? (
               <label>
                 Månedslønn (kr)
-                <input inputMode="decimal" {...felt("maanedslonn")} />
+                <input id="felt-maanedslonn" inputMode="decimal" {...felt("maanedslonn")} />
                 {maaned != null && Number.isFinite(maaned) && <span className="felt-hjelp">{belop.format(maaned * 12)} kr i året</span>}
               </label>
             ) : (
               <label>
                 Timelønn (kr)
-                <input inputMode="decimal" {...felt("timelonn")} />
+                <input id="felt-timelonn" inputMode="decimal" {...felt("timelonn")} />
               </label>
             )}
           </div>
@@ -1166,7 +1292,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
               <div className="rad">
                 <label>
                   Skattetrekk
-                  <select {...felt("skattekort")}>
+                  <select id="felt-skattekort" {...felt("skattekort")}>
                     <option value="">Ikke registrert (50 % trekk)</option>
                     <option value="tabell">Tabelltrekk</option>
                     <option value="prosent">Prosenttrekk</option>
@@ -1251,13 +1377,7 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
               <div className="rad">
                 <label>
                   Yrkeskode
-                  <input inputMode="numeric" maxLength={9} placeholder="7 siffer" {...felt("yrkeskode")} />
-                  <span className="felt-hjelp">
-                    SSBs yrkeskode (STYRK-08), 7 siffer.{" "}
-                    <a href="https://www.ssb.no/klass/klassifikasjoner/7" target="_blank" rel="noreferrer">
-                      Finn koden hos SSB
-                    </a>
-                  </span>
+                  <YrkeskodeFelt verdi={a.yrkeskode} endre={(k) => sett({ yrkeskode: k })} disabled={!kanEndre} />
                 </label>
                 <label>
                   Arbeidstidsordning
@@ -1304,6 +1424,14 @@ function AnsattSkjema({ ansatt, kanEndre, oppdatert, lukk }: { ansatt: Partial<A
                   </label>
                 )}
               </div>
+              <label>
+                ArbeidsforholdID
+                <input autoComplete="off" spellCheck={false} maxLength={50} placeholder={ansatt.ansattnummer ? String(ansatt.ansattnummer) : "Ansattnummeret"} {...felt("arbeidsforhold_id")} />
+                <span className="felt-hjelp">
+                  Tom: ansattnummeret. Fra det forrige lønnssystemet (hentes fra a-ordningen), så a-meldingen fortsetter det samme arbeidsforholdet i stedet for å
+                  avslutte det og starte et nytt.
+                </span>
+              </label>
               {a.arbeidsforhold_type === FRILANSER && (
                 <p className="felt-hjelp tillegg-hjelp">
                   Frilansere, oppdragstakere og styremedlemmer får honorar, ikke lønn: ingen feriepenger, OTP eller sykepenger, og de står i a-meldingen bare de månedene de
@@ -1554,13 +1682,13 @@ function TidligereLonn({ ansattId, kanEndre }: { ansattId: string; kanEndre: boo
 function Tilgang({ ansatt: a, kanEndre, epostEndret, oppdatert }: { ansatt: Ansatt; kanEndre: boolean; epostEndret: boolean; oppdatert: (a: Ansatt) => void }) {
   const { org, oppdater } = useKonto();
   const h = useHandling();
-  const [svar, settSvar] = useState<{ koblet: boolean; lenke: string | null; sendt_til: string | null } | null>(null);
+  const [svar, settSvar] = useState<{ koblet: boolean; lenke: string | null; sendt_til: string | null; utfylling?: boolean } | null>(null);
   const hentPaNytt = async () => oppdatert(await hent<Ansatt>(`/org/${org!.id}/ansatte/${a.id}`));
 
-  const inviter = () =>
+  const inviter = (utfylling = false) =>
     h.kjor(async () => {
-      const r = await api("POST", `/org/${org!.id}/ansatte/${a.id}/inviter`);
-      settSvar(r);
+      const r = await api("POST", `/org/${org!.id}/ansatte/${a.id}/inviter`, utfylling ? { utfylling: true } : undefined);
+      settSvar({ ...r, utfylling });
       await hentPaNytt();
       // Koblet med en gang (kanskje til en selv): menyen og «Mine timer» oppdateres.
       if (r.koblet) await oppdater();
@@ -1590,9 +1718,18 @@ function Tilgang({ ansatt: a, kanEndre, epostEndret, oppdatert }: { ansatt: Ansa
           Med egen innlogging fører {a.fornavn} timene sine selv og leverer uka til godkjenning. Den ansatte ser bare sine egne timer.
         </p>
       )}
+      {a.utfylling_bedt && !a.utfylling && (
+        <p className="dempet liten">
+          Du ba {a.fornavn} fylle ut opplysningene sine {dato(a.utfylling_bedt.slice(0, 10))}. Du får varsel når de er sendt inn.
+        </p>
+      )}
       {svar &&
         (svar.koblet ? (
-          <div className="melding ok">{a.fornavn} var allerede med i organisasjonen og er nå koblet til ansattkortet.</div>
+          <div className="melding ok">
+            {svar.utfylling
+              ? `${a.fornavn} har fått beskjed${svar.sendt_til ? ` på e-post (${svar.sendt_til})` : ""} om å fylle ut opplysningene sine under Min side.`
+              : `${a.fornavn} var allerede med i organisasjonen og er nå koblet til ansattkortet.`}
+          </div>
         ) : (
           <div className="melding ok">
             Invitasjonen er sendt til {svar.sendt_til}. Du kan også sende lenken selv; den gjelder i sju dager:
@@ -1603,8 +1740,18 @@ function Tilgang({ ansatt: a, kanEndre, epostEndret, oppdatert }: { ansatt: Ansa
       {kanEndre && (
         <div className="knapper">
           {a.tilgang !== "koblet" && (
-            <button type="button" disabled={h.opptatt || !a.epost || epostEndret || !a.aktiv} onClick={inviter}>
+            <button type="button" disabled={h.opptatt || !a.epost || epostEndret || !a.aktiv} onClick={() => inviter()}>
               {a.tilgang === "invitert" ? "Send invitasjonen på nytt" : "Gi innlogging"}
+            </button>
+          )}
+          {erAnsatt(a) && (
+            <button
+              type="button"
+              disabled={h.opptatt || !a.epost || epostEndret || !a.aktiv}
+              title="Den ansatte fyller ut fødselsnummer, kontonummer, adresse og pårørende under Min side, og du godkjenner"
+              onClick={() => inviter(true)}
+            >
+              {a.tilgang === "koblet" ? "Be om opplysninger" : "Gi innlogging og be om opplysninger"}
             </button>
           )}
           {a.tilgang && (

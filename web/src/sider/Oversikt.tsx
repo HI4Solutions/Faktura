@@ -20,6 +20,7 @@ import type { ByttSvar } from "./Vaktbytte";
 import { fravaerTekst } from "./Fravaer";
 import { antall, hilsen, Oppfolging, Tall, type Oppgave } from "./OversiktDeler";
 import type { Skatteetatenstatus } from "./RegnskapSkatteetaten";
+import { mangler, manglerTekst } from "../ansattMangler";
 
 export function Oversikt() {
   const { org, meg, velgOrg } = useKonto();
@@ -393,6 +394,7 @@ function BankMelding({ s }: { s: BankStatus }) {
 // --- Personalet, lønnen og regnskapet ------------------------------------------------------------
 
 type KjoringRad = { id: string; periode: string; type: "ordinar" | "ekstra"; utbetalingsdato: string; status: "utkast" | "godkjent" };
+type AnsattRad = Parameters<typeof mangler>[0] & { id: string; fornavn: string; etternavn: string; utfylling: { status: "levert" | "avvist" } | null };
 type Kollega = { id: string; fornavn: string; etternavn: string };
 type IDagData = { dato: string; paJobb: { navn: string; tid: string }[]; borte: { navn: string; hva: string }[]; ledige: number };
 // Tallene for personalet (null: ikke med for rollen eller funksjonene).
@@ -424,6 +426,9 @@ function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData |
   const ferie = useData(() => (leder && vaktplan ? hent<unknown[]>(`${sti}/ferie/overforinger?status=venter`).catch(() => null) : ingen()), [sti, leder, vaktplan], valg);
   const timebank = useData(() => (leder && org?.timebank ? hent<{ soknader: { status: string }[] }>(`${sti}/timebank`).catch(() => null) : ingen()), [sti, leder, org?.timebank], valg);
   const kjoringer = useData(() => (lonn ? hent<KjoringRad[]>(`${sti}/lonn/kjoringer`).catch(() => null) : ingen()), [sti, lonn], valg);
+  // De ansatte: opplysninger de har sendt inn til godkjenning, og det som mangler før lønnen
+  // (fødselsnummer, kontonummer, lønn …; ansattMangler.ts).
+  const ansatte = useData(() => (leder ? hent<AnsattRad[]>(`${sti}/ansatte?aktiv=true`).catch(() => null) : ingen()), [sti, leder], valg);
 
   const oppgaver: Oppgave[] = [];
   const uker = timer.data?.uker.length ?? 0;
@@ -445,7 +450,27 @@ function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData |
       fare: igjen <= 3,
     });
   }
-  const laster = [timer, vakter, bytter, ferie, timebank, kjoringer].some((d) => d.laster);
+  const levert = (ansatte.data ?? []).filter((a) => a.utfylling?.status === "levert");
+  if (levert.length)
+    oppgaver.push({
+      nokkel: "utfylling",
+      tekst:
+        levert.length === 1
+          ? `${levert[0]!.fornavn} ${levert[0]!.etternavn} har sendt inn opplysningene sine til godkjenning`
+          : `${antall(levert.length, "ansatt", "ansatte")} har sendt inn opplysningene sine til godkjenning`,
+      til: levert.length === 1 ? `/ansatte?ansatt=${levert[0]!.id}` : "/ansatte",
+    });
+  const manglerNoe = (ansatte.data ?? []).filter((a) => !a.utfylling && mangler(a, { lonn: harFunksjon(org, "lonn") }).length);
+  if (manglerNoe.length)
+    oppgaver.push({
+      nokkel: "mangler",
+      tekst:
+        manglerNoe.length === 1
+          ? `${manglerNoe[0]!.fornavn} ${manglerNoe[0]!.etternavn} mangler ${manglerTekst(mangler(manglerNoe[0]!, { lonn: harFunksjon(org, "lonn") }))}`
+          : `${antall(manglerNoe.length, "ansatt", "ansatte")} mangler opplysninger til lønnen`,
+      til: manglerNoe.length === 1 ? `/ansatte?ansatt=${manglerNoe[0]!.id}` : "/ansatte",
+    });
+  const laster = [timer, vakter, bytter, ferie, timebank, kjoringer, ansatte].some((d) => d.laster);
 
   // I dag: vaktene og de faste arbeidsdagene i dag, og fraværet.
   let idagData: IDagData | null = null;

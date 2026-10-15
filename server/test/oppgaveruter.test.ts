@@ -15,7 +15,7 @@ describe("oppgavene til workeren", () => {
   });
 
   it("sjekker oppgaven før den kjøres (Altinn, a-meldingen, NAV og Skatteetaten)", async () => {
-    for (const t of ["altinn-endring", "amelding-lag", "amelding-status", "nav-hent", "nav-inntektsmelding", "skatteetaten-hent"]) {
+    for (const t of ["altinn-endring", "amelding-lag", "amelding-status", "nav-hent", "nav-inntektsmelding", "skatteetaten-hent", "aordning-hent"]) {
       const r = await worker.request(`/oppgaver/${t}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -23,5 +23,12 @@ describe("oppgavene til workeren", () => {
       });
       expect(r.status, t).toBe(400);
     }
+    // Adressen til rapporten fra a-ordningen må være en adresse.
+    const r = await worker.request("/oppgaver/aordning-hent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ org_id: "00000000-0000-4000-8000-000000000000", oppgave_id: "x", bestilling: "ikke en adresse" }),
+    });
+    expect(r.status).toBe(400);
   });
 });

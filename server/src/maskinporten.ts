@@ -27,6 +27,11 @@ export class EtatFeil extends Error {
   }
 }
 
+// Avstemmingsrapporten for a-meldingen (avstemming): verten er gjettet etter mønsteret til
+// innsendingen og tilbakemeldingen (innrapporteringamelding, ameldingtilbakemelding); den nøyaktige
+// står i OpenAPI-spesifikasjonen på SwaggerHub (avstemmingsrapport-amelding-api). Svarer
+// Skatteetaten at adressen er ukjent, er det her den rettes (aordning.ts sier fra).
+//
 // Krav og betalinger og Frister: rettighetspakken (regnskapssystem, for systembrukeren) står i
 // adressen, som i eksemplene Skatteetaten hadde i dokumentasjonen
 // (/api/innkreving/kravogbetalinger/v1/{rettighetspakke}/{organisasjonsnummer}/aapnekrav). Den
@@ -38,6 +43,7 @@ const ADRESSER = {
     altinn: "https://platform.tt02.altinn.no",
     skattekort: "https://api-test.sits.no/api/forskudd",
     amelding: "https://innrapporteringamelding.api.skatteetaten-test.no/v1",
+    avstemming: "https://avstemmingsrapportamelding.api.skatteetaten-test.no/v1",
     nav: "https://sykepenger-api.ekstern.dev.nav.no",
     krav: "https://api-test.sits.no/api/innkreving/kravogbetalinger/v1/regnskapssystem",
     frister: "https://api-test.sits.no/api/innkreving/frister/v1/regnskapssystem",
@@ -47,6 +53,7 @@ const ADRESSER = {
     altinn: "https://platform.altinn.no",
     skattekort: "https://api.skatteetaten.no/api/forskudd",
     amelding: "https://innrapporteringamelding.api.skatteetaten.no/v1",
+    avstemming: "https://avstemmingsrapportamelding.api.skatteetaten.no/v1",
     nav: "https://sykepenger-api.nav.no",
     krav: "https://api.skatteetaten.no/api/innkreving/kravogbetalinger/v1/regnskapssystem",
     frister: "https://api.skatteetaten.no/api/innkreving/frister/v1/regnskapssystem",
@@ -60,6 +67,7 @@ export function adresser() {
     altinn: config.altinnUrl ?? a.altinn,
     skattekort: config.skattekortUrl ?? a.skattekort,
     amelding: config.ameldingUrl ?? a.amelding,
+    avstemming: config.avstemmingUrl ?? a.avstemming,
     nav: config.navUrl ?? a.nav,
     krav: config.kravUrl ?? a.krav,
     frister: config.fristerUrl ?? a.frister,

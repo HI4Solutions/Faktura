@@ -56,9 +56,11 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
 1. **Innstillinger → Lønn → A-melding:** organisasjonsnummeret til virksomheten
    (underenheten i Enhetsregisteret; appen foreslår den når det bare er én) og til
    pensjonsleverandøren når de har OTP.
-2. **På hver ansatt** (Arbeidsforhold i a-meldingen): yrkeskoden (7 siffer, SSBs yrkeskoder
-   basert på STYRK-08), arbeidstidsordningen og typen arbeidsforhold (standard: ordinært, ikke
-   skift), og årsaken når den ansatte slutter. Stillingsprosenten og datoene for siste
+2. **På hver ansatt** (Arbeidsforhold i a-meldingen): yrkeskoden (7 siffer fra SSBs
+   yrkeskatalog, basert på STYRK-08; søk på yrket i feltet), arbeidstidsordningen og typen
+   arbeidsforhold (standard: ordinært, ikke skift), og årsaken når den ansatte slutter.
+   ArbeidsforholdID-en er ansattnummeret, eller den fra det forrige lønnssystemet når den er ført
+   (hentet fra a-ordningen, `docs/ansatte.md`), så arbeidsforholdet fortsetter. Stillingsprosenten og datoene for siste
    lønnsendring og endring i stillingsprosent kommer fra lønnshistorikken på den ansatte (det som
    gjelder ved utgangen av måneden); endres lønnen eller stillingen, velger du datoen den gjelder
    fra. Etterbetaling eller trekk for en tidligere måned får opptjeningsperioden i meldingen.

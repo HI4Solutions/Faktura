@@ -89,6 +89,9 @@ export const config = {
   altinnUrl: valgfri("ALTINN_URL"),
   skattekortUrl: valgfri("SKATTEKORT_URL"),
   ameldingUrl: valgfri("AMELDING_URL"),
+  // Avstemmingsrapporten for a-meldingen (ansatte fra a-ordningen, aordning.ts); samme scope og
+  // tilgangspakke som innsendingen.
+  avstemmingUrl: valgfri("AVSTEMMING_URL"),
   // Sykepenger fra NAV (docs/nav.md): sykmeldingene og forespørslene om inntektsmelding hentes, og
   // inntektsmeldingen sendes, når Medinnova AS har lagt scopet nav:helseytelser/sykepenger på
   // Maskinporten-klienten. Da ber systemet også om tilgangspakken «Lønn med personopplysninger av

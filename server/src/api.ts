@@ -50,6 +50,9 @@ import { virksomhetRuter } from "./virksomheter.js";
 import { yrkesskadeRuter } from "./yrkesskader.js";
 import { regnskapRuter } from "./regnskapRuter.js";
 import { skatteetatenRuter } from "./skatteetatenRuter.js";
+import { aordningRuter } from "./aordning.js";
+import { utfyllingRuter } from "./ansattUtfylling.js";
+import { yrkeskodeRuter } from "./yrkeskoder.js";
 import { regnskapBilagRuter } from "./regnskapBilagRuter.js";
 import { utgiftRuter } from "./utgifter.js";
 import { bankRegnskapRuter } from "./regnskapBank.js";
@@ -443,6 +446,11 @@ export function lagApi() {
   org.route("/", assistentRuter());
   org.route("/", lonnsslippRuter());
   org.route("/", paaminnelseRuter());
+  // Før ansattRuter: /ansatte/aordning, /ansatte/yrkeskoder og /ansatte/meg/utfylling er ikke
+  // ansatte med id.
+  org.route("/", aordningRuter());
+  org.route("/", yrkeskodeRuter());
+  org.route("/", utfyllingRuter());
   org.route("/", ansattRuter());
   org.route("/", vaktRuter());
   org.route("/", turnusRuter());

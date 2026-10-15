@@ -1,7 +1,8 @@
 // Min side (for den ansatte, «Min side» i menyen, /meg): det som står om deg i ansattregisteret
 // (personalia, ansettelsen og lønnen med de faste tilleggene og skattekortet), feriebanken og
-// inntekten (lønnsslippene og årsoversikten, Lonn.tsx). Bare lesing: er noe feil, gir den ansatte
-// beskjed til lederen, som retter det under Ansatte.
+// inntekten (lønnsslippene og årsoversikten, Lonn.tsx). Personalia (adresse, fødselsnummer,
+// kontonummer og pårørende) fyller den ansatte ut selv under «Mine opplysninger», og lederen
+// godkjenner (AnsattUtfylling.tsx); resten retter lederen under Ansatte.
 import { type ReactNode } from "react";
 import { hent } from "../api";
 import { Feil, Laster, Tom, useData } from "../felles";
@@ -12,6 +13,7 @@ import { IkonAnsatte } from "../ikoner";
 import { dagerTekst } from "./Arbeidsplan";
 import { AnsattFerie } from "./Ferie";
 import { MineSlipper } from "./Lonn";
+import { MineOpplysninger, type Utfylling } from "./AnsattUtfylling";
 
 type Tillegg = { id: string; navn: string; belop: number; per: "maaned" | "time"; fra: string | null; til: string | null };
 type Meg = {
@@ -24,6 +26,8 @@ type Meg = {
   adresse: string | null;
   postnr: string | null;
   poststed: string | null;
+  parorende_navn: string | null;
+  parorende_telefon: string | null;
   fodselsdato: string | null;
   har_fnr: boolean;
   kontonr: string | null;
@@ -45,6 +49,8 @@ type Meg = {
   skatt_prosent: number | null;
   skatt_frikort: number | null;
   skattekort_aar: number | null;
+  utfylling: Utfylling | null;
+  utfylling_bedt: string | null;
 };
 
 const tall = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 2 });
@@ -98,8 +104,11 @@ export function MinSide() {
         <h1>Min side</h1>
       </div>
       <p className="dempet">
-        Dette står om deg hos {org.navn}. Er noe feil, gi beskjed til lederen din, så retter de det.
+        Dette står om deg hos {org.navn}. Adressen, kontonummeret og de andre opplysningene om deg retter du selv under Mine opplysninger, og lederen din godkjenner
+        dem. Er noe annet feil, gi beskjed til lederen din.
       </p>
+      {/* Lederen har bedt om opplysningene, eller de er avvist: øverst. */}
+      {((m.utfylling_bedt && !m.utfylling) || m.utfylling?.status === "avvist") && <MineOpplysninger meg={m} oppdatert={(x) => meg.settData(x)} />}
       <div className="min-side">
         <section className="kort">
           <h2>
@@ -112,8 +121,10 @@ export function MinSide() {
             <Rad navn="Telefon">{m.telefon}</Rad>
             <Rad navn="Adresse">{adresse}</Rad>
             {m.arbeidstaker && <Rad navn="Kontonummer">{visKontonr(m.kontonr)}</Rad>}
+            <Rad navn="Nærmeste pårørende">{[m.parorende_navn, m.parorende_telefon].filter(Boolean).join(", ")}</Rad>
           </dl>
         </section>
+        {!((m.utfylling_bedt && !m.utfylling) || m.utfylling?.status === "avvist") && <MineOpplysninger meg={m} oppdatert={(x) => meg.settData(x)} />}
         <section className="kort">
           <h2>Ansettelse</h2>
           <dl>

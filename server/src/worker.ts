@@ -18,6 +18,7 @@ import { endreTilgang, hentSkattekort, hentSkattekortSvar, lagTilgang, planleggD
 import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingInnsending.js";
 import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepenger.js";
 import { hentKravOgFrister, planleggKravOgFrister } from "./skatteetatenKrav.js";
+import { hentFraAordningen } from "./aordning.js";
 import { aktiverLonnsendringer } from "./lonnsendringer.js";
 import { lonnHverMorgen, oppdaterLonnsutkast } from "./lonnAutomatikk.js";
 import { bokforSalgForAlle } from "./salgBokforing.js";
@@ -178,6 +179,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "nav-hent") return hentFraNav(o.org_id);
   if (o.type === "nav-inntektsmelding") return sendInntektsmelding(o.org_id, o.inntektsmelding_id);
   if (o.type === "skatteetaten-hent") return void (await hentKravOgFrister(o.org_id));
+  if (o.type === "aordning-hent") return void (await hentFraAordningen(o.org_id, o.bestilling, o.forsok));
   if (o.type === "rapport-send") return sendRapporter(o);
   if (o.type === "epostbekreftelse") return sendEpostbekreftelse(o);
   return sendEpost(o);
@@ -636,6 +638,14 @@ export function lagWorker() {
   app.post("/oppgaver/skatteetaten-hent", async (c) => {
     const o = skattOppgave.parse(await c.req.json());
     return c.json((await hentKravOgFrister(o.org_id)) ?? { ok: true });
+  });
+
+  // Ansatte fra a-ordningen: avstemmingsrapporten bestilles og hentes (aordning.ts).
+  app.post("/oppgaver/aordning-hent", async (c) => {
+    const o = skattOppgave
+      .extend({ bestilling: z.string().url().max(500).optional(), forsok: z.number().int().min(0).max(100).optional() })
+      .parse(await c.req.json());
+    return c.json((await hentFraAordningen(o.org_id, o.bestilling, o.forsok)) ?? { ok: true });
   });
 
   // Rapportmodulen: rapporter på e-post til regnskapsføreren.

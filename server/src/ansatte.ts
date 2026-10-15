@@ -31,7 +31,7 @@ export const valgfri = <T extends z.ZodTypeAny>(s: T) => z.preprocess((v) => (ty
 export const tekst = (maks: number, navn: string) => z.string().trim().max(maks, `${navn} kan ha høyst ${maks} tegn`);
 export const datoS = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato");
 export const klokke = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Skriv klokkeslettet som TT:MM");
-const siffer = (navn: string, antall: number, sjekk?: (s: string) => boolean, melding?: string) =>
+export const siffer = (navn: string, antall: number, sjekk?: (s: string) => boolean, melding?: string) =>
   z
     .string()
     .transform((v) => v.replace(/[\s.]/g, ""))
@@ -59,7 +59,7 @@ const tilleggSkjema = z
   .refine((t) => !t.fra || !t.til || t.til >= t.fra, "Tillegget slutter før det begynner");
 type Tillegg = z.infer<typeof tilleggSkjema>;
 
-const ansattSkjema = z.object({
+export const ansattSkjema = z.object({
   fornavn: z.string({ error: "Skriv fornavnet" }).trim().min(1, "Skriv fornavnet").max(100, "Fornavnet kan ha høyst 100 tegn"),
   etternavn: z.string({ error: "Skriv etternavnet" }).trim().min(1, "Skriv etternavnet").max(100, "Etternavnet kan ha høyst 100 tegn"),
   // Forkortelsen der plassen er trang (0061_forkortelser.sql; tom: lages av initialene).
@@ -75,6 +75,9 @@ const ansattSkjema = z.object({
   adresse: valgfri(tekst(200, "Adressen")),
   postnr: valgfri(z.string().trim().regex(/^\d{4}$/, "Postnummeret må ha fire siffer")),
   poststed: valgfri(tekst(100, "Poststedet")),
+  // Nærmeste pårørende (0113): hvem som skal kontaktes om noe skjer.
+  parorende_navn: valgfri(tekst(100, "Navnet på den pårørende")),
+  parorende_telefon: valgfri(tekst(30, "Telefonnummeret til den pårørende")),
   fodselsdato: valgfri(datoS),
   // Bare til skriving: lagres kryptert og vises aldri igjen (null: fjernes).
   fnr: valgfri(siffer("Fødselsnummeret", 11, fnrGyldig, "Fødselsnummeret er ikke gyldig (sjekk sifrene)")),
@@ -115,6 +118,14 @@ const ansattSkjema = z.object({
   // A-meldingen (0077_amelding.sql): yrkeskoden (7 siffer, SSBs yrkeskoder), typen arbeidsforhold,
   // arbeidstidsordningen og årsaken til sluttdatoen.
   yrkeskode: valgfri(siffer("Yrkeskoden", 7)),
+  // ArbeidsforholdID-en fra det forrige lønnssystemet (0113; tom: ansattnummeret), så a-meldingen
+  // fortsetter det samme arbeidsforholdet.
+  arbeidsforhold_id: valgfri(
+    z
+      .string()
+      .trim()
+      .regex(/^\S{1,50}$/, "ArbeidsforholdID-en kan ha høyst 50 tegn, uten mellomrom"),
+  ),
   arbeidsforhold_type: z.enum(["ordinaertArbeidsforhold", "maritimtArbeidsforhold", "frilanserOppdragstakerHonorarPersonerMm"]).optional(),
   // Frilansere, oppdragstakere og styremedlemmer (0096): honoraret er honorar for oppdrag eller
   // styrehonorar (og godtgjørelse for verv).
@@ -233,8 +244,12 @@ const foringSkjema = z.object({
 
 // --- Utvalg -------------------------------------------------------------------
 
-const ANSATT = `
+export const ANSATT = `
   select a.id, a.ansattnummer, a.fornavn, a.etternavn, a.forkortelse, a.epost, a.telefon, a.adresse, a.postnr, a.poststed,
+         a.parorende_navn, a.parorende_telefon, a.arbeidsforhold_id, a.utfylling_bedt,
+         -- Det den ansatte har sendt inn selv og som venter på godkjenning, eller er avvist (0113).
+         (select json_build_object('felt', u.felt, 'har_fnr', u.har_fnr, 'status', u.status, 'avvist_grunn', u.avvist_grunn, 'levert', u.levert)
+            from faktura.ansatt_utfylling u where u.org_id = a.org_id and u.ansatt_id = a.id) as utfylling,
          a.fodselsdato, a.har_fnr, a.kontonr, a.stilling, a.stillingsprosent, a.ukentlig_arbeidstid, a.ansatt_fra,
          a.ansatt_til, a.ansettelsestype, a.lonnstype, a.maanedslonn, a.timelonn, a.aktiv, a.notat, a.gruppe_id, a.bursdag_varsel, a.ferie_dager, a.opprettet, a.oppdatert,
          -- Skattekortet (0065_lonn.sql), og det som er hentet fra Skatteetaten (0068).
@@ -404,7 +419,15 @@ function ukesummer(foringer: Foringsrad[], r: Regler, avtalt: Map<string, number
 // Push til eier og administrator (de som godkjenner timer, planlegger vakter og får vite om
 // sykdom), og dem med en egen rolle med modulen (Personal, eller Lønn for reisene), unntatt den
 // som selv gjorde det. Slås opp av serveren: en ansatt ser ikke hvem de andre medlemmene er.
-export async function varslePersonal(org: string, unntatt: string, hendelse: "timer" | "vakter" | "fravaer" | "reiser", tittel: string, tekst: string, url: string, tag: string) {
+export async function varslePersonal(
+  org: string,
+  unntatt: string,
+  hendelse: "timer" | "vakter" | "fravaer" | "reiser" | "ansatte",
+  tittel: string,
+  tekst: string,
+  url: string,
+  tag: string,
+) {
   const mottakere = await somSystem((db) =>
     alle<{ bruker_id: string }>(
       db,
@@ -415,6 +438,12 @@ export async function varslePersonal(org: string, unntatt: string, hendelse: "ti
   );
   if (mottakere.length)
     await leggIKo({ type: "varsel", varsel: { hendelse, org_id: org, bruker_ider: mottakere.map((m) => m.bruker_id), tittel, tekst, url, tag } });
+}
+
+// Med godkjent tilgang til Skatteetaten hentes skattekortet når fødselsnummeret legges inn.
+export async function hentSkattekortFor(c: Context, ider: string[]) {
+  const t = await bruk(c, (db) => en<{ status: string }>(db, "select status from faktura.skattekort_tilgang where org_id = $1", [orgId(c)]));
+  if (t?.status === "godkjent" && ider.length) await leggIKo({ type: "skattekort-hent", org_id: orgId(c), ansatt_ider: ider, kilde: "ansatt" });
 }
 
 const timerTekst = (t: number) => `${t.toLocaleString("nb-NO", { maximumFractionDigits: 2 })} t`;
@@ -641,12 +670,6 @@ export function ansattRuter() {
     if (b.fnr) await hentSkattekortFor(c, [a.id]);
     return c.json(a, 201);
   });
-
-  // Med godkjent tilgang til Skatteetaten hentes skattekortet når fødselsnummeret legges inn.
-  async function hentSkattekortFor(c: Context, ider: string[]) {
-    const t = await bruk(c, (db) => en<{ status: string }>(db, "select status from faktura.skattekort_tilgang where org_id = $1", [orgId(c)]));
-    if (t?.status === "godkjent" && ider.length) await leggIKo({ type: "skattekort-hent", org_id: orgId(c), ansatt_ider: ider, kilde: "ansatt" });
-  }
 
   // Skattekortet fra Skatteetaten regnes om når valget av biarbeidsgiver endres (fra trekket for
   // lønn fra biarbeidsgiver eller hovedarbeidsgiver), med mindre skattekortet også endres for hånd.
@@ -971,32 +994,87 @@ export function ansattRuter() {
   });
 
   // Egen innlogging: invitasjon på e-post (rollen ansatt). Er e-posten alt med i
-  // organisasjonen, kobles den med en gang.
+  // organisasjonen, kobles den med en gang. utfylling (0113): lederen ber også den ansatte fylle
+  // ut opplysningene sine selv under Min side; er den ansatte alt koblet, får den bare e-post og
+  // varsel om det.
   r.post("/ansatte/:id/inviter", async (c) => {
+    const { utfylling } = z.object({ utfylling: z.boolean().optional() }).parse(await c.req.json().catch(() => ({})));
     const svar = await bruk(c, async (db) => {
-      const token = (await en<{ t: string | null }>(db, "select faktura.inviter_ansatt($1, $2) as t", [orgId(c), id(c)]))!.t;
-      const a = await en<{ fornavn: string; epost: string }>(db, "select fornavn, epost from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), id(c)]);
+      await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      const a = await en<{ fornavn: string; epost: string | null; bruker_id: string | null; aktiv: boolean; koblet: boolean }>(
+        db,
+        `select a.fornavn, a.epost, a.bruker_id, a.aktiv,
+                a.bruker_id is not null and exists (select 1 from faktura.medlemmer m where m.org_id = a.org_id and m.bruker_id = a.bruker_id) as koblet
+           from faktura.ansatte a where a.org_id = $1 and a.id = $2`,
+        [orgId(c), id(c)],
+      );
+      if (!a) throw new ApiFeil(404, "Fant ikke den ansatte");
+      if (utfylling && !a.aktiv) throw new ApiFeil(409, "Den ansatte har sluttet");
+      const token = a.koblet ? null : (await en<{ t: string | null }>(db, "select faktura.inviter_ansatt($1, $2) as t", [orgId(c), id(c)]))!.t;
+      if (utfylling) {
+        const res = await db.query("update faktura.ansatte set utfylling_bedt = now() where org_id = $1 and id = $2", [orgId(c), id(c)]);
+        if (!res.rowCount) throw new ApiFeil(403, "Ingen tilgang");
+      }
+      // Koblet nå (e-posten var alt med i organisasjonen).
+      const bruker = a.koblet
+        ? a.bruker_id
+        : ((await en<{ bruker_id: string | null }>(db, "select bruker_id from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), id(c)]))?.bruker_id ?? null);
+      const epost = (await en<{ epost: string | null }>(db, "select epost from faktura.ansatte where org_id = $1 and id = $2", [orgId(c), id(c)]))!.epost;
       const org = await en<{ navn: string }>(db, "select navn from faktura.organisasjoner where id = $1", [orgId(c)]);
-      return { token, ansatt: a!, org: org!.navn };
+      return { token, fornavn: a.fornavn, epost, bruker, org: org!.navn };
     });
-    if (!svar.token) return c.json({ koblet: true, lenke: null, sendt_til: null });
+    const opplysninger = "fødselsnummer, kontonummer for lønnen, adresse og nærmeste pårørende";
+    if (!svar.token) {
+      // Koblet: bare beskjed om å fylle ut (på e-post og som varsel).
+      if (!utfylling) return c.json({ koblet: true, lenke: null, sendt_til: null });
+      const lenke = `${config.appUrl}/meg?org=${orgId(c)}`;
+      if (svar.epost)
+        await leggIKo({
+          type: "epost",
+          til: [svar.epost],
+          emne: `Fyll ut opplysningene dine for ${svar.org}`,
+          fra_navn: svar.org,
+          tekst: [
+            `Hei ${svar.fornavn},`,
+            "",
+            `${svar.org} ber deg fylle ut opplysningene dine i Admin Konsoll: ${opplysninger}.`,
+            "",
+            `Logg inn og fyll dem ut under Min side: ${lenke}`,
+          ].join("\n"),
+        });
+      if (svar.bruker)
+        await leggIKo({
+          type: "varsel",
+          varsel: {
+            hendelse: "ansatte",
+            org_id: orgId(c),
+            bruker_ider: [svar.bruker],
+            tittel: "Fyll ut opplysningene dine",
+            tekst: `${svar.org} ber deg fylle ut ${opplysninger} under Min side.`,
+            url: "/meg",
+            tag: `utfylling-${id(c)}`,
+          },
+        }).catch(() => undefined);
+      return c.json({ koblet: true, lenke: null, sendt_til: svar.epost });
+    }
     const lenke = `${config.appUrl}/invitasjon/${svar.token}`;
     await leggIKo({
       type: "epost",
-      til: [svar.ansatt.epost],
+      til: [svar.epost!],
       emne: `Du er invitert til ${svar.org} i Admin Konsoll`,
       fra_navn: svar.org,
       tekst: [
-        `Hei ${svar.ansatt.fornavn},`,
+        `Hei ${svar.fornavn},`,
         "",
         `${svar.org} har gitt deg tilgang til Admin Konsoll, der du fører timene dine.`,
+        ...(utfylling ? ["", `Vi trenger noen opplysninger fra deg: ${opplysninger}. Når du har logget inn, fyller du dem ut under Min side.`] : []),
         "",
         `Åpne lenken for å logge inn (bruk denne e-postadressen): ${lenke}`,
         "",
         "Lenken gjelder i sju dager.",
       ].join("\n"),
     });
-    return c.json({ koblet: false, lenke, sendt_til: svar.ansatt.epost });
+    return c.json({ koblet: false, lenke, sendt_til: svar.epost });
   });
 
   r.delete("/ansatte/:id/tilgang", async (c) => {

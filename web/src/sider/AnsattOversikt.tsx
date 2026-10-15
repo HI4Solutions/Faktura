@@ -76,6 +76,15 @@ export function AnsattOversikt() {
     valg,
   );
   const bytter = useData(() => (bytte ? hent<ByttSvar>(`${sti}/vaktbytter`).catch(() => null) : Promise.resolve(null)), [sti, bytte], valg);
+  // Opplysningene lederen har bedt deg fylle ut, eller som er avvist (Min side, AnsattUtfylling.tsx).
+  const megSelv = useData(
+    () =>
+      personal
+        ? hent<{ utfylling_bedt: string | null; utfylling: { status: "levert" | "avvist"; avvist_grunn: string | null } | null }>(`${sti}/ansatte/meg`).catch(() => null)
+        : Promise.resolve(null),
+    [sti, personal],
+    valg,
+  );
 
   if (!org) return <Laster />;
   if (!egen)
@@ -109,7 +118,13 @@ export function AnsattOversikt() {
   const nye = (beskjeder.data?.beskjeder ?? []).filter((b) => b.ny);
 
   // Det som venter på deg.
+  const u = megSelv.data;
   const oppgaver: Oppgave[] = [
+    ...(u?.utfylling?.status === "avvist"
+      ? [{ nokkel: "utfylling", tekst: `Rett opplysningene dine: «${u.utfylling.avvist_grunn ?? ""}»`, til: "/meg", fare: true }]
+      : u?.utfylling_bedt && !u.utfylling
+        ? [{ nokkel: "utfylling", tekst: "Fyll ut opplysningene dine: fødselsnummer, kontonummer, adresse og pårørende", til: "/meg" }]
+        : []),
     ...tilMeg.map((b) => ({
       nokkel: `bytte-${b.id}`,
       tekst: `${b.fra_navn.split(" ")[0]} vil ${b.mot_vakt_id ? "bytte vakt med deg" : "gi deg vakten"} ${naarDag(b.dato, idag).toLowerCase()} ${b.fra}–${b.til}`,

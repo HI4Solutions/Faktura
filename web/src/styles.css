@@ -3100,3 +3100,44 @@ td.idag .pt-dato { background: var(--aksent); color: var(--aksent-tekst); }
 .skatt-rad { cursor: default; }
 .skatt-rad:hover:not(:disabled), .skatt-rad:active:not(:disabled) { background: none; }
 .skatt-rad .tittel, .skatt-rad .under { white-space: normal; }
+
+/* --------------------------------------------------------------------------
+   Enklere å legge inn ansatte: ny ansatt i steg (NyAnsatt.tsx), opplysningene den ansatte fyller
+   ut (AnsattUtfylling.tsx), «Mangler» i ansattkortet og hentingen fra a-ordningen (Aordning.tsx)
+   -------------------------------------------------------------------------- */
+.steg-viser { display: flex; gap: 6px; margin: 0 0 18px; padding: 0; list-style: none; flex-wrap: wrap; }
+.steg-viser li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; font-size: 0.86rem; color: var(--dempet); background: var(--flate-2); box-shadow: inset 0 0 0 1px var(--kant); }
+.steg-viser .steg-nr { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--kant); color: var(--tekst-2); font-size: 0.78rem; font-weight: 650; }
+.steg-viser li.aktiv { color: var(--aksent); background: var(--aksent-lys); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aksent) 30%, transparent); font-weight: 600; }
+.steg-viser li.aktiv .steg-nr { background: var(--aksent); color: #fff; }
+.steg-viser li.ferdig .steg-nr { background: var(--ok-lys); color: var(--ok); }
+.valg-kort { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 6px 0 14px; padding: 0; border: 0; }
+.valg-kort legend { padding: 0; margin-bottom: 8px; font-weight: 600; font-size: 0.92rem; }
+.valg-kort > label { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--kant); border-radius: var(--radius-s); cursor: pointer; }
+.valg-kort > label.valgt { border-color: var(--aksent); background: var(--aksent-lys); }
+.valg-kort > label > input { margin-top: 3px; }
+.valg-kort > label > span { display: flex; flex-direction: column; gap: 2px; }
+.ny-ansatt .knapper { align-items: center; }
+.utfylling { align-items: flex-start; }
+.utfylling-tekst { flex: 1 1 320px; min-width: 0; }
+.utfylling-tabell { width: 100%; margin: 8px 0 4px; border-collapse: collapse; font-size: 0.88rem; color: var(--tekst); }
+.utfylling-tabell th, .utfylling-tabell td { padding: 4px 8px 4px 0; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.utfylling-tabell thead th { font-weight: 600; color: var(--dempet); font-size: 0.78rem; }
+.utfylling-tabell th { text-transform: none; letter-spacing: normal; background: none; }
+.utfylling-tabell tbody th { font-weight: 550; color: var(--tekst-2); white-space: nowrap; font-size: 0.86rem; }
+.utfylling-tabell tbody tr + tr { border-top: 1px solid var(--kant); }
+.utfylling label { margin-top: 8px; color: var(--tekst); }
+.mangler-boks { display: flex; align-items: center; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; }
+.mangler-boks .knapper { margin: 0; gap: 4px 12px; }
+.mine-opplysninger { margin-bottom: 16px; }
+.mine-opplysninger h2 { margin: 0 0 10px; font-size: 1.02rem; }
+.min-side > .mine-opplysninger { margin: 0; }
+.aordning p { margin-top: 0; }
+.aordning-liste { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--kant); border-radius: var(--radius-s); }
+.aordning-liste > li { padding: 10px 12px; }
+.aordning-liste > li + li { border-top: 1px solid var(--kant); }
+.aordning-liste > li.valgt { background: var(--flate-2); }
+.aordning-valg { display: flex; align-items: flex-start; gap: 10px; margin: 0; cursor: pointer; }
+.aordning-valg > input { margin-top: 3px; }
+.aordning-detaljer { display: flex; align-items: center; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; margin: 2px 0 0 26px; font-size: 0.86rem; color: var(--tekst-2); }
+.aordning-liste .felt-hjelp, .aordning-liste .rad { margin-left: 26px; }

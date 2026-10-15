@@ -41,7 +41,11 @@ export type Arbeidsforholdsrad = {
   otp_utmeldt?: string | null;
   // Virksomheten den ansatte jobber i nå (0101; null: hovedvirksomheten i lønnsoppsettet).
   virksomhet?: string | null;
+  // ArbeidsforholdID-en fra det forrige lønnssystemet (0113; null: ansattnummeret).
+  arbeidsforhold_id?: string | null;
 };
+// ArbeidsforholdID-en i meldingen: den fra det forrige lønnssystemet, ellers ansattnummeret.
+export const arbeidsforholdId = (f: Pick<Arbeidsforholdsrad, "ansattnummer" | "arbeidsforhold_id">) => f.arbeidsforhold_id ?? String(f.ansattnummer);
 export type Slippdata = {
   ansatt_id: string;
   utbetalingsdato: string;
@@ -156,7 +160,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
             to_char(coalesce(e.stilling, case when a.siste_stillingsendring <= $3::date then a.siste_stillingsendring end), 'YYYY-MM-DD') as siste_stillingsendring,
             to_char(a.fodselsdato, 'YYYY-MM-DD') as fodselsdato, to_char(a.otp_innmeldt, 'YYYY-MM-DD') as otp_innmeldt,
             to_char(a.otp_utmeldt, 'YYYY-MM-DD') as otp_utmeldt,
-            (select v.orgnr from faktura.virksomheter v where v.org_id = a.org_id and v.id = a.virksomhet_id) as virksomhet
+            (select v.orgnr from faktura.virksomheter v where v.org_id = a.org_id and v.id = a.virksomhet_id) as virksomhet,
+            a.arbeidsforhold_id
        from faktura.ansatte a
        left join lateral faktura.lonn_gjeldende(a.org_id, a.id, $3::date) g on true
        left join lateral faktura.lonn_endringsdatoer(a.org_id, a.id, $3::date) e on true
@@ -543,7 +548,7 @@ function permisjonerI(g: Grunnlag, f: Arbeidsforholdsrad) {
 
 function arbeidsforhold(f: Arbeidsforholdsrad, g: Grunnlag) {
   const frilanser = f.arbeidsforhold_type === "frilanserOppdragstakerHonorarPersonerMm";
-  const x: Record<string, unknown> = { arbeidsforholdId: String(f.ansattnummer), typeArbeidsforhold: f.arbeidsforhold_type, startdato: f.ansatt_fra };
+  const x: Record<string, unknown> = { arbeidsforholdId: arbeidsforholdId(f), typeArbeidsforhold: f.arbeidsforhold_type, startdato: f.ansatt_fra };
   if (f.ansatt_til) x.sluttdato = f.ansatt_til;
   if (!frilanser) x.antallTimerPerUkeSomEnFullStillingTilsvarer = desimal(g.fullStilling);
   if (f.yrkeskode) x.yrke = f.yrkeskode;
@@ -614,7 +619,7 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
               utloeserArbeidsgiveravgift: y.aga,
               inngaarIGrunnlagForTrekk: y.trekk,
               beloep: belop(y.belop),
-              arbeidsforholdId: String(f.ansattnummer),
+              arbeidsforholdId: arbeidsforholdId(f),
               loennsinntekt,
             };
           });
