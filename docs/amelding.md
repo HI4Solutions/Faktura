@@ -107,7 +107,9 @@ skattekortene (se `docs/skattekort.md`); de må være satt opp først.
 2. **Scopene på Maskinporten-klienten.** Når Skatteetaten har gitt tilgang, legg disse til på
    integrasjonen i Samarbeidsportalen (samme klient og nøkkel som for skattekortene):
    - `skatteetaten:innrapporteringamelding` (innsending og tilbakemelding);
-   - `digdir:dialogporten` (tilbakemeldingen ligger i Dialogporten).
+   - `digdir:dialogporten` (tilbakemeldingen ligger i Dialogporten). Det bestilles hos Digdir i
+     registreringsskjemaet for sluttbrukersystemleverandører (lenken står i `docs/skattekort.md`,
+     punkt 2).
 3. **GitHub-variabelen** (Settings → Secrets and variables → Actions → Variables):
    `AMELDING_INNSENDING` = `true`. Kjør så workflowen «Infrastruktur» (Actions → Infrastruktur →
    Run workflow). Adressen til API-et følger `SKATTEETATEN_MILJO`; den kan overstyres med

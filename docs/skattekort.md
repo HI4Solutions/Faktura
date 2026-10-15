@@ -41,11 +41,15 @@ deretter i produksjon.
    (test og produksjon). Før de er godkjent, står de ikke i lista over scopes i portalen, eller
    de er merket «Tilgang mangler».
    - Fra Digdir (Altinn): når bruksvilkårene for sluttbrukersystemleverandører er signert (punkt
-     1), fyll ut registreringsskjemaet for sluttbrukersystemleverandør med «Systembruker» krysset
-     av (lenket fra <https://docs.altinn.studio/nb/authorization/getting-started/systemuser/>).
+     1), fyll ut «Registreringsskjema for sluttbrukersystemleverandør» med «Systembruker» krysset
+     av:
+     <https://forms.office.com/Pages/ResponsePage.aspx?id=D1aOAK8I7EygVrNUR1A5kcdP2Xp78HZOttvolvmHfSJUOFFBMThaOTI1UlVEVU9VM0FaTVZLMzg0Vi4u>
+     (lenket fra steg 2 på <https://docs.altinn.studio/nb/authorization/getting-started/systemuser/>).
      Det gir `altinn:authentication/systemregister.write`,
      `altinn:authentication/systemuser.request.read` og
-     `altinn:authentication/systemuser.request.write`. Klientdelegering og samtykke trengs ikke.
+     `altinn:authentication/systemuser.request.write`. Be i det samme skjemaet om
+     `digdir:dialogporten` (a-meldingen, se [amelding.md](amelding.md)); Skatteetaten ber
+     leverandørene bestille det der. Klientdelegering og samtykke trengs ikke.
    - Fra Skatteetaten: `skatteetaten:skattekorttilarbeidsgiver` (og senere A-meldingen), med
      Skatteetatens skjema for tilgang til API-ene:
      <https://www.skatteetaten.no/en/our-partners/end-user-systems/sbs-nyheter/her-kan-du-soke-om-tilgang-til-tjenester-for-innrapportering-til-skatteetaten/>.
