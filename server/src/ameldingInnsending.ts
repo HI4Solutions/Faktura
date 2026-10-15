@@ -12,7 +12,7 @@ import { config } from "./config.js";
 import { dekrypter } from "./kryptering.js";
 import { adresser, EtatFeil, etatKall, hentToken, SCOPE } from "./maskinporten.js";
 import { A_ORDNING } from "./altinn.js";
-import { harPakke, hentTilgang, melding } from "./skattekort.js";
+import { harPakke, hentTilgang, melding, skjulFnr, utdrag } from "./skattekort.js";
 import { lagring, leggIKo } from "./tjenester.js";
 import { byggLeveranse, hentGrunnlag, kontroller, oppsummer, tilXml } from "./amelding.js";
 import { maanedNavn } from "./lonnsberegning.js";
@@ -58,15 +58,74 @@ async function fodselsnumre(org: string, ider: string[]): Promise<Map<string, st
   return ut;
 }
 
-// Feilen fra Skatteetaten (AMLD_-kode og meldingen; et fødselsnummer skjules av melding()).
-function ameldingFeil(r: { status: number; data: any; tekst: string }): EtatFeil {
-  const kode = r.tekst.match(/AMLD_\d+/)?.[0] ?? null;
+// Navnene feltene i en feil fra Skatteetaten kan ha (kode, melding, sti og angitt verdi).
+const FEILFELT = {
+  melding: ["melding", "feilmelding", "beskrivelse", "message", "detail"],
+  kode: ["kode", "feilkode", "feilspesifiseringskode", "code"],
+  sti: ["sti", "felt", "field", "path", "pointer"],
+  verdi: ["angittVerdi", "verdi", "value"],
+};
+// Feltene i selve svaret som står i hovedfeilen, eller som ikke sier noe om feilen.
+const HOVEDFELT = new Set(["kode", "melding", "korrelasjonsid", "status", "error", "timestamp", "title", "type", "instance", "detail", "message", "path"]);
+
+// Detaljene i feilsvaret: feilspesifiseringen (kode, melding, sti og angitt verdi) i selve svaret
+// og i lister og objekter inne i det. Formatet står bare i spesifikasjonen på SwaggerHub, så alt
+// som ser ut som en feil, tas med; finnes ingenting kjent, tas de ukjente feltene med som de er.
+export function feildetaljer(d: unknown): string[] {
+  const ut: string[] = [];
+  const felt = (o: Record<string, unknown>, navn: string[]) => {
+    for (const n of navn) {
+      const v = o[n];
+      if ((typeof v === "string" && v.trim()) || typeof v === "number" || typeof v === "boolean") return String(v).trim();
+    }
+    return null;
+  };
+  const besok = (v: unknown, rot: boolean, dybde: number) => {
+    if (dybde > 5 || ut.length >= 8) return;
+    if (typeof v === "string") {
+      if (!rot && v.trim()) ut.push(v.trim());
+      return;
+    }
+    if (Array.isArray(v)) {
+      for (const x of v) besok(x, false, dybde + 1);
+      return;
+    }
+    if (!v || typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    // Koden og meldingen i selve svaret er hovedfeilen (står først i feilen).
+    const melding = rot ? null : felt(o, FEILFELT.melding);
+    const kode = felt(o, rot ? ["feilspesifiseringskode"] : FEILFELT.kode);
+    const sti = felt(o, rot ? FEILFELT.sti.filter((n) => n !== "path") : FEILFELT.sti);
+    const verdi = felt(o, FEILFELT.verdi);
+    const deler = [melding && kode ? `${melding} (${kode})` : (melding ?? kode), sti && `sti ${sti}`, verdi && `angitt verdi «${verdi}»`].filter(Boolean);
+    if (deler.length) ut.push(deler.join(", "));
+    for (const x of Object.values(o)) if (x && typeof x === "object") besok(x, false, dybde + 1);
+  };
+  besok(d, true, 0);
+  if (!ut.length && d && typeof d === "object" && !Array.isArray(d)) {
+    const ukjente = Object.fromEntries(Object.entries(d).filter(([k]) => !HOVEDFELT.has(k)));
+    if (Object.keys(ukjente).length) ut.push(utdrag(JSON.stringify(ukjente)));
+  }
+  return [...new Set(ut)];
+}
+
+// Feilen fra Skatteetaten: koden og meldingen, detaljene og korrelasjons-ID-en (eller starten av
+// svaret når det ikke er JSON). Fødselsnumre skjules av melding() når feilen lagres.
+export function ameldingFeil(r: { status: number; data: any; tekst: string }): EtatFeil {
+  const d = r.data && typeof r.data === "object" && !Array.isArray(r.data) ? (r.data as Record<string, unknown>) : null;
+  const kode = (typeof d?.kode === "string" && d.kode.trim()) || r.tekst.match(/AMLD_\d+/)?.[0] || null;
   // Idempotensnøkkelen er brukt: meldingen er sendt før (et forsøk som ble avbrutt etter sendingen).
   if (kode === "AMLD_019")
     return new EtatFeil("Skatteetaten har allerede tatt imot denne meldingen (AMLD_019). Se a-meldingen i Altinn før du sender den på nytt.", r.status, kode);
-  const d = r.data;
-  const tekst = (typeof d?.melding === "string" && d.melding) || (typeof d?.detail === "string" && d.detail) || (typeof d?.title === "string" && d.title) || `Skatteetaten svarte ${r.status}`;
-  return new EtatFeil(`A-meldingen ble ikke tatt imot: ${tekst}${kode ? ` (${kode})` : ""}`, r.status, kode);
+  const tekst = [d?.melding, d?.detail, d?.title, d?.message].find((x): x is string => typeof x === "string" && x.trim() !== "")?.trim() ?? `Skatteetaten svarte ${r.status}`;
+  const detaljer = r.data != null ? feildetaljer(r.data).filter((x) => x !== tekst && x !== kode) : [];
+  if (!d && !detaljer.length && r.tekst.trim()) detaljer.push(utdrag(r.tekst));
+  const korrelasjonsid = typeof d?.korrelasjonsid === "string" && d.korrelasjonsid.trim() ? d.korrelasjonsid.trim() : null;
+  return new EtatFeil(
+    `A-meldingen ble ikke tatt imot: ${tekst}${kode ? ` (${kode})` : ""}${detaljer.length ? `: ${detaljer.join("; ")}` : ""}${korrelasjonsid ? ` (korrelasjons-ID ${korrelasjonsid})` : ""}`,
+    r.status,
+    kode,
+  );
 }
 
 // Varsel til eier og administrator.
@@ -111,7 +170,23 @@ export async function lagAmelding(org: string, ameldingId: string) {
       throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Innstillinger → Lønn → Skattekort.", 409);
     const token = await hentToken(SCOPE.amelding, t.orgnr);
     const r = await etatKall(`${adresser().amelding}/innsending/${maaned}/${t.orgnr}?idempotencyKey=${m.id}`, token, { metode: "POST", kropp: leveranse, hvem: "Skatteetaten" });
-    if (r.status >= 300) throw ameldingFeil(r);
+    if (r.status >= 300) {
+      // Hele svaret (uten fødselsnumre) og hva som ble sendt, til feilsøkingen.
+      const oppgave = leveranse.leveranse.oppgave as { virksomhet?: { norskIdentifikator: string; inntektsmottaker?: unknown[] }[] };
+      logg("WARNING", "Skatteetaten avviste a-meldingen", {
+        org_id: org,
+        maaned,
+        status: r.status,
+        svar: skjulFnr(r.tekst).slice(0, 4000),
+        sendt: {
+          sti: `/innsending/${maaned}/${t.orgnr}`,
+          opplysningspliktig: g.org.orgnr,
+          virksomheter: (oppgave.virksomhet ?? []).map((v) => ({ orgnr: v.norskIdentifikator, mottakere: v.inntektsmottaker?.length ?? 0 })),
+          felt: Object.keys(leveranse.leveranse),
+        },
+      });
+      throw ameldingFeil(r);
+    }
     await oppdater(m.id, {
       status: "sendt",
       forsendelse_id: typeof r.data?.forsendelseId === "string" ? r.data.forsendelseId : null,

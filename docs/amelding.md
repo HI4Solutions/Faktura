@@ -37,6 +37,11 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    Workeren sender meldingen til API-et, og henter tilbakemeldingen fra Dialogporten og Skatteetaten
    (første gang etter to minutter, så sjeldnere, og minst hver halvtime i en uke). Status og avvik
    vises på måneden, og eier og administrator får varsel når den er mottatt eller avvist.
+   Avviser API-et selve innsendingen (status «Feil», f.eks. «Feil i request (AMLD_006)»), står
+   hele feilen på meldingen: koden, detaljene fra Skatteetaten (feilspesifiseringen med sti og
+   angitt verdi) og korrelasjons-ID-en, som Skatteetatens brukerstøtte trenger. Workeren logger
+   svaret (uten fødselsnumre) og hva som ble sendt («Skatteetaten avviste a-meldingen»). En melding
+   som feilet, kan sendes på nytt (ny idempotensnøkkel).
 
 Flere virksomheter (underenheter): hver får sin `virksomhet` i meldingen med de ansatte som har
 lønnen og arbeidsforholdet der, og arbeidsgiveravgiften per sone; summene er for hele foretaket.
@@ -56,7 +61,8 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
 1. **Innstillinger → Lønn → A-melding:** organisasjonsnummeret til virksomheten
    (underenheten i Enhetsregisteret; appen foreslår den når det bare er én) og til
    pensjonsleverandøren når de har OTP. Har foretaket ingen underenhet, sier feltet det (den
-   registreres med Samordnet registermelding i Altinn). Testbedriftene (organisasjonsnumre som
+   registreres med Samordnet registermelding i Altinn). Foretakets eget organisasjonsnummer (den
+   juridiske enheten) godtas ikke som virksomhet. Testbedriftene (organisasjonsnumre som
    begynner på 2 eller 3) slås opp i Brønnøysundregistrenes testmiljø
    (`data.ppe.brreg.no`), der testdataene fra Tenor ligger.
 2. **På hver ansatt** (Arbeidsforhold i a-meldingen): yrkeskoden (7 siffer fra SSBs

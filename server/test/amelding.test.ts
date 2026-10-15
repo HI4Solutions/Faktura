@@ -19,7 +19,8 @@ import { settKryptering } from "../src/kryptering.js";
 import { lagring, settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 import { settEtatFetch } from "../src/maskinporten.js";
 import { avgiftsgrunnlag, byggLeveranse, kontroller, oppsummer, sumAvgift, tilXml, type Grunnlag } from "../src/amelding.js";
-import { tilbakemeldingUrl, tolkTilbakemelding } from "../src/ameldingInnsending.js";
+import { ameldingFeil, tilbakemeldingUrl, tolkTilbakemelding } from "../src/ameldingInnsending.js";
+import { melding } from "../src/skattekort.js";
 import { frist } from "../src/ameldingRuter.js";
 import { kjorOppgave } from "../src/worker.js";
 
@@ -271,6 +272,41 @@ describe("a-meldingen (uten database)", () => {
     ]);
     expect(kontroller(GRUNNLAG)).toEqual([]);
     expect(oppsummer(GRUNNLAG)).toMatchObject({ antall_arbeidsforhold: 2, antall_med_lonn: 2, inntekt: 57300, sum_forskuddstrekk: 18100, arbeidsgiveravgift: 8220 });
+    // Virksomheten er en underenhet, aldri foretaket selv.
+    expect(kontroller({ ...GRUNNLAG, virksomhet: GRUNNLAG.org.orgnr }).map((x) => [x.niva, x.tekst])).toEqual([
+      [
+        "feil",
+        "Virksomheten under Innstillinger → Lønn → A-melding er organisasjonsnummeret til foretaket. Bruk organisasjonsnummeret til underenheten (virksomheten) i Enhetsregisteret.",
+      ],
+    ]);
+  });
+
+  it("feilen fra Skatteetaten: koden, detaljene (kode, melding, sti og angitt verdi), korrelasjons-ID-en, og uten fødselsnumre", () => {
+    const feil = (status: number, data: unknown, tekst = data == null ? "" : JSON.stringify(data)) => ameldingFeil({ status, data, tekst }).message;
+    // Feilspesifiseringen i en liste.
+    expect(
+      feil(400, {
+        kode: "AMLD_006",
+        melding: "Feil i request",
+        korrelasjonsid: "k-1",
+        feilspesifiseringer: [{ kode: "AMLD_1022", melding: "Feil i parametre", sti: "idempotencyKey", angittVerdi: "abc" }],
+      }),
+    ).toBe("A-meldingen ble ikke tatt imot: Feil i request (AMLD_006): Feil i parametre (AMLD_1022), sti idempotencyKey, angitt verdi «abc» (korrelasjons-ID k-1)");
+    // Feilspesifiseringen i selve svaret.
+    expect(
+      feil(400, { kode: "AMLD_006", melding: "Feil i request", feilspesifiseringskode: "AMLD_1052", sti: "leveranse.kalendermaaned", angittVerdi: "2026-10", korrelasjonsid: "k-2" }),
+    ).toBe("A-meldingen ble ikke tatt imot: Feil i request (AMLD_006): AMLD_1052, sti leveranse.kalendermaaned, angitt verdi «2026-10» (korrelasjons-ID k-2)");
+    // Bare kode og melding, Springs standardsvar, ukjente felt og et svar som ikke er JSON.
+    expect(feil(400, { kode: "AMLD_006", melding: "Feil i request", korrelasjonsid: "k-3" })).toBe("A-meldingen ble ikke tatt imot: Feil i request (AMLD_006) (korrelasjons-ID k-3)");
+    expect(feil(400, { timestamp: "2026-10-15T20:00:00Z", status: 400, error: "Bad Request", path: "/v1/innsending/2026-10/314140729" })).toBe(
+      "A-meldingen ble ikke tatt imot: Skatteetaten svarte 400",
+    );
+    expect(feil(400, { kode: "AMLD_006", melding: "Feil i request", noe: { annet: 1 } })).toBe('A-meldingen ble ikke tatt imot: Feil i request (AMLD_006): {"noe":{"annet":1}}');
+    expect(feil(502, null, "<html><body>Bad gateway</body></html>")).toBe("A-meldingen ble ikke tatt imot: Skatteetaten svarte 502: Bad gateway");
+    expect(feil(409, { kode: "AMLD_019", melding: "Idempotensnøkkel er benyttet tidligere" })).toContain("allerede tatt imot denne meldingen (AMLD_019)");
+    // Et fødselsnummer i feilen skjules når den lagres.
+    const lagret = melding(ameldingFeil({ status: 400, data: { kode: "AMLD_010", melding: "Feil i payload", feil: [{ sti: "norskIdentifikator", angittVerdi: "13830197340" }] }, tekst: "" }));
+    expect(lagret).toBe("A-meldingen ble ikke tatt imot: Feil i payload (AMLD_010): sti norskIdentifikator, angitt verdi «•••••••••••»");
   });
 
   it("fristen er den 5. i måneden etter, eller neste virkedag", () => {
@@ -315,6 +351,8 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
   const kall: { metode: string; url: string; kropp: any }[] = [];
   // Om systemet i Altinns systemregister har tilgangspakkene endringsforespørselen ber om.
   let systemetHarPakkene = false;
+  // Feilen Skatteetaten svarer innsendingen med (400), eller null.
+  let avvisInnsending: unknown = null;
   let org: string;
   let kari: string;
   let per: string;
@@ -355,7 +393,7 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
       if (u.host === "mp.test") return json(200, { access_token: "tok", expires_in: 120 });
       kall.push(k);
       if (k.metode === "POST" && u.host === "amelding.test" && u.pathname.startsWith("/v1/innsending/"))
-        return json(200, { dialogId: "dialog-1", forsendelseId: "forsendelse-1", meldingsId: k.kropp.leveranse.meldingsId });
+        return avvisInnsending ? json(400, avvisInnsending) : json(200, { dialogId: "dialog-1", forsendelseId: "forsendelse-1", meldingsId: k.kropp.leveranse.meldingsId });
       if (u.host === "altinn.test" && u.pathname === "/dialogporten/api/v1/enduser/dialogs/dialog-1")
         return json(200, { transmissions: [{ attachments: [{ urls: [{ url: "https://tilbakemelding.test/v1/forsendelser/forsendelse-1", consumerType: "Api" }] }] }] });
       if (u.host === "tilbakemelding.test") return json(200, { mottak: { mottakstatus: "mottatt", avvik: [{ kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" }] } });
@@ -411,6 +449,9 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     expect((await api("POST", `/api/org/${org}/amelding/2026-09`, { innsending: "fil" })).data.error).toContain("mangler yrkeskode");
     // Feltene.
     expect((await api("PUT", `/api/org/${org}/lonn-oppsett`, { virksomhet_orgnr: "915000186" })).data.error).toBe("Organisasjonsnummeret til virksomheten er ikke gyldig");
+    expect((await api("PUT", `/api/org/${org}/lonn-oppsett`, { virksomhet_orgnr: "915000177" })).data.error).toBe(
+      "Det er organisasjonsnummeret til foretaket (den juridiske enheten). Bruk virksomhetens (underenhetens) organisasjonsnummer.",
+    );
     expect((await api("PUT", `/api/org/${org}/lonn-oppsett`, { virksomhet_orgnr: "915 000 185", pensjonsinnretning_orgnr: "915000193" })).data).toMatchObject({
       virksomhet_orgnr: "915000185",
       pensjonsinnretning_orgnr: "915000193",
@@ -469,6 +510,39 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     expect(rad.tilbakemelding.avvik).toEqual([{ kode: "F999", tekst: "Bare en opplysning", alvorlighet: "opplysning" }]);
     expect(ko.filter((o: any) => o.type === "varsel" && o.varsel.tittel === "A-meldingen er mottatt")).toHaveLength(1);
     config.ameldingInnsending = false;
+  });
+
+  it("innsending Skatteetaten avviser: feilen med detaljene og korrelasjons-ID-en, varsel, og den kan sendes på nytt", async () => {
+    config.ameldingInnsending = true;
+    avvisInnsending = {
+      kode: "AMLD_006",
+      melding: "Feil i request",
+      korrelasjonsid: "k-9",
+      feilspesifiseringer: [{ kode: "AMLD_1022", melding: "Feil i parametre", sti: "idempotencyKey" }],
+    };
+    const varsler = () => ko.filter((o: any) => o.type === "varsel" && o.varsel.tittel === "A-meldingen ble ikke sendt").length;
+    const for_ = varsler();
+    try {
+      const m = await api("POST", `/api/org/${org}/amelding/2026-09`, { innsending: "api" });
+      expect(m.status).toBe(201);
+      await kjor("amelding-lag");
+      expect((await api("GET", `/api/org/${org}/amelding/2026-09`)).data.meldinger[0]).toMatchObject({
+        id: m.data.id,
+        status: "feil",
+        feil: "A-meldingen ble ikke tatt imot: Feil i request (AMLD_006): Feil i parametre (AMLD_1022), sti idempotencyKey (korrelasjons-ID k-9)",
+      });
+      expect(varsler()).toBe(for_ + 1);
+      // En melding som feilet, stopper ikke en ny.
+      avvisInnsending = null;
+      const ny = await api("POST", `/api/org/${org}/amelding/2026-09`, { innsending: "api" });
+      expect(ny.status).toBe(201);
+      await kjor("amelding-lag");
+      expect((await api("GET", `/api/org/${org}/amelding/2026-09`)).data.meldinger[0]).toMatchObject({ id: ny.data.id, status: "sendt" });
+      await kjor("amelding-status");
+    } finally {
+      avvisInnsending = null;
+      config.ameldingInnsending = false;
+    }
   });
 
   it("utvidelsen av tilgangen i Altinn med tilgangspakkene systemet trenger nå", async () => {

@@ -121,8 +121,8 @@ export function kortFraSvar(s: Skattekortsvar, biarbeidsgiver: boolean): Kort | 
 // --- Kallene til Skatteetaten ------------------------------------------------------------------
 
 // Starten av et svar som ikke er en vanlig feilmelding (uten HTML-koder).
-const utdrag = (tekst: string) => tekst.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
-const skjulFnr = (s: string) => s.replace(/\b\d{11}\b/g, "•••••••••••");
+export const utdrag = (tekst: string) => tekst.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+export const skjulFnr = (s: string) => s.replace(/\b\d{11}\b/g, "•••••••••••");
 
 // Feilen fra Skatteetaten. Som regel {kode, melding, korrelasjonsid}; svarer de med noe annet (en
 // standard feilside eller et annet format), tas starten av svaret med, så feilen kan meldes til

@@ -461,6 +461,9 @@ export function ansattRuter() {
     return c.json(
       await bruk(c, async (db) => {
         await db.query("select faktura.krev($1, 'admin')", [orgId(c)]);
+        // Virksomheten i a-meldingen er en underenhet, aldri foretaket selv.
+        if (b.virksomhet_orgnr && (await en<{ orgnr: string | null }>(db, "select orgnr from faktura.organisasjoner where id = $1", [orgId(c)]))?.orgnr === b.virksomhet_orgnr)
+          throw new ApiFeil(400, "Det er organisasjonsnummeret til foretaket (den juridiske enheten). Bruk virksomhetens (underenhetens) organisasjonsnummer.");
         const naa = await regler(db, orgId(c));
         const ny = { ...naa, ...Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined)) };
         await db.query(

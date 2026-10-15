@@ -415,6 +415,12 @@ export function kontroller(g: Grunnlag): Avvik[] {
       niva: "feil",
       tekst: "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Lønn → A-melding.",
     });
+  // Virksomheten er alltid en underenhet, aldri foretaket (den juridiske enheten) selv.
+  else if (g.virksomhet === g.org.orgnr)
+    a.push({
+      niva: "feil",
+      tekst: "Virksomheten under Innstillinger → Lønn → A-melding er organisasjonsnummeret til foretaket. Bruk organisasjonsnummeret til underenheten (virksomheten) i Enhetsregisteret.",
+    });
   if (g.slipper.some((s) => s.otp > 0) && !g.pensjonsinnretning)
     a.push({ niva: "feil", tekst: "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Lønn → A-melding." });
   const iMelding = new Set(g.slipper.map((s) => s.ansatt_id));
