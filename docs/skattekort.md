@@ -18,7 +18,12 @@ Funksjonen er skjult til klient-ID-en til Maskinporten er satt (GitHub-variabele
 3. Workeren henter et token fra Maskinporten for kundens systembruker, bestiller skattekortene til
    de ansatte med fødselsnummer (høyst 1000 om gangen), henter svaret og lagrer skattekortene på de
    ansatte. Hver morgen hentes endringene, og et skattekort hentes når en ansatt legges inn med
-   fødselsnummer.
+   fødselsnummer. Bestillingen har med en e-postadresse (og mobilnummer når organisasjonen har
+   et) som Skatteetaten varsler når et skattekort endres: organisasjonens e-post (Innstillinger →
+   Organisasjon), ellers e-posten til den som koblet til Skatteetaten, ellers eierens.
+4. Avviser Skatteetaten en bestilling, står svaret deres (med korrelasjons-ID-en, som Skatteetaten
+   trenger om feilen meldes) under «Siste henting feilet». Hele svaret, uten fødselsnumre, står i
+   loggen til workeren («Skatteetaten avviste bestillingen av skattekort»).
 
 Koden: `server/src/maskinporten.ts` (token), `server/src/altinn.ts` (systemregisteret og
 forespørslene), `server/src/skattekort.ts` (bestilling, svar og lagring),

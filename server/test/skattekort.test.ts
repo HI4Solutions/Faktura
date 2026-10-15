@@ -19,6 +19,7 @@ import {
   PAUSE,
   planleggDagligSkattekort,
   planleggTilgangssjekk,
+  skattFeil,
   tolkSvar,
   trekkode,
   type Skattekortsvar,
@@ -155,6 +156,30 @@ describe("Skatteetaten og Maskinporten: token, svar og skattekort", () => {
   it("skjuler fødselsnumre i feilmeldinger", () => {
     expect(melding(new Error("Ugyldig arbeidstaker 13830197340 (FOR_001)"))).toBe("Ugyldig arbeidstaker ••••••••••• (FOR_001)");
     expect(melding(new Error("Org 915000010"))).toBe("Org 915000010");
+  });
+
+  it("feilene fra Skatteetaten: meldingen og koden, ellers starten av svaret, og korrelasjons-ID-en", () => {
+    const feil = (status: number, tekst: string) => {
+      let data: any = null;
+      try {
+        data = JSON.parse(tekst);
+      } catch {}
+      return skattFeil({ status, data, tekst }, "Bestillingen av skattekort feilet");
+    };
+    const f = feil(400, JSON.stringify({ kode: "FOR_004", melding: "Ugyldig forespørsel", korrelasjonsid: "a621a996-315d" }));
+    expect(f.message).toBe("Bestillingen av skattekort feilet: Ugyldig forespørsel (FOR_004) (korrelasjons-ID a621a996-315d)");
+    expect([f.status, f.kode]).toEqual([400, "FOR_004"]);
+    expect(feil(400, JSON.stringify({ kode: "FOR_001" })).message).toBe("Bestillingen av skattekort feilet: Skatteetaten svarte 400 (FOR_001)");
+    // Andre formater: standardfeilen i Spring (problem+json) og en feilside.
+    expect(feil(400, JSON.stringify({ type: "about:blank", title: "Bad Request", status: 400, detail: "Failed to read request" })).message).toBe(
+      "Bestillingen av skattekort feilet: Failed to read request",
+    );
+    expect(feil(400, JSON.stringify({ status: 400, error: "Bad Request", path: "/api/forskudd/bestillSkattekort" })).message).toBe(
+      'Bestillingen av skattekort feilet: Skatteetaten svarte 400: {"status":400,"error":"Bad Request","path":"/api/forskudd/bestillSkattekort"}',
+    );
+    expect(feil(400, "<html><body><h1>400 Bad Request</h1>\n<p>nginx</p></body></html>").message).toBe("Bestillingen av skattekort feilet: Skatteetaten svarte 400: 400 Bad Request nginx");
+    expect(feil(400, "").message).toBe("Bestillingen av skattekort feilet: Skatteetaten svarte 400");
+    expect(feil(403, "").message).toContain("Skatteetaten avviste tilgangen (403)");
   });
 
   it("finner referansen til bestillingen og lager bestillingen", () => {
@@ -496,6 +521,39 @@ describe.skipIf(!process.env.DATABASE_URL)("skattekort fra Skatteetaten", () => 
     // Uten fødselsnummer: ingenting å hente.
     await api("POST", `/api/org/${org}/ansatte`, { fornavn: "Uten", etternavn: "Nummer", ansatt_fra: `${iAar}-03-01` });
     expect(ko).toHaveLength(0);
+  });
+
+  it("uten e-post på organisasjonen varsler Skatteetaten den som koblet til; en avvist bestilling viser svaret", async () => {
+    expect((await api("PATCH", `/api/org/${org}`, { epost: null })).status).toBe(200);
+    const bestillinger: any[] = [];
+    // Et svar som ikke er Skatteetatens vanlige feilformat (standardfeilen i Spring).
+    svar["POST skatt.test/api/forskudd/bestillSkattekort"] = (k) => {
+      bestillinger.push(k.kropp);
+      return json(400, { timestamp: "2026-10-15T12:00:00Z", status: 400, error: "Bad Request", path: "/api/forskudd/bestillSkattekort" });
+    };
+    expect((await api("POST", `/api/org/${org}/skattekort/hent`, {})).data).toEqual({ ok: true, startet: true });
+    await kjor(["skattekort-hent"]);
+    expect(bestillinger[0].kontaktinformasjon).toEqual({ epostadresse: "skatt-eier@server.test" });
+    let s = (await api("GET", `/api/org/${org}/skattekort`)).data;
+    expect(s.tilgang).toMatchObject({
+      status: "godkjent",
+      siste_feil:
+        'Bestillingen av skattekort feilet: Skatteetaten svarte 400: {"timestamp":"2026-10-15T12:00:00Z","status":400,"error":"Bad Request","path":"/api/forskudd/bestillSkattekort"}',
+    });
+    // Avvist: oppgaven prøves ikke igjen av seg selv.
+    expect(ko).toHaveLength(0);
+
+    // Med organisasjonens e-post (og mobilnummer) igjen; feilen i Skatteetatens vanlige format.
+    expect((await api("PATCH", `/api/org/${org}`, { epost: "post@skatt-test.no", telefon: "912 34 567" })).status).toBe(200);
+    svar["POST skatt.test/api/forskudd/bestillSkattekort"] = (k) => {
+      bestillinger.push(k.kropp);
+      return json(400, { kode: "FOR_001", melding: "Request payload validerer ikke", korrelasjonsid: "13a865f5-28f9" });
+    };
+    await api("POST", `/api/org/${org}/skattekort/hent`, {});
+    await kjor(["skattekort-hent"]);
+    expect(bestillinger[1].kontaktinformasjon).toEqual({ epostadresse: "post@skatt-test.no", mobiltelefonummer: "+4791234567" });
+    s = (await api("GET", `/api/org/${org}/skattekort`)).data;
+    expect(s.tilgang.siste_feil).toBe("Bestillingen av skattekort feilet: Request payload validerer ikke (FOR_001) (korrelasjons-ID 13a865f5-28f9)");
   });
 
   it("uten systembruker i Altinn (MP-303) må tilgangen bes om på nytt", async () => {

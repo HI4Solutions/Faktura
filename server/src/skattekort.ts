@@ -120,12 +120,28 @@ export function kortFraSvar(s: Skattekortsvar, biarbeidsgiver: boolean): Kort | 
 
 // --- Kallene til Skatteetaten ------------------------------------------------------------------
 
-function skattFeil(svar: { status: number; data: any }, hva: string): EtatFeil {
-  const kode = typeof svar.data?.kode === "string" ? svar.data.kode : null;
-  const melding = typeof svar.data?.melding === "string" ? svar.data.melding : null;
+// Starten av et svar som ikke er en vanlig feilmelding (uten HTML-koder).
+const utdrag = (tekst: string) => tekst.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+const skjulFnr = (s: string) => s.replace(/\b\d{11}\b/g, "•••••••••••");
+
+// Feilen fra Skatteetaten. Som regel {kode, melding, korrelasjonsid}; svarer de med noe annet (en
+// standard feilside eller et annet format), tas starten av svaret med, så feilen kan meldes til
+// Skatteetaten (med korrelasjons-ID-en når den finnes).
+export function skattFeil(svar: { status: number; data: any; tekst: string }, hva: string): EtatFeil {
+  const d = svar.data && typeof svar.data === "object" ? svar.data : {};
+  const felt = (...navn: string[]) =>
+    navn.map((n) => d[n]).find((v): v is string => typeof v === "string" && v.trim() !== "")?.trim() ?? null;
+  const kode = felt("kode");
+  const melding = felt("melding", "detail", "message");
+  const korrelasjonsid = felt("korrelasjonsid");
   if (svar.status === 403 && !melding)
     return new EtatFeil(`${hva}: Skatteetaten avviste tilgangen (403). Sjekk at tilgangen i Altinn fortsatt er godkjent.`, 403, kode);
-  return new EtatFeil(`${hva}: ${melding ?? `Skatteetaten svarte ${svar.status}`}${kode ? ` (${kode})` : ""}`, svar.status, kode);
+  const rest = melding || kode ? "" : utdrag(svar.tekst);
+  return new EtatFeil(
+    `${hva}: ${melding ?? `Skatteetaten svarte ${svar.status}${rest ? `: ${rest}` : ""}`}${kode ? ` (${kode})` : ""}${korrelasjonsid ? ` (korrelasjons-ID ${korrelasjonsid})` : ""}`,
+    svar.status,
+    kode,
+  );
 }
 
 // Referansen til bestillingen (BR og sifre), i hvilket felt den enn står.
@@ -148,8 +164,8 @@ export function mobilnummer(tlf: string | null): string | null {
   return /^[49]\d{7}$/.test(s) ? `+47${s}` : null;
 }
 
-// Kontaktinformasjonen er organisasjonens e-post (og mobilnummer); Skatteetaten varsler der når
-// et skattekort endres.
+// Kontaktinformasjonen er e-posten (og mobilnummeret) Skatteetaten varsler når et skattekort endres
+// (varsel_epost i hentTilgang). Alle Skatteetatens eksempler har den med.
 export function bestillingskropp(b: Bestilling) {
   const kontakt = Object.fromEntries(
     Object.entries({ epostadresse: b.kontakt.epost?.trim() || null, mobiltelefonummer: mobilnummer(b.kontakt.telefon) }).filter(([, v]) => v),
@@ -166,8 +182,17 @@ export function bestillingskropp(b: Bestilling) {
 }
 
 async function bestill(token: string, b: Bestilling): Promise<string> {
-  const r = await etatKall(`${adresser().skattekort}/bestillSkattekort`, token, { metode: "POST", kropp: bestillingskropp(b), hvem: "Skatteetaten" });
-  if (r.status >= 300) throw skattFeil(r, "Bestillingen av skattekort feilet");
+  const kropp = bestillingskropp(b);
+  const r = await etatKall(`${adresser().skattekort}/bestillSkattekort`, token, { metode: "POST", kropp, hvem: "Skatteetaten" });
+  if (r.status >= 300) {
+    // Hele svaret (uten fødselsnumre) og hva bestillingen hadde med, til feilsøking.
+    logg("WARNING", "Skatteetaten avviste bestillingen av skattekort", {
+      status: r.status,
+      svar: skjulFnr(r.tekst).slice(0, 2000),
+      bestilling: { felt: Object.keys(kropp), bestillingstype: kropp.bestillingstype, kontakt: Object.keys(kropp.kontaktinformasjon ?? {}), antall: b.fnr?.length ?? 0 },
+    });
+    throw skattFeil(r, "Bestillingen av skattekort feilet");
+  }
   const ref = finnReferanse(r);
   if (!ref) throw new EtatFeil("Skatteetaten ga ingen referanse til bestillingen", 502);
   return ref;
@@ -177,7 +202,10 @@ async function bestill(token: string, b: Bestilling): Promise<string> {
 async function hentSvar(token: string, ref: string): Promise<any | null> {
   const r = await etatKall(`${adresser().skattekort}/skattekortTilArbeidsgiver/svar/${encodeURIComponent(ref)}`, token, { hvem: "Skatteetaten" });
   if (r.status === 204 || (r.status === 200 && !r.tekst.trim())) return null;
-  if (r.status >= 300) throw skattFeil(r, "Henting av skattekortene feilet");
+  if (r.status >= 300) {
+    logg("WARNING", "Skatteetaten avviste hentingen av skattekortene", { status: r.status, referanse: ref, svar: skjulFnr(r.tekst).slice(0, 2000) });
+    throw skattFeil(r, "Henting av skattekortene feilet");
+  }
   return r.data ?? {};
 }
 
@@ -201,19 +229,27 @@ type Tilgangsrad = {
   foresporsel_id: string | null;
   godkjenn_url: string | null;
   orgnr: string | null;
-  epost: string | null;
   telefon: string | null;
+  varsel_epost: string | null;
   pakker: string[];
   endring_status: string | null;
   endring_id: string | null;
   endring_pakker: string[] | null;
 };
 
+// E-posten Skatteetaten varsler når et skattekort endres (kontaktinformasjonen i bestillingen):
+// organisasjonens, ellers den som koblet til Skatteetaten, ellers eieren. t er skattekort_tilgang
+// og o organisasjonen.
+const VARSEL_EPOST = `coalesce(nullif(btrim(o.epost), ''),
+         (select b.epost from faktura.brukere b where b.id = t.bedt_av),
+         (select b.epost from faktura.medlemmer m join faktura.brukere b on b.id = m.bruker_id
+           where m.org_id = o.id and m.rolle = 'eier' order by m.opprettet limit 1)) as varsel_epost`;
+
 export const hentTilgang = (orgId: string) =>
   somSystem((db) =>
     en<Tilgangsrad>(
       db,
-      `select t.status, t.foresporsel_id, t.godkjenn_url, o.orgnr, o.epost, o.telefon, t.pakker, t.endring_status, t.endring_id, t.endring_pakker
+      `select t.status, t.foresporsel_id, t.godkjenn_url, o.orgnr, o.telefon, ${VARSEL_EPOST}, t.pakker, t.endring_status, t.endring_id, t.endring_pakker
          from faktura.skattekort_tilgang t join faktura.organisasjoner o on o.id = t.org_id
         where t.org_id = $1`,
       [orgId],
@@ -238,8 +274,7 @@ async function oppdaterTilgang(orgId: string, fra: string[], felt: Record<string
 }
 
 // Feilmeldingen som lagres og vises (et fødselsnummer i den fra Skatteetaten skjules).
-export const melding = (e: unknown) =>
-  (e instanceof Error ? e.message : String(e)).replace(/\b\d{11}\b/g, "•••••••••••").slice(0, 500);
+export const melding = (e: unknown) => skjulFnr(e instanceof Error ? e.message : String(e)).slice(0, 500);
 // Feil som ikke går over av seg selv (avvist, ugyldig, ikke satt opp): oppgaven prøves ikke igjen.
 const varig = (e: unknown) => e instanceof EtatFeil && ((e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429) || e.status === 503);
 
@@ -436,7 +471,7 @@ export async function hentSkattekort(
   try {
     const token = await hentToken(SCOPE.skattekort, t.orgnr);
     const { fnr, hentes } = await ansatte(orgId, aar, valg);
-    const kontakt = { epost: t.epost, telefon: t.telefon };
+    const kontakt = { epost: t.varsel_epost, telefon: t.telefon };
     const bestillinger: Bestilling[] = [];
     // Endringene gjelder de ansatte som er hentet før (uten ansatte med fødselsnummer: ingenting å hente).
     if (valg.daglig && fnr.size) bestillinger.push({ aar, orgnr: t.orgnr, kontakt });
