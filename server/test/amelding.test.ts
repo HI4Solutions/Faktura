@@ -301,7 +301,12 @@ describe("a-meldingen (uten database)", () => {
     expect(feil(400, { timestamp: "2026-10-15T20:00:00Z", status: 400, error: "Bad Request", path: "/v1/innsending/2026-10/314140729" })).toBe(
       "A-meldingen ble ikke tatt imot: Skatteetaten svarte 400",
     );
-    expect(feil(400, { kode: "AMLD_006", melding: "Feil i request", noe: { annet: 1 } })).toBe('A-meldingen ble ikke tatt imot: Feil i request (AMLD_006): {"noe":{"annet":1}}');
+    expect(feil(400, { kode: "AMLD_006", melding: "Feil i request", noe: { annet: 1 } })).toBe("A-meldingen ble ikke tatt imot: Feil i request (AMLD_006): annet «1»");
+    expect(feil(400, { kode: "AMLD_006", melding: "Feil i request", noe: [[1]] })).toBe('A-meldingen ble ikke tatt imot: Feil i request (AMLD_006): {"noe":[[1]]}');
+    // De andre feltene i feilen, f.eks. hodet som mangler.
+    expect(feil(400, { kode: "AMLD_006", melding: "Feil i request", feilspesifiseringer: [{ kode: "AMLD_1028", melding: "Header mangler", header: "idempotencyKey" }] })).toBe(
+      "A-meldingen ble ikke tatt imot: Feil i request (AMLD_006): Header mangler (AMLD_1028), header «idempotencyKey»",
+    );
     expect(feil(502, null, "<html><body>Bad gateway</body></html>")).toBe("A-meldingen ble ikke tatt imot: Skatteetaten svarte 502: Bad gateway");
     expect(feil(409, { kode: "AMLD_019", melding: "Idempotensnøkkel er benyttet tidligere" })).toContain("allerede tatt imot denne meldingen (AMLD_019)");
     // Et fødselsnummer i feilen skjules når den lagres.
@@ -348,7 +353,7 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
   const eier = "Bearer test:uid-amelding-eier:amelding-eier@server.test:mfa";
   const ko: Oppgave[] = [];
   const filer = new Map<string, Uint8Array>();
-  const kall: { metode: string; url: string; kropp: any }[] = [];
+  const kall: { metode: string; url: string; kropp: any; hoder: Record<string, string> }[] = [];
   // Om systemet i Altinns systemregister har tilgangspakkene endringsforespørselen ber om.
   let systemetHarPakkene = false;
   // Feilen Skatteetaten svarer innsendingen med (400), eller null.
@@ -389,11 +394,16 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     settEtatFetch(async (url, init) => {
       const u = new URL(String(url));
       const tekst = init?.body ? String(init.body) : null;
-      const k = { metode: init?.method ?? "GET", url: `${u.host}${u.pathname}${u.search}`, kropp: tekst && tekst.startsWith("{") ? JSON.parse(tekst) : tekst };
+      const hoder = (init?.headers ?? {}) as Record<string, string>;
+      const k = { metode: init?.method ?? "GET", url: `${u.host}${u.pathname}${u.search}`, kropp: tekst && tekst.startsWith("{") ? JSON.parse(tekst) : tekst, hoder };
       if (u.host === "mp.test") return json(200, { access_token: "tok", expires_in: 120 });
       kall.push(k);
-      if (k.metode === "POST" && u.host === "amelding.test" && u.pathname.startsWith("/v1/innsending/"))
+      if (k.metode === "POST" && u.host === "amelding.test" && u.pathname.startsWith("/v1/innsending/")) {
+        // Som testmiljøet: uten idempotensnøkkelen som hode mangler et påkrevd hode.
+        if (hoder.idempotencyKey !== u.searchParams.get("idempotencyKey"))
+          return json(400, { kode: "AMLD_006", melding: "Feil i request", feilspesifiseringer: [{ kode: "AMLD_1028", melding: "Header mangler" }] });
         return avvisInnsending ? json(400, avvisInnsending) : json(200, { dialogId: "dialog-1", forsendelseId: "forsendelse-1", meldingsId: k.kropp.leveranse.meldingsId });
+      }
       if (u.host === "altinn.test" && u.pathname === "/dialogporten/api/v1/enduser/dialogs/dialog-1")
         return json(200, { transmissions: [{ attachments: [{ urls: [{ url: "https://tilbakemelding.test/v1/forsendelser/forsendelse-1", consumerType: "Api" }] }] }] });
       if (u.host === "tilbakemelding.test") return json(200, { mottak: { mottakstatus: "mottatt", avvik: [{ kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" }] } });
@@ -499,6 +509,7 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     await kjor("amelding-lag");
     const sendt = kall.find((k) => k.metode === "POST" && k.url.startsWith("amelding.test/v1/innsending/"))!;
     expect(sendt.url).toBe(`amelding.test/v1/innsending/2026-09/915000177?idempotencyKey=${m.data.id}`);
+    expect(sendt.hoder).toMatchObject({ idempotencyKey: m.data.id, "Idempotency-Key": m.data.id, "content-type": "application/json" });
     expect(sendt.kropp.leveranse).toMatchObject({ erstatterMeldingsId: filMelding, meldingsId: m.data.meldings_id, kalendermaaned: "2026-09" });
     let rad = (await api("GET", `/api/org/${org}/amelding/2026-09`)).data.meldinger[0];
     expect(rad).toMatchObject({ status: "sendt", forsendelse_id: "forsendelse-1" });

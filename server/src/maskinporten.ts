@@ -171,10 +171,11 @@ export async function hentToken(scope: string, kunde?: string): Promise<string> 
 }
 
 // Kall med token. Gir svaret som JSON (null uten innhold), eller kaster EtatFeil med meldingen.
+// hoder: egne hoder i tillegg (f.eks. idempotensnøkkelen).
 export async function etatKall(
   url: string,
   token: string,
-  valg: { metode?: "GET" | "POST" | "PUT" | "DELETE"; kropp?: unknown; hvem: string },
+  valg: { metode?: "GET" | "POST" | "PUT" | "DELETE"; kropp?: unknown; hvem: string; hoder?: Record<string, string> },
 ): Promise<{ status: number; data: any; tekst: string; headers: Headers }> {
   let r: Response;
   try {
@@ -184,6 +185,7 @@ export async function etatKall(
         authorization: `Bearer ${token}`,
         accept: "application/json",
         ...(valg.kropp === undefined ? {} : { "content-type": "application/json" }),
+        ...valg.hoder,
       },
       body: valg.kropp === undefined ? undefined : JSON.stringify(valg.kropp),
       signal: AbortSignal.timeout(60_000),

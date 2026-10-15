@@ -60,24 +60,24 @@ async function fodselsnumre(org: string, ider: string[]): Promise<Map<string, st
 
 // Navnene feltene i en feil fra Skatteetaten kan ha (kode, melding, sti og angitt verdi).
 const FEILFELT = {
-  melding: ["melding", "feilmelding", "beskrivelse", "message", "detail"],
+  melding: ["melding", "feilmelding", "beskrivelse", "message", "detail", "defaultMessage"],
   kode: ["kode", "feilkode", "feilspesifiseringskode", "code"],
   sti: ["sti", "felt", "field", "path", "pointer"],
-  verdi: ["angittVerdi", "verdi", "value"],
+  verdi: ["angittVerdi", "verdi", "value", "rejectedValue"],
 };
+const KJENTE = new Set(Object.values(FEILFELT).flat());
 // Feltene i selve svaret som står i hovedfeilen, eller som ikke sier noe om feilen.
 const HOVEDFELT = new Set(["kode", "melding", "korrelasjonsid", "status", "error", "timestamp", "title", "type", "instance", "detail", "message", "path"]);
 
 // Detaljene i feilsvaret: feilspesifiseringen (kode, melding, sti og angitt verdi) i selve svaret
-// og i lister og objekter inne i det. Formatet står bare i spesifikasjonen på SwaggerHub, så alt
-// som ser ut som en feil, tas med; finnes ingenting kjent, tas de ukjente feltene med som de er.
+// og i lister og objekter inne i det, med de andre feltene i feilen (f.eks. navnet på et hode som
+// mangler). Formatet står bare i spesifikasjonen på SwaggerHub, så alt som ser ut som en feil, tas
+// med; finnes ingenting kjent, tas de ukjente feltene med som de er.
 export function feildetaljer(d: unknown): string[] {
   const ut: string[] = [];
+  const enkel = (v: unknown) => (typeof v === "string" && v.trim()) || typeof v === "number" || typeof v === "boolean";
   const felt = (o: Record<string, unknown>, navn: string[]) => {
-    for (const n of navn) {
-      const v = o[n];
-      if ((typeof v === "string" && v.trim()) || typeof v === "number" || typeof v === "boolean") return String(v).trim();
-    }
+    for (const n of navn) if (enkel(o[n])) return String(o[n]).trim();
     return null;
   };
   const besok = (v: unknown, rot: boolean, dybde: number) => {
@@ -97,7 +97,10 @@ export function feildetaljer(d: unknown): string[] {
     const kode = felt(o, rot ? ["feilspesifiseringskode"] : FEILFELT.kode);
     const sti = felt(o, rot ? FEILFELT.sti.filter((n) => n !== "path") : FEILFELT.sti);
     const verdi = felt(o, FEILFELT.verdi);
-    const deler = [melding && kode ? `${melding} (${kode})` : (melding ?? kode), sti && `sti ${sti}`, verdi && `angitt verdi «${verdi}»`].filter(Boolean);
+    const andre = Object.entries(o)
+      .filter(([k, x]) => !KJENTE.has(k) && !HOVEDFELT.has(k) && enkel(x))
+      .map(([k, x]) => `${k} «${String(x).trim()}»`);
+    const deler = [melding && kode ? `${melding} (${kode})` : (melding ?? kode), sti && `sti ${sti}`, verdi && `angitt verdi «${verdi}»`, ...andre].filter(Boolean);
     if (deler.length) ut.push(deler.join(", "));
     for (const x of Object.values(o)) if (x && typeof x === "object") besok(x, false, dybde + 1);
   };
@@ -169,7 +172,15 @@ export async function lagAmelding(org: string, ameldingId: string) {
     if (!t?.orgnr || !harPakke(t, A_ORDNING))
       throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Innstillinger → Lønn → Skattekort.", 409);
     const token = await hentToken(SCOPE.amelding, t.orgnr);
-    const r = await etatKall(`${adresser().amelding}/innsending/${maaned}/${t.orgnr}?idempotencyKey=${m.id}`, token, { metode: "POST", kropp: leveranse, hvem: "Skatteetaten" });
+    // Idempotensnøkkelen er en påkrevd «parameter» uten at dokumentasjonen sier hvor. Med den bare i
+    // adressen svarte testmiljøet «Header mangler (AMLD_1028)», så den sendes også som hode, både med
+    // parameternavnet og med standardnavnet (Idempotency-Key).
+    const r = await etatKall(`${adresser().amelding}/innsending/${maaned}/${t.orgnr}?idempotencyKey=${m.id}`, token, {
+      metode: "POST",
+      kropp: leveranse,
+      hvem: "Skatteetaten",
+      hoder: { idempotencyKey: m.id, "Idempotency-Key": m.id },
+    });
     if (r.status >= 300) {
       // Hele svaret (uten fødselsnumre) og hva som ble sendt, til feilsøkingen.
       const oppgave = leveranse.leveranse.oppgave as { virksomhet?: { norskIdentifikator: string; inntektsmottaker?: unknown[] }[] };

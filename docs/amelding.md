@@ -41,7 +41,10 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    hele feilen på meldingen: koden, detaljene fra Skatteetaten (feilspesifiseringen med sti og
    angitt verdi) og korrelasjons-ID-en, som Skatteetatens brukerstøtte trenger. Workeren logger
    svaret (uten fødselsnumre) og hva som ble sendt («Skatteetaten avviste a-meldingen»). En melding
-   som feilet, kan sendes på nytt (ny idempotensnøkkel).
+   som feilet, kan sendes på nytt (ny idempotensnøkkel). Idempotensnøkkelen (ID-en til meldingen)
+   sendes både i adressen og som hode (`idempotencyKey` og `Idempotency-Key`). Dokumentasjonen sier
+   bare at «parameteren» er påkrevd, og testmiljøet svarte «Header mangler (AMLD_1028)» da den bare
+   sto i adressen.
 
 Flere virksomheter (underenheter): hver får sin `virksomhet` i meldingen med de ansatte som har
 lønnen og arbeidsforholdet der, og arbeidsgiveravgiften per sone; summene er for hele foretaket.
