@@ -187,6 +187,7 @@ function Ramme() {
   const { kanInstallere } = usePwa();
   useVarselNavigering();
   const sted = useLocation();
+  const nav = useNavigate();
   // Ny side: lukk menyen og start øverst (ellers lander man midt på siden etter en lang liste).
   useEffect(() => {
     settMenyApen(false);
@@ -446,7 +447,14 @@ function Ramme() {
               : "Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt."}
           </p>
         )}
-        <NyOrganisasjon avbryt={orgs.length || meg?.plattformadmin ? () => settNy(false) : undefined} />
+        <NyOrganisasjon
+          avbryt={orgs.length || meg?.plattformadmin ? () => settNy(false) : undefined}
+          opprettet={() => {
+            // Den nye organisasjonen er valgt: lukk skjemaet og gå til oversikten for den.
+            settNy(false);
+            nav("/");
+          }}
+        />
         <p className="liten dempet">
           Fått en invitasjon? Åpne lenken i e-posten. · <button className="lenke" onClick={loggUt}>Logg ut</button>
         </p>

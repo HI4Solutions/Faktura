@@ -4,7 +4,8 @@ import { Feil, useHandling } from "../felles";
 import { useKonto } from "../konto";
 import { orgnr as visOrgnr } from "../format";
 
-export function NyOrganisasjon({ avbryt }: { avbryt?: () => void }) {
+// opprettet kalles når organisasjonen er laget og valgt, så den som viser skjemaet kan lukke det.
+export function NyOrganisasjon({ avbryt, opprettet }: { avbryt?: () => void; opprettet?: () => void }) {
   const { oppdater, velgOrg } = useKonto();
 
   const { meg } = useKonto();
@@ -46,6 +47,7 @@ export function NyOrganisasjon({ avbryt }: { avbryt?: () => void }) {
     if (o) {
       velgOrg(o.id);
       await oppdater();
+      opprettet?.();
     }
   }
 
