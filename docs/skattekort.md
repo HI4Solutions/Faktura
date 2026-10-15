@@ -50,9 +50,12 @@ deretter i produksjon.
      `altinn:authentication/systemuser.request.write`. Be i det samme skjemaet om
      `digdir:dialogporten` (a-meldingen, se [amelding.md](amelding.md)); Skatteetaten ber
      leverandørene bestille det der. Klientdelegering og samtykke trengs ikke.
-   - Fra Skatteetaten: `skatteetaten:skattekorttilarbeidsgiver` (og senere A-meldingen), med
-     Skatteetatens skjema for tilgang til API-ene:
-     <https://www.skatteetaten.no/en/our-partners/end-user-systems/sbs-nyheter/her-kan-du-soke-om-tilgang-til-tjenester-for-innrapportering-til-skatteetaten/>.
+   - Fra Skatteetaten: `skatteetaten:skattekorttilarbeidsgiver`. Det bestilles i Skatteetatens
+     brukerstøtteportal (<https://eksternjira.sits.no>, «Brukerstøtte for bruk av Skatteetatens
+     opplysninger» → «Tilgangsforespørsel hente data»), med tjenesten «Skattekort til
+     arbeidsgiver», for test og produksjon (lenken «Bestill tilgang til tjenesten» i
+     dokumentasjonen til API-et, under Kilder). Velg bare den; de andre tjenestene i lista bruker
+     ikke appen. A-meldingen er innrapportering og bestilles for seg, se [amelding.md](amelding.md).
    - `nav:helseytelser/sykepenger` (NAV, `docs/nav.md`) er åpent for alle og trenger ingen søknad.
 3. **Nøkkelen.** Lag nøkkelparet i Cloud Shell, i prosjektet `hi4-faktura-prod`. Den private
    nøkkelen legges rett i Secret Manager og slettes etterpå; den skal aldri sendes på e-post, i
