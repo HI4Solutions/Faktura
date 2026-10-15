@@ -102,9 +102,10 @@ deretter i produksjon. Maskinporten-klienten og systemet i Altinn er de samme so
 skattekortene (se `docs/skattekort.md`); de må være satt opp først.
 
 1. **Søk om tilgang til API-et hos Skatteetaten** for Medinnova AS (scopet
-   `skatteetaten:innrapporteringamelding`, testmiljøet først). Lenken til bestillingen står under
-   «Trenger du hjelp» på siden «A-meldingen – for sluttbrukersystemer» (lenkene under). Det er en
-   egen bestilling; skattekortet bestilles som «hente data» (se `docs/skattekort.md`).
+   `skatteetaten:innrapporteringamelding`, test og produksjon). Det gjøres med Skatteetatens skjema
+   for tilgang til tjenester for innrapportering, i samme søknad som skattekortet (se
+   `docs/skattekort.md`); lenken står også under «Trenger du hjelp» på siden «A-meldingen – for
+   sluttbrukersystemer» (lenkene under). Scopet gir også avstemmingsrapporten (tidligere A06/A07).
 2. **Scopene på Maskinporten-klienten.** Når Skatteetaten har gitt tilgang, legg disse til på
    integrasjonen i Samarbeidsportalen (samme klient og nøkkel som for skattekortene):
    - `skatteetaten:innrapporteringamelding` (innsending og tilbakemelding);

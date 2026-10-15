@@ -50,15 +50,15 @@ deretter i produksjon.
      `altinn:authentication/systemuser.request.write`. Be i det samme skjemaet om
      `digdir:dialogporten` (a-meldingen, se [amelding.md](amelding.md)); Skatteetaten ber
      leverandørene bestille det der. Klientdelegering og samtykke trengs ikke.
-   - Fra Skatteetaten: `skatteetaten:skattekorttilarbeidsgiver`. Det bestilles i Skatteetatens
-     brukerstøtteportal (<https://eksternjira.sits.no>, «Brukerstøtte for bruk av Skatteetatens
-     opplysninger» → «Tilgangsforespørsel hente data»), med tjenesten «Skattekort til
-     arbeidsgiver», for test og produksjon (lenken «Bestill tilgang til tjenesten» i
-     dokumentasjonen til API-et, under Kilder). De andre tjenestene i lista bruker ikke appen ennå;
-     «Krav og betalinger» og «Frister» er aktuelle for regnskapet og «Trekkpålegg» for lønnstrekkene
-     (tilgang til `skatteetaten:trekkpaalegg` i test bestilles med e-post til
-     fremtidensinnkreving@skatteetaten.no). A-meldingen er innrapportering og bestilles for seg, se
-     [amelding.md](amelding.md).
+   - Fra Skatteetaten: `skatteetaten:skattekorttilarbeidsgiver` og
+     `skatteetaten:innrapporteringamelding` (a-meldingen, se [amelding.md](amelding.md)). Begge
+     bestilles i én søknad med Skatteetatens skjema for tilgang til tjenester for innrapportering, i
+     brukerstøtteportalen (<https://eksternjira.sits.no>): velg «Skattekort til arbeidsgiver» og
+     «A-meldingen», test og produksjon, og godta bruksvilkårene (se «søknad om tilgang til tjenester
+     for innrapportering» under Kilder). Tre tjenester til er aktuelle senere, men brukes ikke av
+     appen ennå: «Krav og betalinger» og «Frister» (regnskapet) bestilles med «Tilgangsforespørsel
+     hente data» i samme portal, og trekkpålegg (`skatteetaten:trekkpaalegg`, lønnstrekkene) i test
+     med e-post til fremtidensinnkreving@skatteetaten.no.
    - `nav:helseytelser/sykepenger` (NAV, `docs/nav.md`) er åpent for alle og trenger ingen søknad.
 3. **Nøkkelen.** Lag nøkkelparet i Cloud Shell, i prosjektet `hi4-faktura-prod`. Den private
    nøkkelen legges rett i Secret Manager og slettes etterpå; den skal aldri sendes på e-post, i
@@ -101,6 +101,9 @@ deretter i produksjon.
 - Skatteetaten, Skattekort til arbeidsgiver API:
   <https://skatteetaten.github.io/api-dokumentasjon/api/skattekorttilarbeidsgiver>
 - Skatteetaten, systembruker: <https://skatteetaten.github.io/api-dokumentasjon/om/systembruker>
+- Skatteetaten, søknad om tilgang til tjenester for innrapportering (a-meldingen, skattekort og
+  flere):
+  <https://www.skatteetaten.no/samarbeidspartnere/sluttbrukersystemer/sbs-nyheter/her-kan-du-soke-om-tilgang-til-tjenester-for-innrapportering-til-skatteetaten/>
 - Skatteetaten, oppkobling for systemleverandører:
   <https://www.skatteetaten.no/samarbeidspartnere/reetablering-altinn/systemleverandor/oppkobling/>
 - Altinn, systembruker for systemleverandører:
