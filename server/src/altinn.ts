@@ -16,18 +16,27 @@ export const TILGANGSPAKKE = "urn:altinn:accesspackage:lonn";
 export const A_ORDNING = "urn:altinn:accesspackage:a-ordning";
 // Tilgangspakken for sykmeldinger, forespørsler og inntektsmeldinger hos NAV (docs/nav.md).
 export const NAV_SYKEPENGER = "urn:altinn:accesspackage:lonn-personopplysninger-saerlig-kategori";
+// Tilgangspakken for krav og betalinger og frister fra Skatteetaten (docs/skatteetaten-krav.md).
+export const KRAV_OG_UTLEGG = "urn:altinn:accesspackage:krav-og-utlegg";
 // Tilgangspakkene systemet trenger nå: «Lønn» alltid, og de for funksjonene som er slått på.
-export const tilgangspakker = () => [TILGANGSPAKKE, ...(config.ameldingInnsending ? [A_ORDNING] : []), ...(config.navSykepenger ? [NAV_SYKEPENGER] : [])];
+export const tilgangspakker = () => [
+  TILGANGSPAKKE,
+  ...(config.ameldingInnsending ? [A_ORDNING] : []),
+  ...(config.navSykepenger ? [NAV_SYKEPENGER] : []),
+  ...(config.kravOgFrister ? [KRAV_OG_UTLEGG] : []),
+];
 export const PAKKENAVN: Record<string, string> = {
   [TILGANGSPAKKE]: "Lønn",
   [A_ORDNING]: "A-ordningen",
   [NAV_SYKEPENGER]: "Lønn med personopplysninger av særlig kategori",
+  [KRAV_OG_UTLEGG]: "Krav, betalinger og utlegg",
 };
 // Hva hver tilgangspakke brukes til (teksten i appen når den mangler).
 export const PAKKEBRUK: Record<string, string> = {
   [TILGANGSPAKKE]: "skattekortene",
   [A_ORDNING]: "a-meldingen",
   [NAV_SYKEPENGER]: "sykmeldinger og inntektsmeldinger hos NAV",
+  [KRAV_OG_UTLEGG]: "krav, betalinger og frister fra Skatteetaten",
 };
 // Adressen Altinn sender brukeren tilbake til (må stå i systemregisteret, nøyaktig slik). Forespørslene
 // lages i bakgrunnen og bruker hoveddomenet; systemregisteret har adressen på alle appens domener, så
@@ -62,23 +71,35 @@ export function altinnFeil(svar: { status: number; data: any; tekst: string }, h
 
 // --- Systemregisteret (leverandøren, én gang) ------------------------------------------------
 
+// Beskrivelsen kunden ser i Altinn: det systemet gjør med tilgangen, etter funksjonene som er slått på.
+function beskrivelse(navn: string) {
+  const krav = config.kravOgFrister;
+  const tekst = config.ameldingInnsending
+    ? {
+        nb: `${navn} henter skattekortene til de ansatte fra Skatteetaten og sender a-meldingen fra lønnskjøringen.`,
+        nn: `${navn} hentar skattekorta til dei tilsette frå Skatteetaten og sender a-meldinga frå lønnskøyringa.`,
+        en: `${navn} retrieves the employees' tax deduction cards and submits the a-melding from payroll.`,
+      }
+    : {
+        nb: `${navn} henter skattekortene til de ansatte fra Skatteetaten til lønnskjøringen.`,
+        nn: `${navn} hentar skattekorta til dei tilsette frå Skatteetaten til lønnskøyringa.`,
+        en: `${navn} retrieves the employees' tax deduction cards from the Norwegian Tax Administration for payroll.`,
+      };
+  if (!krav) return tekst;
+  return {
+    nb: `${tekst.nb} Regnskapet viser kravene, betalingene og fristene hos Skatteetaten.`,
+    nn: `${tekst.nn} Rekneskapen viser krava, betalingane og fristane hos Skatteetaten.`,
+    en: `${tekst.en} The accounts show the claims, payments and deadlines at the Norwegian Tax Administration.`,
+  };
+}
+
 export function systemdefinisjon() {
   const navn = config.altinnSystemnavn;
   return {
     id: systemId(),
     vendor: { authority: "iso6523-actorid-upis", ID: `0192:${config.leverandorOrgnr}` },
     name: { nb: navn, nn: navn, en: navn },
-    description: config.ameldingInnsending
-      ? {
-          nb: `${navn} henter skattekortene til de ansatte fra Skatteetaten og sender a-meldingen fra lønnskjøringen.`,
-          nn: `${navn} hentar skattekorta til dei tilsette frå Skatteetaten og sender a-meldinga frå lønnskøyringa.`,
-          en: `${navn} retrieves the employees' tax deduction cards and submits the a-melding from payroll.`,
-        }
-      : {
-          nb: `${navn} henter skattekortene til de ansatte fra Skatteetaten til lønnskjøringen.`,
-          nn: `${navn} hentar skattekorta til dei tilsette frå Skatteetaten til lønnskøyringa.`,
-          en: `${navn} retrieves the employees' tax deduction cards from the Norwegian Tax Administration for payroll.`,
-        },
+    description: beskrivelse(navn),
     accessPackages: tilgangspakker().map((urn) => ({ urn })),
     clientId: config.maskinportenKlientId ? [config.maskinportenKlientId] : [],
     allowedRedirectUrls: appUrler().map((u) => godkjentUrl(u)),

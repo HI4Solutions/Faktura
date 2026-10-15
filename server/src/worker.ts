@@ -17,6 +17,7 @@ import { sendBursdager } from "./bursdager.js";
 import { endreTilgang, hentSkattekort, hentSkattekortSvar, lagTilgang, planleggDagligSkattekort, planleggTilgangssjekk, registrerAltinnSystem, sjekkTilgang } from "./skattekort.js";
 import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingInnsending.js";
 import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepenger.js";
+import { hentKravOgFrister, planleggKravOgFrister } from "./skatteetatenKrav.js";
 import { aktiverLonnsendringer } from "./lonnsendringer.js";
 import { lonnHverMorgen, oppdaterLonnsutkast } from "./lonnAutomatikk.js";
 import { bokforSalgForAlle } from "./salgBokforing.js";
@@ -176,6 +177,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "amelding-status") return sjekkAmelding(o.org_id, o.amelding_id, o.forsok);
   if (o.type === "nav-hent") return hentFraNav(o.org_id);
   if (o.type === "nav-inntektsmelding") return sendInntektsmelding(o.org_id, o.inntektsmelding_id);
+  if (o.type === "skatteetaten-hent") return void (await hentKravOgFrister(o.org_id));
   if (o.type === "rapport-send") return sendRapporter(o);
   if (o.type === "epostbekreftelse") return sendEpostbekreftelse(o);
   return sendEpost(o);
@@ -630,6 +632,12 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
 
+  // Skatteetaten: kravene og betalingene, og fristene.
+  app.post("/oppgaver/skatteetaten-hent", async (c) => {
+    const o = skattOppgave.parse(await c.req.json());
+    return c.json((await hentKravOgFrister(o.org_id)) ?? { ok: true });
+  });
+
   // Rapportmodulen: rapporter på e-post til regnskapsføreren.
   app.post("/oppgaver/rapport-send", async (c) => {
     const o = z
@@ -659,7 +667,8 @@ export function lagWorker() {
   // hentetidene (planleggingen tar hver hentetid én gang per bank), sjekker nye kunder for
   // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker
   // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
-  // a-meldingene som venter på tilbakemelding. Lønnsutkastene der noe er endret, regnes ut på nytt,
+  // a-meldingene som venter på tilbakemelding. Krav og frister fra Skatteetaten hentes når tilgangen
+  // er godkjent og hver morgen fra kl. 06 (skatteetatenKrav.ts). Lønnsutkastene der noe er endret, regnes ut på nytt,
   // fakturaene og innbetalingene som ikke er bokført, bokføres (salgBokforing.ts), og bankpostene
   // avstemmes (bankAvstemming.ts). Fra kl. 08 den 1. går månedsavslutningen (maanedsavslutning.ts), og
   // når den er ferdig for alle, månedsrapportene til regnskapsførerne som har bedt om dem.
@@ -672,6 +681,7 @@ export function lagWorker() {
     await planleggTilgangssjekk().catch((e) => logg("ERROR", "Sjekk av tilgangene i Altinn feilet", { feil: (e as Error).message }));
     await planleggAmeldingssjekk().catch((e) => logg("ERROR", "Sjekk av a-meldingene feilet", { feil: (e as Error).message }));
     await planleggNavHenting().catch((e) => logg("ERROR", "Planlegging av hentingen fra NAV feilet", { feil: (e as Error).message }));
+    await planleggKravOgFrister().catch((e) => logg("ERROR", "Planlegging av krav og frister fra Skatteetaten feilet", { feil: (e as Error).message }));
     await oppdaterLonnsutkast().catch((e) => logg("ERROR", "Omregningen av lønnsutkastene feilet", { feil: (e as Error).message }));
     await bokforSalgForAlle().catch((e) => logg("ERROR", "Bokføringen av fakturaene og innbetalingene feilet", { feil: (e as Error).message }));
     await avstemBankForAlle().catch((e) => logg("ERROR", "Avstemmingen av banken feilet", { feil: (e as Error).message }));

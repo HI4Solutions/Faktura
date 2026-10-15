@@ -95,6 +95,13 @@ export const config = {
   // særlig kategori». Adressen følger miljøet; den kan overstyres (tester).
   navSykepenger: ["1", "true", "ja"].includes((valgfri("NAV_SYKEPENGER") ?? "").toLowerCase()),
   navUrl: valgfri("NAV_SYKEPENGER_URL"),
+  // Krav og betalinger og frister fra Skatteetaten (docs/skatteetaten-krav.md): på når Medinnova
+  // AS har lagt scopene skatteetaten:kravogbetalinger og skatteetaten:frister på
+  // Maskinporten-klienten. Da ber systemet også om tilgangspakken «Krav, betalinger og utlegg», og
+  // Regnskap får fanen «Skatteetaten». Adressene følger miljøet; de kan overstyres (tester).
+  kravOgFrister: ["1", "true", "ja"].includes((valgfri("KRAV_OG_FRISTER") ?? "").toLowerCase()),
+  kravUrl: valgfri("KRAV_OG_BETALINGER_URL"),
+  fristerUrl: valgfri("FRISTER_URL"),
 
   // AI: Gemini på Vertex AI i prosjektet (uten prosjekt er AI-funksjonene skjult), i EU.
   // Regionen kan også være multiregionen «eu» eller «global».

@@ -48,6 +48,8 @@ jobs:
       TF_VAR_amelding_innsending: ${{ vars.AMELDING_INNSENDING || 'false' }}
       # Sykepenger fra NAV (docs/nav.md): av til scopet nav:helseytelser/sykepenger er på klienten.
       TF_VAR_nav_sykepenger: ${{ vars.NAV_SYKEPENGER || 'false' }}
+      # Krav og frister fra Skatteetaten (docs/skatteetaten-krav.md): av til scopene er på klienten.
+      TF_VAR_krav_og_frister: ${{ vars.KRAV_OG_FRISTER || 'false' }}
     steps:
       - uses: actions/checkout@v4
 

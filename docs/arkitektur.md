@@ -922,6 +922,22 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `NAV_SYKEPENGER` er satt; da ber systemet i Altinn også om tilgangspakken «Lønn med
   personopplysninger av særlig kategori», og kunder som er koblet til, utvider tilgangen som for
   a-meldingen
+- Krav, betalinger og frister fra Skatteetaten (`0112_skatteetaten_krav.sql`,
+  `server/src/skatteetatenKrav.ts`, `server/src/skatteetatenRuter.ts`,
+  `server/src/skatteetatenRapporter.ts`, `web/src/sider/RegnskapSkatteetaten.tsx`,
+  `docs/skatteetaten-krav.md`): Krav og betalinger API (åpne krav med forfall og
+  betalingsinformasjon, innbetalinger og utbetalinger det siste året) og Frister API, med
+  systembrukeren i Altinn (tilgangspakken «Krav, betalinger og utlegg», rettighetspakken
+  `regnskapssystem`) og hvert sitt Maskinporten-token (`skatteetaten:kravogbetalinger` og
+  `skatteetaten:frister`). Hjerteslaget legger organisasjonene med tilgangspakken og Regnskap i kø
+  når de ikke er hentet ennå og hver morgen fra kl. 06 (`skatteetaten_krav.forsokt`); «Hent nå» høyst
+  én gang i minuttet. Svarene tolkes og lagres for seg (krav og frister, med feilen fra siste
+  forsøk); ingen krav eller frister (KB-007, KB-009, FRI-007) er et tomt svar. Fanen
+  «Skatteetaten» under Regnskap, «Til oppfølging» på Oversikt, og rapportene
+  `regnskap.skatteetaten_krav`, `regnskap.skatteetaten_frister` og
+  `regnskap.skatteetaten_betalinger` (bare når hentingen er på, `Rapportdef.aktiv`). Av til
+  `KRAV_OG_FRISTER` er satt; da ber systemet i Altinn også om tilgangspakken, og kunder som er
+  koblet til, utvider tilgangen som for a-meldingen
 - Lønns- og stillingsendringer (`0080_lonnsendringer.sql`, `server/src/lonnsendringer.ts`,
   `web/src/sider/Lonnsendringer.tsx`): lønnen og stillingsprosenten har en historikk
   (`lonnsendringer`). Hver endring gjelder fra en dato og har bare feltene som endres (lønnstypen,

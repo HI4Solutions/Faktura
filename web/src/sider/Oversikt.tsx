@@ -19,6 +19,7 @@ import type { VaktSvar } from "./Vakter";
 import type { ByttSvar } from "./Vaktbytte";
 import { fravaerTekst } from "./Fravaer";
 import { antall, hilsen, Oppfolging, Tall, type Oppgave } from "./OversiktDeler";
+import type { Skatteetatenstatus } from "./RegnskapSkatteetaten";
 
 export function Oversikt() {
   const { org, meg, velgOrg } = useKonto();
@@ -478,7 +479,8 @@ function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData |
 }
 
 // Regnskapet: punktene i månedsavslutningen for forrige måned som ikke er i orden (bankpostene,
-// utgiftene og resten), med lenke dit (RegnskapAvslutning.tsx).
+// utgiftene og resten), med lenke dit (RegnskapAvslutning.tsx). Og fra Skatteetaten
+// (RegnskapSkatteetaten.tsx): det som er forfalt, det som forfaller og fristene de neste to ukene.
 function useRegnskap(): { oppgaver: Oppgave[]; laster: boolean } {
   const { org } = useKonto();
   const se = harFunksjon(org, "regnskap") && kanSeRegnskap(org) && org?.type !== "regnskapsbyraa";
@@ -492,11 +494,38 @@ function useRegnskap(): { oppgaver: Oppgave[]; laster: boolean } {
     [org?.id, se],
     { oppdater: true },
   );
+  const skatt = useData(
+    () => (se ? hent<Skatteetatenstatus>(`/org/${org!.id}/regnskap/skatteetaten`).catch(() => null) : Promise.resolve(null)),
+    [org?.id, se],
+    { oppdater: true },
+  );
   const s = status.data;
   const oppgaver: Oppgave[] = (s?.punkter ?? [])
     .filter((p) => !p.ok && !p.venter)
     .map((p) => ({ nokkel: `regnskap-${p.nokkel}`, tekst: `${p.navn} (${s!.navn.toLowerCase()}): ${p.tekst}`, til: p.lenke }));
-  return { oppgaver, laster: status.laster };
+  return { oppgaver: [...skatteoppgaver(skatt.data), ...oppgaver], laster: status.laster || skatt.laster };
+}
+
+// Fra Skatteetaten: det som er forfalt, det som forfaller de neste to ukene (med den første datoen),
+// og fristene de neste to ukene.
+function skatteoppgaver(s: Skatteetatenstatus | null | undefined): Oppgave[] {
+  if (!s?.pa) return [];
+  const idag = iDag();
+  const om14 = leggTilDager(idag, 14);
+  const til = "/regnskap?fane=skatteetaten";
+  const k = s.krav.data;
+  const snart = (k?.aapne ?? []).flatMap((x) => x.forfall.filter((f) => f.gjenstaaende > 0 && f.dato && f.dato >= idag && f.dato <= om14));
+  const forst = snart.map((f) => f.dato!).sort()[0];
+  return [
+    ...(k && k.summer.forfalt > 0 ? [{ nokkel: "skatt-forfalt", tekst: `Forfalt til Skatteetaten: ${kr(k.summer.forfalt)} kr`, til, fare: true }] : []),
+    ...(snart.length
+      ? [{ nokkel: "skatt-forfaller", tekst: `Betal ${kr(snart.reduce((sum, f) => sum + f.gjenstaaende, 0))} kr til Skatteetaten innen ${dato(forst)}`, til }]
+      : []),
+    ...(s.frister.data?.frister ?? [])
+      .filter((f) => f.frist >= idag && f.frist <= om14)
+      .slice(0, 3)
+      .map((f, i) => ({ nokkel: `skatt-frist-${i}`, tekst: `${f.tittel.replace(/\.$/, "")} – frist ${dato(f.frist)}`, til })),
+  ];
 }
 
 // Hvem som er på jobb og borte i dag, og vaktene uten ansatt.

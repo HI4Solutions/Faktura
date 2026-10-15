@@ -92,6 +92,8 @@ export type Oppgave =
   // NAV: sykmeldingene og forespørslene om inntektsmelding, og inntektsmeldingen som sendes.
   | { type: "nav-hent"; org_id: string }
   | { type: "nav-inntektsmelding"; org_id: string; inntektsmelding_id: string }
+  // Skatteetaten: kravene og betalingene, og fristene (skatteetatenKrav.ts).
+  | { type: "skatteetaten-hent"; org_id: string }
   // Rapportmodulen: rapporter (CSV og PDF) på e-post til regnskapsføreren.
   | {
       type: "rapport-send";
@@ -128,6 +130,7 @@ export const OPPGAVETYPER = [
   "amelding-status",
   "nav-hent",
   "nav-inntektsmelding",
+  "skatteetaten-hent",
   "rapport-send",
 ] as const satisfies readonly Oppgave["type"][];
 const alleOppgavetyper: Exclude<Oppgave["type"], (typeof OPPGAVETYPER)[number]> extends never ? true : never = true;

@@ -227,6 +227,14 @@ Mva-meldingen for hver termin regnes fra bilagene (Regnskap → Mva; `server/src
 - Når terminen er levert, kan den låses (lenken under «Levert i Altinn»): det som føres senere med en
   dato i terminen, havner da i neste termin, og meldingen som er levert, endres ikke.
 
+## Krav, betalinger og frister fra Skatteetaten
+
+Fanen «Skatteetaten» viser det organisasjonen skylder Skatteetaten (forfalt, ikke forfalt,
+stipulerte renter og saldoen), de åpne kravene med forfall, kontonummer og KID, fristene for
+mva-meldingen og skattemeldingen, og innbetalingene og utbetalingene det siste året, hentet med
+systembrukeren i Altinn (tilgangspakken «Krav, betalinger og utlegg»). Det som er forfalt og
+fristene de neste to ukene står også på Oversikt. Se `docs/skatteetaten-krav.md`.
+
 ## Mva-justering for kapitalvarer (bilagserie V)
 
 Fradraget for inngående avgift på kapitalvarer justeres når bruken endres (merverdiavgiftsloven

@@ -42,7 +42,7 @@ import { iFakturadelen } from "./fakturameny";
 import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
   IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
-  IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva,
+  IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva, IkonSkatteetaten,
   IkonNed, IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSkjold, IkonTavle, IkonTimebank,
   IkonUtgift, IkonVelg,
 } from "./ikoner";
@@ -352,6 +352,7 @@ function Ramme() {
     ["utgifter", "Utgifter", IkonUtgift],
     ["bank", "Bank", IkonBank],
     ["mva", "Mva", IkonMva],
+    ["skatteetaten", "Skatteetaten", IkonSkatteetaten],
     ["saldobalanse", "Saldobalanse", IkonBalanse],
     ["aarsoppgjor", "Årsoppgjør", IkonAarsoppgjor],
     ["anlegg", "Anleggsmidler", IkonAnlegg],

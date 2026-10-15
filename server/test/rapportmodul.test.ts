@@ -50,6 +50,21 @@ describe("rapportmodulen: valg og perioder", () => {
       expect.arrayContaining(["faktura.journal", "faktura.mva", "personal.timer", "lonn.journal", "lonn.lonnsarter", "lonn.skatt_aga", "lonn.avstemming", "lonn.nav_refusjoner", "regnskap.avskrivninger", "regnskap.saldobalanse", "regnskap.bilagsjournal"]),
     );
   });
+
+  it("kravene, fristene og betalingene fra Skatteetaten er med bare når hentingen er slått på", () => {
+    const skatt = RAPPORTER.filter((r) => r.id.startsWith("regnskap.skatteetaten_"));
+    expect(skatt.map((r) => [r.id, r.parameter, r.maanedlig, r.tilgang, r.funksjon])).toEqual([
+      ["regnskap.skatteetaten_krav", "ingen", true, "regnskap", "regnskap"],
+      ["regnskap.skatteetaten_frister", "ingen", true, "regnskap", "regnskap"],
+      ["regnskap.skatteetaten_betalinger", "periode", true, "regnskap", "regnskap"],
+    ]);
+    const foer = config.kravOgFrister;
+    config.kravOgFrister = false;
+    expect(skatt.every((r) => r.aktiv?.() === false)).toBe(true);
+    config.kravOgFrister = true;
+    expect(skatt.every((r) => r.aktiv?.() === true)).toBe(true);
+    config.kravOgFrister = foer;
+  });
 });
 
 describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
@@ -253,6 +268,22 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     expect(av.status).toBe(403);
     expect(av.data.error).toBe("Funksjonen rapporten hører til, er ikke slått på");
     expect((await kall("PUT", `/api/admin/organisasjoner/${org}/funksjoner`, { lonn: true }, admin)).status).toBe(200);
+  });
+
+  it("kravene, fristene og betalingene fra Skatteetaten står i lista når hentingen er på, også for regnskap", async () => {
+    const skatt = ["regnskap.skatteetaten_krav", "regnskap.skatteetaten_frister", "regnskap.skatteetaten_betalinger"];
+    expect((await moduler()).regnskap).not.toContain(skatt[0]);
+    config.kravOgFrister = true;
+    try {
+      expect((await moduler()).regnskap.slice(-3)).toEqual(skatt);
+      expect((await moduler(regnskap)).regnskap.slice(-3)).toEqual(skatt);
+      expect(await moduler(fakturerer)).not.toHaveProperty("regnskap");
+      const r = await kall("GET", `/api/org/${org}/rapportmodul/regnskap.skatteetaten_krav`);
+      expect(r.status).toBe(200);
+      expect(r.data).toMatchObject({ rader: [], merknad: "Kravene er ikke hentet fra Skatteetaten ennå.", periode: expect.stringMatching(/^per \d{2}\.\d{2}\.\d{4}$/) });
+    } finally {
+      config.kravOgFrister = false;
+    }
   });
 
   it("fakturarapportene som tabell, CSV og PDF", async () => {

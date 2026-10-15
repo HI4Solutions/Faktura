@@ -49,6 +49,7 @@ import { afpRuter } from "./afpPremier.js";
 import { virksomhetRuter } from "./virksomheter.js";
 import { yrkesskadeRuter } from "./yrkesskader.js";
 import { regnskapRuter } from "./regnskapRuter.js";
+import { skatteetatenRuter } from "./skatteetatenRuter.js";
 import { regnskapBilagRuter } from "./regnskapBilagRuter.js";
 import { utgiftRuter } from "./utgifter.js";
 import { bankRegnskapRuter } from "./regnskapBank.js";
@@ -473,6 +474,7 @@ export function lagApi() {
   org.route("/", aarsoppgjorRuter());
   org.route("/", saftRuter());
   org.route("/", mvaJusteringRuter());
+  org.route("/", skatteetatenRuter());
   org.route("/", skattekortRuter());
   // Rapportmodulen: hver rapport krever sin funksjon og tilgang (rapportmodul.ts).
   org.route("/", rapportmodulRuter());

@@ -36,6 +36,7 @@ import { mvaRapporter } from "./mva.js";
 import { aarsoppgjorRapporter } from "./aarsoppgjor.js";
 import { mvaJusteringRapporter } from "./mvaJustering.js";
 import { naeringsspesifikasjonRapporter } from "./naeringsspesifikasjon.js";
+import { skatteetatenRapporter } from "./skatteetatenRapporter.js";
 
 // --- Typene ---------------------------------------------------------------------------------------
 
@@ -64,6 +65,7 @@ export type Rapportdef = {
   tilgang: "les" | "personal_les" | "personal" | "regnskap"; // handlingen brukeren må kunne (faktura.kan)
   parameter: Parameter;
   maanedlig?: boolean; // kan sendes til regnskapsføreren hver måned (for forrige måned)
+  aktiv?: () => boolean; // vises bare når det er sant (f.eks. når en integrasjon er slått på)
   hent: (db: Db, org: string, v: Valg) => Promise<Rapportdata>;
 };
 
@@ -98,6 +100,7 @@ export const RAPPORTER: Rapportdef[] = [
   ...aarsoppgjorRapporter,
   ...mvaJusteringRapporter,
   ...naeringsspesifikasjonRapporter,
+  ...skatteetatenRapporter,
 ];
 const PER_ID = new Map(RAPPORTER.map((r) => [r.id, r]));
 export const rapport = (id: string) => PER_ID.get(id);
@@ -169,7 +172,7 @@ export async function tilgjengelige(db: Db, org: string): Promise<Rapportdef[]> 
     [org, par],
   );
   const ok = new Set(svar.filter((x) => x.ok).map((x) => x.par));
-  return RAPPORTER.filter((r) => ok.has(nokkel(r)));
+  return RAPPORTER.filter((r) => ok.has(nokkel(r)) && (r.aktiv?.() ?? true));
 }
 
 export async function kjorRapport(db: Db, org: string, def: Rapportdef, inn: ValgInn): Promise<Rapportresultat> {
@@ -436,7 +439,7 @@ export async function planleggMaanedsrapporter(iDag = osloIDag()): Promise<numbe
   for (const r of rader) {
     const rapporter = r.maanedlig
       .map((id) => rapport(id))
-      .filter((d): d is Rapportdef => !!d && !!d.maanedlig)
+      .filter((d): d is Rapportdef => !!d && !!d.maanedlig && (d.aktiv?.() ?? true))
       .flatMap((d): { id: string; valg: ValgInn }[] => {
         if (d.parameter === "periode") return [{ id: d.id, valg: { fra, til } }];
         if (d.parameter === "termin" && forrige.mnd % 2 === 0) return [{ id: d.id, valg: { aar: forrige.aar, termin: forrige.mnd / 2 } }];

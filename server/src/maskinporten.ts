@@ -27,6 +27,11 @@ export class EtatFeil extends Error {
   }
 }
 
+// Krav og betalinger og Frister: rettighetspakken (regnskapssystem, for systembrukeren) står i
+// adressen, som i eksemplene Skatteetaten hadde i dokumentasjonen
+// (/api/innkreving/kravogbetalinger/v1/{rettighetspakke}/{organisasjonsnummer}/aapnekrav). Den
+// nøyaktige adressen står i OpenAPI-spesifikasjonene på SwaggerHub (krav-og-betalinger-api og
+// frister-api); svarer Skatteetaten KB-003 eller FRI-003 (ukjent adresse), er det her den rettes.
 const ADRESSER = {
   test: {
     maskinporten: "https://test.maskinporten.no",
@@ -34,6 +39,8 @@ const ADRESSER = {
     skattekort: "https://api-test.sits.no/api/forskudd",
     amelding: "https://innrapporteringamelding.api.skatteetaten-test.no/v1",
     nav: "https://sykepenger-api.ekstern.dev.nav.no",
+    krav: "https://api-test.sits.no/api/innkreving/kravogbetalinger/v1/regnskapssystem",
+    frister: "https://api-test.sits.no/api/innkreving/frister/v1/regnskapssystem",
   },
   prod: {
     maskinporten: "https://maskinporten.no",
@@ -41,6 +48,8 @@ const ADRESSER = {
     skattekort: "https://api.skatteetaten.no/api/forskudd",
     amelding: "https://innrapporteringamelding.api.skatteetaten.no/v1",
     nav: "https://sykepenger-api.nav.no",
+    krav: "https://api.skatteetaten.no/api/innkreving/kravogbetalinger/v1/regnskapssystem",
+    frister: "https://api.skatteetaten.no/api/innkreving/frister/v1/regnskapssystem",
   },
 };
 
@@ -52,6 +61,8 @@ export function adresser() {
     skattekort: config.skattekortUrl ?? a.skattekort,
     amelding: config.ameldingUrl ?? a.amelding,
     nav: config.navUrl ?? a.nav,
+    krav: config.kravUrl ?? a.krav,
+    frister: config.fristerUrl ?? a.frister,
   };
 }
 
@@ -73,6 +84,9 @@ export const SCOPE = {
   // Sykepenger fra NAV: sykmeldinger, forespørsler og inntektsmeldinger (eget token, nøyaktig dette
   // scopet).
   nav: "nav:helseytelser/sykepenger",
+  // Krav og betalinger og frister fra Skatteetaten (hvert sitt token, så det ene virker uten det andre).
+  krav: "skatteetaten:kravogbetalinger",
+  frister: "skatteetaten:frister",
 };
 
 const b64 = (x: string | Buffer) => Buffer.from(x).toString("base64url");

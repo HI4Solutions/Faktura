@@ -3089,3 +3089,14 @@ td.idag .pt-dato { background: var(--aksent); color: var(--aksent-tekst); }
 .min-rad dd { margin: 0; overflow-wrap: anywhere; }
 /* Hjelpen om tastene vises ikke på berøringsskjermer. */
 @media (hover: none) { .kun-tastatur { display: none; } }
+
+/* --------------------------------------------------------------------------
+   Skatteetaten under Regnskap (sider/RegnskapSkatteetaten.tsx)
+   -------------------------------------------------------------------------- */
+.skatt-betaling { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
+.skatt-betaling span { white-space: nowrap; }
+.skatt-betaling button.lenke { margin-left: 4px; font-size: 0.82rem; }
+.skatt-naar { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.skatt-rad { cursor: default; }
+.skatt-rad:hover:not(:disabled), .skatt-rad:active:not(:disabled) { background: none; }
+.skatt-rad .tittel, .skatt-rad .under { white-space: normal; }

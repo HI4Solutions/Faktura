@@ -4,10 +4,11 @@
 // år (også goodwill), nedskrivning og reversering, salg og utrangering, periodiseringene
 // (RegnskapPeriodiseringer.tsx), månedsavslutningen (RegnskapAvslutning.tsx), saldoavskrivningene
 // (skattemessig, med goodwill i gruppe b) og kontoene. Eier, administrator og regnskap, med
-// funksjonen «Regnskap».
+// funksjonen «Regnskap». Kravene, betalingene og fristene hos Skatteetaten står i fanen «Skatteetaten»
+// (RegnskapSkatteetaten.tsx).
 //
-// Fanen står i adressen (?fane=bilag|utgifter|bank|mva|saldobalanse|aarsoppgjor|anlegg|periodiseringer|saldo|
-// kontoer), og det som er åpent, med ?anlegg=, ?periodisering=, ?utgift=, ?post= eller ?aar= (og ?termin=).
+// Fanen står i adressen (?fane=bilag|utgifter|bank|mva|skatteetaten|saldobalanse|aarsoppgjor|anlegg|periodiseringer|
+// saldo|kontoer), og det som er åpent, med ?anlegg=, ?periodisering=, ?utgift=, ?post= eller ?aar= (og ?termin=).
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
@@ -22,6 +23,7 @@ import { Utgifter } from "./RegnskapUtgifter";
 import { Bank, visKonto, type Bankoversikt } from "./RegnskapBank";
 import { Mva } from "./RegnskapMva";
 import { Aarsoppgjor } from "./RegnskapAarsoppgjor";
+import { Skatteetaten } from "./RegnskapSkatteetaten";
 import { Kapitalvare, justeringTekst, salgsforslag, type Kapitalvarestatus } from "./RegnskapMvaJustering";
 
 type Kategori = { kode: string; navn: string; konto: string; avskrivningskonto: string | null; skatt: string; levetid_mnd: number | null };
@@ -126,6 +128,7 @@ export function Regnskap() {
     ["utgifter", "Utgifter"],
     ["bank", "Bank"],
     ["mva", "Mva"],
+    ["skatteetaten", "Skatteetaten"],
     ["saldobalanse", "Saldobalanse"],
     ["aarsoppgjor", "Årsoppgjør"],
     ["anlegg", "Anleggsmidler"],
@@ -173,6 +176,7 @@ export function Regnskap() {
         // Ny termin, nytt skjema (meldinger og feil fra den forrige blir ikke stående).
         <Mva key={`${sok.get("aar")}-${sok.get("termin")}`} aar={sok.get("aar")} termin={sok.get("termin")} velg={(aar, termin) => ga({ aar, termin })} />
       )}
+      {fane === "skatteetaten" && <Skatteetaten />}
       {fane === "saldobalanse" && <Saldobalansen />}
       {fane === "aarsoppgjor" && <Aarsoppgjor key={sok.get("aar") ?? ""} aar={sok.get("aar")} velg={(aar) => ga({ aar })} />}
       {fane === "anlegg" && <Anleggsmidler apne={(id) => ga({ anlegg: id })} />}

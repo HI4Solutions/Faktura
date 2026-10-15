@@ -14,8 +14,8 @@ describe("oppgavene til workeren", () => {
     expect(OPPGAVETYPER.filter((t) => !ruter.has(`/oppgaver/${t}`))).toEqual([]);
   });
 
-  it("sjekker oppgaven før den kjøres (Altinn, a-meldingen og NAV)", async () => {
-    for (const t of ["altinn-endring", "amelding-lag", "amelding-status", "nav-hent", "nav-inntektsmelding"]) {
+  it("sjekker oppgaven før den kjøres (Altinn, a-meldingen, NAV og Skatteetaten)", async () => {
+    for (const t of ["altinn-endring", "amelding-lag", "amelding-status", "nav-hent", "nav-inntektsmelding", "skatteetaten-hent"]) {
       const r = await worker.request(`/oppgaver/${t}`, {
         method: "POST",
         headers: { "content-type": "application/json" },

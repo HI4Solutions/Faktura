@@ -310,6 +310,15 @@ export const IkonReise = (p: P) => (
 // Regnskapet: bilag (en kvittering med linjer), utgifter (kvittering med minus), bank, mva
 // (prosent), saldobalanse (vekt), årsoppgjør (bok), anleggsmidler (bygning), periodiseringer
 // (tidslinje), saldoavskrivninger (synkende kurve) og kontoene (nummerert liste).
+// Skatteetaten (krav og frister): et ark med en klokke.
+export const IkonSkatteetaten = (p: P) => (
+  <Ikon {...p}>
+    <path d="M12.5 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l4 4v3.5" />
+    <path d="M9 8h4.5M9 12h3" />
+    <circle cx="17" cy="17" r="4" />
+    <path d="M17 15.2V17l1.2 1.2" />
+  </Ikon>
+);
 export const IkonBilag = (p: P) => (
   <Ikon {...p}>
     <path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z" />

@@ -153,6 +153,12 @@ variable "nav_sykepenger" {
   default     = false
 }
 
+variable "krav_og_frister" {
+  description = "Krav og betalinger og frister hentes fra Skatteetaten til fanen «Skatteetaten» under Regnskap (Medinnova AS har lagt scopene skatteetaten:kravogbetalinger og skatteetaten:frister på Maskinporten-klienten), og systemet i Altinn ber om tilgangspakken «Krav, betalinger og utlegg». Settes med GitHub-variabelen KRAV_OG_FRISTER (true)."
+  type        = bool
+  default     = false
+}
+
 variable "maskinporten_nokkel_id" {
   description = "Nøkkel-ID-en (kid) til nøkkelen på Maskinporten-klienten. Settes med GitHub-variabelen MASKINPORTEN_NOKKEL_ID."
   type        = string
