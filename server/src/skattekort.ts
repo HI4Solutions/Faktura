@@ -346,7 +346,15 @@ export async function endreTilgang(orgId: string) {
     if (t.endring_status === "venter") {
       const mangler = tilgangspakker().filter((p) => !t.pakker.includes(p));
       if (!mangler.length) return void (await felt({ endring_status: "godkjent", endring_feil: null }));
-      const f = await lagEndringsforesporsel(t.orgnr, mangler);
+      const f = await lagEndringsforesporsel(t.orgnr, mangler).catch(async (e) => {
+        // Systemet i Altinns systemregister har ikke pakkene ennå (AUTH-00063, f.eks. når a-meldingen
+        // nettopp er slått på): det oppdateres med det systemet trenger nå, som «Oppdater i Altinn»
+        // under Drift, og forespørselen prøves én gang til.
+        if (!(e instanceof EtatFeil && e.kode === "AUTH-00063")) throw e;
+        const r = await registrerAltinnSystem();
+        if (!r.ok) throw new EtatFeil(`Systemet i Altinn mangler tilgangspakkene og kunne ikke oppdateres: ${r.feil}`, 409);
+        return lagEndringsforesporsel(t.orgnr!, mangler);
+      });
       await felt({ endring_status: f.status, endring_id: f.id, endring_url: f.godkjennUrl, endring_pakker: mangler, endring_feil: null });
       if (f.status === "godkjent") await felt({ pakker: [...new Set([...t.pakker, ...mangler])] });
       return;

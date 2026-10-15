@@ -313,6 +313,8 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
   const ko: Oppgave[] = [];
   const filer = new Map<string, Uint8Array>();
   const kall: { metode: string; url: string; kropp: any }[] = [];
+  // Om systemet i Altinns systemregister har tilgangspakkene endringsforespørselen ber om.
+  let systemetHarPakkene = false;
   let org: string;
   let kari: string;
   let per: string;
@@ -362,10 +364,18 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
         return u.searchParams.get("orgno") === "915000177"
           ? json(200, { id: "7c1d2e3f-0000-4000-8000-00000000b001", systemId: "936564046_lonn", reporteeOrgNo: "915000177" })
           : new Response(null, { status: 404 });
-      if (k.metode === "POST" && u.pathname === "/authentication/api/v1/systemuser/changerequest/vendor")
-        return u.searchParams.get("correlation-id") && u.searchParams.get("system-user-id")
-          ? json(201, { id: u.searchParams.get("correlation-id"), status: "New", confirmUrl: "https://altinn.test/godkjenn/endring" })
-          : new Response("Missing or invalid QueryParameter: correlation-id.", { status: 400, headers: { "content-type": "text/plain" } });
+      // Systemet i systemregisteret: oppdateres (PUT) med tilgangspakkene systemet trenger nå.
+      if (u.pathname === "/authentication/api/v1/systemregister/vendor/936564046_lonn") {
+        if (k.metode === "PUT") systemetHarPakkene = k.kropp.accessPackages.some((p: any) => p.urn === "urn:altinn:accesspackage:a-ordning");
+        return json(200, { id: "936564046_lonn" });
+      }
+      if (k.metode === "POST" && u.pathname === "/authentication/api/v1/systemuser/changerequest/vendor") {
+        if (!u.searchParams.get("correlation-id") || !u.searchParams.get("system-user-id"))
+          return new Response("Missing or invalid QueryParameter: correlation-id.", { status: 400, headers: { "content-type": "text/plain" } });
+        if (!systemetHarPakkene)
+          return json(400, { title: "Bad Request", status: 400, detail: "One or more accesspackage is not found in the referenced system in the System Register.", code: "AUTH-00063" });
+        return json(201, { id: u.searchParams.get("correlation-id"), status: "New", confirmUrl: "https://altinn.test/godkjenn/endring" });
+      }
       if (u.pathname.startsWith("/authentication/api/v1/systemuser/changerequest/vendor/"))
         return json(200, { id: u.pathname.split("/").pop(), status: "Accepted" });
       throw new Error(`Uventet kall: ${k.metode} ${k.url}`);
@@ -469,7 +479,15 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     await kjor("altinn-endring");
     // Systembrukeren slås opp, og endringsforespørselen har ID-en dens og en ny korrelasjons-ID.
     expect(kall.some((k) => k.url === "altinn.test/authentication/api/v1/systemuser/vendor/byquery?system-id=936564046_lonn&orgno=915000177")).toBe(true);
-    const endring = kall.find((k) => k.metode === "POST" && k.url.includes("/systemuser/changerequest/vendor?"))!;
+    // Systemet i Altinn hadde ikke «A-ordningen» (AUTH-00063): det ble oppdatert, og forespørselen
+    // prøvd igjen.
+    const endringer = kall.filter((k) => k.metode === "POST" && k.url.includes("/systemuser/changerequest/vendor?"));
+    expect(endringer).toHaveLength(2);
+    expect(kall.find((k) => k.metode === "PUT" && k.url.endsWith("/systemregister/vendor/936564046_lonn"))?.kropp.accessPackages).toEqual([
+      { urn: "urn:altinn:accesspackage:lonn" },
+      { urn: "urn:altinn:accesspackage:a-ordning" },
+    ]);
+    const endring = endringer[1];
     const q = new URL(`https://${endring.url}`).searchParams;
     expect(q.get("system-user-id")).toBe("7c1d2e3f-0000-4000-8000-00000000b001");
     expect(q.get("correlation-id")).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
