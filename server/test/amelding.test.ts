@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { config } from "../src/config.js";
 import { lagApi } from "../src/api.js";
-import { somSystem } from "../src/db.js";
+import { en, somSystem } from "../src/db.js";
 import { settKryptering } from "../src/kryptering.js";
 import { lagring, settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 import { settEtatFetch } from "../src/maskinporten.js";
@@ -357,9 +357,17 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
       if (u.host === "altinn.test" && u.pathname === "/dialogporten/api/v1/enduser/dialogs/dialog-1")
         return json(200, { transmissions: [{ attachments: [{ urls: [{ url: "https://tilbakemelding.test/v1/forsendelser/forsendelse-1", consumerType: "Api" }] }] }] });
       if (u.host === "tilbakemelding.test") return json(200, { mottak: { mottakstatus: "mottatt", avvik: [{ kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" }] } });
+      // Systembrukeren til organisasjonen (ID-en trengs til endringsforespørselen).
+      if (u.pathname === "/authentication/api/v1/systemuser/vendor/byquery")
+        return u.searchParams.get("orgno") === "915000177"
+          ? json(200, { id: "7c1d2e3f-0000-4000-8000-00000000b001", systemId: "936564046_lonn", reporteeOrgNo: "915000177" })
+          : new Response(null, { status: 404 });
       if (k.metode === "POST" && u.pathname === "/authentication/api/v1/systemuser/changerequest/vendor")
-        return json(201, { id: "4f0d7c4e-0000-4000-8000-0000000000e1", status: "New", confirmUrl: "https://altinn.test/godkjenn/endring" });
-      if (u.pathname === "/authentication/api/v1/systemuser/changerequest/vendor/4f0d7c4e-0000-4000-8000-0000000000e1") return json(200, { id: "4f0d7c4e-0000-4000-8000-0000000000e1", status: "Accepted" });
+        return u.searchParams.get("correlation-id") && u.searchParams.get("system-user-id")
+          ? json(201, { id: u.searchParams.get("correlation-id"), status: "New", confirmUrl: "https://altinn.test/godkjenn/endring" })
+          : new Response("Missing or invalid QueryParameter: correlation-id.", { status: 400, headers: { "content-type": "text/plain" } });
+      if (u.pathname.startsWith("/authentication/api/v1/systemuser/changerequest/vendor/"))
+        return json(200, { id: u.pathname.split("/").pop(), status: "Accepted" });
       throw new Error(`Uventet kall: ${k.metode} ${k.url}`);
     });
 
@@ -459,9 +467,15 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     expect((await api("GET", `/api/org/${org}/skattekort`)).data.tilgang).toMatchObject({ status: "godkjent", mangler: ["A-ordningen"], pakkenavn: ["Lønn"] });
     expect((await api("POST", `/api/org/${org}/skattekort/utvid`)).status).toBe(200);
     await kjor("altinn-endring");
-    const endring = kall.find((k) => k.url.endsWith("/systemuser/changerequest/vendor"))!;
-    expect(endring.kropp).toMatchObject({ partyOrgNo: "915000177", requiredAccessPackages: [{ urn: "urn:altinn:accesspackage:a-ordning" }] });
+    // Systembrukeren slås opp, og endringsforespørselen har ID-en dens og en ny korrelasjons-ID.
+    expect(kall.some((k) => k.url === "altinn.test/authentication/api/v1/systemuser/vendor/byquery?system-id=936564046_lonn&orgno=915000177")).toBe(true);
+    const endring = kall.find((k) => k.metode === "POST" && k.url.includes("/systemuser/changerequest/vendor?"))!;
+    const q = new URL(`https://${endring.url}`).searchParams;
+    expect(q.get("system-user-id")).toBe("7c1d2e3f-0000-4000-8000-00000000b001");
+    expect(q.get("correlation-id")).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(endring.kropp).toEqual({ requiredAccessPackages: [{ urn: "urn:altinn:accesspackage:a-ordning" }], redirectUrl: "http://localhost:5173/skattekort/godkjent" });
     expect((await api("GET", `/api/org/${org}/skattekort`)).data.tilgang).toMatchObject({ endring_status: "ny", endring_url: "https://altinn.test/godkjenn/endring" });
+    expect(await somSystem((db) => en(db, "select endring_id::text as id from faktura.skattekort_tilgang where org_id = $1", [org]))).toEqual({ id: q.get("correlation-id") });
     // Brukeren kommer tilbake fra Altinn: endringen sjekkes, og pakken er med.
     expect((await api("POST", `/api/org/${org}/skattekort/sjekk`)).data).toMatchObject({ sjekkes: true });
     await kjor("altinn-endring");

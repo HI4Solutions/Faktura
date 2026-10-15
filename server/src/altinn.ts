@@ -5,6 +5,7 @@
 // brukeren tilbake til appen. Deretter kan workeren hente token for organisasjonen.
 // https://docs.altinn.studio/nb/api/authentication/systemuserapi/systemregister/create/
 // https://docs.altinn.studio/nb/api/authentication/systemuserapi/systemuserrequest/external/
+import { randomUUID } from "node:crypto";
 import { appUrler } from "./appadresse.js";
 import { config } from "./config.js";
 import { adresser, EtatFeil, etatKall, hentToken, SCOPE, systemId } from "./maskinporten.js";
@@ -36,14 +37,27 @@ export const godkjentUrl = (appUrl = config.appUrl) => `${appUrl}/skattekort/god
 const api = () => `${adresser().altinn}/authentication/api/v1`;
 
 // Feilen fra Altinn (ProblemDetails, med kode som AUTH-00007 eller AUTH.VLD-00002).
-function altinnFeil(svar: { status: number; data: any; tekst: string }, hva: string): EtatFeil {
+// Svarer Altinn med bare en tekst (BadRequest("…")) eller valideringsfeil fra ASP.NET (errors), tas
+// de med; ellers starten av svaret, så feilen kan meldes.
+export function altinnFeil(svar: { status: number; data: any; tekst: string }, hva: string): EtatFeil {
   const kode = svar.tekst.match(/AUTH(?:\.VLD)?-\d{5}/)?.[0] ?? null;
   const d = svar.data;
   const valideringer = Array.isArray(d?.validationErrors)
     ? d.validationErrors.map((e: any) => e?.detail).filter((x: unknown): x is string => typeof x === "string")
     : [];
-  const melding = valideringer.join(" ") || (typeof d?.detail === "string" && d.detail) || (typeof d?.title === "string" && d.title) || `Altinn svarte ${svar.status}`;
-  return new EtatFeil(`${hva}: ${melding}${kode ? ` (${kode})` : ""}`, svar.status, kode);
+  const errors =
+    d?.errors && typeof d.errors === "object" && !Array.isArray(d.errors)
+      ? Object.values(d.errors).flat().filter((x: unknown): x is string => typeof x === "string")
+      : [];
+  const tekst = (typeof d === "string" ? d : svar.tekst).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+  const melding =
+    valideringer.join(" ") ||
+    (typeof d?.detail === "string" && d.detail) ||
+    errors.join(" ") ||
+    (typeof d?.title === "string" && d.title) ||
+    tekst ||
+    `Altinn svarte ${svar.status}`;
+  return new EtatFeil(`${hva}: ${melding}${kode && !melding.includes(kode) ? ` (${kode})` : ""}`, svar.status, kode);
 }
 
 // --- Systemregisteret (leverandøren, én gang) ------------------------------------------------
@@ -96,10 +110,11 @@ export async function registrerSystem(): Promise<"ny" | "oppdatert"> {
 export type Tilgangsstatus = "ny" | "godkjent" | "avslatt" | "avvist" | "utlopt";
 export type Foresporsel = { id: string | null; status: Tilgangsstatus; godkjennUrl: string | null };
 
-// Statusen i Altinn: New, Accepted, Rejected, Denied, Timedout.
+// Statusen i Altinn: New, Accepted, Rejected, Denied, Timedout (og NoChangeNeeded for en
+// endringsforespørsel systembrukeren ikke trenger).
 export function tilStatus(s: unknown): Tilgangsstatus {
   const v = String(s ?? "").toLowerCase();
-  if (v === "accepted") return "godkjent";
+  if (v === "accepted" || v === "nochangeneeded") return "godkjent";
   if (v === "rejected") return "avslatt";
   if (v === "denied") return "avvist";
   if (v === "timedout") return "utlopt";
@@ -165,20 +180,30 @@ export async function hentForesporsel(id: string): Promise<Foresporsel | null> {
 
 // --- Endringsforespørsler (flere tilgangspakker for en systembruker som finnes) ----------------
 
-// Ber kunden godkjenne flere tilgangspakker for systembrukeren (f.eks. «A-ordningen» når
-// a-meldingen slås på). Har systembrukeren dem alt, er den godkjent.
-// https://docs.altinn.studio/nb/api/authentication/systemuserapi/scopes/
-export async function lagEndringsforesporsel(orgnr: string, pakker: string[]): Promise<Foresporsel> {
+// ID-en til systembrukeren organisasjonen har for systemet vårt (null: den finnes ikke).
+// externalRef er organisasjonsnummeret, som Altinn bruker når den ikke er satt.
+// https://docs.altinn.studio/nb/authorization/guides/system-vendor/system-user/byquery/
+export async function hentSystembrukerId(orgnr: string): Promise<string | null> {
   const token = await hentToken(SCOPE.foresporselSkriv);
-  const r = await etatKall(`${api()}/systemuser/changerequest/vendor`, token, {
+  const q = new URLSearchParams({ "system-id": systemId(), orgno: orgnr });
+  const r = await etatKall(`${api()}/systemuser/vendor/byquery?${q}`, token, { hvem: "Altinn" });
+  if (r.status === 404) return null;
+  if (r.status >= 300) throw altinnFeil(r, "Kunne ikke slå opp systembrukeren i Altinn");
+  return typeof r.data?.id === "string" ? r.data.id : null;
+}
+
+// Ber kunden godkjenne flere tilgangspakker for systembrukeren (f.eks. «A-ordningen» når
+// a-meldingen slås på). Altinn vil ha ID-en til systembrukeren og en ny korrelasjons-ID for hver
+// endring (den blir ID-en til endringsforespørselen). Har systembrukeren pakkene alt, er den godkjent.
+// https://docs.altinn.studio/nb/authorization/guides/system-vendor/system-user/changerequest/
+export async function lagEndringsforesporsel(orgnr: string, pakker: string[]): Promise<Foresporsel> {
+  const brukerId = await hentSystembrukerId(orgnr);
+  if (!brukerId) throw new EtatFeil("Fant ikke systembrukeren i Altinn. Koble fra og koble til Skatteetaten på nytt.", 404);
+  const token = await hentToken(SCOPE.foresporselSkriv);
+  const q = new URLSearchParams({ "correlation-id": randomUUID(), "system-user-id": brukerId });
+  const r = await etatKall(`${api()}/systemuser/changerequest/vendor?${q}`, token, {
     metode: "POST",
-    kropp: {
-      systemId: systemId(),
-      partyOrgNo: orgnr,
-      externalRef: orgnr,
-      requiredAccessPackages: pakker.map((urn) => ({ urn })),
-      redirectUrl: godkjentUrl(),
-    },
+    kropp: { requiredAccessPackages: pakker.map((urn) => ({ urn })), redirectUrl: godkjentUrl() },
     hvem: "Altinn",
   });
   if (r.status < 300) return somForesporsel(r.data);
