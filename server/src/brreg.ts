@@ -133,11 +133,18 @@ export function finnRolle(roller: Rolle[], navn: string | null | undefined): Rol
 // Er e-postadressen nøyaktig den som står på foretaket (også gratis e-post som Gmail)?
 export const erForetaketsEpost = (epost: string, enhet: Enhet) => Boolean(enhet.epost && enhet.epost.trim().toLowerCase() === epost.trim().toLowerCase());
 
+// Testbedriftene (syntetiske testdata fra Tenor) har organisasjonsnumre som begynner på 2 eller 3;
+// ekte begynner på 8 eller 9. De finnes bare i Brønnøysundregistrenes testmiljø, som har de samme
+// dataene som Tenor testdatasøk og det samme API-et.
+export const erTestbedrift = (nr: string) => /^[23]\d{8}$/.test(nr);
+
 // Underenhetene (virksomhetene) til en juridisk enhet, til a-meldingen (arbeidsforholdene
-// rapporteres under virksomheten). Nedlagte er ikke med.
+// rapporteres under virksomheten). Nedlagte er ikke med. Bare forslag i innstillingene, så
+// testmiljøet kan brukes for testbedriftene (verifiseringen bruker bare det ekte registeret).
 export async function hentUnderenheter(nr: string): Promise<{ orgnr: string; navn: string; adresse: string | null }[]> {
   if (!orgnrGyldig(nr)) throw new ApiFeil(400, "Ugyldig organisasjonsnummer");
-  const r = await fetch(`https://data.brreg.no/enhetsregisteret/api/underenheter?overordnetEnhet=${nr}&size=50`, { headers: { accept: "application/json" } });
+  const vert = erTestbedrift(nr) ? "data.ppe.brreg.no" : "data.brreg.no";
+  const r = await fetch(`https://${vert}/enhetsregisteret/api/underenheter?overordnetEnhet=${nr}&size=50`, { headers: { accept: "application/json" } });
   if (!r.ok) throw new ApiFeil(502, "Enhetsregisteret svarer ikke");
   const d: any = await r.json();
   return ((d?._embedded?.underenheter ?? []) as any[])

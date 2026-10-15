@@ -55,7 +55,10 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
 
 1. **Innstillinger → Lønn → A-melding:** organisasjonsnummeret til virksomheten
    (underenheten i Enhetsregisteret; appen foreslår den når det bare er én) og til
-   pensjonsleverandøren når de har OTP.
+   pensjonsleverandøren når de har OTP. Har foretaket ingen underenhet, sier feltet det (den
+   registreres med Samordnet registermelding i Altinn). Testbedriftene (organisasjonsnumre som
+   begynner på 2 eller 3) slås opp i Brønnøysundregistrenes testmiljø
+   (`data.ppe.brreg.no`), der testdataene fra Tenor ligger.
 2. **På hver ansatt** (Arbeidsforhold i a-meldingen): yrkeskoden (7 siffer fra SSBs
    yrkeskatalog, basert på STYRK-08; søk på yrket i feltet), arbeidstidsordningen og typen
    arbeidsforhold (standard: ordinært, ikke skift), og årsaken når den ansatte slutter.

@@ -383,12 +383,9 @@ const TITTEL: Record<string, string> = {
 function PersonalOppsett({ del }: { del: string }) {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
-  // Virksomhetene (underenhetene) i Enhetsregisteret, til a-meldingen.
-  const virksomheter = useData(
-    () =>
-      harFunksjon(org, "lonn")
-        ? hent<{ orgnr: string; navn: string; adresse: string | null }[]>(`/org/${org!.id}/amelding-virksomheter`).catch(() => [])
-        : Promise.resolve([] as { orgnr: string; navn: string; adresse: string | null }[]),
+  // Virksomhetene (underenhetene) i Enhetsregisteret, til a-meldingen (null: ikke slått opp).
+  const virksomheter = useData<{ orgnr: string; navn: string; adresse: string | null }[] | null>(
+    () => (harFunksjon(org, "lonn") ? hent<{ orgnr: string; navn: string; adresse: string | null }[]>(`/org/${org!.id}/amelding-virksomheter`).catch(() => null) : Promise.resolve(null)),
     [org?.id],
   );
   const [o, settO] = useState<{
@@ -850,6 +847,14 @@ function PersonalOppsett({ del }: { del: string }) {
                     <button type="button" className="lenke" onClick={() => settO({ ...o, virksomhet_orgnr: virksomheter.data![0]!.orgnr })}>
                       Bruk {virksomheter.data[0]!.navn} ({virksomheter.data[0]!.orgnr})
                     </button>
+                  </>
+                )}
+                {virksomheter.data?.length === 0 && org!.orgnr && (
+                  <>
+                    {" "}
+                    {/^[23]\d{8}$/.test(org!.orgnr)
+                      ? "Testbedriften har ingen underenhet i Brønnøysundregistrenes testmiljø (der testdataene fra Tenor ligger). A-meldingen må ha en, så bruk en testbedrift som har en underenhet."
+                      : "Enhetsregisteret har ingen underenhet for foretaket. A-meldingen må ha en: registrer virksomheten med Samordnet registermelding i Altinn, og skriv nummeret her når den er registrert."}
                   </>
                 )}
               </span>
