@@ -141,7 +141,8 @@ export async function hentGrunnlag(db: Db, org: string, maaned: string): Promise
     db,
     `select l.slipp_id, l.lonnsart, l.belop::float8 as belop, l.antall::float8 as antall,
             to_char(l.opptjent_fra, 'YYYY-MM-DD') as opptjent_fra, to_char(l.opptjent_til, 'YYYY-MM-DD') as opptjent_til, l.tillegg
-       from faktura.lonnslinjer l where l.slipp_id = any($1::uuid[]) and not l.fjernet`,
+       from faktura.lonnslinjer l where l.slipp_id = any($1::uuid[]) and not l.fjernet
+      order by l.rekkefolge, l.opprettet, l.id`,
     [slipper.map((s) => s.id)],
   );
   // Arbeidsforholdene som er aktive i måneden, og dem med utbetaling i den. Frilansere,
