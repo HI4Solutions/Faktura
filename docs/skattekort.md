@@ -54,8 +54,11 @@ deretter i produksjon.
      brukerstøtteportal (<https://eksternjira.sits.no>, «Brukerstøtte for bruk av Skatteetatens
      opplysninger» → «Tilgangsforespørsel hente data»), med tjenesten «Skattekort til
      arbeidsgiver», for test og produksjon (lenken «Bestill tilgang til tjenesten» i
-     dokumentasjonen til API-et, under Kilder). Velg bare den; de andre tjenestene i lista bruker
-     ikke appen. A-meldingen er innrapportering og bestilles for seg, se [amelding.md](amelding.md).
+     dokumentasjonen til API-et, under Kilder). De andre tjenestene i lista bruker ikke appen ennå;
+     «Krav og betalinger» og «Frister» er aktuelle for regnskapet og «Trekkpålegg» for lønnstrekkene
+     (tilgang til `skatteetaten:trekkpaalegg` i test bestilles med e-post til
+     fremtidensinnkreving@skatteetaten.no). A-meldingen er innrapportering og bestilles for seg, se
+     [amelding.md](amelding.md).
    - `nav:helseytelser/sykepenger` (NAV, `docs/nav.md`) er åpent for alle og trenger ingen søknad.
 3. **Nøkkelen.** Lag nøkkelparet i Cloud Shell, i prosjektet `hi4-faktura-prod`. Den private
    nøkkelen legges rett i Secret Manager og slettes etterpå; den skal aldri sendes på e-post, i
