@@ -103,6 +103,36 @@ export type Oppgave =
       automatisk?: "lonn" | "maaned" | null;
     };
 
+// Alle oppgavetypene. Cloud Tasks poster dem til /oppgaver/<type> på workeren, som må ha en rute
+// for hver av dem (testen i oppgaveruter.test.ts); typesjekken sier fra om en type mangler her.
+export const OPPGAVETYPER = [
+  "send-faktura",
+  "sjekk-ehf",
+  "send-purring",
+  "disk-synk",
+  "disk-slett",
+  "varsel",
+  "epost",
+  "epostbekreftelse",
+  "bank-auth",
+  "bank-okt",
+  "bank-hent",
+  "bank-slett",
+  "skattekort-tilgang",
+  "skattekort-status",
+  "skattekort-hent",
+  "skattekort-svar",
+  "altinn-system",
+  "altinn-endring",
+  "amelding-lag",
+  "amelding-status",
+  "nav-hent",
+  "nav-inntektsmelding",
+  "rapport-send",
+] as const satisfies readonly Oppgave["type"][];
+const alleOppgavetyper: Exclude<Oppgave["type"], (typeof OPPGAVETYPER)[number]> extends never ? true : never = true;
+void alleOppgavetyper;
+
 let tasks: CloudTasksClient | undefined;
 
 export type Oppgavekjorer = (o: Oppgave & { oppgave_id: string }) => Promise<void>;

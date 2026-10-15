@@ -599,6 +599,36 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
   app.post("/oppgaver/altinn-system", async (c) => c.json(await registrerAltinnSystem()));
+  // Flere tilgangspakker for systembrukeren i Altinn (endringsforespørselen).
+  app.post("/oppgaver/altinn-endring", async (c) => {
+    const o = skattOppgave.parse(await c.req.json());
+    await endreTilgang(o.org_id);
+    return c.json({ ok: true });
+  });
+
+  // A-meldingen: fila eller innsendingen til Skatteetaten, og tilbakemeldingen.
+  app.post("/oppgaver/amelding-lag", async (c) => {
+    const o = skattOppgave.extend({ amelding_id: z.string().uuid() }).parse(await c.req.json());
+    await lagAmelding(o.org_id, o.amelding_id);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/amelding-status", async (c) => {
+    const o = skattOppgave.extend({ amelding_id: z.string().uuid(), forsok: z.number().int().min(1).max(100).optional() }).parse(await c.req.json());
+    await sjekkAmelding(o.org_id, o.amelding_id, o.forsok);
+    return c.json({ ok: true });
+  });
+
+  // NAV: sykmeldingene og forespørslene om inntektsmelding, og inntektsmeldingen som sendes.
+  app.post("/oppgaver/nav-hent", async (c) => {
+    const o = skattOppgave.parse(await c.req.json());
+    await hentFraNav(o.org_id);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/nav-inntektsmelding", async (c) => {
+    const o = skattOppgave.extend({ inntektsmelding_id: z.string().uuid() }).parse(await c.req.json());
+    await sendInntektsmelding(o.org_id, o.inntektsmelding_id);
+    return c.json({ ok: true });
+  });
 
   // Rapportmodulen: rapporter på e-post til regnskapsføreren.
   app.post("/oppgaver/rapport-send", async (c) => {
