@@ -30,6 +30,29 @@ riktig (`HOST_ACTIVE`), er bekreftet (`OWNERSHIP_ACTIVE`) og har sertifikat (`CE
 Leverandørens egne A-oppføringer (standardsiden) er slått av. MX-oppføringen gjelder e-post til
 domenet og skal stå.
 
+### E-post fra domenet (SPF, DKIM og DMARC)
+
+E-posten fra appen sendes fra `post@adminkonsoll.no` gjennom Resend. Oppføringene Resend viser
+under Domains → `adminkonsoll.no` (DKIM-nøkkelen `resend._domainkey`, og MX og SPF for
+underdomenet `send`) skal stå; det er dem som gjør domenet verifisert. I tillegg har domenet en
+DMARC-oppføring, så mottakerne (Gmail, Outlook og andre) vet hvordan e-post fra domenet skal
+kontrolleres, og Gmail og Yahoo krever den av avsendere som sender mye:
+
+| Navn | Type | Verdi |
+|---|---|---|
+| `_dmarc` | TXT | `v=DMARC1; p=none; rua=mailto:post@adminkonsoll.no; adkim=r; aspf=r` |
+
+E-post fra Resend består kontrollen: DKIM-signaturen gjelder `adminkonsoll.no`, og returadressen
+(Return-Path) er på `send.adminkonsoll.no`, som regnes som samme domene med `aspf=r`. Med `p=none`
+stoppes ingenting ennå; mottakerne sender bare daglige rapporter (XML) til adressen i `rua`, som må
+kunne ta imot e-post. Sjekk oppføringen i Cloud Shell med `dig +short TXT _dmarc.adminkonsoll.no`.
+
+Når rapportene i et par uker viser at all e-post fra domenet består, skjerpes regelen til
+`p=quarantine` (e-post som ikke består, havner i søppelposten) og senere `p=reject` (den avvises).
+Det gjelder også e-post som sendes fra en vanlig e-postkonto på domenet: den må ha SPF og DKIM hos
+e-postleverandøren, ellers havner den i søppelposten når regelen skjerpes. Reserveadressen
+`faktura@hi4.no` hører til domenet `hi4.no` og berøres ikke.
+
 ## Tilbakeadressene hos tjenestene
 
 - **Google OAuth-klienten** (Google Disk, `GOOGLE_OAUTH_CLIENT_ID`), i Google Cloud Console under
