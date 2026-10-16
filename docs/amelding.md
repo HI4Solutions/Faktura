@@ -36,7 +36,13 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
 4. **Innsendingen** (når den er slått på og kunden har gitt tilgang): «Send til Skatteetaten».
    Workeren sender meldingen til API-et, og henter tilbakemeldingen fra Dialogporten og Skatteetaten
    (første gang etter to minutter, så sjeldnere, og minst hver halvtime i en uke). Status og avvik
-   vises på måneden, og eier og administrator får varsel når den er mottatt eller avvist. Hvert
+   vises på måneden, og eier og administrator får varsel når den er mottatt eller avvist. Svaret fra
+   Skatteetaten gjelder hele måneden: `mottak[].mottattLeveranse[]` har hver melding for måneden med
+   sin `meldingsId` og `mottakstatus`, og `mottattPeriode` avvikene for perioden. Statusen er den for
+   meldingen selv (en tidligere avvist melding samme måned gjør ikke den nye avvist), og avvikene for
+   perioden står på meldingen svaret kom etter (`tilbakemeldingEtterMottakAvMeldingsId`). Står
+   meldingen ikke i svaret ennå, venter den. Meldinger som fikk status fra en annen melding før dette
+   ble rettet, sjekkes på nytt (`0115_amelding_status_per_melding.sql`). Hvert
    avvik viser alvorlighetsgraden, regelen og detaljene fra Skatteetaten (`navn` og `detaljer`) og
    koden (f.eks. MAGNET_EDAG-230B); det samme avviket flere ganger står én gang med antallet, og
    fødselsnummeret i teksten blir navnet på den ansatte (workeren slår det opp; ellers skjules det).

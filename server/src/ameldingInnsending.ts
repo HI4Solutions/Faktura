@@ -286,16 +286,24 @@ const skjul = (x: unknown) => JSON.parse(JSON.stringify(x ?? null).replace(/\b\d
 // Et avvik i tilbakemeldingen. antall: når det samme avviket står flere ganger.
 export type Avvik = { kode: string | null; tekst: string; alvorlighet: string | null; antall?: number };
 
-// Status og avvik fra tilbakemeldingen. Formatet tolkes forsiktig: status-feltene og avvikene, hvor
-// de enn står (lister, ett avvik for seg eller bare tekst). Skatteetaten har id, navn (regelen),
-// alvorlighetsgrad og detaljer på hvert avvik. Er meldingen avvist uten avvik, brukes feltene som
-// sier hvorfor (årsak, grunn, feilmelding). navnPaa: navnet på den ansatte med fødselsnummeret
-// (avvikene sier hvem de gjelder); ellers skjules det.
-export function tolkTilbakemelding(data: any, navnPaa?: (fnr: string) => string | undefined): { status: "mottatt" | "avvist" | null; avvik: Avvik[] } {
+// Status og avvik fra tilbakemeldingen. Skatteetatens svar gjelder hele måneden: mottak[] har
+// mottattLeveranse[] med hver melding for måneden (meldingsId, mottakstatus og avvik) og
+// mottattPeriode med avvikene for perioden. Statusen er den for meldingen selv (meldingsId), ikke
+// for en annen melding samme måned; står den ikke der ennå, er svaret ikke klart (null). Avvikene for
+// perioden tas med når svaret kom etter denne meldingen (tilbakemeldingEtterMottakAvMeldingsId).
+// Uten listen over meldinger tolkes svaret forsiktig: status-feltene og avvikene, hvor de enn står.
+// Avvik: lister, ett avvik for seg eller bare tekst; Skatteetaten har id, navn (regelen),
+// alvorlighetsgrad og detaljer. Er meldingen avvist uten avvik, brukes feltene som sier hvorfor
+// (årsak, grunn, feilmelding). navnPaa: navnet på den ansatte med fødselsnummeret (avvikene sier
+// hvem de gjelder); ellers skjules det.
+export function tolkTilbakemelding(
+  data: any,
+  valg: { meldingsId?: string | null; navnPaa?: (fnr: string) => string | undefined } = {},
+): { status: "mottatt" | "avvist" | null; avvik: Avvik[] } {
   const statuser: string[] = [];
   const avvik: Avvik[] = [];
   const grunner: string[] = [];
-  const tekstUtenFnr = (t: string) => t.replace(/\b\d{11}\b/g, (f) => navnPaa?.(f) ?? "•••••••••••");
+  const tekstUtenFnr = (t: string) => t.replace(/\b\d{11}\b/g, (f) => valg.navnPaa?.(f) ?? "•••••••••••");
   const leggTil = (ny: Avvik) => {
     const likt = avvik.find((y) => y.kode === ny.kode && y.tekst === ny.tekst && y.alvorlighet === ny.alvorlighet);
     if (likt) likt.antall = (likt.antall ?? 1) + 1;
@@ -312,20 +320,28 @@ export function tolkTilbakemelding(data: any, navnPaa?: (fnr: string) => string 
     leggTil({ kode: kode == null ? null : String(kode), tekst: tekstUtenFnr(tekst), alvorlighet });
   };
   // iAvvik: elementene i en liste med avvik (f.eks. «avvik» eller «avviksliste»). Et avvik tolkes for
-  // seg (ikke feltene i det hver for seg).
-  const gjennom = (x: any, nokkel = "", iAvvik = false) => {
+  // seg (ikke feltene i det hver for seg). medStatus: false for avvikene i perioden.
+  const gjennom = (x: any, nokkel = "", iAvvik = false, medStatus = true) => {
     if (x == null) return;
-    if (Array.isArray(x)) return void x.forEach((v) => gjennom(v, nokkel, /avvik/i.test(nokkel)));
+    if (Array.isArray(x)) return void x.forEach((v) => gjennom(v, nokkel, /avvik/i.test(nokkel), medStatus));
     if (typeof x === "object") {
       if (iAvvik || /^avvik$/i.test(nokkel)) return void ettAvvik(x);
-      return void Object.entries(x).forEach(([k, v]) => gjennom(v, k));
+      return void Object.entries(x).forEach(([k, v]) => gjennom(v, k, false, medStatus));
     }
     if (typeof x !== "string") return;
     if (iAvvik || /^avvik$/i.test(nokkel)) ettAvvik(x);
+    else if (!medStatus) return;
     else if (/status/i.test(nokkel)) statuser.push(x.toLowerCase());
     else if (/aarsak|årsak|grunn|feilmelding|forklaring/i.test(nokkel) && x.trim()) grunner.push(tekstUtenFnr(x.trim()));
   };
-  gjennom(data);
+  const liste = (x: unknown): any[] => (Array.isArray(x) ? x : x == null ? [] : [x]);
+  const leveranser = liste(data?.mottak).flatMap((m) => liste(m?.mottattLeveranse).map((l) => ({ m, l })));
+  if (valg.meldingsId && leveranser.length) {
+    const egen = leveranser.find((x) => x.l?.meldingsId === valg.meldingsId);
+    if (!egen) return { status: null, avvik: [] };
+    gjennom(egen.l);
+    if (egen.m?.tilbakemeldingEtterMottakAvMeldingsId === valg.meldingsId) gjennom(egen.m?.mottattPeriode, "", false, false);
+  } else gjennom(data);
   // «ikkeMottatt», «underBehandling» og lignende er ikke et svar ennå.
   const mottatt = (s: string) => /mottatt|godkjent|^ok$/.test(s) && !/ikke|under|venter/.test(s);
   const status = statuser.some((s) => s.includes("avvist")) ? "avvist" : statuser.some(mottatt) ? "mottatt" : null;
@@ -402,9 +418,10 @@ export async function sjekkAmelding(org: string, ameldingId: string, forsok = 1)
     const r = await etatKall(url, await hentToken(SCOPE.amelding, t.orgnr), { hvem: "Skatteetaten" });
     if (r.status === 404 || r.status === 204) return void (await venter("Tilbakemeldingen er ikke klar hos Skatteetaten ennå.", { detaljer: { adresse: vertOgSti(url) } }));
     if (r.status >= 300) throw ameldingFeil(r);
-    let tb = tolkTilbakemelding(r.data);
+    let tb = tolkTilbakemelding(r.data, { meldingsId: m.meldings_id });
     // Avvik som gjelder en ansatt: med navnet i stedet for det skjulte fødselsnummeret.
-    if (tb.avvik.some((a) => a.tekst.includes("•••••••••••"))) tb = tolkTilbakemelding(r.data, await navnForFnr(org, r.data));
+    if (tb.avvik.some((a) => a.tekst.includes("•••••••••••")))
+      tb = tolkTilbakemelding(r.data, { meldingsId: m.meldings_id, navnPaa: await navnForFnr(org, r.data) });
     // Avvist uten at noe sier hvorfor: feltene i loggen, så formatet kan tolkes (hele svaret, uten
     // fødselsnumre, står på meldingen).
     if (tb.status === "avvist" && !tb.avvik.length)
@@ -412,7 +429,7 @@ export async function sjekkAmelding(org: string, ameldingId: string, forsok = 1)
     if (!tb.status) {
       // Feltene (ikke verdiene) i loggen, så formatet kan sjekkes.
       const felt = r.data && typeof r.data === "object" ? Object.keys(r.data).slice(0, 30) : typeof r.data;
-      return void (await venter("Tilbakemeldingen har ingen status ennå.", { detaljer: { adresse: vertOgSti(url), felt }, tilbakemelding: { avvik: tb.avvik, data: skjul(r.data) } }));
+      return void (await venter("Svaret fra Skatteetaten har ingen status for denne meldingen ennå.", { detaljer: { adresse: vertOgSti(url), felt }, tilbakemelding: { avvik: tb.avvik, data: skjul(r.data) } }));
     }
     await oppdater(m.id, { tilbakemelding: { ...tb, data: skjul(r.data) }, status: tb.status, feil: null });
     const mnd = maanedNavn(m.maaned);

@@ -399,10 +399,37 @@ describe("a-meldingen (uten database)", () => {
         },
       ],
     });
-    expect(tolkTilbakemelding(avvist, (f) => (f === "13830197340" ? "Kari Nordmann" : undefined)).avvik[0]!.tekst).toBe(
+    expect(tolkTilbakemelding(avvist, { navnPaa: (f) => (f === "13830197340" ? "Kari Nordmann" : undefined) }).avvik[0]!.tekst).toBe(
       "Ugyldig verdi. ArbeidsforholdsID på inntekt skal ikke oppgis. Gjelder inntektsmottaker Kari Nordmann under virksomhet 215296172.",
     );
-    expect(tolkTilbakemelding(avvist, () => undefined).avvik[0]!.tekst).toContain("inntektsmottaker ••••••••••• under");
+    expect(tolkTilbakemelding(avvist, { navnPaa: () => undefined }).avvik[0]!.tekst).toContain("inntektsmottaker ••••••••••• under");
+    // Svaret gjelder hele måneden (Skatteetatens format): statusen er den for meldingen selv, ikke en
+    // annen melding samme måned, og avvikene i perioden tas med når svaret kom etter denne meldingen.
+    const maaneden = {
+      mottak: [
+        {
+          kalendermaaned: "2026-10",
+          mottattPeriode: { avvik: [{ id: "MAGNET_EDAG-184", navn: "Avvik i avgiftsgrunnlaget.", alvorlighetsgrad: "oeyeblikkelig", detaljer: "Summen stemmer ikke." }], virksomhet: [] },
+          mottattLeveranse: [
+            { avvik: [], meldingsId: "m-1", mottakstatus: "avvist" },
+            { avvik: [], meldingsId: "m-2", mottakstatus: "mottatt" },
+            { avvik: [{ id: "X9", navn: "Til informasjon.", alvorlighetsgrad: "opplysning", detaljer: "Gjelder 13830197340." }], meldingsId: "m-3", mottakstatus: "mottatt" },
+          ],
+          tilbakemeldingEtterMottakAvMeldingsId: "m-3",
+        },
+      ],
+    };
+    expect(tolkTilbakemelding(maaneden, { meldingsId: "m-1" })).toEqual({ status: "avvist", avvik: [] });
+    expect(tolkTilbakemelding(maaneden, { meldingsId: "m-2" })).toEqual({ status: "mottatt", avvik: [] });
+    expect(tolkTilbakemelding(maaneden, { meldingsId: "m-3" })).toEqual({
+      status: "mottatt",
+      avvik: [
+        { kode: "X9", tekst: "Til informasjon. Gjelder •••••••••••.", alvorlighet: "opplysning" },
+        { kode: "MAGNET_EDAG-184", tekst: "Avvik i avgiftsgrunnlaget. Summen stemmer ikke.", alvorlighet: "oeyeblikkelig" },
+      ],
+    });
+    // Meldingen står ikke i svaret ennå: ikke klart.
+    expect(tolkTilbakemelding(maaneden, { meldingsId: "m-4" })).toEqual({ status: null, avvik: [] });
     // Andre former: avvik som tekst, ett avvik for seg, og en avvisning med bare årsaken.
     expect(tolkTilbakemelding({ status: "AVVIST", avvik: ["Meldingen gjelder en lukket måned."] }).avvik).toEqual([
       { kode: null, tekst: "Meldingen gjelder en lukket måned.", alvorlighet: null },
@@ -511,16 +538,26 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
               : []),
           ],
         });
-      if (u.host === "tilbakemelding.test" && u.pathname === "/v1/forsendelser/forsendelse-2")
+      if (u.host === "tilbakemelding.test" && u.pathname === "/v1/forsendelser/forsendelse-2") {
+        // Svaret gjelder hele måneden (Skatteetatens format): en tidligere melding som ble avvist, og
+        // den som ble sendt nå (meldingsId-en fra innsendingen), med avvikene for perioden.
+        const meldingsId = [...kall].reverse().find((k) => k.metode === "POST" && k.url.startsWith("amelding.test/v1/innsending/"))?.kropp?.leveranse?.meldingsId;
         return json(200, {
-          mottak: {
-            mottakstatus: "mottatt",
-            avvik: [
-              { kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" },
-              ...[1, 2].map(() => ({ id: "MAGNET_EDAG-999", navn: "Til informasjon.", alvorlighetsgrad: "opplysning", detaljer: "Gjelder inntektsmottaker 13830197340." })),
-            ],
-          },
+          mottak: [
+            {
+              kalendermaaned: "2026-09",
+              mottattPeriode: {
+                avvik: [1, 2].map(() => ({ id: "MAGNET_EDAG-999", navn: "Til informasjon.", alvorlighetsgrad: "opplysning", detaljer: "Gjelder inntektsmottaker 13830197340." })),
+              },
+              mottattLeveranse: [
+                { avvik: [], meldingsId: "en-tidligere-melding", mottakstatus: "avvist" },
+                { avvik: [{ kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" }], meldingsId, mottakstatus: "mottatt" },
+              ],
+              tilbakemeldingEtterMottakAvMeldingsId: meldingsId,
+            },
+          ],
         });
+      }
       // Systembrukeren til organisasjonen (ID-en trengs til endringsforespørselen).
       if (u.pathname === "/authentication/api/v1/systemuser/vendor/byquery")
         return u.searchParams.get("orgno") === "915000177"
