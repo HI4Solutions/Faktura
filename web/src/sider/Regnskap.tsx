@@ -155,7 +155,8 @@ export function Regnskap() {
       <div className="topp">
         <h1>Regnskap</h1>
       </div>
-      <div className="faner tett" role="tablist">
+      {/* På PC står fanene i undermenyen (App.tsx), og her bare når den er skjult (meny-faner). */}
+      <div className="faner tett meny-faner" role="tablist">
         {faner.map(([v, t]) => (
           <button
             key={v}

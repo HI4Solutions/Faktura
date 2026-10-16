@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { updateProfile } from "firebase/auth";
 import { hentAuth } from "./firebase";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -33,7 +33,7 @@ import { Beskjeder, useUlesteBeskjeder } from "./sider/Beskjeder";
 import { Sjekklister } from "./sider/Sjekklister";
 import { Lonn } from "./sider/Lonn";
 import { Regnskap } from "./sider/Regnskap";
-import { Logo } from "./Logo";
+import { Logo, LogoIkon } from "./Logo";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
 import { TemaBryter } from "./TemaBryter";
@@ -43,9 +43,9 @@ import { iFakturadelen } from "./fakturameny";
 import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
   IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
-  IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva, IkonSkatteetaten,
-  IkonNed, IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSjekkliste, IkonSkjold, IkonTavle, IkonTimebank,
-  IkonUtgift, IkonVelg,
+  IkonFravaer, IkonHoyre, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva,
+  IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonRegnskap, IkonReise, IkonSjekkliste, IkonSkatteetaten, IkonSkjold, IkonTavle,
+  IkonTimebank, IkonUtgift, IkonVelg, IkonVenstre,
 } from "./ikoner";
 
 const initialer = (navn: string) =>
@@ -60,10 +60,13 @@ const orgType: Record<string, string> = { foretak: "Foretak", regnskapsbyraa: "R
 // Antall nye beskjeder (99+ over det).
 const UlesteTall = ({ n }: { n: number }) => (n > 0 ? <span className="ulest-tall" aria-label={`${n} nye`}>{n > 99 ? "99+" : n}</span> : null);
 
-// Punktene i sidemenyen, i kategorier (Plattform, Faktura, Personal, Lønn, Regnskap).
+// Sidemenyen i to nivåer: modulene (Oversikt, Plattform, Faktura, Personal, Lønn, Regnskap og
+// Rapporter; de ansatte har sine egne) i hovedmenyen, og sidene i modulen man er i, i undermenyen
+// ved siden av. gruppe: overskriften punktet står under i undermenyen (Regnskap). kort: navnet
+// under ikonet når hovedmenyen er smal.
 type MenyIkon = (p: { storrelse?: number }) => ReactNode;
-type MenyPunkt = { til: string; Ikon: MenyIkon; tekst: string; aktiv: boolean; teller?: number };
-type MenyKategoriData = { navn: string; punkter: MenyPunkt[]; aktiv: boolean };
+type MenyPunkt = { til: string; Ikon: MenyIkon; tekst: string; aktiv: boolean; teller?: number; gruppe?: string };
+type Modul = { id: string; navn: string; kort?: string; Ikon: MenyIkon; punkter: MenyPunkt[]; aktiv: boolean };
 
 function MenyLenke({ x }: { x: MenyPunkt }) {
   return (
@@ -75,24 +78,52 @@ function MenyLenke({ x }: { x: MenyPunkt }) {
   );
 }
 
-// En kategori som foldes ut og sammen med overskriften. Lukket viser den antall nye (beskjedene),
-// og en prikk når siden man er på, ligger i den.
-function MenyKategori({ k, apen, veksle }: { k: MenyKategoriData; apen: boolean; veksle: () => void }) {
-  const id = `meny-${k.navn.toLowerCase().replace(/[^a-z0-9æøå]+/g, "-")}`;
-  const teller = k.punkter.reduce((n, x) => n + (x.teller ?? 0), 0);
+// En modul i hovedmenyen: en lenke når modulen har én side, ellers en knapp som viser sidene i
+// undermenyen. Antall nye (beskjedene) står ved modulen.
+function ModulKnapp({ m, apen, velg }: { m: Modul; apen: boolean; velg: (m: Modul) => void }) {
+  const teller = m.punkter.reduce((n, x) => n + (x.teller ?? 0), 0);
+  const innhold = (
+    <>
+      <m.Ikon />
+      <span className={`modul-navn${m.kort ? " lang" : ""}`}>{m.navn}</span>
+      {m.kort && <span className="modul-kort">{m.kort}</span>}
+      <UlesteTall n={teller} />
+    </>
+  );
+  if (m.punkter.length === 1)
+    return (
+      <Link to={m.punkter[0]!.til} className={`modul${m.aktiv ? " active" : ""}`} aria-current={m.aktiv ? "page" : undefined} title={m.navn}>
+        {innhold}
+      </Link>
+    );
   return (
-    <div className={`meny-gruppe${apen ? " apen" : ""}`}>
-      <button type="button" className={`meny-kategori${k.aktiv && !apen ? " har-aktiv" : ""}`} aria-expanded={apen} aria-controls={id} onClick={veksle}>
-        <span className="meny-kategori-navn">{k.navn}</span>
-        {!apen && <UlesteTall n={teller} />}
-        <IkonNed storrelse={16} />
-      </button>
-      <div id={id} className="meny-punkter" hidden={!apen}>
-        {k.punkter.map((x) => (
-          <MenyLenke key={x.til} x={x} />
-        ))}
-      </div>
-    </div>
+    <button
+      type="button"
+      className={`modul${m.aktiv ? " active" : ""}${apen ? " apen" : ""}`}
+      aria-expanded={apen}
+      aria-controls="undermeny"
+      title={m.navn}
+      onClick={() => velg(m)}
+    >
+      {innhold}
+      <span className="modul-pil">
+        <IkonHoyre storrelse={16} />
+      </span>
+    </button>
+  );
+}
+
+// Sidene i en modul, med en overskrift der en ny gruppe begynner.
+function Undersider({ m }: { m: Modul }) {
+  return (
+    <>
+      {m.punkter.map((x, i) => (
+        <Fragment key={x.til}>
+          {x.gruppe && x.gruppe !== m.punkter[i - 1]?.gruppe && <div className="meny-gruppenavn">{x.gruppe}</div>}
+          <MenyLenke x={x} />
+        </Fragment>
+      ))}
+    </>
   );
 }
 
@@ -176,15 +207,9 @@ function Ramme() {
   const { meg, org, velgOrg, loggUt } = useKonto();
   const [ny, settNy] = useState(false);
   const [menyApen, settMenyApen] = useState(false);
-  // Kategoriene i sidemenyen som er åpne (lukket som standard).
-  const [apne, settApne] = useState<ReadonlySet<string>>(() => new Set());
-  const veksle = (navn: string) =>
-    settApne((a) => {
-      const n = new Set(a);
-      if (n.has(navn)) n.delete(navn);
-      else n.add(navn);
-      return n;
-    });
+  // Modulen undermenyen viser: undefined følger siden man er på, null er lukket, og på mobil
+  // modulen man har trykket på i menyen.
+  const [valgtModul, settValgtModul] = useState<string | null | undefined>(undefined);
   const { kanInstallere } = usePwa();
   useVarselNavigering();
   const sted = useLocation();
@@ -349,21 +374,21 @@ function Ramme() {
   };
   // Bunnmenyen viser personaldelen på personalsidene, og alltid når fakturadelen ikke er med.
   const personalmeny = !ansatt && (iPersonal || (!visFaktura && org?.type !== "regnskapsbyraa")) && (visAnsatte || visTimer || visBeskjeder);
-  // Regnskapet er en egen seksjon i menyen, med fanene på Regnskap som punkter (Regnskap.tsx; uten
-  // fane i adressen er det bilagene).
+  // Regnskapet: fanene på Regnskap som sider, i grupper (Regnskap.tsx; uten fane i adressen er det
+  // bilagene).
   const regnskapFane = sted.pathname === "/regnskap" ? (her.get("fane") ?? "bilag") : null;
-  const regnskapPunkter: [string, string, (p: { storrelse?: number }) => ReactNode][] = [
-    ["bilag", "Bilag", IkonBilag],
-    ["utgifter", "Utgifter", IkonUtgift],
-    ["bank", "Bank", IkonBank],
-    ["mva", "Mva", IkonMva],
-    ["skatteetaten", "Skatteetaten", IkonSkatteetaten],
-    ["saldobalanse", "Saldobalanse", IkonBalanse],
-    ["aarsoppgjor", "Årsoppgjør", IkonAarsoppgjor],
-    ["anlegg", "Anleggsmidler", IkonAnlegg],
-    ["periodiseringer", "Periodiseringer", IkonPeriodisering],
-    ["saldo", "Saldoavskrivninger", IkonAvskrivning],
-    ["kontoer", "Kontoer", IkonKontoplan],
+  const regnskapPunkter: [string, string, MenyIkon, string][] = [
+    ["bilag", "Bilag", IkonBilag, "Daglig"],
+    ["utgifter", "Utgifter", IkonUtgift, "Daglig"],
+    ["bank", "Bank", IkonBank, "Daglig"],
+    ["mva", "Mva", IkonMva, "Skatt og avgift"],
+    ["skatteetaten", "Skatteetaten", IkonSkatteetaten, "Skatt og avgift"],
+    ["saldobalanse", "Saldobalanse", IkonBalanse, "Avslutning"],
+    ["periodiseringer", "Periodiseringer", IkonPeriodisering, "Avslutning"],
+    ["aarsoppgjor", "Årsoppgjør", IkonAarsoppgjor, "Avslutning"],
+    ["anlegg", "Anleggsmidler", IkonAnlegg, "Eiendeler og kontoer"],
+    ["saldo", "Saldoavskrivninger", IkonAvskrivning, "Eiendeler og kontoer"],
+    ["kontoer", "Kontoer", IkonKontoplan, "Eiendeler og kontoer"],
   ];
   // Plattformadministratoren (GitHub-variabelen ADMIN_EPOSTER) har sin egen oversikt over plattformen,
   // organisasjonene og driften (fanene i Admin.tsx).
@@ -374,33 +399,44 @@ function Ramme() {
     ["/admin?fane=drift", "Drift", ["drift"], IkonDrift],
   ];
 
-  // Sidemenyen: Oversikt øverst, så kategoriene: Plattform (plattformadministratoren) og modulene
-  // (Faktura, Personal, Lønn, Regnskap og Rapporter; de ansatte har sine egne grupper). Kategoriene
-  // foldes ut og sammen og er lukket som standard; den med siden man er på, åpnes når man kommer dit.
-  // En kategori med ett punkt er en vanlig lenke. Konto (Innstillinger) står nederst som før.
-  const punkt = (til: string, Ikon: MenyIkon, tekst: string, aktiv: boolean, teller?: number): MenyPunkt => ({ til, Ikon, tekst, aktiv, teller });
-  const kategori = (navn: string, punkter: (MenyPunkt | false | null | undefined)[], aktiv = false): MenyKategoriData => {
+  // Sidemenyen: modulene i hovedmenyen (Oversikt øverst, så Plattform for plattformadministratoren
+  // og Faktura, Personal, Lønn, Regnskap og Rapporter; de ansatte har sine egne grupper). En modul
+  // med én side er en vanlig lenke. Konto (Innstillinger) står nederst som før.
+  const punkt = (til: string, Ikon: MenyIkon, tekst: string, aktiv: boolean, teller?: number, gruppe?: string): MenyPunkt => ({ til, Ikon, tekst, aktiv, teller, gruppe });
+  const modul = (id: string, navn: string, Ikon: MenyIkon, punkter: (MenyPunkt | false | null | undefined)[], aktiv = false, kort?: string): Modul => {
     const p = punkter.filter((x): x is MenyPunkt => !!x);
-    return { navn, punkter: p, aktiv: aktiv || p.some((x) => x.aktiv) };
+    return { id, navn, kort, Ikon, punkter: p, aktiv: aktiv || p.some((x) => x.aktiv) };
   };
+  // Ikonet og det korte navnet til gruppene i menyen til de ansatte.
+  const ansattModul: Record<string, [MenyIkon, string?]> = {
+    Vakter: [IkonKalender],
+    "Timer og fravær": [IkonKlokke, "Timer"],
+    Sjekklister: [IkonSjekkliste],
+    Lønn: [IkonLonn],
+    Meg: [IkonPerson],
+  };
+  const forside = org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt";
   // Lønnen: fanene på Lønn som punkter (Lonn.tsx); lederen ser kjøringene først, ellers egne slipper.
   const lonnLeder = !ansatt && kanSeLonn(org);
-  const kategorier = [
+  const moduler = [
+    org && modul("oversikt", forside, IkonOversikt, [punkt("/", IkonOversikt, forside, sted.pathname === "/")]),
     meg?.plattformadmin &&
-      kategori(
+      modul(
+        "plattform",
         "Plattform",
+        IkonNokkel,
         plattformPunkter.map(([til, tekst, faner, Ikon]) => punkt(til, Ikon, tekst, !!adminFane && faner.includes(adminFane))),
         sted.pathname === "/admin",
       ),
     ...(org && !ansatt
       ? [
           visFaktura &&
-            kategori("Faktura", [
+            modul("faktura", "Faktura", IkonFaktura, [
               punkt("/fakturaer", IkonFaktura, "Fakturaer", iFakturadelen(sted.pathname)),
               punkt("/kunder", IkonKunder, "Kunder", sted.pathname.startsWith("/kunder")),
               punkt("/produkter", IkonProdukter, "Produkter", sted.pathname.startsWith("/produkter")),
             ]),
-          kategori("Personal", [
+          modul("personal", "Personal", IkonAnsatte, [
             visAnsatte && punkt("/ansatte", IkonAnsatte, "Ansatte", sted.pathname.startsWith("/ansatte")),
             visTimer && visVakter && punkt("/vakter", IkonKalender, "Vaktplan", sted.pathname === "/vakter"),
             visTimer && punkt("/timer", IkonKlokke, timerOgFerie(org) ? "Timer og ferie" : "Timer", iTimerOgFerie),
@@ -408,8 +444,10 @@ function Ramme() {
             visSjekklister && punkt("/sjekklister", IkonSjekkliste, "Sjekklister", sted.pathname === "/sjekklister"),
           ]),
           visLonn &&
-            kategori(
+            modul(
+              "lonn",
               "Lønn",
+              IkonLonn,
               [
                 lonnLeder && punkt("/lonn?fane=kjoringer", IkonLonn, "Lønnskjøringer", paa("/lonn", "kjoringer", true)),
                 lonnLeder && punkt("/lonn?fane=amelding", IkonRapport, "A-melding", paa("/lonn", "amelding")),
@@ -424,22 +462,44 @@ function Ramme() {
           // Regnskap og Rapporter: ikke for byrået selv (klientene har sine).
           visRegnskap &&
             org.type !== "regnskapsbyraa" &&
-            kategori(
+            modul(
+              "regnskap",
               "Regnskap",
-              regnskapPunkter.map(([fane, tekst, Ikon]) => punkt(fane === "bilag" ? "/regnskap" : `/regnskap?fane=${fane}`, Ikon, tekst, regnskapFane === fane)),
+              IkonRegnskap,
+              regnskapPunkter.map(([fane, tekst, Ikon, gruppe]) =>
+                punkt(fane === "bilag" ? "/regnskap" : `/regnskap?fane=${fane}`, Ikon, tekst, regnskapFane === fane, undefined, gruppe),
+              ),
               sted.pathname === "/regnskap",
             ),
-          visRapporter && org.type !== "regnskapsbyraa" && kategori("Rapporter", [punkt("/rapporter", IkonRapport, "Rapporter", sted.pathname === "/rapporter")]),
+          visRapporter && org.type !== "regnskapsbyraa" && modul("rapporter", "Rapporter", IkonRapport, [punkt("/rapporter", IkonRapport, "Rapporter", sted.pathname === "/rapporter")]),
         ]
       : []),
-    ...(org && ansatt ? ansattGrupper.map(([navn, punkter]) => kategori(navn, punkter.map((x) => punkt(x.til, x.Ikon, x.tekst, x.aktiv, x.teller)))) : []),
-  ].filter((k): k is MenyKategoriData => !!k && k.punkter.length > 0);
-  const aktivKategori = kategorier.find((k) => k.aktiv && k.punkter.length > 1)?.navn ?? null;
-
-  // Kategorien med siden man er på, åpnes når man kommer dit (også om den var lukket).
-  useEffect(() => {
-    if (aktivKategori) settApne((a) => (a.has(aktivKategori) ? a : new Set(a).add(aktivKategori)));
-  }, [aktivKategori, sted.pathname, sted.search]);
+    ...(org && ansatt
+      ? ansattGrupper.map(([navn, punkter]) =>
+          modul(
+            `ansatt-${navn}`,
+            navn,
+            ansattModul[navn]?.[0] ?? IkonPerson,
+            punkter.map((x) => punkt(x.til, x.Ikon, x.tekst, x.aktiv, x.teller)),
+            false,
+            ansattModul[navn]?.[1],
+          ),
+        )
+      : []),
+  ].filter((m): m is Modul => !!m && m.punkter.length > 0);
+  // Modulen med siden man er på (med flere sider), og den undermenyen viser.
+  const aktivModul = moduler.find((m) => m.aktiv && m.punkter.length > 1)?.id ?? null;
+  const apenId = valgtModul === undefined ? aktivModul : valgtModul;
+  const apen = moduler.find((m) => m.id === apenId && m.punkter.length > 1) ?? null;
+  // I en annen modul følger undermenyen siden igjen, og menyen på mobil starter der hver gang den åpnes.
+  useEffect(() => settValgtModul(undefined), [aktivModul, menyApen]);
+  const velgModul = (m: Modul) => {
+    // Mobil: sidene i modulen vises i menyen, uten å gå dit.
+    if (window.matchMedia("(max-width: 860px)").matches) return settValgtModul(m.id);
+    // PC: modulen man er i, viser eller skjuler undermenyen; en annen modul åpnes på første side.
+    if (m.id === aktivModul) return settValgtModul(apen?.id === m.id ? null : undefined);
+    nav(m.punkter[0]!.til);
+  };
 
   // Plattformadministratoren kommer inn også uten organisasjon (til sin egen oversikt).
   if (ny || (orgs.length === 0 && !meg?.plattformadmin)) {
@@ -470,7 +530,7 @@ function Ramme() {
   }
 
   return (
-    <div className="ramme">
+    <div className={`ramme${apen ? " med-undermeny" : ""}`}>
       {/* Mobil: logo øverst (trykk for menyen), utseende og logg ut til høyre; menyen ligger
           også i bunnmenyen («Mer»). */}
       <header className="mobiltopp">
@@ -566,102 +626,131 @@ function Ramme() {
         </button>
       </nav>
       <div className={`meny-skygge${menyApen ? " apen" : ""}`} onClick={() => settMenyApen(false)} />
-      <nav
-        id="hovedmeny"
-        className={`meny${menyApen ? " apen" : ""}`}
-        onClick={(e) => {
-          // Også når man trykker på siden man er på (da endres ikke adressen).
-          if ((e.target as HTMLElement).closest("a")) settMenyApen(false);
-        }}
-      >
-        <div className="logo" onClick={() => settMenyApen(false)}>
-          <Logo />
-        </div>
-        <div className="orgvelger">
-          <span className="avatar">{initialer(org?.navn ?? "?")}</span>
-          <div style={{ minWidth: 0 }}>
-            <div className="navn">{org?.navn ?? "Ingen organisasjon"}</div>
-            <div className="type">
-              {/* Med en egen rolle: navnet på rollen (f.eks. Personalansvarlig). */}
-              {org ? (org.rolle === "tilpasset" && org.tilgangsrolle ? org.tilgangsrolle : ansatt ? "Ansatt" : (orgType[org.type] ?? org.type)) : "Plattformadministrator"}
-              {org && !org.direkte_medlem ? " · klient" : ""}
-            </div>
+      {/* PC: hovedmenyen med modulene, og i en modul med flere sider blir den en smal stripe med
+          ikonene, og undermenyen ved siden av viser sidene. Mobil: menyen er en skuff, og sidene i
+          en modul vises i den (med «Alle moduler» tilbake). */}
+      <div className="sidemeny">
+        <nav
+          id="hovedmeny"
+          className={`meny${menyApen ? " apen" : ""}${apen ? " har-undermeny" : ""}`}
+          aria-label="Moduler"
+          onClick={(e) => {
+            // Også når man trykker på siden man er på (da endres ikke adressen).
+            if ((e.target as HTMLElement).closest("a")) settMenyApen(false);
+          }}
+        >
+          <div className="logo" onClick={() => settMenyApen(false)}>
+            <span className="logo-full">
+              <Logo />
+            </span>
+            <span className="logo-mini">
+              <LogoIkon storrelse={34} />
+            </span>
           </div>
-          <span className="pil">
-            <IkonVelg storrelse={16} />
-          </span>
-          <select value={org?.id ?? ""} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
-            {!org && (
-              <option value="" disabled>
-                Ingen organisasjon
-              </option>
-            )}
-            {orgs.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.navn}
-                {o.direkte_medlem ? "" : " (klient)"}
-              </option>
+          <div className="orgvelger" title={org?.navn}>
+            <span className="avatar">{initialer(org?.navn ?? "?")}</span>
+            <div style={{ minWidth: 0 }}>
+              <div className="navn">{org?.navn ?? "Ingen organisasjon"}</div>
+              <div className="type">
+                {/* Med en egen rolle: navnet på rollen (f.eks. Personalansvarlig). */}
+                {org ? (org.rolle === "tilpasset" && org.tilgangsrolle ? org.tilgangsrolle : ansatt ? "Ansatt" : (orgType[org.type] ?? org.type)) : "Plattformadministrator"}
+                {org && !org.direkte_medlem ? " · klient" : ""}
+              </div>
+            </div>
+            <span className="pil">
+              <IkonVelg storrelse={16} />
+            </span>
+            <select value={org?.id ?? ""} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
+              {!org && (
+                <option value="" disabled>
+                  Ingen organisasjon
+                </option>
+              )}
+              {orgs.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.navn}
+                  {o.direkte_medlem ? "" : " (klient)"}
+                </option>
+              ))}
+              <option value="__ny">+ Ny organisasjon</option>
+            </select>
+          </div>
+          {/* Lista ruller, og bunnen (utseende, navn og logg ut) står fast. Oversikt øverst: forsiden
+              for hver rolle (de ansatte har sin egen, AnsattOversikt.tsx; et regnskapsbyrå ser
+              klientene). */}
+          <div className="meny-liste meny-moduler">
+            {moduler.map((m) => (
+              <ModulKnapp key={m.id} m={m} apen={apen?.id === m.id} velg={velgModul} />
             ))}
-            <option value="__ny">+ Ny organisasjon</option>
-          </select>
-        </div>
-        {/* Lista ruller, og bunnen (utseende, navn og logg ut) står fast. Oversikt øverst: forsiden
-            for hver rolle (de ansatte har sin egen, AnsattOversikt.tsx; et regnskapsbyrå ser
-            klientene). */}
-        <div className="meny-liste">
-          {org && (
-            <NavLink to="/" end>
-              <IkonOversikt />
-              {org.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}
-            </NavLink>
-          )}
-          {kategorier.map((k) =>
-            k.punkter.length === 1 ? (
-              <MenyLenke key={k.navn} x={k.punkter[0]!} />
-            ) : (
-              <MenyKategori key={k.navn} k={k} apen={apne.has(k.navn)} veksle={() => veksle(k.navn)} />
-            ),
-          )}
-          {/* Konto nederst i lista, som før: Innstillinger er alltid synlig (ikke i en nedtrekk). Uten
-              organisasjon (plattformadministratoren) er det bare å installere appen. */}
-          {(org || kanInstallere) && <div className="meny-seksjon">Konto</div>}
-          {org && (
-            <NavLink to="/innstillinger">
-              <IkonInnstillinger />
-              Innstillinger
-            </NavLink>
-          )}
-          {/* Bare eier og administrator verifiserer (Verifisering.tsx). */}
-          {org?.verifisering === "ny" && org.direkte_medlem && erAdmin(org) && (
-            <NavLink to="/verifisering">
-              <IkonSkjold />
-              Verifiser organisasjon
-            </NavLink>
-          )}
-          {kanInstallere && (
-            <a href="#" onClick={(e) => (e.preventDefault(), void installer())}>
-              <IkonInstaller />
-              Installer appen
-            </a>
-          )}
-        </div>
-        <div className="meny-fot">
-          <div className="meny-tema">
-            <span>Utseende</span>
-            <TemaBryter />
+            {/* Konto nederst i lista, som før: Innstillinger er alltid synlig. Uten organisasjon
+                (plattformadministratoren) er det bare å installere appen. */}
+            {(org || kanInstallere) && <div className="meny-seksjon">Konto</div>}
+            {org && (
+              <NavLink to="/innstillinger" className="modul" title="Innstillinger">
+                <IkonInnstillinger />
+                <span className="modul-navn">Innstillinger</span>
+              </NavLink>
+            )}
+            {/* Bare eier og administrator verifiserer (Verifisering.tsx). */}
+            {org?.verifisering === "ny" && org.direkte_medlem && erAdmin(org) && (
+              <NavLink to="/verifisering" className="modul" title="Verifiser organisasjon">
+                <IkonSkjold />
+                <span className="modul-navn lang">Verifiser organisasjon</span>
+                <span className="modul-kort">Verifiser</span>
+              </NavLink>
+            )}
+            {kanInstallere && (
+              <a href="#" className="modul" title="Installer appen" onClick={(e) => (e.preventDefault(), void installer())}>
+                <IkonInstaller />
+                <span className="modul-navn lang">Installer appen</span>
+                <span className="modul-kort">Installer</span>
+              </a>
+            )}
           </div>
-          <div className="bunn">
-            <span className="avatar rund">{initialer(meg?.bruker.navn ?? meg?.bruker.epost ?? "?")}</span>
-            <div className="hvem">
-              <div>{meg?.bruker.navn}</div>
-              <span>{meg?.bruker.epost}</span>
+          {/* Mobil: sidene i modulen, i stedet for modulene. */}
+          {apen && (
+            <div className="meny-liste meny-under">
+              <button type="button" className="meny-tilbake" onClick={() => settValgtModul(null)}>
+                <IkonVenstre storrelse={16} />
+                Alle moduler
+              </button>
+              <div className="meny-under-navn">{apen.navn}</div>
+              <Undersider m={apen} />
             </div>
-            <button className="ikon" onClick={loggUt} title="Logg ut" aria-label="Logg ut">
-              <IkonLoggUt />
-            </button>
+          )}
+          <div className="meny-fot">
+            <div className="meny-tema">
+              <span>Utseende</span>
+              <TemaBryter />
+            </div>
+            <div className="bunn">
+              <span className="avatar rund" title={meg?.bruker.navn ?? undefined}>
+                {initialer(meg?.bruker.navn ?? meg?.bruker.epost ?? "?")}
+              </span>
+              <div className="hvem">
+                <div>{meg?.bruker.navn}</div>
+                <span>{meg?.bruker.epost}</span>
+              </div>
+              <button className="ikon" onClick={loggUt} title="Logg ut" aria-label="Logg ut">
+                <IkonLoggUt />
+              </button>
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav>
+        {apen && (
+          <nav id="undermeny" className="undermeny" aria-label={apen.navn}>
+            <div className="undermeny-topp">
+              <h2>{apen.navn}</h2>
+              <button type="button" className="ikon" title="Skjul menyen" aria-label={`Skjul menyen for ${apen.navn}`} onClick={() => settValgtModul(null)}>
+                <IkonVenstre storrelse={18} />
+              </button>
+            </div>
+            <div className="undermeny-liste">
+              <Undersider m={apen} />
+            </div>
+          </nav>
+        )}
+      </div>
       <main className="innhold" data-modul={iPersonal ? "personal" : undefined}>
         {org && ansatt && (
           <Routes>

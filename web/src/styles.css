@@ -127,15 +127,19 @@ strong { font-weight: 650; }
 ::selection { background: var(--aksent-ring); }
 
 /* --------------------------------------------------------------------------
-   Oppsett: mørk sidemeny + innhold
+   Oppsett: mørk sidemeny + innhold. Sidemenyen har to nivåer (App.tsx): hovedmenyen med
+   modulene, og i en modul med flere sider blir den en smal stripe med ikonene, med undermenyen
+   (sidene i modulen) ved siden av.
    -------------------------------------------------------------------------- */
-.ramme { display: grid; grid-template-columns: 256px 1fr; min-height: 100vh; }
+.ramme { display: grid; grid-template-columns: auto 1fr; min-height: 100vh; }
+.sidemeny { position: sticky; top: 0; height: 100vh; align-self: start; display: flex; z-index: 20; }
 .meny {
   background: linear-gradient(180deg, var(--meny-bg) 0%, var(--meny-bg-2) 100%);
   color: var(--meny-tekst); padding: 18px 14px; display: flex; flex-direction: column; gap: 2px;
-  position: sticky; top: 0; height: 100vh; overflow: hidden; z-index: 20;
+  width: 256px; height: 100%; overflow: hidden; z-index: 20;
 }
 .meny .logo { margin: 4px 8px 20px; flex: none; }
+.meny .logo-mini { display: none; }
 .meny .orgvelger { flex: none; }
 /* Lista ruller (rullefeltet helt ut i kanten), og bunnen står fast under den. */
 .meny-liste {
@@ -145,24 +149,36 @@ strong { font-weight: 650; }
 .meny-fot { flex: none; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
 /* Konto nederst i lista (Innstillinger og de andre): en vanlig overskrift, ikke en nedtrekk. */
 .meny-seksjon { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--meny-dempet); margin: 16px 10px 6px; font-weight: 600; }
-/* Kategoriene foldes ut og sammen med overskriften (pila snur når den er åpen). */
-.meny-gruppe { display: flex; flex-direction: column; gap: 2px; }
-button.meny-kategori {
-  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 0; margin-top: 8px; padding: 8px 10px;
-  border: 0; border-radius: 9px; background: transparent; box-shadow: none; color: var(--meny-dempet);
-  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; text-align: left;
+/* Modulene i hovedmenyen: ikon og navn, og en pil på dem med flere sider (de vises i undermenyen). */
+.meny .modul {
+  display: flex; align-items: center; gap: 11px; width: 100%; min-height: 0; padding: 9px 10px; border: 0; border-radius: 9px;
+  background: transparent; box-shadow: none; color: var(--meny-tekst); font: inherit; font-size: 0.93rem; font-weight: 500;
+  line-height: 1.3; text-align: left; text-decoration: none; cursor: pointer; transition: background .15s, color .15s;
   -webkit-tap-highlight-color: transparent;
 }
-button.meny-kategori:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); color: #fff; }
-button.meny-kategori:active:not(:disabled) { transform: none; }
-button.meny-kategori:focus-visible { box-shadow: 0 0 0 2px #7d9bff; }
-.meny-kategori-navn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-button.meny-kategori svg { flex: none; transition: transform .18s ease; }
-button.meny-kategori[aria-expanded="true"] svg { transform: rotate(180deg); }
-button.meny-kategori[aria-expanded="true"], button.meny-kategori.har-aktiv { color: var(--meny-tekst); }
-button.meny-kategori .ulest-tall { letter-spacing: 0; }
-.meny-punkter { display: flex; flex-direction: column; gap: 2px; }
-.meny-punkter[hidden] { display: none; }
+.meny .modul svg { flex: none; opacity: .8; }
+.meny .modul:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); color: #fff; text-decoration: none; }
+.meny .modul:active:not(:disabled) { transform: none; }
+.meny .modul:focus-visible { box-shadow: 0 0 0 2px #7d9bff; }
+.meny .modul.active { background: var(--meny-aktiv-bg); color: var(--meny-aktiv); box-shadow: inset 2px 0 0 #7d9bff; }
+.meny .modul.active svg { opacity: 1; color: #9db4ff; }
+.modul-navn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modul-kort { display: none; }
+.meny .modul .modul-pil { display: flex; flex: none; color: var(--meny-dempet); }
+.meny .modul .modul-pil svg { opacity: 1; color: inherit; }
+/* Gruppene i en modul (Regnskap), i undermenyen og i menyen på mobil. */
+.meny-gruppenavn { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em; font-weight: 600; color: var(--dempet); margin: 14px 10px 4px; }
+.meny .meny-gruppenavn { color: var(--meny-dempet); }
+/* Mobil: sidene i modulen i menyen, med «Alle moduler» tilbake (vises bare på mobil). */
+.meny .meny-under { display: none; }
+button.meny-tilbake {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 0; margin: 2px 0 2px; padding: 6px 10px 6px 6px;
+  border: 0; border-radius: 8px; background: transparent; box-shadow: none; color: var(--meny-dempet); font-size: 0.85rem; font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+button.meny-tilbake:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); color: #fff; }
+button.meny-tilbake:active:not(:disabled) { transform: none; }
+.meny-under-navn { color: #fff; font-size: 1.1rem; font-weight: 700; margin: 6px 10px 4px; }
 .meny a {
   display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 9px;
   color: var(--meny-tekst); text-decoration: none; font-size: 0.93rem; font-weight: 500;
@@ -216,6 +232,61 @@ button.meny-kategori .ulest-tall { letter-spacing: 0; }
 .temabryter button:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, 0.08); }
 .temabryter button.valgt, .temabryter button.valgt:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .temabryter button:focus-visible { box-shadow: 0 0 0 2px #7d9bff; }
+
+/* Undermenyen (PC): sidene i modulen, på lys bunn ved siden av den smale hovedmenyen. */
+.undermeny { display: none; }
+@media (min-width: 861px) {
+  .undermeny {
+    display: flex; flex-direction: column; width: 244px; height: 100%; padding: 22px 12px 16px;
+    background: var(--flate); border-right: 1px solid var(--kant); animation: undermeny-inn .16s ease-out;
+  }
+  .undermeny-topp { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 2px 10px 10px; flex: none; }
+  .undermeny-topp h2 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; }
+  .undermeny-topp button.ikon {
+    width: 30px; height: 30px; min-height: 30px; padding: 0; justify-content: center; border-color: transparent;
+    background: transparent; box-shadow: none; color: var(--dempet);
+  }
+  .undermeny-topp button.ikon:hover:not(:disabled) { background: var(--flate-2); border-color: var(--kant); color: var(--tekst); }
+  .undermeny-liste {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px;
+    margin: 0 -12px; padding: 0 12px 12px; scrollbar-width: thin;
+  }
+  .undermeny-liste .meny-gruppenavn:first-child { margin-top: 4px; }
+  .undermeny a {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; color: var(--tekst-2);
+    text-decoration: none; font-size: 0.92rem; font-weight: 500; transition: background .15s, color .15s;
+  }
+  .undermeny a svg { flex: none; color: var(--dempet); }
+  .undermeny a:hover { background: var(--flate-2); color: var(--tekst); text-decoration: none; }
+  .undermeny a.active { background: var(--aksent-lys); color: var(--aksent); font-weight: 600; }
+  .undermeny a.active svg { color: var(--aksent); }
+
+  /* Hovedmenyen som smal stripe: ikonene med det korte navnet under, bare symbolet i logoen og
+     forbokstavene til organisasjonen (velgeren ligger over dem). */
+  .meny.har-undermeny { width: 80px; padding: 16px 8px; }
+  .meny.har-undermeny .logo { margin: 2px auto 14px; }
+  .meny.har-undermeny .logo-full { display: none; }
+  .meny.har-undermeny .logo-mini { display: block; }
+  .meny.har-undermeny .orgvelger { justify-content: center; padding: 6px 0; margin-bottom: 8px; background: transparent; border-color: transparent; }
+  .meny.har-undermeny .orgvelger > div, .meny.har-undermeny .orgvelger .pil { display: none; }
+  .meny.har-undermeny .meny-liste { margin: 0 -8px; padding: 2px 8px 10px; }
+  .meny.har-undermeny .modul {
+    position: relative; flex-direction: column; justify-content: center; gap: 5px; padding: 9px 2px 8px;
+    font-size: 0.64rem; font-weight: 600; letter-spacing: 0.01em; text-align: center;
+  }
+  .meny.har-undermeny .modul .modul-navn { flex: none; max-width: 100%; }
+  .meny.har-undermeny .modul .modul-navn.lang, .meny.har-undermeny .modul .modul-pil { display: none; }
+  .meny.har-undermeny .modul-kort { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meny.har-undermeny .modul .ulest-tall { position: absolute; top: 3px; right: 12px; }
+  .meny.har-undermeny .meny-seksjon { height: 1px; margin: 10px 10px; overflow: hidden; font-size: 0; background: rgba(255, 255, 255, 0.08); }
+  .meny.har-undermeny .meny-tema, .meny.har-undermeny .bunn .hvem { display: none; }
+  .meny.har-undermeny .bunn { flex-direction: column; gap: 8px; padding-top: 12px; }
+}
+@keyframes undermeny-inn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+/* Fanene på en side som står i undermenyen (Regnskap), vises ikke to ganger på PC. */
+@media (min-width: 861px) {
+  .ramme.med-undermeny .meny-faner { display: none; }
+}
 
 /* Logoen i toppfeltet åpner menyen. */
 .logo-knapp {
@@ -291,6 +362,9 @@ button.meny-kategori .ulest-tall { letter-spacing: 0; }
     transform: translateX(-100%); visibility: hidden; transition: transform .22s ease, visibility .22s;
   }
   .meny.apen { transform: none; visibility: visible; box-shadow: var(--skygge-3); }
+  .sidemeny { display: contents; }
+  .meny.har-undermeny .meny-moduler { display: none; }
+  .meny.har-undermeny .meny-under { display: flex; }
   body.skriver .bunnmeny { display: none; }
   .meny-skygge.apen { display: block; position: fixed; inset: 0; background: rgba(5, 10, 25, 0.5); z-index: 39; }
   @media (max-width: 359px) {

@@ -667,19 +667,23 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   mellom underfanene. Gamle lenker og varsler (`?fane=betaling`, `?fane=ehf`, `?fane=brukere`,
   `?fane=skattekort` og `?fane=personal#lonn`, `#afp`, `#amelding`, `#skattekort`) går til fanen og
   underfanen der delen er nå (`nyAdresse`)
-- Sidemenyen (`App.tsx`) har Oversikt øverst, forsiden for hver rolle (se under), og resten i
-  kategorier: Plattform (bare for plattformadministratorene), Faktura (Fakturaer, Kunder og
-  Produkter), Personal (Ansatte, Vaktplan, Timer eller «Timer og ferie», og Beskjeder), Lønn
-  (fanene på Lønn som punkter: Lønnskjøringer, A-melding, Sykepenger, Årsoversikt, Reiser og Mine
-  lønnsslipper), Regnskap (delene av Regnskap som egne punkter: Bilag, Utgifter, Bank, Mva,
-  Saldobalanse, Årsoppgjør, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer, som
-  `?fane=` på `/regnskap`) og Rapporter, og nederst Konto (Innstillinger, Verifiser organisasjon
-  for eier og administrator, og Installer appen), som alltid er synlig. Kategoriene foldes ut og
-  sammen med overskriften (`MenyKategori`): de er lukket som standard, og den med siden man er på,
-  åpnes når man kommer dit; lukket viser den tallet på nye beskjeder, og en kategori med ett punkt
-  er en vanlig lenke. Lista ruller, og bunnen (utseendet, navnet og «Logg ut») står fast, også i
-  skuffen på mobil. Det rollen og modulene ikke gir tilgang til, er ikke med. De ansatte
-  har sin egen meny (under Roller). Et regnskapsbyrå har Klienter i stedet for Oversikt og ikke
+- Sidemenyen (`App.tsx`) har to nivåer. Hovedmenyen har modulene: Oversikt øverst, forsiden for
+  hver rolle (se under), Plattform (bare for plattformadministratorene), Faktura (Fakturaer, Kunder
+  og Produkter), Personal (Ansatte, Vaktplan, Timer eller «Timer og ferie», Beskjeder og
+  Sjekklister), Lønn (fanene på Lønn: Lønnskjøringer, A-melding, Sykepenger, Årsoversikt, Reiser og
+  Mine lønnsslipper), Regnskap (delene av Regnskap, som `?fane=` på `/regnskap`, i gruppene Daglig:
+  Bilag, Utgifter og Bank; Skatt og avgift: Mva og Skatteetaten; Avslutning: Saldobalanse,
+  Periodiseringer og Årsoppgjør; Eiendeler og kontoer: Anleggsmidler, Saldoavskrivninger og
+  Kontoer) og Rapporter, og nederst Konto (Innstillinger, Verifiser organisasjon for eier og
+  administrator, og Installer appen). En modul med én side er en vanlig lenke. På PC åpner en
+  modul med flere sider seg på den første, hovedmenyen blir en smal stripe med ikonene og et kort
+  navn under hvert, og undermenyen ved siden av viser sidene i modulen; den følger siden man er
+  på, kan skjules (pila øverst, eller modulen man er i) og åpnes igjen, og fanene på Regnskap
+  vises ikke på siden mens den er åpen. På mobil er menyen en skuff: en modul viser sidene sine i
+  skuffen (uten å bytte side), med «Alle moduler» tilbake, og skuffen åpner på modulen man er i.
+  Tallet på nye beskjeder står ved modulen og siden. Lista ruller, og bunnen (utseendet, navnet og
+  «Logg ut») står fast. Det rollen og modulene ikke gir tilgang til, er ikke med. De ansatte har
+  sin egen meny (under Roller). Et regnskapsbyrå har Klienter i stedet for Oversikt og ikke
   Faktura.
 - Hver har sin egen oversikt, satt sammen av de samme delene (`OversiktDeler.tsx`: hilsenen,
   nøkkeltallene, som lenker til siden de hører til, og «Til oppfølging» med én linje per ting som
@@ -1432,7 +1436,8 @@ fakturadata, andre medlemmer, kollegaenes ansattkort, lønn, timer, timebank, no
 utkast i vaktplanen eller revisjonsloggen. Varsler til hele organisasjonen og
 Google Disk-kopier går ikke til ansatte. Sidemenyen deres (`App.tsx`) har Oversikt øverst (deres
 egen forside, `AnsattOversikt.tsx`) og det som ellers ligger i faner på sidene, som egne punkter i
-grupper:
+grupper (modulene i hovedmenyen, med sidene i undermenyen; «Timer og fravær» heter «Timer» i den
+smale menyen):
 
 - Vakter: Kalender (`/vakter?fane=plan&visning=turnus`, med turnusen deres som standard og hele
   kalenderen), Mine vakter, Ledige vakter, Bytte vakter (bare når vaktbytte er slått på,
