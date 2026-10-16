@@ -25,7 +25,7 @@
 | API og bakgrunnsjobber | Cloud Run (api, worker) og Cloud Run job (migrate) |
 | Innlogging | Identity Platform: e-post og passord, e-postbekreftelse, TOTP-MFA |
 | Filer | Cloud Storage: `fakturaer` med versjonering og oppbevaringsregel, `filer` for logo og vedlegg |
-| Køer og hendelser | Cloud Tasks (utsending med gjentatte forsøk), Pub/Sub (integrasjoner). Cloud Tasks og Scheduler ligger i europe-west1, som er nærmeste region med disse tjenestene. API-et legger oppgavene på `WORKER_URL`; workeren, som ikke kan få sin egen adresse fra Terraform, bruker adressen Cloud Scheduler, Cloud Tasks og Pub/Sub kaller den på (`settWorkerAdresse` i `tjenester.ts`). En oppgave som ikke kan legges i kø i produksjon, logges som ERROR |
+| Køer og hendelser | Cloud Tasks (utsending med gjentatte forsøk), Pub/Sub (integrasjoner). Cloud Tasks og Scheduler ligger i europe-west1, som er nærmeste region med disse tjenestene. API-et legger oppgavene på `WORKER_URL`; workeren, som ikke kan få sin egen adresse fra Terraform, bruker adressen Cloud Scheduler, Cloud Tasks og Pub/Sub kaller den på (`settWorkerAdresse` i `tjenester.ts`). En oppgave som ikke kan legges i kø i produksjon, logges som ERROR. Fakturaer der utsendingen aldri ble kjørt (utstedt, ikke sendt og uten PDF, mer enn ti minutter etter utstedelsen), er merket «Ikke sendt» i fakturalisten og sendes på nytt flere om gangen (`POST /fakturaer/send-flere`) |
 | Planlagte jobber | Cloud Scheduler med OIDC-token mot workeren |
 | Hemmeligheter | Secret Manager. Cloud KMS krypterer OAuth- og integrasjonstokens |
 | Bygg og utrulling | GitHub Actions med Workload Identity Federation, Artifact Registry, Terraform |

@@ -475,6 +475,8 @@ tbody tr.klikkbar:hover { background: var(--aksent-lys); }
 .melding.feil { background: var(--fare-lys); color: var(--fare); border-color: color-mix(in srgb, var(--fare) 25%, transparent); }
 .melding.ok { background: var(--ok-lys); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 25%, transparent); }
 .melding.info { background: var(--info-lys); color: var(--info); border-color: color-mix(in srgb, var(--info) 22%, transparent); }
+/* En melding med en knapp ved siden av teksten (bryter under på smal skjerm). */
+.melding.med-knapp { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
 
 /* Bannere nederst: ny versjon og frakoblet */
 .bannere {

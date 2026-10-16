@@ -788,6 +788,11 @@ export function lagApi() {
     const status = c.req.query("status");
     const kunde = c.req.query("kunde_id");
     const type = c.req.query("type");
+    // Ikke sendt: utstedt, men utsendingen er aldri kjørt (ikke sendt, og ingen PDF; f.eks. da
+    // oppgavene ikke kom i kø). En faktura som er utstedt uten sending, eller til en kunde uten
+    // e-post, har PDF-en og står ikke her. Feltet ikke_sendt er bare sant når fakturaen ble utstedt
+    // for over ti minutter siden (før det kan utsendingen være på vei).
+    if (c.req.query("ikke_sendt") === "1") vilkar.push(`f.status = 'utstedt' and f.sendt_at is null and f.pdf_sti is null`);
     if (status === "kreditert" && c.req.query("kreditnotaer")) {
       // Krediterte fakturaer sammen med kreditnotaene (som ikke skal betales).
       vilkar.push(`(f.status = 'kreditert' or (f.type = 'kreditnota' and f.status <> 'utkast'))`);
@@ -811,7 +816,9 @@ export function lagApi() {
                   f.fakturadato, f.forfallsdato, f.betalt_belop, f.kreditert_belop, f.refusjon_belop,
                   coalesce(f.sum_inkl_mva, faktura.utkast_sum(f.id)) as sum_inkl_mva,
                   case when f.status = 'utkast' then (select count(*)::int from faktura.faktura_linjer l where l.faktura_id = f.id) end as antall_linjer,
-                  case when f.status = 'utkast' then k.epost end as kunde_epost,
+                  case when f.status = 'utkast' or (f.status = 'utstedt' and f.sendt_at is null) then k.epost end as kunde_epost,
+                  case when f.status = 'utstedt' and f.sendt_at is null then k.ehf end as kunde_ehf,
+                  (f.status = 'utstedt' and f.sendt_at is null and f.pdf_sti is null and f.utstedt_at < now() - interval '10 minutes') as ikke_sendt,
                   f.sendt_at, f.kreditnota_for, f.planlagt_sending,
                   (f.status = 'utstedt' and f.type = 'faktura' and f.forfallsdato < faktura.i_dag()) as forfalt,
                   (select count(*) from faktura.purringer p where p.faktura_id = f.id) as antall_purringer,
@@ -1120,6 +1127,21 @@ export function lagApi() {
     });
     const ikkeSendt = b.send_epost === false ? [] : await leggUtsendingIKo(fakturaer.map((f) => f.id));
     return c.json({ fakturaer, ikke_sendt: ikkeSendt, hoppet_over: hoppetOver });
+  });
+
+  // Sender utstedte fakturaer på nytt, flere om gangen (fakturaene som ikke ble sendt). Som «Send
+  // på nytt» på fakturaen: EHF når kunden kan ta imot det, ellers e-post. Utkast hoppes over.
+  org.post("/fakturaer/send-flere", async (c) => {
+    const b = await kropp(c, z.object({ ider: z.array(uuid).min(1).max(200, "Høyst 200 fakturaer om gangen") }));
+    const ider = [...new Set(b.ider)];
+    const { sendes, hoppetOver } = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'utsted')", [orgId(c)]);
+      const rader = await alle<{ id: string }>(db, "select id from faktura.fakturaer where org_id = $1 and id = any($2::uuid[]) and status <> 'utkast'", [orgId(c), ider]);
+      const finnes = new Set(rader.map((r) => r.id));
+      return { sendes: ider.filter((id) => finnes.has(id)), hoppetOver: ider.filter((id) => !finnes.has(id)) };
+    });
+    const ikkeSendt = await leggUtsendingIKo(sendes);
+    return c.json({ sendes: sendes.length - ikkeSendt.length, ikke_sendt: ikkeSendt, hoppet_over: hoppetOver }, 202);
   });
 
   org.delete("/fakturaer/:id", async (c) => {

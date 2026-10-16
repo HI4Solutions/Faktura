@@ -41,6 +41,11 @@ export function Fakturaliste() {
   useHentVedApning();
   const [sendUtkast, settSendUtkast] = useState(false);
   const utkast = status === "utkast" ? (data ?? []) : [];
+  // Utstedt, men ikke sendt til kunden (f.eks. da utsendingen ikke kom i kø). De som ble utstedt de
+  // siste ti minuttene, er trolig på vei (ikke_sendt er usann) og står ikke med.
+  const ikkeSendt = useData(() => (kanSkrive(org) ? hent<any[]>(`/org/${org!.id}/fakturaer?ikke_sendt=1`) : Promise.resolve([])), [org?.id], { oppdater: true });
+  const glemt = (ikkeSendt.data ?? []).filter((f) => f.ikke_sendt);
+  const [sendPaaNytt, settSendPaaNytt] = useState(false);
 
   return (
     <>
@@ -60,6 +65,14 @@ export function Fakturaliste() {
         )}
       </div>
       <Fakturafaner valgt={status} velgStatus={settStatus} />
+      {glemt.length > 0 && (
+        <div className="melding advarsel med-knapp" role="status">
+          <span>{glemt.length === 1 ? "Én faktura er utstedt, men ikke sendt til kunden." : `${glemt.length} fakturaer er utstedt, men ikke sendt til kunden.`}</span>
+          <button type="button" onClick={() => settSendPaaNytt(true)}>
+            Se og send …
+          </button>
+        </div>
+      )}
       {utkast.length > 0 && kanSkrive(org) && harFunksjon(org, "flere") && (
         <div className="knapper" style={{ marginBottom: 14 }}>
           <button type="button" onClick={() => settSendUtkast(true)}>
@@ -78,6 +91,16 @@ export function Fakturaliste() {
           betaling={kanBokfore(org)}
         />
       )}
+      <Dialog apen={sendPaaNytt} lukk={() => settSendPaaNytt(false)} tittel="Ikke sendt">
+        <SendPaaNytt
+          fakturaer={glemt}
+          ferdig={() => {
+            settSendPaaNytt(false);
+            void ikkeSendt.last();
+            last();
+          }}
+        />
+      </Dialog>
       <Dialog apen={sendUtkast} lukk={() => settSendUtkast(false)} tittel="Send utkast">
         <SendUtkast
           utkast={utkast}
@@ -88,6 +111,88 @@ export function Fakturaliste() {
         />
       </Dialog>
     </>
+  );
+}
+
+// Fakturaene som er utstedt, men der utsendingen aldri ble kjørt: send dem på nytt, flere om gangen
+// (EHF når kunden kan ta imot det, ellers e-post). Kunder uten e-post og EHF er ikke valgt: fakturaen
+// lages, men sendes ikke (legg inn e-posten på kunden først).
+function SendPaaNytt({ fakturaer, ferdig }: { fakturaer: any[]; ferdig: () => void }) {
+  const { org } = useKonto();
+  const kan = (f: any) => Boolean(f.kunde_epost || f.kunde_ehf);
+  const [valgt, settValgt] = useState<Set<string>>(() => new Set(fakturaer.filter(kan).map((f) => f.id)));
+  const [resultat, settResultat] = useState<{ sendes: number; ikke_sendt: string[] } | null>(null);
+  const h = useHandling();
+  const valgte = fakturaer.filter((f) => valgt.has(f.id));
+  const alle = valgte.length === fakturaer.length && fakturaer.length > 0;
+  const n = (x: number) => `${x} ${x === 1 ? "faktura" : "fakturaer"}`;
+
+  async function send() {
+    const r = await h.kjor(() => api<{ sendes: number; ikke_sendt: string[] }>("POST", `/org/${org!.id}/fakturaer/send-flere`, { ider: valgte.map((f) => f.id) }));
+    if (r) settResultat(r);
+  }
+
+  if (resultat)
+    return (
+      <>
+        <div className="melding ok">{n(resultat.sendes)} sendes nå.</div>
+        {resultat.ikke_sendt.length > 0 && (
+          <div className="melding feil">{n(resultat.ikke_sendt.length)} kom ikke i kø for sending. Prøv igjen, eller åpne dem og trykk «Send på nytt».</div>
+        )}
+        <div className="knapper">
+          <button type="button" className="primar" onClick={ferdig}>
+            Ferdig
+          </button>
+        </div>
+      </>
+    );
+
+  return (
+    <div className="flervalg">
+      <p className="liten dempet">Fakturaene er utstedt, men kunden har ikke fått dem (verken e-post eller EHF).</p>
+      {fakturaer.length > 1 && (
+        <label className="velg-alle">
+          <input type="checkbox" checked={alle} onChange={() => settValgt(alle ? new Set() : new Set(fakturaer.map((f) => f.id)))} />
+          Velg alle ({fakturaer.length})
+        </label>
+      )}
+      <div className="flervalg-liste">
+        {fakturaer.map((f) => (
+          <label key={f.id}>
+            <input
+              type="checkbox"
+              checked={valgt.has(f.id)}
+              onChange={() =>
+                settValgt((v) => {
+                  const ny = new Set(v);
+                  if (ny.has(f.id)) ny.delete(f.id);
+                  else ny.add(f.id);
+                  return ny;
+                })
+              }
+            />
+            <span>
+              <span className="linje">
+                <span className="navn">
+                  {f.type === "kreditnota" ? "Kreditnota" : "Faktura"} {f.fakturanummer} · {f.kunde_navn}
+                </span>
+                <span className="belop">{kr(f.sum_inkl_mva)}</span>
+              </span>
+              <span className="dempet liten">
+                {f.fakturadato ? `${dato(f.fakturadato)} · ` : ""}
+                {f.kunde_epost ?? (f.kunde_ehf ? "EHF" : "Kunden mangler e-post: fakturaen lages, men sendes ikke (legg inn e-posten på kunden først)")}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <Feil melding={h.feil} />
+      <div className="knapper">
+        <button type="button" className="primar" disabled={!valgte.length || h.opptatt} onClick={send}>
+          {h.opptatt ? "Sender …" : `Send ${n(valgte.length)}`}
+        </button>
+      </div>
+    </div>
   );
 }
 

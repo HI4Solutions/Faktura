@@ -1,6 +1,7 @@
 // Mange fakturaer på én gang: til forskjellige kunder med forskjellige produkter.
 import { describe, expect, it, beforeAll } from "vitest";
 import { lagApi } from "../src/api.js";
+import { somSystem } from "../src/db.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 
 describe.skipIf(!process.env.DATABASE_URL)("Flere fakturaer på én gang", () => {
@@ -134,5 +135,38 @@ describe.skipIf(!process.env.DATABASE_URL)("Flere fakturaer på én gang", () =>
     expect(r.data.fakturaer.map((f: any) => [f.id, f.status])).toEqual([[b, "utstedt"]]);
     expect(r.data.hoppet_over).toEqual([a]);
     expect(sendinger()).toEqual([b]);
+  });
+
+  it("fakturaene som ikke ble sendt: lista, og flere sendt på nytt", async () => {
+    const u = await kall("POST", `/api/org/${org}/fakturaer/flere`, {
+      fakturaer: [
+        { kunde_id: k[0], linjer: [linje("Leie", 900)] },
+        { kunde_id: k[2], linjer: [linje("Leie", 800)] },
+        { kunde_id: k[1], linjer: [linje("Leie", 700)] },
+      ],
+    });
+    const [a, b, utkast] = u.data.fakturaer.map((f: any) => f.id);
+    // Utstedt, men utsendingen ble aldri kjørt (som da oppgavene ikke kom i kø): ikke sendt.
+    expect((await kall("POST", `/api/org/${org}/fakturaer/utsted-flere`, { ider: [a, b] })).status).toBe(200);
+    // Rett etter utstedelsen kan utsendingen være på vei (ikke_sendt er usann). De som ble utstedt uten sending i testene over,
+    // er også med (ingen av dem er sendt).
+    const liste = (await kall("GET", `/api/org/${org}/fakturaer?ikke_sendt=1`)).data.filter((f: any) => [a, b].includes(f.id));
+    expect(liste.map((f: any) => [f.id, f.status, f.kunde_epost, f.sendt_at, f.ikke_sendt])).toEqual([
+      [b, "utstedt", null, null, false],
+      [a, "utstedt", "en@test.no", null, false],
+    ]);
+    expect((await kall("GET", `/api/org/${org}/fakturaer?ikke_sendt=1`)).data.every((f: any) => f.status === "utstedt" && !f.sendt_at)).toBe(true);
+    // Bare de som har tilgang til å sende, og utkast og fremmede fakturaer hoppes over.
+    expect((await kall("POST", `/api/org/${org}/fakturaer/send-flere`, { ider: [a] }, fremmed)).status).toBe(403);
+    ko.length = 0;
+    const r = await kall("POST", `/api/org/${org}/fakturaer/send-flere`, { ider: [a, b, utkast, a] });
+    expect(r.status).toBe(202);
+    expect(r.data).toEqual({ sendes: 2, ikke_sendt: [], hoppet_over: [utkast] });
+    expect(sendinger()).toEqual([a, b]);
+    // Når fakturaen er sendt, er den ikke med lenger.
+    await somSystem((db) => db.query("select faktura.marker_sendt($1, null, 'en@test.no')", [a]));
+    const etter = (await kall("GET", `/api/org/${org}/fakturaer?ikke_sendt=1`)).data.map((f: any) => f.id);
+    expect(etter).toContain(b);
+    expect(etter).not.toContain(a);
   });
 });
