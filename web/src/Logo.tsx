@@ -1,7 +1,8 @@
 // Admin Konsoll-logoen: et avrundet kvadrat delt i fire moduler der mellomrommene danner en K
-// (Modul-K), og ordmerket i Schibsted Grotesk. Kilen mellom armene har aksentfargen. Fargene
-// kommer fra styles.css (--logo-farge og --logo-kile), så logoen er nattblå på lys bunn og hvit
-// på mørk. Samme tegning som favicon.svg, app-ikonene og filene i docs/merkevare.
+// (Modul-K), og ordmerket «adminkonsoll» i Inter Display («admin» Regular, «konsoll» Bold). Kilen
+// mellom armene har aksentfargen. Fargene kommer fra styles.css (--logo-farge og --logo-kile), så
+// logoen er nattblå på lys bunn og hvit på mørk. Samme tegning som favicon.svg, app-ikonene og
+// filene i docs/merkevare.
 import { KILE, LOGO_BREDDE, ORDMERKE, STAMME } from "./logoStier";
 
 // Bare symbolet, f.eks. på låseskjermen.
