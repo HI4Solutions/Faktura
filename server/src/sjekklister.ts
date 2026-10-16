@@ -179,7 +179,11 @@ export function sjekklisteRuter() {
     c.json(
       await bruk(c, async (db) => {
         const t = await tilgang(db, orgId(c));
-        const lister = await alle<{ min: boolean; aktiv: boolean }>(db, `${LISTER} where s.org_id = $1 order by lower(s.navn)`, [orgId(c)]);
+        // Sortert her og ikke i databasen: sorteringen der følger databasens oppsett (i Cloud SQL
+        // står Å sammen med A), men lista skal være i norsk alfabetisk rekkefølge (Æ, Ø, Å sist).
+        const lister = (await alle<{ navn: string; min: boolean; aktiv: boolean }>(db, `${LISTER} where s.org_id = $1`, [orgId(c)])).sort((a, b) =>
+          a.navn.localeCompare(b.navn, "nb"),
+        );
         const apne = await en<{ n: number }>(
           db,
           `select count(*)::int as n from faktura.sjekkliste_svar x
