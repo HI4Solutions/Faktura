@@ -27,6 +27,7 @@ type Rad = {
   erstatter: string | null;
   innsending: "fil" | "api";
   status: string;
+  forsendelse_id: string | null;
   dialog_id: string | null;
 };
 
@@ -34,7 +35,7 @@ const hentRad = (org: string, id: string) =>
   somSystem((db) =>
     en<Rad>(
       db,
-      `select id, org_id, to_char(maaned, 'YYYY-MM-DD') as maaned, meldings_id, erstatter, innsending, status, dialog_id
+      `select id, org_id, to_char(maaned, 'YYYY-MM-DD') as maaned, meldings_id, erstatter, innsending, status, forsendelse_id, dialog_id
          from faktura.ameldinger where org_id = $1 and id = $2`,
       [org, id],
     ),
@@ -217,17 +218,64 @@ export async function lagAmelding(org: string, ameldingId: string) {
 
 // --- Tilbakemeldingen -------------------------------------------------------------------------
 
-// Lenken til tilbakemeldingen i dialogen (vedlegget for API-et i en forsendelse fra Skatteetaten).
-export function tilbakemeldingUrl(dialog: any): string | null {
-  const urler: { url: string; consumerType?: string }[] = [];
-  const samle = (x: any) => {
-    if (!x || typeof x !== "object") return;
-    if (Array.isArray(x)) return x.forEach(samle);
-    if (typeof x.url === "string" && /^https:\/\//.test(x.url)) urler.push({ url: x.url, consumerType: x.consumerType });
-    for (const v of Object.values(x)) samle(v);
+type Lenke = { url: string; consumerType?: string };
+
+// Lenkene (https) i noe fra Dialogporten, hvor de enn står (vedleggene på en forsendelse).
+function lenker(x: unknown): Lenke[] {
+  const ut: Lenke[] = [];
+  const samle = (y: any) => {
+    if (!y || typeof y !== "object") return;
+    if (Array.isArray(y)) return y.forEach(samle);
+    if (typeof y.url === "string" && /^https:\/\//.test(y.url)) ut.push({ url: y.url, consumerType: y.consumerType });
+    for (const v of Object.values(y)) samle(v);
   };
-  samle(dialog?.transmissions ?? dialog);
-  return urler.find((u) => u.consumerType === "Api")?.url ?? urler.find((u) => /tilbakemelding/i.test(u.url) && !/\/web\//.test(u.url))?.url ?? null;
+  samle(x);
+  return ut;
+}
+
+// Lenken for API-et (consumerType «Api»), ellers en lenke til tilbakemeldingen som ikke er for
+// innboksen («Gui», under /web/).
+const apiLenke = (l: Lenke[]) =>
+  l.find((u) => u.consumerType === "Api")?.url ?? l.find((u) => /tilbakemelding/i.test(u.url) && !/\/web\//.test(u.url))?.url ?? null;
+
+const forsendelserI = (dialog: any): any[] | null =>
+  Array.isArray(dialog?.transmissions) ? dialog.transmissions.filter((t: unknown) => t && typeof t === "object") : null;
+
+// Lenken til tilbakemeldingen i dialogen. Skatteetaten lager én forsendelse (transmission) for
+// innsendingen og en annen for tilbakemeldingen, og begge kan ha en lenke for API-et. Forsendelsen
+// for innsendingen (ID-en i svaret på innsendingen, eller typen «Submission») hoppes derfor over,
+// og den nyeste av de andre brukes.
+export function tilbakemeldingUrl(dialog: any, innsending?: string | null): string | null {
+  const forsendelser = forsendelserI(dialog);
+  if (!forsendelser) return apiLenke(lenker(dialog));
+  const tilbakemeldinger = forsendelser
+    .filter((t) => !(innsending && t.id === innsending) && String(t.type ?? "").toLowerCase() !== "submission")
+    .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+  for (const t of tilbakemeldinger) {
+    const url = apiLenke(lenker(t));
+    if (url) return url;
+  }
+  return null;
+}
+
+// Verten og stien i en adresse (til loggen, uten spørringen).
+const vertOgSti = (url: string) => {
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname}`;
+  } catch {
+    return "ugyldig adresse";
+  }
+};
+
+// Forsendelsene i dialogen til loggen: ID-en, typen, når og lenkene (verten og stien).
+export function forsendelseOversikt(dialog: any) {
+  return (forsendelserI(dialog) ?? []).slice(0, 20).map((t) => ({
+    id: t.id ?? null,
+    type: t.type ?? null,
+    opprettet: t.createdAt ?? null,
+    lenker: lenker(t.attachments).map((l) => `${l.consumerType ?? "?"} ${vertOgSti(l.url)}`),
+  }));
 }
 
 const skjul = (x: unknown) => JSON.parse(JSON.stringify(x ?? null).replace(/\b\d{11}\b/g, "•••••••••••"));
@@ -262,31 +310,51 @@ export function tolkTilbakemelding(data: any): { status: "mottatt" | "avvist" | 
 }
 
 // Henter tilbakemeldingen (raden står som «sendt»). Er den ikke klar, prøves det igjen litt senere
-// (lenger mellom hver gang, i to døgn).
+// (lenger mellom hver gang, i to døgn). Hva den venter på, står på meldingen (tilbakemelding.venter,
+// vist med når den sist ble sjekket) og i loggen, med forsendelsene i dialogen.
 export async function sjekkAmelding(org: string, ameldingId: string, forsok = 1) {
   const m = await hentRad(org, ameldingId);
   if (!m || m.status !== "sendt") return;
   const igjen = async () => {
     if (forsok < 40) await leggIKo({ type: "amelding-status", org_id: org, amelding_id: m.id, forsok: forsok + 1 }, Math.min(3600, 120 * forsok));
   };
+  // Ikke klar ennå: grunnen står på meldingen og i loggen, og det prøves igjen senere.
+  type Venter = { detaljer?: Record<string, unknown>; tilbakemelding?: Record<string, unknown>; igjen?: boolean };
+  const venter = async (grunn: string, o: Venter = {}) => {
+    logg("INFO", "Tilbakemeldingen på a-meldingen er ikke klar", { org_id: org, amelding_id: m.id, forsok, grunn, ...o.detaljer });
+    await oppdater(m.id, { tilbakemelding: { status: null, avvik: [], ...o.tilbakemelding, venter: grunn }, feil: null });
+    if (o.igjen !== false) await igjen();
+  };
   try {
     await oppdater(m.id, { sjekket: new Date().toISOString() });
-    if (!m.dialog_id) return;
+    // Uten dialog-ID-en er det ingenting å slå opp (et nytt forsøk hjelper ikke).
+    if (!m.dialog_id)
+      return void (await venter("Skatteetaten sendte ingen dialog-ID med kvitteringen, så appen finner ikke tilbakemeldingen. Den står i innboksen i Altinn.", { igjen: false }));
     const t = await hentTilgang(org);
     if (!t?.orgnr) return;
-    const dp = await etatKall(`${adresser().altinn}/dialogporten/api/v1/enduser/dialogs/${encodeURIComponent(m.dialog_id)}`, await hentToken(SCOPE.dialogporten, t.orgnr), {
-      hvem: "Dialogporten",
-    });
-    if (dp.status === 404) return void (await igjen());
+    const token = await hentToken(SCOPE.dialogporten, t.orgnr);
+    const adresse = `${adresser().altinn}/dialogporten/api/v1/enduser/dialogs/${encodeURIComponent(m.dialog_id)}`;
+    const dp = await etatKall(adresse, token, { hvem: "Dialogporten" });
+    if (dp.status === 404) return void (await venter("Dialogen er ikke i Dialogporten ennå."));
     if (dp.status >= 300) throw new EtatFeil(`Dialogporten svarte ${dp.status}`, dp.status);
-    const url = tilbakemeldingUrl(dp.data);
-    if (!url) return void (await igjen());
+    let dialog = dp.data;
+    // Står ikke forsendelsene i dialogen, hentes de for seg.
+    if (!forsendelserI(dialog)) {
+      const f = await etatKall(`${adresse}/transmissions`, token, { hvem: "Dialogporten" });
+      if (f.status < 300 && Array.isArray(f.data)) dialog = { ...dialog, transmissions: f.data };
+    }
+    const url = tilbakemeldingUrl(dialog, m.forsendelse_id);
+    if (!url) return void (await venter("Skatteetaten har ikke lagt tilbakemeldingen i Dialogporten ennå.", { detaljer: { forsendelser: forsendelseOversikt(dialog) } }));
     const r = await etatKall(url, await hentToken(SCOPE.amelding, t.orgnr), { hvem: "Skatteetaten" });
-    if (r.status === 404 || r.status === 204) return void (await igjen());
+    if (r.status === 404 || r.status === 204) return void (await venter("Tilbakemeldingen er ikke klar hos Skatteetaten ennå.", { detaljer: { adresse: vertOgSti(url) } }));
     if (r.status >= 300) throw ameldingFeil(r);
     const tb = tolkTilbakemelding(r.data);
-    await oppdater(m.id, { tilbakemelding: { ...tb, data: skjul(r.data) }, ...(tb.status ? { status: tb.status } : {}) });
-    if (!tb.status) return void (await igjen());
+    if (!tb.status) {
+      // Feltene (ikke verdiene) i loggen, så formatet kan sjekkes.
+      const felt = r.data && typeof r.data === "object" ? Object.keys(r.data).slice(0, 30) : typeof r.data;
+      return void (await venter("Tilbakemeldingen har ingen status ennå.", { detaljer: { adresse: vertOgSti(url), felt }, tilbakemelding: { avvik: tb.avvik, data: skjul(r.data) } }));
+    }
+    await oppdater(m.id, { tilbakemelding: { ...tb, data: skjul(r.data) }, status: tb.status, feil: null });
     const mnd = maanedNavn(m.maaned);
     await varsle(
       org,

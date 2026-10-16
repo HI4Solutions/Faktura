@@ -26,7 +26,7 @@ export { frist };
 
 const RAD = `
   select id, to_char(maaned, 'YYYY-MM') as maaned, meldings_id, erstatter, innsending, status, oppsummering, forsendelse_id, tilbakemelding,
-         feil, opprettet, sendt_at, (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = laget_av) as laget_av
+         feil, opprettet, sendt_at, sjekket, (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = laget_av) as laget_av
     from faktura.ameldinger`;
 
 // Om meldingen kan sendes til API-et (slått på, og systembrukeren har «A-ordningen»).

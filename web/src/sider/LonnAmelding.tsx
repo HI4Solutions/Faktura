@@ -22,10 +22,12 @@ type Melding = {
   status: Status;
   oppsummering: Grunnlag | null;
   forsendelse_id: string | null;
-  tilbakemelding: { status: string | null; avvik: { kode: string | null; tekst: string; alvorlighet: string | null }[] } | null;
+  // venter: hva den venter på når tilbakemeldingen ikke er kommet (sist den ble sjekket).
+  tilbakemelding: { status: string | null; avvik: { kode: string | null; tekst: string; alvorlighet: string | null }[]; venter?: string | null } | null;
   feil: string | null;
   opprettet: string;
   sendt_at: string | null;
+  sjekket: string | null;
   laget_av: string | null;
 };
 type Innsending = { pa: boolean; tilgang: boolean; miljo: "test" | "prod" };
@@ -453,6 +455,12 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
                 </div>
                 {m.erstatter && <div className="liten dempet">Erstatter en melding som er levert.</div>}
                 {m.feil && <div className="liten fare-tekst">{m.feil}</div>}
+                {m.status === "sendt" && m.sjekket && (
+                  <div className="liten dempet">
+                    Sist sjekket {tid(m.sjekket)}
+                    {m.tilbakemelding?.venter ? `: ${m.tilbakemelding.venter}` : "."}
+                  </div>
+                )}
                 {m.tilbakemelding?.avvik.length ? (
                   <ul className="liten amelding-tilbakemelding">
                     {m.tilbakemelding.avvik.map((a, i) => (

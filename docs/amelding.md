@@ -37,6 +37,13 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    Workeren sender meldingen til API-et, og henter tilbakemeldingen fra Dialogporten og Skatteetaten
    (første gang etter to minutter, så sjeldnere, og minst hver halvtime i en uke). Status og avvik
    vises på måneden, og eier og administrator får varsel når den er mottatt eller avvist.
+   Dialogen har én forsendelse for innsendingen og en annen for tilbakemeldingen, og begge kan ha
+   en lenke for API-et. Forsendelsen for innsendingen (ID-en i svaret på innsendingen, eller typen
+   «Submission») hoppes over, og den nyeste tilbakemeldingen hentes. Til den er kommet, står det
+   på meldingen når den sist ble sjekket og hva den venter på (f.eks. «Skatteetaten har ikke lagt
+   tilbakemeldingen i Dialogporten ennå»), og workeren logger forsendelsene i dialogen («Tilbakemeldingen
+   på a-meldingen er ikke klar»). Tilbakemeldingen står også i innboksen i Altinn (i testmiljøet
+   <https://af.tt.altinn.no/>, innlogget som daglig leder i testbedriften).
    Avviser API-et selve innsendingen (status «Feil», f.eks. «Feil i request (AMLD_006)»), står
    hele feilen på meldingen: koden, detaljene fra Skatteetaten (feilspesifiseringen med sti og
    angitt verdi) og korrelasjons-ID-en, som Skatteetatens brukerstøtte trenger. Workeren logger

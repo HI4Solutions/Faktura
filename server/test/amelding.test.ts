@@ -19,7 +19,7 @@ import { settKryptering } from "../src/kryptering.js";
 import { lagring, settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 import { settEtatFetch } from "../src/maskinporten.js";
 import { avgiftsgrunnlag, byggLeveranse, kontroller, oppsummer, sumAvgift, tilXml, type Grunnlag } from "../src/amelding.js";
-import { ameldingFeil, tilbakemeldingUrl, tolkTilbakemelding } from "../src/ameldingInnsending.js";
+import { ameldingFeil, forsendelseOversikt, tilbakemeldingUrl, tolkTilbakemelding } from "../src/ameldingInnsending.js";
 import { melding } from "../src/skattekort.js";
 import { frist } from "../src/ameldingRuter.js";
 import { kjorOppgave } from "../src/worker.js";
@@ -336,6 +336,33 @@ describe("a-meldingen (uten database)", () => {
     };
     expect(tilbakemeldingUrl(dialog)).toBe("https://ameldingtilbakemelding.api.skatteetaten-test.no/v1/forsendelser/2");
     expect(tilbakemeldingUrl({ transmissions: [] })).toBe(null);
+    // Forsendelsen for innsendingen har også en lenke for API-et: den hoppes over (ID-en fra svaret
+    // på innsendingen, eller typen «Submission»), og den nyeste tilbakemeldingen brukes.
+    const forsendelse = (id: string, type: string | undefined, createdAt: string, url: string) => ({
+      id,
+      ...(type ? { type } : {}),
+      createdAt,
+      attachments: [{ urls: [{ url: `https://skatt-test.sits.no/web/x/${id}`, consumerType: "Gui" }, { url, consumerType: "Api" }] }],
+    });
+    const innsending = forsendelse("f-1", "Submission", "2026-10-16T10:00:00Z", "https://innrapporteringamelding.api.skatteetaten-test.no/v1/forsendelser/f-1");
+    const eldre = forsendelse("f-2", "Information", "2026-10-16T10:02:00Z", "https://ameldingtilbakemelding.api.skatteetaten-test.no/v1/forsendelser/f-2");
+    const nyeste = forsendelse("f-3", "Acceptance", "2026-10-16T10:05:00Z", "https://ameldingtilbakemelding.api.skatteetaten-test.no/v1/forsendelser/f-3");
+    expect(tilbakemeldingUrl({ transmissions: [innsending, eldre, nyeste] }, "f-1")).toBe("https://ameldingtilbakemelding.api.skatteetaten-test.no/v1/forsendelser/f-3");
+    expect(tilbakemeldingUrl({ transmissions: [innsending] }, "f-1")).toBe(null);
+    expect(tilbakemeldingUrl({ transmissions: [innsending] })).toBe(null);
+    const utenType = forsendelse("f-1", undefined, "2026-10-16T10:00:00Z", "https://innrapporteringamelding.api.skatteetaten-test.no/v1/forsendelser/f-1");
+    expect(tilbakemeldingUrl({ transmissions: [utenType] }, "f-1")).toBe(null);
+    expect(tilbakemeldingUrl({ transmissions: [utenType, eldre] }, "f-1")).toBe("https://ameldingtilbakemelding.api.skatteetaten-test.no/v1/forsendelser/f-2");
+    // Til loggen: forsendelsene med typen og lenkene (verten og stien, uten spørringen).
+    expect(forsendelseOversikt({ transmissions: [innsending, null, "x"] })).toEqual([
+      {
+        id: "f-1",
+        type: "Submission",
+        opprettet: "2026-10-16T10:00:00Z",
+        lenker: ["Gui skatt-test.sits.no/web/x/f-1", "Api innrapporteringamelding.api.skatteetaten-test.no/v1/forsendelser/f-1"],
+      },
+    ]);
+    expect(forsendelseOversikt({})).toEqual([]);
     expect(tolkTilbakemelding({ mottak: { mottakstatus: "MOTTATT", avvik: [{ kode: "F123", beskrivelse: "Feil for 13830197340", alvorlighetsgrad: "opplysning" }] } })).toEqual({
       status: "mottatt",
       avvik: [{ kode: "F123", tekst: "Feil for •••••••••••", alvorlighet: "opplysning" }],
@@ -358,6 +385,8 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
   let systemetHarPakkene = false;
   // Feilen Skatteetaten svarer innsendingen med (400), eller null.
   let avvisInnsending: unknown = null;
+  // Dialogen har først bare forsendelsen for innsendingen (med en lenke for API-et), så kommer tilbakemeldingen.
+  let tilbakemeldingKommet = false;
   let org: string;
   let kari: string;
   let per: string;
@@ -405,8 +434,35 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
         return avvisInnsending ? json(400, avvisInnsending) : json(200, { dialogId: "dialog-1", forsendelseId: "forsendelse-1", meldingsId: k.kropp.leveranse.meldingsId });
       }
       if (u.host === "altinn.test" && u.pathname === "/dialogporten/api/v1/enduser/dialogs/dialog-1")
-        return json(200, { transmissions: [{ attachments: [{ urls: [{ url: "https://tilbakemelding.test/v1/forsendelser/forsendelse-1", consumerType: "Api" }] }] }] });
-      if (u.host === "tilbakemelding.test") return json(200, { mottak: { mottakstatus: "mottatt", avvik: [{ kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" }] } });
+        return json(200, {
+          transmissions: [
+            {
+              id: "forsendelse-1",
+              type: "Submission",
+              createdAt: "2026-10-05T10:00:00Z",
+              attachments: [{ urls: [{ url: "https://amelding.test/v1/forsendelser/forsendelse-1", consumerType: "Api" }] }],
+            },
+            ...(tilbakemeldingKommet
+              ? [
+                  {
+                    id: "forsendelse-2",
+                    type: "Acceptance",
+                    createdAt: "2026-10-05T10:03:00Z",
+                    attachments: [
+                      {
+                        urls: [
+                          { url: "https://skatt.test/web/aor-tilbakemelding/forsendelse-2", consumerType: "Gui" },
+                          { url: "https://tilbakemelding.test/v1/forsendelser/forsendelse-2", consumerType: "Api" },
+                        ],
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        });
+      if (u.host === "tilbakemelding.test" && u.pathname === "/v1/forsendelser/forsendelse-2")
+        return json(200, { mottak: { mottakstatus: "mottatt", avvik: [{ kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" }] } });
       // Systembrukeren til organisasjonen (ID-en trengs til endringsforespørselen).
       if (u.pathname === "/authentication/api/v1/systemuser/vendor/byquery")
         return u.searchParams.get("orgno") === "915000177"
@@ -515,9 +571,18 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     expect(rad).toMatchObject({ status: "sendt", forsendelse_id: "forsendelse-1" });
     // Mens den venter på tilbakemelding, får måneden ikke en ny.
     expect((await api("POST", `/api/org/${org}/amelding/2026-09`, { innsending: "api" })).status).toBe(409);
+    // Først er bare innsendingen i dialogen: den hoppes over, og meldingen sier hva den venter på.
+    await kjor("amelding-status");
+    rad = (await api("GET", `/api/org/${org}/amelding/2026-09`)).data.meldinger[0];
+    expect(rad).toMatchObject({ status: "sendt", feil: null, tilbakemelding: { status: null, venter: "Skatteetaten har ikke lagt tilbakemeldingen i Dialogporten ennå." } });
+    expect(rad.sjekket).toBeTruthy();
+    expect(ko.filter((o: any) => o.type === "amelding-status")).toHaveLength(1);
+    expect(kall.some((k) => k.url.startsWith("amelding.test/v1/forsendelser/"))).toBe(false);
+    tilbakemeldingKommet = true;
     await kjor("amelding-status");
     rad = (await api("GET", `/api/org/${org}/amelding/2026-09`)).data.meldinger[0];
     expect(rad).toMatchObject({ status: "mottatt" });
+    expect(rad.tilbakemelding.venter).toBeUndefined();
     expect(rad.tilbakemelding.avvik).toEqual([{ kode: "F999", tekst: "Bare en opplysning", alvorlighet: "opplysning" }]);
     expect(ko.filter((o: any) => o.type === "varsel" && o.varsel.tittel === "A-meldingen er mottatt")).toHaveLength(1);
     config.ameldingInnsending = false;
