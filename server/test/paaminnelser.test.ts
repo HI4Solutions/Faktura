@@ -9,7 +9,10 @@ import { settPushSender } from "../src/push.js";
 import { sendPaaminnelser } from "../src/paaminnelser.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 
-const dag = (n = 0) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date(Date.now() + n * 86400_000));
+const iDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
+// Kalenderdager fra i dag, som serveren regner: n × 24 timer gir feil dato i timen rundt midnatt når
+// sommertiden begynner eller slutter i mellom.
+const dag = (n = 0) => new Date(Date.parse(`${iDag()}T12:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
 
 describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
   const app = lagApi();
@@ -33,6 +36,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
     expect((await kall("POST", "/api/push/abonnement", { endpoint: enheter[navn], p256dh: "B".repeat(87), auth: "a".repeat(22), enhet: navn }, hvem)).status).toBe(201);
   };
   const til = (navn: string) => sendt.filter((s) => s.endpoint === enheter[navn]);
+  // sendPaaminnelser tar alle påminnelser som er forfalt i databasen, også andre testers (f.eks.
+  // databasetestene, der en påminnelse for i morgen kl. 00 blir forfalt etter midnatt). Testene ser
+  // derfor på virkningen for sine egne påminnelser, ikke på antallet.
+  const sist = async (id: string) => (await kall("GET", `/api/org/${org}/paaminnelser/${id}`)).data.sist_varslet as string | null;
   // Gjør en påminnelse klar til å sendes nå (som om tiden er inne).
   // Forfalt nå: i dag kl. 00 norsk tid, så testen ikke avhenger av når på døgnet den kjøres.
   const forfall = (id: string, dato = dag()) =>
@@ -122,11 +129,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
   it("sendes til den som lagde den, med lenke til en ny faktura, og så neste måned", async () => {
     const p = (await kall("POST", `/api/org/${org}/paaminnelser`, { tekst: "Send strømfaktura til Kari", kunde_id: kari, produkter: [strom], intervall: "maaned", neste_dato: dag(1) })).data;
     // Ikke før tiden er inne.
-    expect(await sendPaaminnelser()).toBe(0);
+    await sendPaaminnelser();
+    expect(await sist(p.id)).toBeNull();
     await forfall(p.id);
     sendt.length = 0;
     ko.length = 0;
-    expect(await sendPaaminnelser()).toBe(1);
+    expect(await sendPaaminnelser()).toBeGreaterThanOrEqual(1);
     expect(til("eier").map((s) => s.innhold)).toEqual([
       expect.objectContaining({
         tittel: "Send strømfaktura til Kari",
@@ -140,7 +148,11 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
     expect(til("leser")).toEqual([]);
     expect(ko.filter((o) => o.type === "epost")).toEqual([]);
     // Én gang, og neste dato er neste måned.
-    expect(await sendPaaminnelser()).toBe(0);
+    const forste = await sist(p.id);
+    sendt.length = 0;
+    await sendPaaminnelser();
+    expect(til("eier")).toEqual([]);
+    expect(await sist(p.id)).toBe(forste);
     const etter = (await kall("GET", `/api/org/${org}/paaminnelser/${p.id}`)).data;
     expect(etter.neste_dato > dag()).toBe(true);
     expect(etter.neste_dato.slice(5, 7)).not.toBe(dag().slice(5, 7));
@@ -150,7 +162,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
     expect((await kall("PUT", "/api/push/valg", { paaminnelse: false })).status).toBe(200);
     await forfall(p.id);
     sendt.length = 0;
-    expect(await sendPaaminnelser()).toBe(1);
+    await sendPaaminnelser();
+    expect(await sist(p.id)).not.toBe(forste);
     expect(til("eier")).toEqual([]);
     expect((await kall("PUT", "/api/push/valg", { paaminnelse: true })).status).toBe(200);
     await kall("DELETE", `/api/org/${org}/paaminnelser/${p.id}`);
@@ -161,7 +174,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
     expect(p.min).toBe(true);
     sendt.length = 0;
     ko.length = 0;
-    expect(await sendPaaminnelser()).toBe(1);
+    expect(await sendPaaminnelser()).toBeGreaterThanOrEqual(1);
     expect(til("eier").map((s) => s.innhold.tittel)).toEqual(["Fakturer strøm for oktober"]);
     expect(til("fakturerer").map((s) => s.innhold.tekst)).toEqual(["Trykk for å skrive inn beløpet og sende fakturaen."]);
     expect(til("eier").map((s) => s.innhold.tekst)).toEqual(["Påminnelse Utleie AS: Trykk for å skrive inn beløpet og sende fakturaen."]);

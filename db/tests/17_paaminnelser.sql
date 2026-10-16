@@ -110,6 +110,9 @@ select set_config('app.bruker_id', :'u', false);
 delete from faktura.kunder where id = :'kari';
 select test.er((select count(*) from faktura.paaminnelser where id = :'p1'), 0::bigint, 'påminnelsen forsvinner med kunden');
 
+-- Påminnelsene fjernes, så ingen blir forfalt senere (f.eks. «Senere» etter midnatt) mens
+-- servertestene går mot samme database.
 \c :migrator
+delete from faktura.paaminnelser where org_id = :'org';
 drop schema test cascade;
 \echo '  ok'

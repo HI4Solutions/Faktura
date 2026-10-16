@@ -123,8 +123,11 @@ describe.skipIf(!process.env.DATABASE_URL)("Push – abonnementer og sending", (
     const org = (await kall("POST", "/api/organisasjoner", ola, { navn: "Forfall AS" })).data.id;
     await kall("PATCH", `/api/org/${org}`, ola, { kontonr: "86011117947" });
     const kunde = (await kall("POST", `/api/org/${org}/kunder`, ola, { navn: "Treg Betaler" })).data.id;
-    const igaar = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date(Date.now() - 86_400_000));
-    const forrige = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date(Date.now() - 15 * 86_400_000));
+    // Kalenderdager tilbake fra i dag i Oslo, som faktura.i_dag() - 1 (ikke n × 24 timer, som bommer
+    // i timen rundt midnatt når sommertiden begynner eller slutter i mellom).
+    const idag = Date.parse(`${new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date())}T12:00:00Z`);
+    const igaar = new Date(idag - 86_400_000).toISOString().slice(0, 10);
+    const forrige = new Date(idag - 15 * 86_400_000).toISOString().slice(0, 10);
     const f = await kall("POST", `/api/org/${org}/fakturaer`, ola, {
       kunde_id: kunde,
       fakturadato: forrige,

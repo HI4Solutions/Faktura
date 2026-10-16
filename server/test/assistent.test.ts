@@ -18,7 +18,10 @@ const kommando = (k: Partial<AiKommando>): AiKommando => ({
   dato: null, send: false, side: "ingen", linjer: [], fakturadato: null, forfallsdato: null, periode_fra: null, periode_til: null,
   deres_referanse: null, kommentar: null, svar: null, merknader: [], ...k,
 });
-const dag = (n = 0) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date(Date.now() + n * 86400_000));
+const iDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
+// Kalenderdager fra i dag, som serveren regner: n × 24 timer gir feil dato i timen rundt midnatt når
+// sommertiden begynner eller slutter i mellom.
+const dag = (n = 0) => new Date(Date.parse(`${iDag()}T12:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
 const norsk = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
 
 describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten", () => {
