@@ -10,6 +10,7 @@ import { alle, en, somSystem } from "../src/db.js";
 import { settEpost, settLokalOppgavekjorer, type EpostMelding, type Oppgave } from "../src/tjenester.js";
 import { kjorOppgave, varsleRapportmottakere } from "../src/worker.js";
 import { lagValg, periodeTekst, planleggMaanedsrapporter, rapport, RAPPORTER, termin, type Valg } from "../src/rapportmodul.js";
+import { iDag } from "../src/regler.js";
 
 describe("rapportmodulen: valg og perioder", () => {
   const def = (id: string) => rapport(id)!;
@@ -174,6 +175,8 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "personal.ansatte",
         "personal.turnus",
         "personal.yrkesskader",
+        "personal.sjekklister",
+        "personal.sjekkliste_avvik",
       ],
       lonn: [
         "lonn.journal",
@@ -222,9 +225,9 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     const liste = (await kall("GET", `/api/org/${org}/rapportmodul`)).data;
     expect(liste.moduler.map((m: any) => m.navn)).toEqual(["Faktura", "Personal", "Lønn", "Regnskap"]);
     expect(liste.moduler[2].rapporter[0]).toEqual({ id: "lonn.journal", navn: "Lønnsjournal", beskrivelse: expect.any(String), parameter: "periode", maanedlig: true });
-    // Regnskap ser lønn og timer, men ikke fraværet og feriebanken (som i personalmodulen).
+    // Regnskap ser lønn, timer og sjekklister, men ikke fraværet og feriebanken (som i personalmodulen).
     const r = await moduler(regnskap);
-    expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte", "personal.turnus"]);
+    expect(r.personal).toEqual(["personal.timer", "personal.timeliste", "personal.timebank", "personal.ekstratimer", "personal.ansatte", "personal.turnus", "personal.sjekklister", "personal.sjekkliste_avvik"]);
     // Sykepengene og refusjonene fra NAV (helseopplysninger) og permisjonene (fravær) ser bare eier
     // og administrator; avstemmingen ser regnskap.
     expect(r.lonn).toHaveLength(18);
@@ -389,6 +392,39 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
     ]);
     expect(r.data.sum).toMatchObject({ antall: 3, timer: 24, helg: 2, helligdag: 2, utkast: 2 });
     expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.turnus?fra=2026-12-21&til=2026-12-27`, undefined, regnskap)).status).toBe(200);
+  });
+
+  it("sjekklisterapportene: når de ble gjort, av hvem og med hvor mange avvik, og avvikene, som tabell og CSV", async () => {
+    const idag = iDag();
+    const igaar = new Date(new Date(`${idag}T00:00:00Z`).getTime() - 86_400_000).toISOString().slice(0, 10);
+    const s = await kall("POST", `/api/org/${org}/sjekklister`, { navn: "Stenging", frekvens: "daglig", punkter: [{ tekst: "Kassen telt" }, { tekst: "Kjøledisken under 4 grader" }] });
+    expect(s.status, JSON.stringify(s.data)).toBe(201);
+    // Ola fører i går etter: avvik på kjøledisken, resten normalt.
+    const u = (await kall("POST", `/api/org/${org}/sjekklister/${s.data.id}/start`, { dato: igaar }, ola)).data;
+    const kjol = u.punkter.find((p: any) => p.tekst === "Kjøledisken under 4 grader");
+    expect((await kall("PUT", `/api/org/${org}/sjekklister/utfyllinger/${u.id}/punkter/${kjol.id}`, { svar: "avvik", kommentar: "9 grader, ringt service" }, ola)).status).toBe(204);
+    expect((await kall("POST", `/api/org/${org}/sjekklister/utfyllinger/${u.id}/alt-normalt`, {}, ola)).status).toBe(200);
+    expect((await kall("POST", `/api/org/${org}/sjekklister/utfyllinger/${u.id}/fullfor`, {}, ola)).data).toEqual({ avvik: 1 });
+
+    // Sjekklisten er laget i dag, så i går mangler ikke (og i dag er ikke over).
+    const r = await kall("GET", `/api/org/${org}/rapportmodul/personal.sjekklister?fra=${igaar}&til=${idag}`);
+    expect(r.status, JSON.stringify(r.data)).toBe(200);
+    expect(r.data.rader).toEqual([
+      { periode: igaar, sjekkliste: "Stenging", frekvens: "Daglig", status: "Fullført", gjort_av: "Ola Time", fullfort: expect.stringMatching(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/), avvik: 1 },
+    ]);
+    expect(r.data.sum).toMatchObject({ avvik: 1 });
+    expect(r.data.merknad).toBe("Perioden er dagen, uka (fra mandag) eller måneden.");
+    const a = await kall("GET", `/api/org/${org}/rapportmodul/personal.sjekkliste_avvik?fra=${idag}&til=${idag}`);
+    expect(a.data.rader).toEqual([
+      { meldt: idag, sjekkliste: "Stenging", punkt: "Kjøledisken under 4 grader", kommentar: "9 grader, ringt service", meldt_av: "Ola Time", status: "Åpent", tiltak: "", lukket_av: "", lukket: null },
+    ]);
+    expect(a.data.merknad).toBe("1 avvik, 1 åpent.");
+    const csv = await kall("GET", `/api/org/${org}/rapportmodul/personal.sjekkliste_avvik/csv?fra=${idag}&til=${idag}`);
+    expect((csv.data as string).trim().split("\r\n")[0]).toBe("Meldt;Sjekkliste;Punkt;Avvik;Meldt av;Status;Tiltak;Lukket av;Lukket");
+    // Regnskap ser dem (som timene og turnusen); fakturerer og den ansatte ikke.
+    expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.sjekkliste_avvik?fra=${idag}&til=${idag}`, undefined, regnskap)).status).toBe(200);
+    expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.sjekklister`, undefined, fakturerer)).status).toBe(403);
+    expect((await kall("GET", `/api/org/${org}/rapportmodul/personal.sjekklister`, undefined, ola)).status).toBe(403);
   });
 
   it("utsendingsoppsettet: bare eier og administrator, med totrinn, og eierne varsles om nye mottakere", async () => {

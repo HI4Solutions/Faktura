@@ -1,7 +1,7 @@
 // Oversikten for den ansatte (forsiden, «Oversikt» øverst i menyen): det som gjelder deg selv. Neste
 // vakt, timene denne uka, ferien som er igjen og timebanken; de neste vaktene; det som venter på deg
-// (vakter kollegaene gir bort, ledige vakter, avviste timer, nye beskjeder); beskjedene og den siste
-// lønnsslippen. Hvert kort henter sitt fra de samme rutene sidene bruker, så et kort som er tregt
+// (vakter kollegaene gir bort, ledige vakter, avviste timer, nye beskjeder, sjekklistene som skal
+// gjøres); beskjedene og den siste lønnsslippen. Hvert kort henter sitt fra de samme rutene sidene bruker, så et kort som er tregt
 // eller feiler, ikke stopper resten. Eier og administrator har sin egen oversikt (Oversikt.tsx), og
 // plattformadministratoren sin (Admin.tsx).
 import { Link, useNavigate } from "react-router-dom";
@@ -17,6 +17,7 @@ import type { Detaljer as FerieDetaljer } from "./Ferie";
 import { fraKolleger, type ByttSvar } from "./Vaktbytte";
 import { fravaerPeriode, fravaerTekst } from "./Fravaer";
 import { antall, hilsen, Oppfolging, Tall, type Oppgave } from "./OversiktDeler";
+import { sjekklisteOppgaver, useSjekklisterTilOversikt } from "./Sjekklister";
 
 type Uke = { ansatt_id: string; uke: number; sum: number; status: "utkast" | "levert" | "godkjent" | "avvist" };
 type Slipp = { id: string; periode: string; utbetalingsdato: string; netto: number; brutto: number };
@@ -76,6 +77,8 @@ export function AnsattOversikt() {
     valg,
   );
   const bytter = useData(() => (bytte ? hent<ByttSvar>(`${sti}/vaktbytter`).catch(() => null) : Promise.resolve(null)), [sti, bytte], valg);
+  // Sjekklistene du skal gjøre denne perioden (Sjekklister.tsx).
+  const sjekklister = useSjekklisterTilOversikt(personal && harFunksjon(org, "sjekklister"));
   // Opplysningene lederen har bedt deg fylle ut, eller som er avvist (Min side, AnsattUtfylling.tsx).
   const megSelv = useData(
     () =>
@@ -135,6 +138,7 @@ export function AnsattOversikt() {
       ? [{ nokkel: "ledige", tekst: `${antall(ledige.length + fraKollegaer.length, "ledig vakt", "ledige vakter")} de neste to ukene`, til: "/vakter?fane=ledige" }]
       : []),
     ...(nye.length ? [{ nokkel: "beskjeder", tekst: antall(nye.length, "ny beskjed", "nye beskjeder"), til: "/beskjeder" }] : []),
+    ...sjekklisteOppgaver(sjekklister.data, { gjore: true, helg: org.helg }),
     ...(ferie.data?.overforinger ?? [])
       .filter((o) => o.status === "venter")
       .map((o) => ({ nokkel: `ferie-${o.id}`, tekst: `Søknaden om å overføre ${tall.format(o.dager)} feriedager venter på svar`, til: "/ferie" })),

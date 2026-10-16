@@ -31,6 +31,7 @@ import { turnusRuter } from "./turnus.js";
 import { vaktbytteRuter } from "./vaktbytte.js";
 import { timebankRuter } from "./timebank.js";
 import { beskjedRuter } from "./beskjeder.js";
+import { sjekklisteRuter } from "./sjekklister.js";
 import { tavleRuter } from "./tavle.js";
 import { fravaerRuter } from "./fravaer.js";
 import { ferieRuter } from "./ferie.js";
@@ -457,6 +458,7 @@ export function lagApi() {
   org.route("/", vaktbytteRuter());
   org.route("/", timebankRuter());
   org.route("/", beskjedRuter());
+  org.route("/", sjekklisteRuter());
   org.route("/", tavleRuter());
   org.route("/", fravaerRuter());
   org.route("/", ferieRuter());

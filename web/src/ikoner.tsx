@@ -397,6 +397,13 @@ export const IkonPerson = (p: P) => (
     <path d="M5 20a7 7 0 0 1 14 0" />
   </Ikon>
 );
+export const IkonSjekkliste = (p: P) => (
+  <Ikon {...p}>
+    <rect x="8.5" y="2.5" width="7" height="3.6" rx="1.1" />
+    <path d="M15.5 4.3h2.2a2 2 0 0 1 2 2v13.2a2 2 0 0 1-2 2H6.3a2 2 0 0 1-2-2V6.3a2 2 0 0 1 2-2h2.2" />
+    <path d="m7.9 11.3 1.4 1.4 2.5-2.6M7.9 16.6l1.4 1.4 2.5-2.6M14 11.8h2.4M14 17.1h2.4" />
+  </Ikon>
+);
 export const IkonTavle = (p: P) => (
   <Ikon {...p}>
     <rect x="3" y="4" width="18" height="16" rx="2.2" />

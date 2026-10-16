@@ -34,6 +34,7 @@ const RUTER: [RegExp, string][] = [
   // går til rollene (0062_beskjeder.sql).
   [/^\/(ansatte|ansattgrupper|timer|timebank|lonn-oppsett|beskjeder|yrkesskader)(\/|$)/, "ansatte"],
   [/^\/(vakter|vaktbytter|tavle|fravaer|egenmelding|feriebank|ferie|kolleger|turnus)(\/|$)/, "vaktplan"],
+  [/^\/sjekklister(\/|$)/, "sjekklister"],
   [/^\/ekstratimer(\.csv|\.pdf)?$/, "vaktplan"],
   [/^\/lonn(\/|$)/, "lonn"],
   [/^\/skattekort(\/|$)/, "lonn"],
@@ -47,6 +48,7 @@ export const funksjonerFor = (sti: string) => [...new Set(RUTER.filter(([re]) =>
 // feilmeldingen sier hva som mangler.
 export const KREVER: Record<string, string> = {
   vaktplan: "ansatte",
+  sjekklister: "ansatte",
   lonn: "ansatte",
   ehf: "faktura",
   gjentakende: "faktura",
@@ -86,6 +88,7 @@ const NAVN: Record<string, string> = {
   google_disk: "Google Disk",
   ansatte: "Ansatte og timer",
   vaktplan: "Vaktplan og bemanning",
+  sjekklister: "Sjekklister",
   lonn: "Lønn",
   regnskap: "Regnskap",
 };

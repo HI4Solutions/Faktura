@@ -93,7 +93,7 @@ describe.skipIf(!process.env.DATABASE_URL)("funksjoner per organisasjon", () => 
 
   it("en ny organisasjon har alle funksjonene, og appen får lista", async () => {
     const o = await meg();
-    expect(o.funksjoner).toEqual(["faktura", "ehf", "bank", "ai", "gjentakende", "flere", "paaminnelser", "rapporter", "import", "google_disk", "ansatte", "vaktplan", "lonn", "regnskap"]);
+    expect(o.funksjoner).toEqual(["faktura", "ehf", "bank", "ai", "gjentakende", "flere", "paaminnelser", "rapporter", "import", "google_disk", "ansatte", "vaktplan", "lonn", "regnskap", "sjekklister"]);
     expect(o.moduler).toEqual(["faktura", "personal", "lonn", "regnskap"]);
     expect(o.personal).toBe(true);
     expect((await kall("GET", `/api/org/${org}/vakter?fra=2026-10-05&til=2026-10-11`)).status).toBe(200);

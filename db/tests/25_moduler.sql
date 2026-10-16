@@ -29,7 +29,7 @@ grant execute on all functions in schema test to public;
 \c :api
 -- Modulene kan alle se, og hver funksjon hører til en.
 select test.er((select array_agg(kode order by rekkefolge) from faktura.moduler), array['faktura', 'personal', 'lonn', 'regnskap'], 'Faktura, Personal, Lønn og Regnskap');
-select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'personal'), array['ansatte', 'vaktplan'], 'Personal har ansatte og vaktplan');
+select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'personal'), array['ansatte', 'vaktplan', 'sjekklister'], 'Personal har ansatte, vaktplan og sjekklister');
 select test.er((select array_agg(kode order by rekkefolge) from faktura.funksjoner where modul = 'lonn'), array['lonn'], 'Lønn har lønnen');
 select test.er((select count(*) from faktura.funksjoner where modul is null), 0::bigint, 'alle funksjonene har en modul');
 
@@ -70,7 +70,7 @@ select test.feiler($$select faktura.velg_moduler(array['faktura'])$$, 'FA403');
 
 -- En organisasjon fra brukeren med Personal og Lønn får bare funksjonene i dem (ikke fakturaene).
 select id as org from faktura.opprett_organisasjon('Bare Personal AS') \gset
-select test.er((select array_agg(kode order by kode) from faktura.org_funksjoner where org_id = :'org' and aktiv), array['ansatte', 'lonn', 'vaktplan'], 'bare Personal og Lønn');
+select test.er((select array_agg(kode order by kode) from faktura.org_funksjoner where org_id = :'org' and aktiv), array['ansatte', 'lonn', 'sjekklister', 'vaktplan'], 'bare Personal og Lønn');
 select test.er(faktura.har_funksjon(:'org', 'ehf'), false, 'uten EHF');
 select test.er(faktura.har_modul(:'org', 'faktura'), false, 'uten Faktura');
 select test.er((select moduler from faktura.mine_organisasjoner where id = :'org'), array['personal', 'lonn'], 'appen får modulene');

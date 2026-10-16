@@ -19,6 +19,7 @@ import type { VaktSvar } from "./Vakter";
 import type { ByttSvar } from "./Vaktbytte";
 import { fravaerTekst } from "./Fravaer";
 import { antall, hilsen, Oppfolging, Tall, type Oppgave } from "./OversiktDeler";
+import { sjekklisteOppgaver, useSjekklisterTilOversikt } from "./Sjekklister";
 import type { Skatteetatenstatus } from "./RegnskapSkatteetaten";
 import { mangler, manglerTekst } from "../ansattMangler";
 
@@ -402,8 +403,9 @@ type PersonalTallData = { paJobb: number | null; borte: number | null; uker: num
 const dagerMellom = (fra: string, til: string) => Math.round((Date.parse(`${til}T12:00:00Z`) - Date.parse(`${fra}T12:00:00Z`)) / 86_400_000);
 
 // Det som venter i personalet og lønnen: timer, vaktbytter, feriesøknader og søknader om avspasering
-// til godkjenning (eier og administrator), ledige vakter de neste sju dagene og lønnskjøringer som
-// ikke er godkjent. Og hvem som er på jobb og borte i dag, for dem som ser vaktplanen.
+// til godkjenning (eier og administrator), ledige vakter de neste sju dagene, lønnskjøringer som
+// ikke er godkjent, og åpne avvik og sjekklister som ikke ble gjort (Sjekklister.tsx). Og hvem som
+// er på jobb og borte i dag, for dem som ser vaktplanen.
 function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData | null; tall: PersonalTallData | null } {
   const { org } = useKonto();
   const se = !!org?.personal && kanSePersonal(org);
@@ -429,6 +431,7 @@ function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData |
   // De ansatte: opplysninger de har sendt inn til godkjenning, og det som mangler før lønnen
   // (fødselsnummer, kontonummer, lønn …; ansattMangler.ts).
   const ansatte = useData(() => (leder ? hent<AnsattRad[]>(`${sti}/ansatte?aktiv=true`).catch(() => null) : ingen()), [sti, leder], valg);
+  const sjekklister = useSjekklisterTilOversikt(leder && harFunksjon(org, "sjekklister"));
 
   const oppgaver: Oppgave[] = [];
   const uker = timer.data?.uker.length ?? 0;
@@ -470,7 +473,8 @@ function usePersonal(): { oppgaver: Oppgave[]; laster: boolean; idag: IDagData |
           : `${antall(manglerNoe.length, "ansatt", "ansatte")} mangler opplysninger til lønnen`,
       til: manglerNoe.length === 1 ? `/ansatte?ansatt=${manglerNoe[0]!.id}` : "/ansatte",
     });
-  const laster = [timer, vakter, bytter, ferie, timebank, kjoringer, ansatte].some((d) => d.laster);
+  oppgaver.push(...sjekklisteOppgaver(sjekklister.data, { leder: true }));
+  const laster = [timer, vakter, bytter, ferie, timebank, kjoringer, ansatte, sjekklister].some((d) => d.laster);
 
   // I dag: vaktene og de faste arbeidsdagene i dag, og fraværet.
   let idagData: IDagData | null = null;

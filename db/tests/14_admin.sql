@@ -68,7 +68,7 @@ select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'fakturaer')::i
 select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'epost')::int, 1, 'på e-post');
 select test.er((current_setting('test.d')::jsonb -> 'antall' ->> 'ehf')::int, 1, 'som EHF');
 select test.er(current_setting('test.d')::jsonb ?| array['fakturert', 'utestaende'], false, 'ingen beløp');
-select test.er((select count(*)::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'funksjoner') x where (x ->> 'aktiv')::boolean), 14,
+select test.er((select count(*)::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'funksjoner') x where (x ->> 'aktiv')::boolean), 15,
                'alle funksjonene er på');
 select test.er((select count(distinct x ->> 'modul')::int from jsonb_array_elements(current_setting('test.d')::jsonb -> 'funksjoner') x), 4,
                'funksjonene i de fire modulene');

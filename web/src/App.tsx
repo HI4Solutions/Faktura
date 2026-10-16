@@ -30,6 +30,7 @@ import { Ferie } from "./sider/Ferie";
 import { MittFravaerSide } from "./sider/Fravaer";
 import { MinSide } from "./sider/MinSide";
 import { Beskjeder, useUlesteBeskjeder } from "./sider/Beskjeder";
+import { Sjekklister } from "./sider/Sjekklister";
 import { Lonn } from "./sider/Lonn";
 import { Regnskap } from "./sider/Regnskap";
 import { Logo } from "./Logo";
@@ -43,7 +44,7 @@ import { SkattekortGodkjent } from "./sider/Skattekort";
 import {
   IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
   IkonFravaer, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva, IkonSkatteetaten,
-  IkonNed, IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSkjold, IkonTavle, IkonTimebank,
+  IkonNed, IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonReise, IkonSjekkliste, IkonSkjold, IkonTavle, IkonTimebank,
   IkonUtgift, IkonVelg,
 } from "./ikoner";
 
@@ -233,6 +234,9 @@ function Ramme() {
   // Beskjeder til rollene: alle i organisasjonen, når Ansatte og timer er slått på. Telleren viser
   // de nye (ikke mens man er på siden).
   const visBeskjeder = !!org?.personal;
+  // Sjekklister (Sjekklister.tsx): alle i organisasjonen, når funksjonen er på; serveren avgjør
+  // hvilke sjekklister hver ser (rollene) og hvem som lager dem og lukker avvikene.
+  const visSjekklister = !!org?.personal && harFunksjon(org, "sjekklister");
   // Lønn: eier, administrator og regnskap (og en egen rolle med Lønn) ser lønnskjøringene, og den
   // som er ansatt, sine egne lønnsslipper (funksjonen «Lønn» bygger på ansatte og timer).
   const visLonn = harFunksjon(org, "lonn") && !!org?.personal && ((!ansatt && kanSeLonn(org)) || !!org.ansatt_id);
@@ -249,7 +253,7 @@ function Ramme() {
   const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
   // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
   // og bunnmenyen viser personaldelen i stedet for fakturadelen der.
-  const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder|lonn|fravaer|meg)(\/|$)/.test(sted.pathname);
+  const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder|sjekklister|lonn|fravaer|meg)(\/|$)/.test(sted.pathname);
   // Eier og administrator har Timer og Ferie som ett punkt, «Timer og ferie» (Ferie er en fane på Timer).
   const iTimerOgFerie = sted.pathname === "/timer" || (timerOgFerie(org) && sted.pathname === "/ferie");
   // Menyen til de ansatte: det som ellers ligger i faner på sidene (vaktene, timene, lønnen), er
@@ -312,6 +316,7 @@ function Ramme() {
               visFerie && { til: "/ferie", Ikon: IkonFerie, tekst: "Ferie", aktiv: sted.pathname === "/ferie" },
             ],
           ],
+          ["Sjekklister", [visSjekklister && { til: "/sjekklister", Ikon: IkonSjekkliste, tekst: "Sjekklister", aktiv: sted.pathname === "/sjekklister" }]],
           [
             "Lønn",
             visLonn
@@ -400,6 +405,7 @@ function Ramme() {
             visTimer && visVakter && punkt("/vakter", IkonKalender, "Vaktplan", sted.pathname === "/vakter"),
             visTimer && punkt("/timer", IkonKlokke, timerOgFerie(org) ? "Timer og ferie" : "Timer", iTimerOgFerie),
             visBeskjeder && punkt("/beskjeder", IkonBjelle, "Beskjeder", sted.pathname === "/beskjeder", nyeBeskjeder),
+            visSjekklister && punkt("/sjekklister", IkonSjekkliste, "Sjekklister", sted.pathname === "/sjekklister"),
           ]),
           visLonn &&
             kategori(
@@ -665,6 +671,7 @@ function Ramme() {
             <Route path="/meg" element={<MinSide />} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
+            <Route path="/sjekklister" element={<Krever kode="sjekklister" navn="Sjekklister"><Sjekklister /></Krever>} />
             <Route path="/lonn" element={<Krever kode="lonn" navn="Lønn og reiser"><Lonn /></Krever>} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
@@ -697,6 +704,7 @@ function Ramme() {
             <Route path="/vakter" element={<Krever kode="vaktplan" navn="Vaktplan"><Vakter /></Krever>} />
             <Route path="/ferie" element={<Krever kode="vaktplan" navn="Ferie"><Ferie /></Krever>} />
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
+            <Route path="/sjekklister" element={<Krever kode="sjekklister" navn="Sjekklister"><Sjekklister /></Krever>} />
             <Route path="/lonn" element={<Krever kode="lonn" navn="Lønn"><Lonn /></Krever>} />
             <Route path="/skattekort/godkjent" element={<Krever kode="lonn" navn="Skattekort"><SkattekortGodkjent /></Krever>} />
             <Route path="/timer" element={<Timer />} />

@@ -579,7 +579,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med engelsk språk, der nettleserens eget klokkeslettfelt ville vist AM og PM. Feltet
   (`Klokkeslett` i `web/src/uke.tsx`) tar også «730», «7.30» og «1530» og retter dem til 07:30
   og 15:30
-- Personalmodulen på mobil (Ansatte, Vaktplan, Timer, Ferie, Lønn og Beskjeder; `main[data-modul="personal"]` i
+- Personalmodulen på mobil (Ansatte, Vaktplan, Timer, Ferie, Lønn, Beskjeder og Sjekklister; `main[data-modul="personal"]` i
   `web/src/styles.css`) er tettere enn resten av appen, så det blir mindre å rulle: mindre knapper,
   felt og rader (fortsatt 16 px tekst i feltene, så iPhone ikke zoomer), vaktplanen én dag om
   gangen med en dagvelger (ukedagene med hvor mange som er på jobb, og «!» når en vakt mangler
@@ -623,11 +623,27 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   hver bruker sist så beskjedene: nye er andres beskjeder etter det, høyst 14 dager gamle. De
   står merket på siden, og tallet på dem står i menyen (i bunnmenyen for de ansatte, ellers som
   en prikk på «Mer»); siden henter nye beskjeder hvert minutt mens den er åpen
+- Sjekklister (`0114_sjekklister.sql`, `server/src/sjekklister.ts`, `web/src/sider/Sjekklister.tsx`,
+  funksjonen `sjekklister` i Personal; se `docs/sjekklister.md`): administrator (`personal`) lager
+  `sjekklister` med `sjekkliste_punkter` som gjøres daglig, ukentlig, månedlig eller ved behov, av
+  alle eller av rollene (`ansattgrupper`) som har dem (`kan_gjore_sjekkliste`; administrator kan
+  alltid). De faste har én `sjekkliste_utfyllinger` per periode (dagen, uka fra mandag eller
+  måneden; `sjekkliste_periode`, unik indeks), ved behov én per gang. `sjekkliste_svar` er
+  «ok» eller «avvik» med kommentar (påkrevd), med teksten på punktet slik den var; «Alt
+  normalt» gir «ok» på resten, og en fullført utfylling kan ikke endres. Avvikene går som
+  varsel (varseltypen `sjekklister`) til eier, administrator og egne roller med Personal når
+  utfyllingen fullføres, og administrator lukker dem med tiltaket; den som meldte avviket, får
+  varsel. Alt skrives gjennom funksjoner i databasen (security definer) som sjekker tilgangen, og
+  tabellene kan bare leses: de som ser personalet (`personal_les`), ser alt, de andre sjekklistene
+  de gjør og sine egne svar. Lista over sjekklistene sier om forrige periode ble gjort
+  (`sjekkliste_forrige`; daglig med stengt i helgene er det hverdagen før), og oversiktene viser
+  det som skal gjøres (den ansatte) og åpne avvik og sjekklister som ikke ble gjort (lederen).
+  Rapportene `personal.sjekklister` og `personal.sjekkliste_avvik` ligger i rapportmodulen
 - `funksjoner` og `org_funksjoner`: hvilke funksjoner hver organisasjon har tilgang til
   (fakturaene, EHF, bank, AI, gjentakende fakturaer, flere fakturaer, påminnelser, rapporter,
-  import, Google Disk, ansatte og timer, vaktplan og bemanning, lønn, regnskap; vaktplanen og
-  lønnen bygger på ansatte og timer, og fakturafunksjonene som EHF og påminnelsene på
-  fakturaene), gruppert i modulene Faktura, Personal, Lønn og Regnskap. Plattformadministratoren
+  import, Google Disk, ansatte og timer, vaktplan og bemanning, sjekklister, lønn, regnskap;
+  vaktplanen, sjekklistene og lønnen bygger på ansatte og timer, og fakturafunksjonene som EHF og
+  påminnelsene på fakturaene), gruppert i modulene Faktura, Personal, Lønn og Regnskap. Plattformadministratoren
   slår modulene av og på med kjernen og funksjonene under hver i detaljene for organisasjonen
   (Plattform → Organisasjoner), og velger standarden for nye organisasjoner nederst samme sted; de
   som fantes da funksjonene kom, beholdt alt. Banken, AI og importen virker uten Faktura (regnskapet
@@ -1287,12 +1303,13 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   termin, år eller ingen, og en funksjon som gir kolonnene og radene); visningen, summene,
   CSV (semikolon, BOM, norske desimaler) og PDF (liggende med mange kolonner) er felles. Lista
   viser bare rapportene organisasjonen har funksjonen til og brukeren har tilgang til
-  (fakturarapportene for alle med lesetilgang, timer, timebank, ansatte og lønn for eier,
+  (fakturarapportene for alle med lesetilgang, timer, timebank, ansatte, sjekklister og lønn for eier,
   administrator og regnskap, fravær, feriebank, permisjoner, sykepenger og refusjonene fra NAV for eier og administrator). Faktura: kundereskontro, mva per
   termin, salg per måned, fakturajournal (med alle kolonnene fra den gamle eksporten) og
   innbetalinger (`server/src/rapporter.ts`). Personal: timer per ansatt (ordinære, overtid uke
   for uke, merarbeid og uten overtid), timeliste, fravær, feriebank, timebank, ekstratimer og
-  ansatte (`server/src/personalRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
+  ansatte (`server/src/personalRapporter.ts`), og sjekklistene (også de faste som ikke ble gjort)
+  og avvikene fra dem (`server/src/sjekklisteRapporter.ts`). Lønn, fra de godkjente kjøringene: lønnsjournal, sum
   per lønnsart (grunnlaget for bokføringen), skattetrekk og arbeidsgiveravgift per termin med
   fristene, feriepengeliste, årsoversikt, OTP, lønns- og stillingsendringer, trekk og betalinger, reiser og
   godtgjørelser, naturalytelser og permisjoner og permitteringer (`server/src/lonnRapporter.ts`),

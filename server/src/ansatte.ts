@@ -422,7 +422,7 @@ function ukesummer(foringer: Foringsrad[], r: Regler, avtalt: Map<string, number
 export async function varslePersonal(
   org: string,
   unntatt: string,
-  hendelse: "timer" | "vakter" | "fravaer" | "reiser" | "ansatte",
+  hendelse: "timer" | "vakter" | "fravaer" | "reiser" | "ansatte" | "sjekklister",
   tittel: string,
   tekst: string,
   url: string,

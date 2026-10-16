@@ -3141,3 +3141,116 @@ td.idag .pt-dato { background: var(--aksent); color: var(--aksent-tekst); }
 .aordning-valg > input { margin-top: 3px; }
 .aordning-detaljer { display: flex; align-items: center; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; margin: 2px 0 0 26px; font-size: 0.86rem; color: var(--tekst-2); }
 .aordning-liste .felt-hjelp, .aordning-liste .rad { margin-left: 26px; }
+
+/* --------------------------------------------------------------------------
+   Sjekklister (sider/Sjekklister.tsx): lista over det som skal gjøres, utfyllingen med «Normalt» og
+   «Avvik» per punkt (store knapper, fremdriften står fast øverst mens man ruller), avvikene,
+   historikken og oppsettet med punktene.
+   -------------------------------------------------------------------------- */
+.sjekk-gruppe h2 { font-size: 0.76rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.07em; color: var(--dempet); margin: 18px 0 6px; }
+.sjekk-gruppe:first-of-type h2 { margin-top: 4px; }
+.sjekk-merker { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.sjekk-merker .merke + .merke { margin-left: 0; }
+.sjekk-start { font-size: 0.8rem; font-weight: 650; color: var(--aksent); padding: 3px 11px; border-radius: 999px; background: var(--aksent-lys); }
+.sjekk-glemt { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
+.sjekk-glemt button { flex: none; }
+
+.sjekk-tilbake { margin-bottom: 12px; font-size: 0.9rem; }
+.sjekk-hode { margin-bottom: 6px; }
+.sjekk-hode h1 { margin: 0 0 2px; }
+.sjekk-beskrivelse { margin: 8px 0 0; color: var(--tekst-2); white-space: pre-line; overflow-wrap: anywhere; }
+.sjekk-fremdrift { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 0; margin-bottom: 4px; }
+.sjekk-fremdrift-linje { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; margin-bottom: 8px; min-height: 36px; }
+.sjekk-fremdrift-linje .sjekk-alt-normalt { margin-left: auto; }
+.sjekk-stolpe { height: 8px; border-radius: 999px; background: var(--kant); overflow: hidden; }
+.sjekk-stolpe > span { display: block; height: 100%; border-radius: inherit; background: var(--ok); transition: width .25s ease; }
+.sjekk-fremdrift .melding { margin: 10px 0 0; }
+.sjekk-status { display: flex; flex-direction: column; gap: 6px; }
+.sjekk-status .merke { margin-right: 4px; }
+.sjekk-status .sjekk-kommentar { color: var(--tekst-2); }
+
+.sjekk-punkter { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+.sjekk-punkt {
+  display: grid; gap: 12px; padding: 14px 16px; background: var(--flate); border: 1px solid var(--kant); border-radius: var(--radius);
+  box-shadow: var(--skygge-1); transition: border-color .15s;
+}
+.sjekk-punkt.ok { border-color: color-mix(in srgb, var(--ok) 35%, var(--kant)); }
+.sjekk-punkt.avvik { border-color: color-mix(in srgb, var(--fare) 45%, var(--kant)); box-shadow: inset 3px 0 0 var(--fare), var(--skygge-1); }
+.sjekk-punkt-topp { display: flex; align-items: flex-start; gap: 12px; }
+.sjekk-nr {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: var(--flate-2); color: var(--tekst-2);
+  box-shadow: inset 0 0 0 1px var(--kant); font-size: 0.8rem; font-weight: 650; font-variant-numeric: tabular-nums;
+}
+.sjekk-punkt.ok .sjekk-nr { background: var(--ok-lys); color: var(--ok); box-shadow: none; }
+.sjekk-punkt.avvik .sjekk-nr { background: var(--fare-lys); color: var(--fare); box-shadow: none; }
+.sjekk-punkt-tekst { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 3px; font-weight: 550; overflow-wrap: anywhere; }
+.sjekk-punkt-tekst .felt-hjelp { margin: 0; }
+.sjekk-valg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sjekk-valg button { justify-content: center; min-height: 46px; font-size: 0.95rem; }
+.sjekk-valg .sjekk-normalt[aria-pressed="true"], .sjekk-valg .sjekk-normalt[aria-pressed="true"]:hover:not(:disabled) { background: var(--ok); border-color: var(--ok); color: var(--flate); }
+.sjekk-valg .sjekk-avvik[aria-pressed="true"], .sjekk-valg .sjekk-avvik[aria-pressed="true"]:hover:not(:disabled) { background: var(--fare); border-color: var(--fare); color: var(--flate); }
+.sjekk-avvik-skjema { display: grid; gap: 8px; }
+.sjekk-avvik-skjema textarea { min-height: 72px; }
+.sjekk-avvik-tekst { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--fare-lys); }
+.sjekk-avvik-tekst > p { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.sjekk-tiltak { margin: 0; display: flex; flex-direction: column; gap: 2px; white-space: pre-line; overflow-wrap: anywhere; }
+.sjekk-avvik-tekst .sjekk-tiltak { align-self: stretch; padding: 8px 10px; border-radius: var(--radius-s); background: var(--flate); }
+.sjekk-svar { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; }
+.sjekk-fullfor label { margin-bottom: 10px; }
+.sjekk-fullfor > p { margin: 0 0 10px; }
+.sjekk-lukk { width: 100%; }
+.sjekk-lukk label { margin-bottom: 8px; }
+.sjekk-lukk-knapp { margin-top: 2px; }
+
+.faner.valg.sjekk-filter { margin-bottom: 8px; }
+@media (min-width: 701px) { .faner.valg.sjekk-filter { width: fit-content; } .faner.valg.sjekk-filter button { min-width: 96px; } }
+.sjekk-forklaring { margin: 0 0 12px; }
+.sjekk-avviksliste { display: grid; gap: 12px; margin-bottom: 18px; }
+.sjekk-avviksliste > .kort { margin: 0; }
+.sjekk-avvik-kort { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.sjekk-avvik-kort.lukket { background: var(--flate-2); }
+.sjekk-avvik-topp { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; width: 100%; }
+.sjekk-avvik-topp strong { overflow-wrap: anywhere; }
+.sjekk-kommentar { margin: 2px 0; white-space: pre-line; overflow-wrap: anywhere; }
+.sjekk-avvik-kort > .sjekk-tiltak { padding: 8px 10px; border-radius: var(--radius-s); background: var(--ok-lys); align-self: stretch; }
+
+.sjekk-historikk-valg .rad { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
+.sjekk-historikk-valg p { margin: 2px 0 0; }
+
+.sjekk-arkivert { margin: 20px 0 2px; font-size: 0.95rem; }
+.sjekk-felt { margin-bottom: 16px; }
+.sjekk-etikett { display: block; font-size: 0.83rem; font-weight: 550; color: var(--tekst-2); margin-bottom: 6px; }
+.faner.valg.sjekk-frekvens { margin-bottom: 4px; }
+.beskjed-til.sjekk-roller { margin-top: 0; }
+.sjekk-punkthjelp { margin: -2px 0 10px; }
+/* Et punkt: tallet, teksten og knappene på linja, veiledningen under. På mobil får teksten hele
+   linja, og knappene står ved veiledningen. */
+.sjekk-redigering { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.sjekk-redigering li {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: "nr felt knapper" ". hjelp hjelp";
+  align-items: center; gap: 4px 8px;
+}
+.sjekk-redigering .sjekk-nr { grid-area: nr; }
+.sjekk-redigering .sjekk-punkt-felt { grid-area: felt; min-width: 0; }
+.sjekk-redigering .sjekk-punkt-knapper { grid-area: knapper; gap: 4px; flex-wrap: nowrap; }
+.sjekk-redigering .sjekk-punkt-knapper button.ikon { width: 34px; height: 34px; justify-content: center; padding: 0; }
+.sjekk-veiledning { grid-area: hjelp; min-width: 0; font-size: 0.88rem; }
+.sjekk-legg-veiledning { grid-area: hjelp; justify-self: start; font-size: 0.8rem; }
+.sjekk-skjema-knapper { margin-top: 6px; }
+
+@media (max-width: 860px) {
+  .sjekk-fremdrift { top: calc(var(--topp-hoyde) + env(safe-area-inset-top)); }
+}
+@media (max-width: 700px) {
+  .sjekk-historikk-valg .rad { grid-template-columns: 1fr 1fr; }
+  .sjekk-historikk-valg .rad > label:first-child { grid-column: 1 / -1; }
+  [data-modul="personal"] .sjekk-punkter { gap: 8px; }
+  [data-modul="personal"] .sjekk-punkt { padding: 10px 12px; gap: 10px; }
+  [data-modul="personal"] .sjekk-valg button { min-height: 44px; font-size: 0.93rem; }
+  [data-modul="personal"] .sjekk-fremdrift { padding: 8px 0 10px; }
+  [data-modul="personal"] .sjekk-gruppe h2 { margin: 12px 0 5px; font-size: 0.72rem; }
+  [data-modul="personal"] .sjekk-avviksliste { gap: 8px; }
+  .sjekk-redigering li { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "nr felt felt" ". hjelp knapper"; gap: 4px 6px; }
+  .sjekk-redigering .sjekk-punkt-knapper button.ikon { width: 32px; height: 32px; }
+  .faner.valg.sjekk-frekvens button { padding-left: 4px; padding-right: 4px; white-space: nowrap; font-size: 0.86rem; }
+}

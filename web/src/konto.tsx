@@ -42,7 +42,7 @@ export const MODULNAVN: Record<ModulKode, string> = { faktura: "Faktura", person
 // Om organisasjonen har modulen. Uten lista (eldre API) er alt på.
 export const harModul = (org: Pick<MinOrg, "moduler"> | null | undefined, kode: ModulKode) => !!org && (!org.moduler || org.moduler.includes(kode));
 
-export type Funksjon = "faktura" | "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan" | "lonn" | "regnskap";
+export type Funksjon = "faktura" | "ehf" | "bank" | "ai" | "gjentakende" | "flere" | "paaminnelser" | "rapporter" | "import" | "google_disk" | "ansatte" | "vaktplan" | "lonn" | "regnskap" | "sjekklister";
 // Om organisasjonen har funksjonen. Uten lista (eldre API) er alt på.
 export const harFunksjon = (org: Pick<MinOrg, "funksjoner"> | null | undefined, kode: Funksjon) => !!org && (!org.funksjoner || org.funksjoner.includes(kode));
 

@@ -171,9 +171,9 @@ export function AppOgVarsler({ del }: { del?: "app" | "varsler" }) {
   const { meg } = useKonto();
   const { data, last } = useData(() => hent<PushData>("/push"), []);
   // Bare de varslene som gjelder: ansatte (og egne roller uten moduler) får bare varsler om timer,
-  // vakter, fravær, bursdager, beskjeder og lønnsslipper, og de bare der ansatte og timer er slått
-  // på. Bursdager og beskjeder går til alle i organisasjonen, lønnsslippen til den som er ansatt
-  // (med lønn).
+  // vakter, fravær, bursdager, beskjeder, sjekklister og lønnsslipper, og de bare der ansatte og
+  // timer er slått på. Bursdager og beskjeder går til alle i organisasjonen, sjekklistene (avvik og
+  // når de er lukket) der funksjonen er på, lønnsslippen til den som er ansatt (med lønn).
   const orgs = meg?.organisasjoner ?? [];
   const bareAnsatt = orgs.length > 0 && orgs.every((o) => erAnsatt(o));
   const typer = Object.entries(data?.typer ?? {}).filter(([type]) =>
@@ -183,7 +183,9 @@ export function AppOgVarsler({ del }: { del?: "app" | "varsler" }) {
         ? orgs.some((o) => o.personal && !!o.ansatt_id && harFunksjon(o, "lonn"))
         : type === "timer" || type === "vakter" || type === "fravaer"
         ? orgs.some((o) => o.personal && (erAnsatt(o) || o.ansatt_id || kanPersonal(o)))
-        : !bareAnsatt,
+        : type === "sjekklister"
+          ? orgs.some((o) => o.personal && harFunksjon(o, "sjekklister"))
+          : !bareAnsatt,
   );
   const { kanInstallere } = usePwa();
   const [denne, settDenne] = useState<string | null>(null); // endepunktet til denne enheten
