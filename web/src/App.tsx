@@ -494,8 +494,8 @@ function Ramme() {
   // I en annen modul følger undermenyen siden igjen, og menyen på mobil starter der hver gang den åpnes.
   useEffect(() => settValgtModul(undefined), [aktivModul, menyApen]);
   const velgModul = (m: Modul) => {
-    // Mobil: sidene i modulen vises i menyen, uten å gå dit.
-    if (window.matchMedia("(max-width: 860px)").matches) return settValgtModul(m.id);
+    // Mobil: sidene i modulen vises i skuffen, uten å gå dit (modulen som vises, skjuler dem igjen).
+    if (window.matchMedia("(max-width: 860px)").matches) return settValgtModul(apen?.id === m.id ? null : m.id);
     // PC: modulen man er i, viser eller skjuler undermenyen; en annen modul åpnes på første side.
     if (m.id === aktivModul) return settValgtModul(apen?.id === m.id ? null : undefined);
     nav(m.punkter[0]!.til);
@@ -626,19 +626,17 @@ function Ramme() {
         </button>
       </nav>
       <div className={`meny-skygge${menyApen ? " apen" : ""}`} onClick={() => settMenyApen(false)} />
-      {/* PC: hovedmenyen med modulene, og i en modul med flere sider blir den en smal stripe med
-          ikonene, og undermenyen ved siden av viser sidene. Mobil: menyen er en skuff, og sidene i
-          en modul vises i den (med «Alle moduler» tilbake). */}
-      <div className="sidemeny">
-        <nav
-          id="hovedmeny"
-          className={`meny${menyApen ? " apen" : ""}${apen ? " har-undermeny" : ""}`}
-          aria-label="Moduler"
-          onClick={(e) => {
-            // Også når man trykker på siden man er på (da endres ikke adressen).
-            if ((e.target as HTMLElement).closest("a")) settMenyApen(false);
-          }}
-        >
+      {/* Hovedmenyen med modulene, og i en modul med flere sider blir den en smal stripe med
+          ikonene, og undermenyen ved siden av viser sidene. På mobil er begge i en skuff, og
+          stripa har bare ikonene. */}
+      <div
+        className={`sidemeny${menyApen ? " apen" : ""}`}
+        onClick={(e) => {
+          // Skuffen lukkes når man velger en side, også den man er på (da endres ikke adressen).
+          if ((e.target as HTMLElement).closest("a")) settMenyApen(false);
+        }}
+      >
+        <nav id="hovedmeny" className={`meny${apen ? " har-undermeny" : ""}`} aria-label="Moduler">
           <div className="logo" onClick={() => settMenyApen(false)}>
             <span className="logo-full">
               <Logo />
@@ -707,17 +705,6 @@ function Ramme() {
               </a>
             )}
           </div>
-          {/* Mobil: sidene i modulen, i stedet for modulene. */}
-          {apen && (
-            <div className="meny-liste meny-under">
-              <button type="button" className="meny-tilbake" onClick={() => settValgtModul(null)}>
-                <IkonVenstre storrelse={16} />
-                Alle moduler
-              </button>
-              <div className="meny-under-navn">{apen.navn}</div>
-              <Undersider m={apen} />
-            </div>
-          )}
           <div className="meny-fot">
             <div className="meny-tema">
               <span>Utseende</span>

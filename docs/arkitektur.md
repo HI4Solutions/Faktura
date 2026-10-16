@@ -679,8 +679,10 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   modul med flere sider seg på den første, hovedmenyen blir en smal stripe med ikonene og et kort
   navn under hvert, og undermenyen ved siden av viser sidene i modulen; den følger siden man er
   på, kan skjules (pila øverst, eller modulen man er i) og åpnes igjen, og fanene på Regnskap
-  vises ikke på siden mens den er åpen. På mobil er menyen en skuff: en modul viser sidene sine i
-  skuffen (uten å bytte side), med «Alle moduler» tilbake, og skuffen åpner på modulen man er i.
+  vises ikke på siden mens den er åpen. På mobil er menyen en skuff med det samme: i en modul er
+  hovedmenyen en smal stripe med bare ikonene, og undermenyen ligger ved siden av. Et ikon viser
+  sidene i den modulen uten å bytte side, pila gir hele menyen med navn, og skuffen åpner på
+  modulen man er i.
   Tallet på nye beskjeder står ved modulen og siden. Lista ruller, og bunnen (utseendet, navnet og
   «Logg ut») står fast. Det rollen og modulene ikke gir tilgang til, er ikke med. De ansatte har
   sin egen meny (under Roller). Et regnskapsbyrå har Klienter i stedet for Oversikt og ikke
