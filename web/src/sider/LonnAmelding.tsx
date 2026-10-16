@@ -23,11 +23,13 @@ type Melding = {
   oppsummering: Grunnlag | null;
   forsendelse_id: string | null;
   // venter: hva den venter på når tilbakemeldingen ikke er kommet (sist den ble sjekket).
-  // antall: når det samme avviket står flere ganger i tilbakemeldingen.
+  // antall: når det samme avviket står flere ganger i tilbakemeldingen. data: hele svaret fra
+  // Skatteetaten, uten fødselsnumre.
   tilbakemelding: {
     status: string | null;
     avvik: { kode: string | null; tekst: string; alvorlighet: string | null; antall?: number }[];
     venter?: string | null;
+    data?: unknown;
   } | null;
   feil: string | null;
   opprettet: string;
@@ -478,6 +480,16 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
                     ))}
                   </ul>
                 ) : null}
+                {/* Hele svaret (uten fødselsnumre), til feilsøking og til Skatteetatens brukerstøtte. */}
+                {m.tilbakemelding?.data != null && (
+                  <details className="liten amelding-svar">
+                    <summary>Hele svaret fra Skatteetaten</summary>
+                    <pre>{JSON.stringify(m.tilbakemelding.data, null, 2)}</pre>
+                    <button type="button" className="lenke" onClick={() => void navigator.clipboard?.writeText(JSON.stringify(m.tilbakemelding?.data, null, 2))}>
+                      Kopier svaret
+                    </button>
+                  </details>
+                )}
                 {admin && m.innsending === "fil" && (m.status === "klar" || m.status === "levert") && (
                   <div className="knapper">
                     <button type="button" disabled={h.opptatt} onClick={() => void lastNedFil(m)}>

@@ -283,43 +283,65 @@ export function forsendelseOversikt(dialog: any) {
 
 const skjul = (x: unknown) => JSON.parse(JSON.stringify(x ?? null).replace(/\b\d{11}\b/g, "•••••••••••"));
 
-// Status og avvik fra tilbakemeldingen (formatet tolkes forsiktig: status-feltene og listene med
-// avvik, hvor de enn står).
 // Et avvik i tilbakemeldingen. antall: når det samme avviket står flere ganger.
 export type Avvik = { kode: string | null; tekst: string; alvorlighet: string | null; antall?: number };
 
-// navnPaa: navnet på den ansatte med fødselsnummeret (avvikene sier hvem de gjelder); ellers skjules
-// det. Skatteetaten har id, navn (regelen), alvorlighetsgrad og detaljer på hvert avvik.
+// Status og avvik fra tilbakemeldingen. Formatet tolkes forsiktig: status-feltene og avvikene, hvor
+// de enn står (lister, ett avvik for seg eller bare tekst). Skatteetaten har id, navn (regelen),
+// alvorlighetsgrad og detaljer på hvert avvik. Er meldingen avvist uten avvik, brukes feltene som
+// sier hvorfor (årsak, grunn, feilmelding). navnPaa: navnet på den ansatte med fødselsnummeret
+// (avvikene sier hvem de gjelder); ellers skjules det.
 export function tolkTilbakemelding(data: any, navnPaa?: (fnr: string) => string | undefined): { status: "mottatt" | "avvist" | null; avvik: Avvik[] } {
   const statuser: string[] = [];
   const avvik: Avvik[] = [];
-  const gjennom = (x: any, nokkel = "") => {
+  const grunner: string[] = [];
+  const tekstUtenFnr = (t: string) => t.replace(/\b\d{11}\b/g, (f) => navnPaa?.(f) ?? "•••••••••••");
+  const leggTil = (ny: Avvik) => {
+    const likt = avvik.find((y) => y.kode === ny.kode && y.tekst === ny.tekst && y.alvorlighet === ny.alvorlighet);
+    if (likt) likt.antall = (likt.antall ?? 1) + 1;
+    else avvik.push(ny);
+  };
+  const ettAvvik = (a: any) => {
+    if (typeof a === "string" && a.trim()) return leggTil({ kode: null, tekst: tekstUtenFnr(a.trim()), alvorlighet: null });
+    if (!a || typeof a !== "object" || Array.isArray(a)) return;
+    const regel = typeof a.navn === "string" ? a.navn.trim() : "";
+    const detaljer = [a.detaljer, a.beskrivelse, a.melding, a.tekst, a.feilmelding, a.forklaring].find((v) => typeof v === "string" && v.trim());
+    const tekst = [regel, detaljer?.trim()].filter(Boolean).join(" ") || JSON.stringify(skjul(a)).slice(0, 300);
+    const kode = [a.kode, a.regel, a.regelnummer, a.avvikskode, a.id].find((v) => typeof v === "string" || typeof v === "number");
+    const alvorlighet = [a.alvorlighetsgrad, a.alvorlighet, a.niva, a.type].find((v) => typeof v === "string") ?? null;
+    leggTil({ kode: kode == null ? null : String(kode), tekst: tekstUtenFnr(tekst), alvorlighet });
+  };
+  // iAvvik: elementene i en liste med avvik (f.eks. «avvik» eller «avviksliste»). Et avvik tolkes for
+  // seg (ikke feltene i det hver for seg).
+  const gjennom = (x: any, nokkel = "", iAvvik = false) => {
     if (x == null) return;
-    if (Array.isArray(x)) {
-      if (/avvik/i.test(nokkel))
-        for (const a of x) {
-          if (!a || typeof a !== "object") continue;
-          const regel = typeof a.navn === "string" ? a.navn.trim() : "";
-          const detaljer = [a.detaljer, a.beskrivelse, a.melding, a.tekst, a.feilmelding, a.forklaring].find((v) => typeof v === "string" && v.trim());
-          const tekst = [regel, detaljer?.trim()].filter(Boolean).join(" ") || JSON.stringify(skjul(a)).slice(0, 300);
-          const kode = [a.kode, a.regel, a.regelnummer, a.avvikskode, a.id].find((v) => typeof v === "string" || typeof v === "number");
-          const alvorlighet = [a.alvorlighetsgrad, a.alvorlighet, a.niva, a.type].find((v) => typeof v === "string") ?? null;
-          const ny: Avvik = { kode: kode == null ? null : String(kode), tekst: tekst.replace(/\b\d{11}\b/g, (f) => navnPaa?.(f) ?? "•••••••••••"), alvorlighet };
-          const likt = avvik.find((y) => y.kode === ny.kode && y.tekst === ny.tekst && y.alvorlighet === ny.alvorlighet);
-          if (likt) likt.antall = (likt.antall ?? 1) + 1;
-          else avvik.push(ny);
-        }
-      x.forEach((v) => gjennom(v, nokkel));
-      return;
+    if (Array.isArray(x)) return void x.forEach((v) => gjennom(v, nokkel, /avvik/i.test(nokkel)));
+    if (typeof x === "object") {
+      if (iAvvik || /^avvik$/i.test(nokkel)) return void ettAvvik(x);
+      return void Object.entries(x).forEach(([k, v]) => gjennom(v, k));
     }
-    if (typeof x === "object") return void Object.entries(x).forEach(([k, v]) => gjennom(v, k));
-    if (typeof x === "string" && /status/i.test(nokkel)) statuser.push(x.toLowerCase());
+    if (typeof x !== "string") return;
+    if (iAvvik || /^avvik$/i.test(nokkel)) ettAvvik(x);
+    else if (/status/i.test(nokkel)) statuser.push(x.toLowerCase());
+    else if (/aarsak|årsak|grunn|feilmelding|forklaring/i.test(nokkel) && x.trim()) grunner.push(tekstUtenFnr(x.trim()));
   };
   gjennom(data);
   // «ikkeMottatt», «underBehandling» og lignende er ikke et svar ennå.
   const mottatt = (s: string) => /mottatt|godkjent|^ok$/.test(s) && !/ikke|under|venter/.test(s);
   const status = statuser.some((s) => s.includes("avvist")) ? "avvist" : statuser.some(mottatt) ? "mottatt" : null;
+  if (status === "avvist" && !avvik.length) for (const g of grunner) leggTil({ kode: null, tekst: g, alvorlighet: "avvisning" });
   return { status, avvik: avvik.slice(0, 100) };
+}
+
+// Feltene (ikke verdiene) i tilbakemeldingen, til loggen når formatet er ukjent.
+export function felterI(x: unknown, sti = "", ut: string[] = []): string[] {
+  if (ut.length >= 60 || x == null || typeof x !== "object") return ut;
+  if (Array.isArray(x)) return x.length ? felterI(x[0], `${sti}[]`, ut) : ut;
+  for (const [k, v] of Object.entries(x)) {
+    ut.push(`${sti}${sti ? "." : ""}${k}`);
+    felterI(v, `${sti}${sti ? "." : ""}${k}`, ut);
+  }
+  return ut;
 }
 
 // Navnene på de ansatte med fødselsnumrene i tilbakemeldingen, så avvikene sier hvem de gjelder
@@ -383,6 +405,10 @@ export async function sjekkAmelding(org: string, ameldingId: string, forsok = 1)
     let tb = tolkTilbakemelding(r.data);
     // Avvik som gjelder en ansatt: med navnet i stedet for det skjulte fødselsnummeret.
     if (tb.avvik.some((a) => a.tekst.includes("•••••••••••"))) tb = tolkTilbakemelding(r.data, await navnForFnr(org, r.data));
+    // Avvist uten at noe sier hvorfor: feltene i loggen, så formatet kan tolkes (hele svaret, uten
+    // fødselsnumre, står på meldingen).
+    if (tb.status === "avvist" && !tb.avvik.length)
+      logg("WARNING", "A-meldingen er avvist, men tilbakemeldingen har ingen avvik appen kjenner igjen", { org_id: org, amelding_id: m.id, felt: felterI(r.data) });
     if (!tb.status) {
       // Feltene (ikke verdiene) i loggen, så formatet kan sjekkes.
       const felt = r.data && typeof r.data === "object" ? Object.keys(r.data).slice(0, 30) : typeof r.data;

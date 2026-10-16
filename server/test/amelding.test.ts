@@ -19,7 +19,7 @@ import { settKryptering } from "../src/kryptering.js";
 import { lagring, settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 import { settEtatFetch } from "../src/maskinporten.js";
 import { avgiftsgrunnlag, byggLeveranse, kontroller, oppsummer, sumAvgift, tilXml, type Grunnlag } from "../src/amelding.js";
-import { ameldingFeil, forsendelseOversikt, tilbakemeldingUrl, tolkTilbakemelding } from "../src/ameldingInnsending.js";
+import { ameldingFeil, forsendelseOversikt, tilbakemeldingUrl, tolkTilbakemelding, felterI } from "../src/ameldingInnsending.js";
 import { melding } from "../src/skattekort.js";
 import { frist } from "../src/ameldingRuter.js";
 import { kjorOppgave } from "../src/worker.js";
@@ -403,6 +403,20 @@ describe("a-meldingen (uten database)", () => {
       "Ugyldig verdi. ArbeidsforholdsID på inntekt skal ikke oppgis. Gjelder inntektsmottaker Kari Nordmann under virksomhet 215296172.",
     );
     expect(tolkTilbakemelding(avvist, () => undefined).avvik[0]!.tekst).toContain("inntektsmottaker ••••••••••• under");
+    // Andre former: avvik som tekst, ett avvik for seg, og en avvisning med bare årsaken.
+    expect(tolkTilbakemelding({ status: "AVVIST", avvik: ["Meldingen gjelder en lukket måned."] }).avvik).toEqual([
+      { kode: null, tekst: "Meldingen gjelder en lukket måned.", alvorlighet: null },
+    ]);
+    expect(tolkTilbakemelding({ mottakstatus: "avvist", avvik: { id: "X1", navn: "Ugyldig.", detaljer: "Mangler noe." } }).avvik).toEqual([
+      { kode: "X1", tekst: "Ugyldig. Mangler noe.", alvorlighet: null },
+    ]);
+    expect(tolkTilbakemelding({ mottak: { mottakstatus: "avvist", aarsakTilAvvisning: "Duplikat for 13830197340." } }).avvik).toEqual([
+      { kode: null, tekst: "Duplikat for •••••••••••.", alvorlighet: "avvisning" },
+    ]);
+    // Årsaken brukes bare når meldingen er avvist uten avvik.
+    expect(tolkTilbakemelding({ mottak: { mottakstatus: "mottatt", aarsak: "x" } }).avvik).toEqual([]);
+    // Feltene til loggen (ikke verdiene).
+    expect(felterI({ mottak: { status: "avvist", liste: [{ kode: 1 }] }, n: 2 })).toEqual(["mottak", "mottak.status", "mottak.liste", "mottak.liste[].kode", "n"]);
     expect(tolkTilbakemelding({ mottak: { mottakstatus: "avvist" } }).status).toBe("avvist");
     expect(tolkTilbakemelding({}).status).toBe(null);
     expect(tolkTilbakemelding({ status: "IKKE_MOTTATT" }).status).toBe(null);

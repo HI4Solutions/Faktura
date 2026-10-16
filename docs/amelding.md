@@ -40,7 +40,11 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    avvik viser alvorlighetsgraden, regelen og detaljene fra Skatteetaten (`navn` og `detaljer`) og
    koden (f.eks. MAGNET_EDAG-230B); det samme avviket flere ganger står én gang med antallet, og
    fødselsnummeret i teksten blir navnet på den ansatte (workeren slår det opp; ellers skjules det).
-   En avvist melding rettes og sendes på nytt som en ny melding (den erstatter ingenting).
+   En avvist melding rettes og sendes på nytt som en ny melding (den erstatter ingenting). Avvikene
+   tolkes hvor de enn står i svaret (lister, ett avvik for seg eller bare tekst); er meldingen avvist
+   uten avvik, vises feltene som sier hvorfor (årsak, grunn, feilmelding), og workeren logger feltene
+   i svaret («… ingen avvik appen kjenner igjen»). Hele svaret (uten fødselsnumre) kan åpnes og
+   kopieres under meldingen («Hele svaret fra Skatteetaten»).
    Dialogen har én forsendelse for innsendingen og en annen for tilbakemeldingen, og begge kan ha
    en lenke for API-et. Forsendelsen for innsendingen (ID-en i svaret på innsendingen, eller typen
    «Submission») hoppes over, og den nyeste tilbakemeldingen hentes. Til den er kommet, står det
