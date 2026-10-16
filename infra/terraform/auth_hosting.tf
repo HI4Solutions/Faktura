@@ -106,6 +106,22 @@ resource "google_monitoring_notification_channel" "epost" {
   }
 }
 
+# Uten ALERT_EMAIL går driftsvarslene til plattformadministratorene (ADMIN_EPOSTER).
+locals {
+  admin_varsel_eposter = var.alert_email != "" ? [] : distinct([for e in split(",", var.admin_eposter) : lower(trimspace(e)) if trimspace(e) != ""])
+  driftsvarsler        = var.alert_email != "" || length(local.admin_varsel_eposter) > 0
+  varselkanaler        = concat(google_monitoring_notification_channel.epost[*].id, [for k in google_monitoring_notification_channel.admin : k.id])
+}
+
+resource "google_monitoring_notification_channel" "admin" {
+  for_each     = toset(local.admin_varsel_eposter)
+  display_name = "Driftsvarsler til ${each.value}"
+  type         = "email"
+  labels = {
+    email_address = each.value
+  }
+}
+
 resource "google_monitoring_uptime_check_config" "api" {
   display_name = "faktura-api /helse"
   timeout      = "10s"
@@ -128,7 +144,7 @@ resource "google_monitoring_uptime_check_config" "api" {
 }
 
 resource "google_monitoring_alert_policy" "api_nede" {
-  count        = var.alert_email == "" ? 0 : 1
+  count        = local.driftsvarsler ? 1 : 0
   display_name = "faktura-api svarer ikke"
   combiner     = "OR"
 
@@ -148,11 +164,11 @@ resource "google_monitoring_alert_policy" "api_nede" {
     }
   }
 
-  notification_channels = [google_monitoring_notification_channel.epost[0].id]
+  notification_channels = local.varselkanaler
 }
 
 resource "google_monitoring_alert_policy" "dlq" {
-  count        = var.alert_email == "" ? 0 : 1
+  count        = local.driftsvarsler ? 1 : 0
   display_name = "Hendelser havner i dead-letter-køen"
   combiner     = "OR"
 
@@ -170,7 +186,46 @@ resource "google_monitoring_alert_policy" "dlq" {
     }
   }
 
-  notification_channels = [google_monitoring_notification_channel.epost[0].id]
+  notification_channels = local.varselkanaler
+}
+
+# Feil i loggen: API-et eller workeren logger noe med alvorlighetsgrad ERROR eller høyere (også
+# forespørsler som svarer 5xx, og Cloud Run selv, f.eks. når minnet er brukt opp). Køfeilen i
+# oktober 2026 (oppgaver som ikke ble lagt i kø) ville gitt varsel samme dag. Høyst ett varsel i
+# timen; meldingen og tjenesten står i varselet.
+resource "google_monitoring_alert_policy" "feil_i_loggen" {
+  count        = local.driftsvarsler ? 1 : 0
+  display_name = "Feil i loggen fra API-et eller workeren"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Logglinje med ERROR eller høyere"
+    condition_matched_log {
+      filter = join(" AND ", [
+        "resource.type=\"cloud_run_revision\"",
+        "resource.labels.service_name=(\"${google_cloud_run_v2_service.api.name}\" OR \"${google_cloud_run_v2_service.worker.name}\")",
+        "severity>=ERROR",
+      ])
+      label_extractors = {
+        tjeneste = "EXTRACT(resource.labels.service_name)"
+        melding  = "EXTRACT(jsonPayload.message)"
+      }
+    }
+  }
+
+  alert_strategy {
+    notification_rate_limit {
+      period = "3600s"
+    }
+    auto_close = "1800s"
+  }
+
+  documentation {
+    mime_type = "text/markdown"
+    content   = "API-et eller workeren i Admin Konsoll logget en feil. Se loggen: Cloud Logging, `resource.type=\"cloud_run_revision\" severity>=ERROR`. Meldingen og tjenesten står i etikettene på hendelsen."
+  }
+
+  notification_channels = local.varselkanaler
 }
 
 # ---------------------------------------------------------------------------

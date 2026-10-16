@@ -29,7 +29,7 @@
 | Planlagte jobber | Cloud Scheduler med OIDC-token mot workeren |
 | Hemmeligheter | Secret Manager. Cloud KMS krypterer OAuth- og integrasjonstokens |
 | Bygg og utrulling | GitHub Actions med Workload Identity Federation, Artifact Registry, Terraform |
-| Overvåking | Cloud Logging, oppetidssjekk og varsler i Cloud Monitoring |
+| Overvåking | Cloud Logging, oppetidssjekk og varsler i Cloud Monitoring: API-et svarer ikke, hendelser i dead-letter-køen, og feil i loggen (ERROR eller høyere fra API-et eller workeren, høyst ett varsel i timen). Varslene går til `ALERT_EMAIL`, ellers til plattformadministratorene (`ADMIN_EPOSTER`) |
 | E-post | Resend (EU) bak et eget grensesnitt. Google har ingen transaksjonell e-posttjeneste |
 | AI | Gemini på Vertex AI i EU (europe-west3, Frankfurt): fakturautkast fra tekst og tale, forslag på innbetalinger. Tjenestekontoene har `roles/aiplatform.user`, uten nøkler |
 

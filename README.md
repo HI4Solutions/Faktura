@@ -99,7 +99,8 @@ Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og ve
 
 2. **Legg verdiene skriptet skriver ut** inn som variabler under
    *Settings → Secrets and variables → Actions → Variables* i GitHub-repoet.
-   `ALERT_EMAIL` er valgfri og gir driftsvarsler på e-post.
+   `ALERT_EMAIL` er valgfri: driftsvarslene (API-et svarer ikke, dead-letter-køen og feil i
+   loggen) går dit, ellers til plattformadministratorene i `ADMIN_EPOSTER`.
 
 3. **Merge til `main`.** Workflowen *Infrastruktur* kjører `terraform apply`. Etter det
    legges hemmelighetene inn én gang:
