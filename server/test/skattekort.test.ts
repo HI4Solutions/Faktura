@@ -178,6 +178,11 @@ describe("Skatteetaten og Maskinporten: token, svar og skattekort", () => {
       'Bestillingen av skattekort feilet: Skatteetaten svarte 400: {"status":400,"error":"Bad Request","path":"/api/forskudd/bestillSkattekort"}',
     );
     expect(feil(400, "<html><body><h1>400 Bad Request</h1>\n<p>nginx</p></body></html>").message).toBe("Bestillingen av skattekort feilet: Skatteetaten svarte 400: 400 Bad Request nginx");
+    // En feilside med <head>, stiler og skript: bare det som vises på siden.
+    const side =
+      "<!DOCTYPE html><html><head><title>Skatteetaten</title><style>.error-page { margin: 0; font-family: Arial }</style></head>" +
+      "<body><style>p { color: #212529 }</style><!-- feil --><script>var x = 1;</script><div class=\"error-page\"><h1>Siden&nbsp;finnes ikke</h1></div></body></html>";
+    expect(feil(404, side).message).toBe("Bestillingen av skattekort feilet: Skatteetaten svarte 404: Siden finnes ikke");
     expect(feil(400, "").message).toBe("Bestillingen av skattekort feilet: Skatteetaten svarte 400");
     expect(feil(403, "").message).toContain("Skatteetaten avviste tilgangen (403)");
   });
