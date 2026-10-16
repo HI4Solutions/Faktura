@@ -34,7 +34,8 @@ eller revisormedarbeider; systemet ber om krav-og-utlegg.
 
 - **Krav og betalinger** (scopet `skatteetaten:kravogbetalinger`): Åpne krav, Innbetalinger og
   Utbetalinger for virksomheten.
-- **Frister** (scopet `skatteetaten:frister`).
+- **Frister** (scopet `skatteetaten:frister`): de som har forfalt, og de kommende (11 måneder
+  fram).
 
 Hver del har sitt eget token og lagres for seg, så den ene virker selv om den andre ikke gjør
 det (f.eks. når bare det ene scopet er lagt på klienten). Svarene tolkes til det appen viser og
@@ -46,15 +47,21 @@ Skatteetaten gir bare tilgang når leverandøren er integrert mot minst ett API 
 innrapportering, og kunden har rapportert gjennom systemet minst én gang (f.eks. a-meldingen fra
 Admin Konsoll). Opplysningene kan bare brukes til å vise dem for kunden.
 
-**Adressene.** Rettighetspakken står i adressen, som i eksemplene Skatteetaten hadde i
-dokumentasjonen: `…/api/innkreving/kravogbetalinger/v1/regnskapssystem/{organisasjonsnummer}/aapnekrav`
-(og `/innbetalinger` og `/utbetalinger` med `fraOgMed` og `tilOgMed`), og
-`…/api/innkreving/frister/v1/regnskapssystem/{organisasjonsnummer}` for fristene. Vertene er
-`api-test.sits.no` (test) og `api.skatteetaten.no` (produksjon), etter `SKATTEETATEN_MILJO`. Den
-nøyaktige adressen står i OpenAPI-spesifikasjonene på SwaggerHub (`krav-og-betalinger-api` og
-`frister-api`). Svarer Skatteetaten KB-003 eller FRI-003 (ukjent adresse), sier fanen fra, og
-adressen rettes i `ADRESSER` i `server/src/maskinporten.ts` (testene kan overstyre den med
-`KRAV_OG_BETALINGER_URL` og `FRISTER_URL`).
+**Adressene** (OpenAPI-spesifikasjonene på SwaggerHub: `krav-og-betalinger-api` 1.5.0 og
+`frister-api` 1.0.0). Rettighetspakken står først i stien:
+
+- Krav og betalinger: `kravogbetalinger.api.skatteetaten-test.no/v1` (test) og
+  `kravogbetalinger.api.skatteetaten.no/v1` (produksjon), med
+  `/regnskapssystem/{organisasjonsnummer}/aapnekrav`, og `/innbetalinger` og `/utbetalinger` med
+  `fraOgMed` og `tilOgMed` (høyst ett år).
+- Frister: `frister.api.skatteetaten-test.no/v1` (test) og `frister.api.skatteetaten.no/v1`
+  (produksjon), med `/regnskapssystem/{organisasjonsnummer}/forfalte` og `…/kommende?fraOgMed=`
+  (uten `tilOgMed` gir Skatteetaten 11 måneder fram). En frist som står i begge svarene, tas med
+  én gang.
+
+Vertene følger `SKATTEETATEN_MILJO`. Svarer Skatteetaten KB-003 eller FRI-003 (ukjent adresse),
+sier fanen fra, og adressen rettes i `ADRESSER` i `server/src/maskinporten.ts` (testene kan
+overstyre den med `KRAV_OG_BETALINGER_URL` og `FRISTER_URL`).
 
 Koden: `server/src/skatteetatenKrav.ts` (hentingen og tolkingen), `server/src/skatteetatenRuter.ts`
 (API-et), `server/src/skatteetatenRapporter.ts` (rapportene), `web/src/sider/RegnskapSkatteetaten.tsx`

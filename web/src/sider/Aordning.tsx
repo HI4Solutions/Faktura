@@ -179,7 +179,10 @@ export function Aordning({ endret }: { endret: () => void }) {
       {hen?.personer && hen.status === "klar" && (
         <>
           <p className="dempet liten">
-            {hen.personer.length} {hen.personer.length === 1 ? "person" : "personer"} i a-meldingene for {maanedTekst(hen.periode_fra)}–{maanedTekst(hen.periode_til)}
+            {hen.personer.length} {hen.personer.length === 1 ? "person" : "personer"}{" "}
+            {hen.periode_fra === hen.periode_til
+              ? `i a-meldingen for ${maanedTekst(hen.periode_fra)}`
+              : `i a-meldingene for ${maanedTekst(hen.periode_fra)}–${maanedTekst(hen.periode_til)}`}
             {hen.hentet ? `, hentet ${dato(hen.hentet.slice(0, 10))}` : ""}.
           </p>
           <ul className="aordning-liste">

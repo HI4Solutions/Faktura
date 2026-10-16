@@ -19,9 +19,10 @@ som mangler noe.
 ## Hent fra a-ordningen
 
 Workeren henter avstemmingsrapporten for a-meldingen fra Skatteetaten (Avstemmingsrapport
-A-melding API, som erstatter A06/A07) for de tre siste kalendermånedene: det a-meldingene sier
-om hver person (arbeidsforholdet: startdato, sluttdato, stillingsprosent, yrkeskode,
-arbeidstidsordning, arbeidsforholdID, og fastlønnen eller timelønnen fra siste måned).
+A-melding API, som erstatter A06/A07) for den siste måneden med en a-melding (den inneværende,
+ellers en av de to før): det a-meldingen sier om hver person (arbeidsforholdet: startdato,
+sluttdato, stillingsprosent, yrkeskode, arbeidstidsordning, arbeidsforholdID, og fastlønnen eller
+timelønnen for måneden).
 
 Lederen ser lista og velger:
 
@@ -44,27 +45,32 @@ samme som for innsendingen av a-meldingen. Knappen virker derfor når `AMELDING_
 og organisasjonen er koblet til Skatteetaten med «A-ordningen» (ellers sier dialogen hva som
 mangler, med lenke til Innstillinger → Lønn → Skattekort).
 
-Bestillingen og hentingen tar gjerne et par minutter. Workeren spør hvert tredje sekund i halvannet
-minutt, og deretter hvert minutt i opptil tjue minutter. Lederen får varsel når lista er klar.
+Bestillingen og hentingen tar gjerne et par minutter. Workeren spør etter statusen hvert tredje
+sekund i halvannet minutt, og deretter hvert minutt i opptil tjue minutter. Lederen får varsel når
+lista er klar.
 Fødselsnumrene krypteres av workeren og lagres for seg (`aordning_import.fnr`, som API-et ikke
 kan lese). De flyttes til den ansatte i databasen (`aordning_sett_fnr`) når lederen legger
 personen inn.
 
-**Adressen.** Skatteetaten har adressene og JSON-skjemaet bare i OpenAPI-spesifikasjonen på
-SwaggerHub (`avstemmingsrapport-amelding-api`):
+**API-et** (OpenAPI-spesifikasjonen `avstemmingsrapport-amelding-api` 1.0.1 på SwaggerHub):
 
-- Bestillingen sendes til `{adresse}/bestilling/{orgnr}` med `fraOgMedKalendermaaned` og
-  `tilOgMedKalendermaaned`.
-- Rapporten hentes fra adressen i svaret (Location, bare hos samme vert) eller med ID-en i svaret.
-- Vertene er gjettet etter mønsteret til de andre a-meldingstjenestene:
-  `avstemmingsrapportamelding.api.skatteetaten-test.no/v1` og `…api.skatteetaten.no/v1`.
-  `AVSTEMMING_URL` overstyrer.
-- Tolkingen finner feltene med navnene fra a-meldingen (`norskIdentifikator`, `arbeidsforhold`,
-  `startdato`, `stillingsprosent`, `yrke`, `inntekt`/`loennsinntekt` …) der de står.
+- Vertene: `ameldingavstemmingsrapport.api.skatteetaten-test.no/v1` (test) og
+  `ameldingavstemmingsrapport.api.skatteetaten.no/v1` (produksjon). `AVSTEMMING_URL` overstyrer.
+- `POST /bestillinger` med `opplysningspliktig` (organisasjonsnummeret), `oensketInntektsaar` og
+  `oensketPeriodeFra`/`oensketPeriodeTil` (månedene som tall) gir `id` og `status`.
+- `GET /bestillinger/{id}` gir statusen: `OPPRETTES`, `KLAR`, `INGEN_DATA` (ingen a-melding for
+  måneden) eller `FEILET`.
+- `GET /rapporter/{id}` gir rapporten (`A07AOrdningenAvstemmingsinformasjon`:
+  `mottatt.oppgave.virksomhet[].inntektsmottaker[]` med `identifiserendeInformasjon`,
+  `arbeidsforhold` og `inntekt`), eller 204 når det ikke er data.
 
-Svarer Skatteetaten at adressen er ukjent (404, AMLD_021/AMLD_1023), sier dialogen det. Da rettes
-adressen i `ADRESSER` i `server/src/maskinporten.ts` og stiene i `server/src/aordning.ts` etter
-spesifikasjonen.
+Beløpene i rapporten er summene for perioden. Derfor bestilles én måned om gangen: først den
+inneværende, så måneden før (og den før der) så lenge Skatteetaten svarer `INGEN_DATA`. Har ingen
+av dem en a-melding, er lista tom. En bestilling som `FEILET`, er en feil; lederen henter på nytt.
+Tolkingen finner feltene med navnene fra a-meldingen (`norskIdentifikator`, `arbeidsforhold`,
+`startdato`, `stillingsprosent`, `yrke`, `inntekt`/`loennsinntekt` …) der de står, så den tåler at
+strukturen endres. Svarer Skatteetaten at adressen er ukjent (404, AMLD_021/AMLD_1023), sier
+dialogen det.
 
 ## Den ansatte fyller ut selv
 

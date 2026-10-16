@@ -96,7 +96,7 @@ export type Oppgave =
   | { type: "skatteetaten-hent"; org_id: string }
   // Ansatte fra a-ordningen (aordning.ts): avstemmingsrapporten bestilles og hentes (bestilling:
   // den som er bestilt og ikke var klar; forsok: hvor mange ganger den er hentet).
-  | { type: "aordning-hent"; org_id: string; bestilling?: string; forsok?: number }
+  | { type: "aordning-hent"; org_id: string; bestilling?: string; forsok?: number; maaned?: string }
   // Rapportmodulen: rapporter (CSV og PDF) på e-post til regnskapsføreren.
   | {
       type: "rapport-send";

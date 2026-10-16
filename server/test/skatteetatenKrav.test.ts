@@ -195,6 +195,27 @@ describe("krav og frister fra Skatteetaten (uten database)", () => {
       { kilde: "mva", status: "FEIL" },
     ]);
     expect(tolkFrister(null)).toEqual({ frister: [], kilder: [] });
+    // De forfalte og de kommende sammen: en frist som står i begge, én gang, og en kilde som ikke
+    // svarte i ett av dem, med den statusen.
+    const forfalt = { tittel: "Mva-melding for 3. termin", aktivitetstype: "rapporteringskrav", frist: "2026-08-31" };
+    const kommende = { tittel: "Mva-melding for 5. termin", aktivitetstype: "rapporteringskrav", frist: "2099-12-10" };
+    const begge = tolkFrister(
+      { kilder: [{ kilde: "merverdiavgift", status: "OK", frister: [forfalt] }], virksomhet: "915000355" },
+      {
+        kilder: [
+          { kilde: "merverdiavgift", status: "Feilet", frister: [forfalt, kommende] },
+          { kilde: "skatt", status: "OK", frister: [] },
+        ],
+      },
+    );
+    expect(begge.frister.map((x) => [x.frist, x.tittel, x.kilde])).toEqual([
+      ["2026-08-31", "Mva-melding for 3. termin", "merverdiavgift"],
+      ["2099-12-10", "Mva-melding for 5. termin", "merverdiavgift"],
+    ]);
+    expect(begge.kilder).toEqual([
+      { kilde: "merverdiavgift", status: "Feilet" },
+      { kilde: "skatt", status: "OK" },
+    ]);
   });
 
   it("tilgangspakken «Krav, betalinger og utlegg» når hentingen er slått på", () => {
@@ -238,7 +259,8 @@ describe.skipIf(!process.env.DATABASE_URL)("krav og frister fra Skatteetaten i a
     [`/${ORGNR}/aapnekrav`]: () => json(200, { ...AAPNE, totalOversikt: { saldo: 33500, sumForfalteKrav: 9000, sumIkkeForfalteKrav: 25000, sumStipulerteRenter: 200, sumUplasserteInnbetalinger: 500 } }),
     [`/${ORGNR}/innbetalinger`]: () => json(200, INNBETALINGER),
     [`/${ORGNR}/utbetalinger`]: () => json(404, { kode: "KB-007", melding: "Fant ingen krav/betalinger på angitt identifikator og periode.", korrelasjonsid: "k-0" }),
-    [`/${ORGNR}`]: () => json(200, FRISTER),
+    [`/${ORGNR}/forfalte`]: () => json(200, { kilder: [], virksomhet: ORGNR }),
+    [`/${ORGNR}/kommende`]: () => json(200, FRISTER),
   };
   let svar = { ...STANDARD };
   const lagret = async () => (await api("GET", `/api/org/${org}/regnskap/skatteetaten`)).data;
@@ -318,7 +340,8 @@ describe.skipIf(!process.env.DATABASE_URL)("krav og frister fra Skatteetaten i a
       ["krav.test", `/${ORGNR}/aapnekrav`, "Bearer tok-skatteetaten:kravogbetalinger"],
       ["krav.test", `/${ORGNR}/innbetalinger?${periode}`, "Bearer tok-skatteetaten:kravogbetalinger"],
       ["krav.test", `/${ORGNR}/utbetalinger?${periode}`, "Bearer tok-skatteetaten:kravogbetalinger"],
-      ["frister.test", `/${ORGNR}?fraOgMed=${pluss(0)}&tilOgMed=${pluss(364)}`, "Bearer tok-skatteetaten:frister"],
+      ["frister.test", `/${ORGNR}/forfalte`, "Bearer tok-skatteetaten:frister"],
+      ["frister.test", `/${ORGNR}/kommende?fraOgMed=${pluss(0)}`, "Bearer tok-skatteetaten:frister"],
     ]);
     const s = await lagret();
     expect(s).toMatchObject({ pa: true, koblet: true, tilgang: true, krav: { feil: null }, frister: { feil: null } });
@@ -342,7 +365,7 @@ describe.skipIf(!process.env.DATABASE_URL)("krav og frister fra Skatteetaten i a
     svar = {
       ...STANDARD,
       [`/${ORGNR}/aapnekrav`]: () => json(500, { kode: "KB-001", melding: "Uventet feil på tjenesten.", korrelasjonsid: "k-1" }),
-      [`/${ORGNR}`]: () => json(403, { kode: "FRI-005", melding: "Feil i forbindelse med autorisering." }),
+      [`/${ORGNR}/forfalte`]: () => json(403, { kode: "FRI-005", melding: "Feil i forbindelse med autorisering." }),
     };
     await expect(hentKravOgFrister(org)).rejects.toThrow("Uventet feil på tjenesten.");
     let s = await lagret();
@@ -352,7 +375,11 @@ describe.skipIf(!process.env.DATABASE_URL)("krav og frister fra Skatteetaten i a
     expect(s.krav.data.aapne).toHaveLength(2);
     expect(s.frister.data.frister).toHaveLength(2);
     // Ukjent adresse (en vanlig 404-side) er en feil som ikke går over; ingen frister (FRI-007) er et tomt svar.
-    svar = { ...STANDARD, [`/${ORGNR}`]: () => json(404, { kode: "FRI-007", melding: "Ingen frister" }) };
+    svar = {
+      ...STANDARD,
+      [`/${ORGNR}/forfalte`]: () => json(404, { kode: "FRI-007", melding: "Ingen frister" }),
+      [`/${ORGNR}/kommende`]: () => json(404, { kode: "FRI-007", melding: "Ingen frister" }),
+    };
     delete svar[`/${ORGNR}/aapnekrav`];
     expect(await hentKravOgFrister(org)).toEqual({ krav: false, frister: true });
     s = await lagret();

@@ -179,7 +179,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "nav-hent") return hentFraNav(o.org_id);
   if (o.type === "nav-inntektsmelding") return sendInntektsmelding(o.org_id, o.inntektsmelding_id);
   if (o.type === "skatteetaten-hent") return void (await hentKravOgFrister(o.org_id));
-  if (o.type === "aordning-hent") return void (await hentFraAordningen(o.org_id, o.bestilling, o.forsok));
+  if (o.type === "aordning-hent") return void (await hentFraAordningen(o.org_id, o.bestilling, o.forsok, o.maaned));
   if (o.type === "rapport-send") return sendRapporter(o);
   if (o.type === "epostbekreftelse") return sendEpostbekreftelse(o);
   return sendEpost(o);
@@ -643,9 +643,13 @@ export function lagWorker() {
   // Ansatte fra a-ordningen: avstemmingsrapporten bestilles og hentes (aordning.ts).
   app.post("/oppgaver/aordning-hent", async (c) => {
     const o = skattOppgave
-      .extend({ bestilling: z.string().url().max(500).optional(), forsok: z.number().int().min(0).max(100).optional() })
+      .extend({
+        bestilling: z.string().url().max(500).optional(),
+        forsok: z.number().int().min(0).max(100).optional(),
+        maaned: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+      })
       .parse(await c.req.json());
-    return c.json((await hentFraAordningen(o.org_id, o.bestilling, o.forsok)) ?? { ok: true });
+    return c.json((await hentFraAordningen(o.org_id, o.bestilling, o.forsok, o.maaned)) ?? { ok: true });
   });
 
   // Rapportmodulen: rapporter på e-post til regnskapsføreren.

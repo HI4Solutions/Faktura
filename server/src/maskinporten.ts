@@ -27,36 +27,32 @@ export class EtatFeil extends Error {
   }
 }
 
-// Avstemmingsrapporten for a-meldingen (avstemming): verten er gjettet etter mønsteret til
-// innsendingen og tilbakemeldingen (innrapporteringamelding, ameldingtilbakemelding); den nøyaktige
-// står i OpenAPI-spesifikasjonen på SwaggerHub (avstemmingsrapport-amelding-api). Svarer
-// Skatteetaten at adressen er ukjent, er det her den rettes (aordning.ts sier fra).
-//
-// Krav og betalinger og Frister: rettighetspakken (regnskapssystem, for systembrukeren) står i
-// adressen, som i eksemplene Skatteetaten hadde i dokumentasjonen
-// (/api/innkreving/kravogbetalinger/v1/{rettighetspakke}/{organisasjonsnummer}/aapnekrav). Den
-// nøyaktige adressen står i OpenAPI-spesifikasjonene på SwaggerHub (krav-og-betalinger-api og
-// frister-api); svarer Skatteetaten KB-003 eller FRI-003 (ukjent adresse), er det her den rettes.
+// Avstemmingsrapporten, Krav og betalinger og Frister: vertene fra OpenAPI-spesifikasjonene på
+// SwaggerHub (avstemmingsrapport-amelding-api 1.0.1, krav-og-betalinger-api 1.5.0 og frister-api
+// 1.0.0). For krav og frister står rettighetspakken (regnskapssystem, for systembrukeren) først i
+// stien: /{rettighetspakke}/{organisasjonsnummer}/aapnekrav og /{rettighetspakke}/
+// {organisasjonsnummer}/kommende. Svarer Skatteetaten at adressen er ukjent (KB-003, FRI-003 eller
+// en vanlig 404-side), er det her den rettes.
 const ADRESSER = {
   test: {
     maskinporten: "https://test.maskinporten.no",
     altinn: "https://platform.tt02.altinn.no",
     skattekort: "https://api-test.sits.no/api/forskudd",
     amelding: "https://innrapporteringamelding.api.skatteetaten-test.no/v1",
-    avstemming: "https://avstemmingsrapportamelding.api.skatteetaten-test.no/v1",
+    avstemming: "https://ameldingavstemmingsrapport.api.skatteetaten-test.no/v1",
     nav: "https://sykepenger-api.ekstern.dev.nav.no",
-    krav: "https://api-test.sits.no/api/innkreving/kravogbetalinger/v1/regnskapssystem",
-    frister: "https://api-test.sits.no/api/innkreving/frister/v1/regnskapssystem",
+    krav: "https://kravogbetalinger.api.skatteetaten-test.no/v1/regnskapssystem",
+    frister: "https://frister.api.skatteetaten-test.no/v1/regnskapssystem",
   },
   prod: {
     maskinporten: "https://maskinporten.no",
     altinn: "https://platform.altinn.no",
     skattekort: "https://api.skatteetaten.no/api/forskudd",
     amelding: "https://innrapporteringamelding.api.skatteetaten.no/v1",
-    avstemming: "https://avstemmingsrapportamelding.api.skatteetaten.no/v1",
+    avstemming: "https://ameldingavstemmingsrapport.api.skatteetaten.no/v1",
     nav: "https://sykepenger-api.nav.no",
-    krav: "https://api.skatteetaten.no/api/innkreving/kravogbetalinger/v1/regnskapssystem",
-    frister: "https://api.skatteetaten.no/api/innkreving/frister/v1/regnskapssystem",
+    krav: "https://kravogbetalinger.api.skatteetaten.no/v1/regnskapssystem",
+    frister: "https://frister.api.skatteetaten.no/v1/regnskapssystem",
   },
 };
 

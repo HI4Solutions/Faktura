@@ -12,7 +12,7 @@ import { settKryptering } from "../src/kryptering.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 import { settEtatFetch } from "../src/maskinporten.js";
 import { A_ORDNING, TILGANGSPAKKE } from "../src/altinn.js";
-import { arbeidsforholdFelt, AVSTEMMING_PAUSE, hentFraAordningen, lonnFelt, periodeFor, tolkAvstemming } from "../src/aordning.js";
+import { arbeidsforholdFelt, AVSTEMMING_PAUSE, hentFraAordningen, lonnFelt, maanederFor, tolkAvstemming } from "../src/aordning.js";
 import { iDag } from "../src/regler.js";
 import { kjorOppgave } from "../src/worker.js";
 
@@ -105,6 +105,82 @@ const RAPPORT = {
   ],
 };
 
+// Rapporten slik den er i Skatteetatens spesifikasjon (avstemmingsrapport-amelding-api 1.0.1,
+// A07AOrdningenAvstemmingsinformasjon) for én måned: navnet som én tekst, tallene som tekst.
+const spekRapport = (maaned: string) => ({
+  mottatt: {
+    avstemmingstidspunkt: "2026-10-05T10:00:00+02:00",
+    fomKalendermaaned: maaned,
+    tomKalendermaaned: maaned,
+    opplysningspliktig: {
+      norskIdentifikator: ORGNR,
+      navn: "A-ORDNING TEST AS",
+      innsendinger: [{ innsender: "Annet lønnssystem", kalendermaaned: maaned, status: "mottatt", meldingsId: "m-1", antallInntektsmottakere: 4 }],
+    },
+    oppgave: {
+      virksomhet: [
+        {
+          norskIdentifikator: "915000347",
+          navn: "AVDELING SENTRUM",
+          antallPersonerInnrapportert: 4,
+          inntektsmottaker: [
+            {
+              norskIdentifikator: KARI,
+              identifiserendeInformasjon: { navn: "KARI HANSEN", foedselsdato: "2001-03-13" },
+              arbeidsforhold: [
+                {
+                  arbeidsforholdId: "AF-1",
+                  typeArbeidsforhold: "ordinaertArbeidsforhold",
+                  startdato: "2019-04-01",
+                  antallTimerPerUkeSomEnFullStillingTilsvarer: "37.5",
+                  avloenningstype: "fast",
+                  yrke: "2223108",
+                  arbeidstidsordning: "ikkeSkift",
+                  stillingsprosent: "100",
+                  formForAnsettelse: "fast",
+                },
+              ],
+              inntekt: [
+                { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "42000", loennsinntekt: { beskrivelse: "fastloenn" } },
+                { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "5000", loennsinntekt: { beskrivelse: "bonus" } },
+              ],
+              forskuddstrekk: [{ beskrivelse: "ordinaert", beloep: "-14000" }],
+            },
+            {
+              norskIdentifikator: SLUTTET,
+              identifiserendeInformasjon: { navn: "Sluttet, Sigrid", foedselsdato: "1980-05-02" },
+              arbeidsforhold: [{ arbeidsforholdId: "9", typeArbeidsforhold: "ordinaertArbeidsforhold", startdato: "2015-01-01", sluttdato: "2026-08-15", stillingsprosent: "50" }],
+            },
+            {
+              norskIdentifikator: PER,
+              identifiserendeInformasjon: { navn: "PER TIME", foedselsdato: "2001-08-24" },
+              arbeidsforhold: [
+                {
+                  arbeidsforholdId: "2",
+                  typeArbeidsforhold: "ordinaertArbeidsforhold",
+                  startdato: "2024-02-01",
+                  stillingsprosent: "40",
+                  yrke: "5223101",
+                  avloenningstype: "time",
+                  arbeidstidsordning: "andreSkift",
+                },
+              ],
+              inntekt: [{ fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "4000", loennsinntekt: { beskrivelse: "timeloenn", antall: "20" } }],
+            },
+            {
+              norskIdentifikator: LISE,
+              identifiserendeInformasjon: { navn: "LISE M. NY", foedselsdato: "1990-05-17" },
+              arbeidsforhold: [{ arbeidsforholdId: "L-7", typeArbeidsforhold: "ordinaertArbeidsforhold", startdato: "2026-09-01", stillingsprosent: "60", yrke: "4110101" }],
+              inntekt: [{ fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "30000", loennsinntekt: { beskrivelse: "fastloenn" } }],
+            },
+          ],
+        },
+      ],
+      betalingsinformasjon: { sumForskuddstrekk: "14000", sumArbeidsgiveravgift: "11000" },
+    },
+  },
+});
+
 describe("avstemmingsrapporten (uten database)", () => {
   it("finner personene, navnene, det gjeldende arbeidsforholdet og lønnen fra siste måned", () => {
     const p = tolkAvstemming(RAPPORT);
@@ -171,9 +247,22 @@ describe("avstemmingsrapporten (uten database)", () => {
     expect(lonnFelt(null, null)).toEqual({});
   });
 
-  it("bestiller de tre siste kalendermånedene", () => {
-    expect(periodeFor("2026-10-15")).toEqual({ fra: "2026-08", til: "2026-10" });
-    expect(periodeFor("2026-01-31")).toEqual({ fra: "2025-11", til: "2026-01" });
+  it("rapporten slik den er i spesifikasjonen: personene, arbeidsforholdet og lønnen for måneden", () => {
+    const p = tolkAvstemming(spekRapport("2026-09"));
+    expect(p.map((x) => [x.fnr, x.fornavn, x.etternavn, x.fodselsdato])).toEqual([
+      [KARI, "Kari", "Hansen", "2001-03-13"],
+      [LISE, "Lise M.", "Ny", "1990-05-17"],
+      [SLUTTET, "Sigrid", "Sluttet", "1980-05-02"],
+      [PER, "Per", "Time", "2001-08-24"],
+    ]);
+    expect(p[0]!.arbeidsforhold[0]).toMatchObject({ id: "AF-1", stillingsprosent: 100, yrkeskode: "2223108", timer_full_stilling: 37.5, maaned: "2026-09" });
+    expect(p[0]!.lonn).toEqual({ maaned: "2026-09", fastlonn: 42000, timelonn: null, timer: null });
+    expect(p[3]!.lonn).toEqual({ maaned: "2026-09", fastlonn: null, timelonn: 200, timer: 20 });
+  });
+
+  it("prøver den inneværende måneden og de to før (én måned om gangen)", () => {
+    expect(maanederFor("2026-10-15")).toEqual(["2026-10", "2026-09", "2026-08"]);
+    expect(maanederFor("2026-01-31")).toEqual(["2026-01", "2025-12", "2025-11"]);
   });
 });
 
@@ -188,9 +277,10 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte fra a-ordningen i appen", ()
   let kariId: string;
   let perId: string;
   let annenId: string;
-  // Svaret på bestillingen og hentingene (byttes i testene).
+  // Svarene på bestillingene, statusene og rapporten (byttes i testene).
   let bestilling: () => Response;
-  let henting: (() => Response)[] = [];
+  let statuser: (() => Response)[] = [];
+  let rapport: () => Response;
 
   const api = async (m: string, sti: string, b?: unknown) => {
     const r = await app.request(sti, { method: m, headers: { authorization: eier, "content-type": "application/json" }, body: b === undefined ? undefined : JSON.stringify(b) });
@@ -233,8 +323,10 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte fra a-ordningen i appen", ()
       }
       if (u.host !== "avst.test") throw new Error(`Uventet kall: ${u.href}`);
       kall.push({ metode: init?.method ?? "GET", sti: `${u.pathname}${u.search}`, kropp: init?.body ? JSON.parse(String(init.body)) : null, token: String((init?.headers as any)?.authorization ?? "") });
-      if (init?.method === "POST") return bestilling();
-      return (henting.shift() ?? (() => json(200, { status: "UNDER_BEHANDLING" })))();
+      if (init?.method === "POST" && u.pathname === "/v1/bestillinger") return bestilling();
+      if (u.pathname.startsWith("/v1/bestillinger/")) return (statuser.shift() ?? (() => json(200, { id: u.pathname.split("/").pop(), status: "OPPRETTES" })))();
+      if (u.pathname.startsWith("/v1/rapporter/")) return rapport();
+      return new Response("<html><body>Not Found</body></html>", { status: 404, headers: { "content-type": "text/html" } });
     });
     org = (await api("POST", "/api/organisasjoner", { navn: "A-ordning Test AS", orgnr: ORGNR })).data.id;
     eierBruker = (await api("GET", "/api/meg")).data.bruker.id;
@@ -259,25 +351,33 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte fra a-ordningen i appen", ()
     expect(kall).toEqual([]);
   });
 
-  it("bestiller rapporten, venter til den er klar, og kobler personene mot dem som finnes", async () => {
-    bestilling = () => json(202, { bestillingId: "b-1" }, { location: "/v1/bestilling/915000339/b-1" });
-    henting = [() => json(200, { status: "UNDER_BEHANDLING" }), () => new Response(null, { status: 204 }), () => json(200, RAPPORT)];
+  it("bestiller rapporten for den siste måneden med en a-melding, venter til den er klar, og kobler personene mot dem som finnes", async () => {
+    const [denne, forrige] = maanederFor(iDag()) as [string, string];
+    const ider = ["b-1", "b-2"];
+    bestilling = () => json(201, { id: ider.shift(), status: "OPPRETTES" });
+    // Ingen a-melding for denne måneden ennå; måneden før er klar etter litt.
+    statuser = [() => json(200, { id: "b-1", status: "INGEN_DATA" }), () => json(200, { id: "b-2", status: "OPPRETTES" }), () => json(200, { id: "b-2", status: "KLAR" })];
+    rapport = () => json(200, spekRapport(forrige));
     const r = await api("POST", `/api/org/${org}/ansatte/aordning/hent`);
     expect(r.data.henting).toMatchObject({ status: "bestilt", personer: null, feil: null });
     // Trykket to ganger: bare én oppgave.
     expect((await api("POST", `/api/org/${org}/ansatte/aordning/hent`)).status).toBe(200);
     expect(await kjor()).toHaveLength(1);
-    const p = periodeFor(iDag());
+    const token = "Bearer tok-skatteetaten:innrapporteringamelding";
     expect(kall.map((k) => [k.metode, k.sti, k.token])).toEqual([
-      ["POST", `/v1/bestilling/${ORGNR}`, "Bearer tok-skatteetaten:innrapporteringamelding"],
-      ["GET", `/v1/bestilling/${ORGNR}/b-1`, "Bearer tok-skatteetaten:innrapporteringamelding"],
-      ["GET", `/v1/bestilling/${ORGNR}/b-1`, "Bearer tok-skatteetaten:innrapporteringamelding"],
-      ["GET", `/v1/bestilling/${ORGNR}/b-1`, "Bearer tok-skatteetaten:innrapporteringamelding"],
+      ["POST", "/v1/bestillinger", token],
+      ["GET", "/v1/bestillinger/b-1", token],
+      ["POST", "/v1/bestillinger", token],
+      ["GET", "/v1/bestillinger/b-2", token],
+      ["GET", "/v1/bestillinger/b-2", token],
+      ["GET", "/v1/rapporter/b-2", token],
     ]);
-    expect(kall[0]!.kropp).toEqual({ fraOgMedKalendermaaned: p.fra, tilOgMedKalendermaaned: p.til });
+    const mnd = (m: string) => [Number(m.slice(0, 4)), Number(m.slice(5, 7))] as const;
+    expect(kall[0]!.kropp).toEqual({ opplysningspliktig: ORGNR, oensketInntektsaar: mnd(denne)[0], oensketPeriodeFra: mnd(denne)[1], oensketPeriodeTil: mnd(denne)[1] });
+    expect(kall[2]!.kropp).toEqual({ opplysningspliktig: ORGNR, oensketInntektsaar: mnd(forrige)[0], oensketPeriodeFra: mnd(forrige)[1], oensketPeriodeTil: mnd(forrige)[1] });
     expect(tokener).toEqual([{ scope: "skatteetaten:innrapporteringamelding", kunde: `0192:${ORGNR}` }]);
     const o = (await api("GET", `/api/org/${org}/ansatte/aordning`)).data;
-    expect(o.henting).toMatchObject({ status: "klar", periode_fra: p.fra, periode_til: p.til, feil: null });
+    expect(o.henting).toMatchObject({ status: "klar", periode_fra: forrige, periode_til: forrige, feil: null });
     const personer = o.henting.personer;
     expect(personer.map((x: any) => [x.nr, x.fornavn, x.etternavn, x.ansatt_id, x.forslag_id, x.sluttet])).toEqual([
       [1, "Kari", "Hansen", kariId, null, false],
@@ -385,22 +485,42 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte fra a-ordningen i appen", ()
     expect(o.feil).toContain("Skatteetaten avviste tilgangen til avstemmingsrapporten (403)");
     expect(o.feil).toContain("tilgangspakken «A-ordningen»");
 
-    // Ikke klar: nytt forsøk om et minutt med adressen til rapporten; feil fra Skatteetaten (5xx) prøves igjen.
-    bestilling = () => json(201, { id: "b-2" });
-    henting = [];
+    // Ikke klar: nytt forsøk om et minutt med bestillingen og måneden; feil fra Skatteetaten (5xx) prøves igjen.
+    const [denne, , eldst] = maanederFor(iDag()) as [string, string, string];
+    bestilling = () => json(201, { id: "b-3", status: "OPPRETTES" });
+    statuser = [];
     await henterIgjen();
     await kjor();
     expect(ko.filter((x) => x.type === "aordning-hent")).toEqual([
-      expect.objectContaining({ type: "aordning-hent", org_id: org, bestilling: `https://avst.test/v1/bestilling/${ORGNR}/b-2`, forsok: 1 }),
+      expect.objectContaining({ type: "aordning-hent", org_id: org, bestilling: "https://avst.test/v1/bestillinger/b-3", forsok: 1, maaned: denne }),
     ]);
-    henting = [() => json(500, { kode: "AMLD_001", melding: "Uventet feil på tjenesten" })];
+    statuser = [() => json(500, { kode: "AMLD_001", melding: "Uventet feil på tjenesten" })];
     await expect(kjor()).rejects.toThrow("Skatteetaten avviste hentingen av avstemmingsrapporten (500)");
     o = (await api("GET", `/api/org/${org}/ansatte/aordning`)).data.henting;
     expect(o).toMatchObject({ status: "bestilt" });
     expect(o.feil).toContain("(500)");
+    // En bestilling som feilet hos Skatteetaten: en feil som ikke prøves igjen.
+    statuser = [() => json(200, { id: "b-3", status: "FEILET" })];
+    expect(await hentFraAordningen(org, "https://avst.test/v1/bestillinger/b-3", 1, denne)).toBeNull();
+    o = (await api("GET", `/api/org/${org}/ansatte/aordning`)).data.henting;
+    expect(o).toMatchObject({ status: "feil", feil: "Skatteetaten klarte ikke å lage avstemmingsrapporten. Prøv å hente på nytt." });
+    // Ingen a-melding de tre siste månedene (rapporten uten innhold, 204, er det samme): ingen
+    // personer, og perioden som ble prøvd.
+    kall.length = 0;
+    bestilling = () => json(201, { id: "b-4", status: "OPPRETTES" });
+    statuser = [0, 1, 2].map((i) => () => json(200, { id: "b-4", status: i === 1 ? "KLAR" : "INGEN_DATA" }));
+    rapport = () => new Response(null, { status: 204 });
+    await henterIgjen();
+    await kjor();
+    expect(kall.filter((k) => k.metode === "POST")).toHaveLength(3);
+    o = (await api("GET", `/api/org/${org}/ansatte/aordning`)).data.henting;
+    expect(o).toMatchObject({ status: "klar", periode_fra: eldst, periode_til: denne, personer: [] });
     // Med en gang klar.
-    henting = [() => json(200, { inntektsmottaker: [{ norskIdentifikator: LISE, navn: "Lise Ny" }] })];
-    expect(await hentFraAordningen(org, `https://avst.test/v1/bestilling/${ORGNR}/b-2`, 2)).toEqual({ personer: 1 });
+    bestilling = () => json(201, { id: "b-5", status: "KLAR" });
+    statuser = [() => json(200, { id: "b-5", status: "KLAR" })];
+    rapport = () => json(200, { mottatt: { fomKalendermaaned: denne, tomKalendermaaned: denne, oppgave: { virksomhet: [{ inntektsmottaker: [{ norskIdentifikator: LISE, identifiserendeInformasjon: { navn: "Lise Ny", foedselsdato: "1990-05-17" } }] }] } } });
+    await henterIgjen();
+    await kjor();
     o = (await api("GET", `/api/org/${org}/ansatte/aordning`)).data.henting;
     expect(o).toMatchObject({ status: "klar", feil: null });
     // Lise finnes nå (samme fødselsnummer).

@@ -7,13 +7,14 @@
 // inn som nye, og hvem som finnes fra før og oppdateres (samme fødselsnummer, eller samme navn
 // for en ansatt uten fødselsnummer).
 //
-// Rapporten bestilles og hentes når den er klar. Adressene og JSON-skjemaet står i
-// OpenAPI-spesifikasjonen på SwaggerHub (avstemmingsrapport-amelding-api), som ikke er
-// tilgjengelig herfra: bestillingen sendes til {adresse}/bestilling/{orgnr} med periodene
-// (kalendermånedene), og rapporten hentes fra adressen i svaret (Location eller en ID).
-// Tolkingen leter etter feltene med navnene fra a-meldingen (norskIdentifikator,
-// arbeidsforhold med startdato, stillingsprosent, yrke osv.) der de står, så den tåler at
-// strukturen er en annen enn ventet. Svarer Skatteetaten at adressen er ukjent, sier appen fra.
+// Rapporten bestilles og hentes når den er klar (avstemmingsrapport-amelding-api 1.0.1 på
+// SwaggerHub): POST /bestillinger med opplysningspliktig, inntektsåret og månedene gir ID-en,
+// GET /bestillinger/{id} statusen (OPPRETTES, KLAR, INGEN_DATA eller FEILET), og GET
+// /rapporter/{id} rapporten (A07AOrdningenAvstemmingsinformasjon: mottatt.oppgave.virksomhet[]
+// .inntektsmottaker[] med arbeidsforhold og inntekt). Beløpene er summene for perioden, så den
+// bestilles for én måned om gangen: den siste måneden med en a-melding. Tolkingen leter etter
+// feltene med navnene fra a-meldingen (norskIdentifikator, arbeidsforhold med startdato,
+// stillingsprosent, yrke osv.) der de står, så den tåler at strukturen endres.
 //
 // Fødselsnumrene krypteres av workeren og lagres for seg (bare workeren leser dem); de settes på
 // den ansatte med faktura.aordning_sett_fnr når lederen legger dem inn.
@@ -344,15 +345,16 @@ export function lonnFelt(af: Arbeidsforhold | null | undefined, l: Lonnsdata | n
 
 // --- Workeren ----------------------------------------------------------------------------------
 
-export const AVSTEMMING_PAUSE = { ms: 3000, maks: 90_000 }; // mellom hver gang rapporten hentes, og hvor lenge (endres i tester)
+export const AVSTEMMING_PAUSE = { ms: 3000, maks: 90_000 }; // mellom hver gang statusen sjekkes, og hvor lenge (endres i tester)
 const vent = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 const MAKS_FORSOK = 20; // nye forsøk hvert minutt når rapporten ikke er klar
 
-// Periodene som bestilles: de tre siste kalendermånedene (med den inneværende).
-export function periodeFor(dag: string): { fra: string; til: string } {
+// Månedene som prøves, den siste først: den inneværende og de to før. Rapporten bestilles for én
+// måned om gangen (beløpene er summene for perioden), så lønnen er lønnen for den måneden, og
+// den siste måneden med en a-melding brukes.
+export function maanederFor(dag: string): string[] {
   const [aar, maaned] = dag.split("-").map(Number) as [number, number];
-  const fra = new Date(Date.UTC(aar, maaned - 1 - 2, 1));
-  return { fra: fra.toISOString().slice(0, 7), til: dag.slice(0, 7) };
+  return [0, 1, 2].map((n) => new Date(Date.UTC(aar, maaned - 1 - n, 1)).toISOString().slice(0, 7));
 }
 
 const AVSTEMMING_HVEM = "Skatteetaten (avstemmingsrapporten)";
@@ -381,48 +383,45 @@ function avstemmingFeil(r: { status: number; data: any; tekst: string }): EtatFe
 // Feil som ikke går over av seg selv: oppgaven prøves ikke igjen.
 const varig = (e: unknown) => e instanceof EtatFeil && ((e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429) || e.status === 503);
 
-// Har svaret personer i seg (rapporten kom med en gang)?
-const harPersoner = (data: unknown) => tolkAvstemming(data).length > 0;
-
-// Adressen rapporten hentes fra: Location-feltet (bare hos samme vert, så tokenet ikke sendes
-// andre steder) eller ID-en i svaret.
-function rapportAdresse(orgnr: string, r: { data: any; headers: Headers }): string | null {
-  const base = adresser().avstemming;
-  const loc = r.headers.get("location");
-  if (loc) {
-    try {
-      const u = new URL(loc, base.endsWith("/") ? base : `${base}/`);
-      if (u.origin === new URL(base).origin) return u.toString();
-    } catch {
-      // ugyldig adresse: ID-en i svaret brukes
-    }
-  }
-  const d = r.data;
-  const id = [d?.bestillingId, d?.bestillingsId, d?.bestillingsid, d?.id, d?.referanse, d?.forsendelseId].find(
-    (x) => (typeof x === "string" && /^[\w.:-]{1,200}$/.test(x)) || typeof x === "number",
-  );
-  return id === undefined ? null : `${base}/bestilling/${orgnr}/${encodeURIComponent(String(id))}`;
-}
-
-const IKKE_KLAR = /^(bestilt|mottatt|under_?behandling|paagaar|pågår|i_?arbeid|ikke_?klar|venter|pending|processing|in_?progress)$/i;
-
-// Rapporten, eller null når den ikke er klar ennå.
-async function hentRapport(token: string, url: string): Promise<unknown | null> {
-  const r = await etatKall(url, token, { hvem: AVSTEMMING_HVEM });
-  if (r.status === 202 || r.status === 204 || (r.status === 200 && !r.tekst.trim())) return null;
+// Bestiller rapporten for én kalendermåned (POST /bestillinger). Svaret er ID-en og statusen;
+// adressen til bestillingen (statusen) returneres.
+async function bestill(token: string, orgnr: string, maaned: string): Promise<string> {
+  const [aar, mnd] = maaned.split("-").map(Number) as [number, number];
+  const r = await etatKall(`${adresser().avstemming}/bestillinger`, token, {
+    metode: "POST",
+    kropp: { opplysningspliktig: orgnr, oensketInntektsaar: aar, oensketPeriodeFra: mnd, oensketPeriodeTil: mnd },
+    hvem: AVSTEMMING_HVEM,
+  });
   if (r.status >= 300) throw avstemmingFeil(r);
-  const status = r.data?.status ?? r.data?.bestillingsstatus;
-  if (typeof status === "string" && IKKE_KLAR.test(status.trim()) && !harPersoner(r.data)) return null;
-  return r.data ?? {};
+  const id = r.data?.id;
+  if (typeof id !== "string" || !/^[\w-]{1,100}$/.test(id)) throw new EtatFeil("Skatteetaten svarte uten ID til bestillingen av avstemmingsrapporten.", 502);
+  return `${adresser().avstemming}/bestillinger/${encodeURIComponent(id)}`;
 }
 
-async function ventPaRapport(token: string, url: string): Promise<unknown | null> {
+// Bestillingen: venter (OPPRETTES), ingen a-melding for måneden (INGEN_DATA, eller ingen rapport),
+// eller rapporten (KLAR, hentet fra /rapporter/{id}, samme ID som bestillingen).
+type Bestillingssvar = { klar: false } | { klar: true; rapport: unknown | null };
+async function sjekkBestilling(token: string, url: string): Promise<Bestillingssvar> {
+  const r = await etatKall(url, token, { hvem: AVSTEMMING_HVEM });
+  if (r.status >= 300) throw avstemmingFeil(r);
+  const status = typeof r.data?.status === "string" ? r.data.status.trim().toUpperCase() : "";
+  if (status === "INGEN_DATA") return { klar: true, rapport: null };
+  // En bestilling som feilet, blir ikke bedre av å spørres igjen: lederen bestiller på nytt.
+  if (status === "FEILET") throw new EtatFeil("Skatteetaten klarte ikke å lage avstemmingsrapporten. Prøv å hente på nytt.", 422);
+  if (status !== "KLAR") return { klar: false };
+  const id = url.split("/").pop()!;
+  const rapport = await etatKall(`${adresser().avstemming}/rapporter/${id}`, token, { hvem: AVSTEMMING_HVEM });
+  if (rapport.status === 204) return { klar: true, rapport: null };
+  if (rapport.status >= 300) throw avstemmingFeil(rapport);
+  return { klar: true, rapport: rapport.data ?? {} };
+}
+
+async function ventPaBestilling(token: string, url: string): Promise<Bestillingssvar> {
   const slutt = Date.now() + AVSTEMMING_PAUSE.maks;
   for (;;) {
+    const svar = await sjekkBestilling(token, url);
+    if (svar.klar || Date.now() + AVSTEMMING_PAUSE.ms > slutt) return svar;
     await vent(AVSTEMMING_PAUSE.ms);
-    const data = await hentRapport(token, url);
-    if (data) return data;
-    if (Date.now() + AVSTEMMING_PAUSE.ms > slutt) return null;
   }
 }
 
@@ -485,9 +484,10 @@ export type Importperson = {
   forslag_id: string | null;
 };
 
-// Henter avstemmingsrapporten for organisasjonen (bestilt av lederen) og lagrer personene.
-// bestilling: adressen til en rapport som er bestilt, men ikke var klar (nytt forsøk om et minutt).
-export async function hentFraAordningen(org: string, bestilling?: string, forsok = 0): Promise<{ personer: number } | null> {
+// Henter avstemmingsrapporten for organisasjonen (bestilt av lederen) og lagrer personene. Den
+// siste måneden med en a-melding brukes (den inneværende, ellers en av de to før).
+// bestilling og maaned: en bestilling som ikke var klar (nytt forsøk om et minutt), og måneden den gjelder.
+export async function hentFraAordningen(org: string, bestilling?: string, forsok = 0, maaned?: string): Promise<{ personer: number } | null> {
   const rad = await somSystem((db) => en<{ status: string; bestilt_av: string | null }>(db, "select status, bestilt_av from faktura.aordning_import where org_id = $1", [org]));
   if (rad?.status !== "bestilt") return null;
   try {
@@ -496,40 +496,36 @@ export async function hentFraAordningen(org: string, bestilling?: string, forsok
     if (!t?.orgnr || t.status !== "godkjent") throw new EtatFeil("Koble til Skatteetaten først (Innstillinger → Lønn → Skattekort).", 409);
     if (!harPakke(t, A_ORDNING)) throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Innstillinger → Lønn → Skattekort.", 409);
     const token = await hentToken(SCOPE.amelding, t.orgnr);
-    const periode = periodeFor(iDag());
-    let url = bestilling ?? null;
+    const maaneder = maanederFor(iDag());
+    let mnd = maaned && /^\d{4}-\d{2}$/.test(maaned) ? maaned : maaneder[0]!;
+    // Bare adressen til en bestilling hos Skatteetaten (tokenet sendes ikke andre steder).
+    let url = bestilling?.startsWith(`${adresser().avstemming}/bestillinger/`) ? bestilling : null;
     let data: unknown = null;
-    if (!url) {
-      const r = await etatKall(`${adresser().avstemming}/bestilling/${t.orgnr}`, token, {
-        metode: "POST",
-        kropp: {
-          fraOgMedKalendermaaned: periode.fra,
-          tilOgMedKalendermaaned: periode.til,
-        },
-        hvem: AVSTEMMING_HVEM,
-      });
-      if (r.status >= 300) throw avstemmingFeil(r);
-      if (harPersoner(r.data)) data = r.data;
-      else {
-        url = rapportAdresse(t.orgnr, r);
-        if (!url) throw new EtatFeil("Skatteetaten svarte uten adresse eller ID til avstemmingsrapporten.", 502);
+    // Måneden rapporten gjelder, eller alle som ble prøvd når ingen hadde en a-melding.
+    let periode = { fra: maaneder.at(-1)!, til: maaneder[0]! };
+    for (;;) {
+      url ??= await bestill(token, t.orgnr, mnd);
+      const svar = await ventPaBestilling(token, url);
+      if (!svar.klar) {
+        if (forsok < MAKS_FORSOK) {
+          await leggIKo({ type: "aordning-hent", org_id: org, bestilling: url, forsok: forsok + 1, maaned: mnd }, 60);
+          return null;
+        }
+        throw new EtatFeil("Skatteetaten ble ikke ferdig med avstemmingsrapporten. Prøv igjen senere.", 504);
       }
-    }
-    data ??= await ventPaRapport(token, url!);
-    if (!data) {
-      if (forsok < MAKS_FORSOK) {
-        await leggIKo(
-          {
-            type: "aordning-hent",
-            org_id: org,
-            bestilling: url!,
-            forsok: forsok + 1,
-          },
-          60,
-        );
-        return null;
+      if (svar.rapport) {
+        data = svar.rapport;
+        periode = { fra: mnd, til: mnd };
+        break;
       }
-      throw new EtatFeil("Skatteetaten ble ikke ferdig med avstemmingsrapporten. Prøv igjen senere.", 504);
+      // Ingen a-melding for måneden: måneden før, så lenge den er blant dem som prøves.
+      const forrige = new Date(Date.UTC(Number(mnd.slice(0, 4)), Number(mnd.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
+      if (forrige < maaneder.at(-1)!) {
+        data = {};
+        break;
+      }
+      mnd = forrige;
+      url = null;
     }
     const personer = tolkAvstemming(data);
     const treff = await finnAnsatte(org, personer);

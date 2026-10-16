@@ -6,7 +6,8 @@
 //   Krav og betalinger (scopet skatteetaten:kravogbetalinger): de åpne kravene (skatt og avgifter)
 //   med forfallene og betalingsinformasjonen (konto og KID), innbetalingene som ikke er plassert,
 //   og innbetalingene og utbetalingene det siste året (Skatteetaten gir høyst ett år om gangen).
-//   Frister (skatteetaten:frister): fristene for mva-meldingen og skattemeldingen det neste året.
+//   Frister (skatteetaten:frister): fristene for mva-meldingen og skattemeldingen som har forfalt,
+//   og de kommende (Skatteetaten gir dem 11 måneder fram).
 //
 // Svarene tolkes til det appen viser, og lagres; det rå svaret lagres ikke. Ingen krav, betalinger
 // eller frister (KB-007, KB-009, FRI-007) er et tomt svar, ikke en feil. Krav og frister hentes hver
@@ -212,21 +213,31 @@ export function tolkKravoversikt(aapne: any, inn: any, ut: any, p: { fra: string
   };
 }
 
-// Fristene ({kilder: [{frister: [...], kilde, status}], virksomhet}), de første først.
-export function tolkFrister(d: any): Fristoversikt {
-  const kilder = liste(d?.kilder);
-  const frister = kilder
-    .flatMap((k) =>
-      liste(k?.frister).map((f): Frist | null => {
-        const frist = dato(f?.frist);
-        const tittel = tekst(f?.tittel) ?? tekst(f?.aktivitetsbeskrivelse);
-        if (!frist || !tittel) return null;
-        return { tittel, beskrivelse: tekst(f?.aktivitetsbeskrivelse, 600), type: tekst(f?.aktivitetstype), frist, kilde: tekst(k?.kilde) };
-      }),
-    )
-    .filter((f): f is Frist => !!f)
-    .sort((a, b) => a.frist.localeCompare(b.frist) || a.tittel.localeCompare(b.tittel, "nb"));
-  return { frister, kilder: kilder.map((k) => ({ kilde: tekst(k?.kilde) ?? "ukjent", status: tekst(k?.status) ?? "OK" })) };
+// Fristene ({kilder: [{frister: [...], kilde, status}], virksomhet}) fra ett eller flere svar (de
+// som har forfalt, og de kommende), de første først. En frist som står i flere svar, tas med én
+// gang, og en kilde som ikke svarte i ett av dem, står med den statusen.
+export function tolkFrister(...svar: any[]): Fristoversikt {
+  const kilder = svar.flatMap((d) => liste(d?.kilder));
+  const sett = new Set<string>();
+  const frister: Frist[] = [];
+  for (const k of kilder)
+    for (const f of liste(k?.frister)) {
+      const frist = dato(f?.frist);
+      const tittel = tekst(f?.tittel) ?? tekst(f?.aktivitetsbeskrivelse);
+      const kilde = tekst(k?.kilde);
+      const id = JSON.stringify([kilde, tittel, frist]);
+      if (!frist || !tittel || sett.has(id)) continue;
+      sett.add(id);
+      frister.push({ tittel, beskrivelse: tekst(f?.aktivitetsbeskrivelse, 600), type: tekst(f?.aktivitetstype), frist, kilde });
+    }
+  frister.sort((a, b) => a.frist.localeCompare(b.frist) || a.tittel.localeCompare(b.tittel, "nb"));
+  const status = new Map<string, string>();
+  for (const k of kilder) {
+    const navn = tekst(k?.kilde) ?? "ukjent";
+    const s = tekst(k?.status) ?? "OK";
+    if (!status.has(navn) || s.toUpperCase() !== "OK") status.set(navn, s);
+  }
+  return { frister, kilder: [...status].map(([kilde, s]) => ({ kilde, status: s })) };
 }
 
 // --- Kallene til Skatteetaten --------------------------------------------------------------------
@@ -270,11 +281,15 @@ export async function hentKrav(orgnr: string, iDag = osloIDag()): Promise<Kravov
   return tolkKravoversikt(aapne, inn, ut, p, iDag);
 }
 
-// Fristene det neste året.
+// Fristene som har forfalt, og de kommende fra i dag (uten tilOgMed gir Skatteetaten 11 måneder
+// fram).
 export async function hentFrister(orgnr: string, iDag = osloIDag()): Promise<Fristoversikt> {
   const token = await hentToken(SCOPE.frister, orgnr);
-  const q = new URLSearchParams({ fraOgMed: iDag, tilOgMed: pluss(iDag, 364) });
-  return tolkFrister(await hent(`${adresser().frister}/${orgnr}?${q}`, token, "Kunne ikke hente fristene fra Skatteetaten"));
+  const base = `${adresser().frister}/${orgnr}`;
+  const hva = "Kunne ikke hente fristene fra Skatteetaten";
+  const forfalte = await hent(`${base}/forfalte`, token, hva);
+  const kommende = await hent(`${base}/kommende?${new URLSearchParams({ fraOgMed: iDag })}`, token, hva);
+  return tolkFrister(forfalte, kommende);
 }
 
 // Feil som ikke går over av seg selv (avvist, ugyldig, ikke satt opp): oppgaven prøves ikke igjen.
