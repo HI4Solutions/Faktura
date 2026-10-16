@@ -208,7 +208,10 @@ export async function lagAmelding(org: string, ameldingId: string) {
       feil: null,
     });
     logg("INFO", "A-meldingen er sendt", { org_id: org, maaned });
-    await leggIKo({ type: "amelding-status", org_id: org, amelding_id: m.id, forsok: 1 }, 120);
+    // Meldingen er sendt: går køen feil, tar hjerteslaget sjekken (planleggAmeldingssjekk).
+    await leggIKo({ type: "amelding-status", org_id: org, amelding_id: m.id, forsok: 1 }, 120).catch((e) =>
+      logg("WARNING", "Sjekken av tilbakemeldingen ble ikke lagt i kø", { org_id: org, maaned, feil: melding(e) }),
+    );
   } catch (e) {
     logg("WARNING", "A-meldingen ble ikke laget eller sendt", { org_id: org, maaned, feil: melding(e) });
     await oppdater(m.id, { status: "feil", feil: melding(e) });
@@ -331,7 +334,8 @@ export async function sjekkAmelding(org: string, ameldingId: string, forsok = 1)
     if (!m.dialog_id)
       return void (await venter("Skatteetaten sendte ingen dialog-ID med kvitteringen, så appen finner ikke tilbakemeldingen. Den står i innboksen i Altinn.", { igjen: false }));
     const t = await hentTilgang(org);
-    if (!t?.orgnr) return;
+    if (!t?.orgnr)
+      return void (await venter("Organisasjonen er ikke koblet til Skatteetaten (systembrukeren i Altinn), så tilbakemeldingen kan ikke hentes.", { igjen: false }));
     const token = await hentToken(SCOPE.dialogporten, t.orgnr);
     const adresse = `${adresser().altinn}/dialogporten/api/v1/enduser/dialogs/${encodeURIComponent(m.dialog_id)}`;
     const dp = await etatKall(adresse, token, { hvem: "Dialogporten" });

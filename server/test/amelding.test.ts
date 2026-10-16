@@ -614,7 +614,19 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
       expect(ny.status).toBe(201);
       await kjor("amelding-lag");
       expect((await api("GET", `/api/org/${org}/amelding/2026-09`)).data.meldinger[0]).toMatchObject({ id: ny.data.id, status: "sendt" });
-      await kjor("amelding-status");
+      // Koblet fra Skatteetaten: grunnen står på meldingen, og den prøves ikke igjen (bare av hjerteslaget).
+      const tilgang = await somSystem((db) =>
+        en<{ status: string; pakker: string[] }>(db, "delete from faktura.skattekort_tilgang where org_id = $1 returning status, pakker", [org]),
+      );
+      try {
+        await kjor("amelding-status");
+        expect((await api("GET", `/api/org/${org}/amelding/2026-09`)).data.meldinger[0].tilbakemelding).toMatchObject({
+          venter: "Organisasjonen er ikke koblet til Skatteetaten (systembrukeren i Altinn), så tilbakemeldingen kan ikke hentes.",
+        });
+        expect(ko.some((o) => o.type === "amelding-status")).toBe(false);
+      } finally {
+        await somSystem((db) => db.query("insert into faktura.skattekort_tilgang (org_id, status, pakker) values ($1, $2, $3)", [org, tilgang!.status, tilgang!.pakker]));
+      }
     } finally {
       avvisInnsending = null;
       config.ameldingInnsending = false;

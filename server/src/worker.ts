@@ -3,7 +3,7 @@ import { z } from "zod";
 import { alle, en, somSystem } from "./db.js";
 import { feilhandterer } from "./feil.js";
 import { fakturaEpost, hentFaktura, pdfFilnavn, purringEpost, sikrePdf } from "./dokument.js";
-import { epost, leggIKo, publiser, type Oppgave } from "./tjenester.js";
+import { epost, leggIKo, publiser, settWorkerAdresse, type Oppgave } from "./tjenester.js";
 import { kjorIndeksregulering } from "./indeksregulering.js";
 import { kopierTilDisk, slettFraDisk, synkOrganisasjon } from "./googleDisk.js";
 import { sendVarsel } from "./push.js";
@@ -479,6 +479,15 @@ async function varsleKontonr(db: SystemDb, r: any) {
 export function lagWorker() {
   const app = new Hono();
   app.onError(feilhandterer);
+
+  // Adressen til workeren selv, for oppgavene den legger i kø (tjenester.ts): fra forespørslene fra
+  // Cloud Scheduler (/jobber), Cloud Tasks (/oppgaver) og Pub/Sub (/hendelser), som alle kaller den
+  // på adressen i Terraform. Cloud Run tar bare imot https.
+  app.use("*", async (c, next) => {
+    const vert = c.req.header("host");
+    if (vert && /^\/(jobber|oppgaver|hendelser)\//.test(c.req.path)) settWorkerAdresse(`https://${vert}`);
+    await next();
+  });
 
   app.get("/helse", (c) => c.json({ ok: true }));
 

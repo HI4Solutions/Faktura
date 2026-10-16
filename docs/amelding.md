@@ -42,8 +42,11 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    «Submission») hoppes over, og den nyeste tilbakemeldingen hentes. Til den er kommet, står det
    på meldingen når den sist ble sjekket og hva den venter på (f.eks. «Skatteetaten har ikke lagt
    tilbakemeldingen i Dialogporten ennå»), og workeren logger forsendelsene i dialogen («Tilbakemeldingen
-   på a-meldingen er ikke klar»). Tilbakemeldingen står også i innboksen i Altinn (i testmiljøet
-   <https://af.tt.altinn.no/>, innlogget som daglig leder i testbedriften).
+   på a-meldingen er ikke klar»). Er organisasjonen ikke lenger koblet til Skatteetaten, står det
+   også på meldingen. Sjekkene er oppgaver workeren selv legger i kø (se Køer og hendelser i
+   `arkitektur.md`); før workeren fikk sin egen adresse, ble de borte, og meldingen sto på «Sendt,
+   venter på svar» med bare tidspunktet for siste sjekk. Tilbakemeldingen står også i innboksen i
+   Altinn (i testmiljøet <https://af.tt.altinn.no/>, innlogget som daglig leder i testbedriften).
    Avviser API-et selve innsendingen (status «Feil», f.eks. «Feil i request (AMLD_006)»), står
    hele feilen på meldingen: koden, detaljene fra Skatteetaten (feilspesifiseringen med sti og
    angitt verdi) og korrelasjons-ID-en, som Skatteetatens brukerstøtte trenger. Workeren logger

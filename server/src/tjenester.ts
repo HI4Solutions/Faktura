@@ -150,12 +150,29 @@ export function settLokalOppgavekjorer(k: Oppgavekjorer | undefined) {
   lokalKjorer = k;
 }
 
+// Workerens egen adresse. WORKER_URL har bare API-et (Terraform kan ikke gi en tjeneste sin egen
+// adresse), så workeren tar den fra forespørslene fra Cloud Scheduler, Cloud Tasks og Pub/Sub
+// (worker.ts): de kommer til adressen tjenesten har i Terraform, den samme som API-et legger
+// oppgavene på. Uten den ble alt workeren selv la i kø (nye forsøk, hjerteslaget, sendingen av
+// gjentakende fakturaer), borte.
+let egenAdresse: string | undefined;
+export function settWorkerAdresse(url: string) {
+  egenAdresse = url.replace(/\/+$/, "");
+}
+export const workerAdresse = () => config.workerUrl ?? egenAdresse;
+
 // forsinkelse: antall sekunder før oppgaven kjøres (lokalt og i tester kjøres den med en gang).
 export async function leggIKo(o: Oppgave, forsinkelse?: number): Promise<void> {
   const oppgave = { ...o, oppgave_id: randomUUID() };
   if (lokalKjorer) return lokalKjorer(oppgave);
-  if (!config.tasksKo || !config.workerUrl || !config.tasksInvokerSa) {
-    console.warn("Cloud Tasks er ikke konfigurert; oppgaven ble ikke lagt i kø", oppgave);
+  const adresse = workerAdresse();
+  if (!config.tasksKo || !adresse || !config.tasksInvokerSa) {
+    // I produksjon blir oppgaven borte: det skal synes i loggen (uten innholdet i oppgaven).
+    if (config.produksjon)
+      console.error(
+        JSON.stringify({ severity: "ERROR", message: "Oppgaven ble ikke lagt i kø: Cloud Tasks eller adressen til workeren mangler", type: o.type, rolle: config.rolle }),
+      );
+    else console.warn("Cloud Tasks er ikke konfigurert; oppgaven ble ikke lagt i kø", oppgave);
     return;
   }
   tasks ??= new CloudTasksClient();
@@ -165,10 +182,10 @@ export async function leggIKo(o: Oppgave, forsinkelse?: number): Promise<void> {
       ...(forsinkelse ? { scheduleTime: { seconds: Math.floor(Date.now() / 1000) + forsinkelse } } : {}),
       httpRequest: {
         httpMethod: "POST",
-        url: `${config.workerUrl}/oppgaver/${o.type}`,
+        url: `${adresse}/oppgaver/${o.type}`,
         headers: { "Content-Type": "application/json" },
         body: Buffer.from(JSON.stringify(oppgave)).toString("base64"),
-        oidcToken: { serviceAccountEmail: config.tasksInvokerSa, audience: config.workerUrl },
+        oidcToken: { serviceAccountEmail: config.tasksInvokerSa, audience: adresse },
       },
     },
   });
