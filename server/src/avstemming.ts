@@ -1,8 +1,9 @@
 // Avstemmingen av lønnen (lønn, fase J). For hver måned: det lønnskjøringene gir i a-meldingen nå
 // (de godkjente kjøringene med utbetaling i måneden: forskuddstrekket og arbeidsgiveravgiften
 // regnet som i meldingen, og lønnen etter beskrivelsen; med arbeidsgiveravgiften av AFP-premien som
-// er betalt i måneden), det som er rapportert i den siste a-meldingen som er levert for måneden
-// (oppsummeringen som ble lagret med den), og det som er bokført i lønnsbilagene og bilagene for
+// er betalt i måneden), det som er rapportert i a-meldingene som gjelder for måneden (oppsummeringene
+// som ble lagret med dem; flere som gjelder, legges sammen i a-ordningen, og en nullstilling har ikke
+// noe innhold, 0117), og det som er bokført i lønnsbilagene og bilagene for
 // AFP-premien (kontoene for forskuddstrekk og skyldig arbeidsgiveravgift). Avvik på
 // 1 kr eller mer mellom lønnen og a-meldingen (mindre er avrunding: meldingen har hele kroner), og
 // på 1 øre mellom lønnen og bokføringen, vises med hva som bør gjøres.
@@ -24,6 +25,14 @@ const krTekst = (n: number) =>
   `${Math.abs(n).toLocaleString("nb-NO", { minimumFractionDigits: Number.isInteger(rund(n)) ? 0 : 2, maximumFractionDigits: 2 }).replace(/[  ]/g, " ")} kr`;
 const osloIDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
 const STATUS: Record<string, string> = { levert: "Levert", sendt: "Sendt", mottatt: "Mottatt" };
+// A-meldingen for måneden i rapporten: status og dato, eller at den er nullstilt eller rapportert dobbelt.
+const ameldingTekst = (d: Maanedsdata) => {
+  if (!d.amelding) return d.lonn ? "Ikke levert" : "Ingen lønn";
+  const antall = d.amelding.antall ?? 1;
+  if (antall === 0) return `Nullstilt ${visDato(d.amelding.dato)}`;
+  if (antall > 1) return `${antall} meldinger gjelder (dobbelt)`;
+  return `${STATUS[d.amelding.status] ?? d.amelding.status} ${visDato(d.amelding.dato)}`;
+};
 
 type Tall = { forskuddstrekk: number; aga: number };
 export type Maanedsdata = {
@@ -31,7 +40,8 @@ export type Maanedsdata = {
   frist: string;
   // Lønnskjøringene: som i a-meldingen (hele kroner) og eksakt (summen av slippene, til bokføringen).
   lonn: (Tall & { eksakt: Tall; inntekter: Record<string, number>; mottakere: number }) | null;
-  amelding: (Tall & { status: string; dato: string; inntekter: Record<string, number> }) | null;
+  // antall: meldingene med innhold som gjelder (flere: rapportert dobbelt; 0: nullstilt). Uten: én.
+  amelding: (Tall & { status: string; dato: string; inntekter: Record<string, number>; antall?: number }) | null;
   bokfort: Tall | null;
 };
 
@@ -61,21 +71,28 @@ export async function hentMaaned(db: Db, org: string, maaned: string, kontoer: {
         mottakere: o.antall_med_lonn,
       }
     : null;
-  const m = await en<{ status: string; dato: string; oppsummering: any }>(
+  // Meldingene som gjelder (ikke erstattet av en melding som er levert, sendt eller mottatt; 0117).
+  const meldinger = await alle<{ status: string; dato: string; oppsummering: any; nullstilling: boolean }>(
     db,
-    `select status, to_char(coalesce(sendt_at, opprettet) at time zone 'Europe/Oslo', 'YYYY-MM-DD') as dato, oppsummering
-       from faktura.ameldinger
+    `select status, to_char(coalesce(sendt_at, opprettet) at time zone 'Europe/Oslo', 'YYYY-MM-DD') as dato, oppsummering, nullstilling
+       from faktura.ameldinger a
       where org_id = $1 and maaned = $2::date and status in ('levert', 'sendt', 'mottatt') and oppsummering is not null
-      order by opprettet desc limit 1`,
+        and faktura.amelding_erstattet_av(a.org_id, a.maaned, a.meldings_id) is null
+      order by opprettet desc`,
     [org, `${maaned}-01`],
   );
-  const amelding = m
+  const medInnhold = meldinger.filter((x) => !x.nullstilling);
+  const vis = medInnhold[0] ?? meldinger[0];
+  const inntekter: Record<string, number> = {};
+  for (const x of medInnhold) for (const [b, n] of Object.entries(perBeskrivelse(x.oppsummering.mottakere))) inntekter[b] = rund((inntekter[b] ?? 0) + n);
+  const amelding = vis
     ? {
-        status: m.status,
-        dato: m.dato,
-        forskuddstrekk: Number(m.oppsummering.sum_forskuddstrekk ?? 0),
-        aga: Number(m.oppsummering.arbeidsgiveravgift ?? 0),
-        inntekter: perBeskrivelse(m.oppsummering.mottakere),
+        status: vis.status,
+        dato: vis.dato,
+        forskuddstrekk: rund(medInnhold.reduce((s, x) => s + Number(x.oppsummering.sum_forskuddstrekk ?? 0), 0)),
+        aga: rund(medInnhold.reduce((s, x) => s + Number(x.oppsummering.arbeidsgiveravgift ?? 0), 0)),
+        inntekter,
+        antall: medInnhold.length,
       }
     : null;
   const b = await en<{ forskuddstrekk: number; aga: number; bilag: number }>(
@@ -102,7 +119,12 @@ export function avvik(m: Maanedsdata, iDag = osloIDag()): string[] {
   const ut: string[] = [];
   if (m.lonn && !m.amelding)
     ut.push(iDag > m.frist ? "A-meldingen er ikke levert." : `A-meldingen er ikke levert ennå (fristen er ${visDato(m.frist)}).`);
-  if (m.amelding) {
+  const antall = m.amelding?.antall ?? 1;
+  if (m.amelding && antall > 1)
+    ut.push(`I a-ordningen gjelder ${antall} a-meldinger for måneden, og de legges sammen (rapportert dobbelt): nullstill den som ikke skal gjelde (Lønn → A-melding → måneden).`);
+  else if (m.amelding && antall === 0) {
+    if (m.lonn) ut.push("A-meldingen for måneden er nullstilt, så lønnen er ikke rapportert: lag en ny a-melding for måneden.");
+  } else if (m.amelding) {
     const l = m.lonn ?? { forskuddstrekk: 0, aga: 0, inntekter: {} as Record<string, number> };
     const f = [
       forskjell("forskuddstrekket", m.amelding.forskuddstrekk, l.forskuddstrekk, 1),
@@ -175,12 +197,12 @@ export const avstemmingRapporter: Rapportdef[] = [
           aga_lonn: d.lonn?.eksakt.aga ?? 0,
           aga_amelding: d.amelding?.aga ?? null,
           aga_bokfort: d.bokfort?.aga ?? null,
-          amelding: d.amelding ? `${STATUS[d.amelding.status] ?? d.amelding.status} ${visDato(d.amelding.dato)}` : d.lonn ? "Ikke levert" : "Ingen lønn",
+          amelding: ameldingTekst(d),
           avvik: a.length ? a.join(" ") : d.lonn || d.amelding ? "Stemmer" : "",
         });
       }
       return {
-        merknad: `Lønnskjøringene: de godkjente kjøringene med utbetaling i måneden. A-meldingen: den siste som er levert for måneden (hele kroner). Bokført: lønnsbilagene i måneden, kontoene ${kontoer.forskuddstrekk} (forskuddstrekk) og ${kontoer.skyldig_aga} (skyldig arbeidsgiveravgift). Under 1 kr mellom lønnen og a-meldingen er avrunding. Fristene for innbetaling står i rapporten «Skattetrekk og arbeidsgiveravgift».`,
+        merknad: `Lønnskjøringene: de godkjente kjøringene med utbetaling i måneden. A-meldingen: meldingene som gjelder for måneden (hele kroner; flere som gjelder, legges sammen i a-ordningen). Bokført: lønnsbilagene i måneden, kontoene ${kontoer.forskuddstrekk} (forskuddstrekk) og ${kontoer.skyldig_aga} (skyldig arbeidsgiveravgift). Under 1 kr mellom lønnen og a-meldingen er avrunding. Fristene for innbetaling står i rapporten «Skattetrekk og arbeidsgiveravgift».`,
         kolonner: [
           { nokkel: "maaned", navn: "Måned" },
           { nokkel: "trekk_lonn", navn: "Forskuddstrekk", type: "kr", sum: true },
@@ -257,7 +279,10 @@ export const avstemmingRapporter: Rapportdef[] = [
       );
       rader.push(rad("Feriepenger opptjent i året", rund(ferie?.opptjent ?? 0), null, null, `Skyldige feriepenger ved årsslutt, utbetales i ${v.aar + 1}`));
       const ikkeLevert = maaneder.filter((m) => m.lonn && !m.amelding).map((m) => maanedNavn(`${m.maaned}-01`).split(" ")[0]);
-      const medAvvik = maaneder.filter((m) => m.amelding && avvik(m, iDag).some((a) => a.startsWith("I a-meldingen"))).map((m) => maanedNavn(`${m.maaned}-01`).split(" ")[0]);
+      // Ikke det samme som lønnen, rapportert dobbelt, eller nullstilt med lønn i måneden.
+      const medAvvik = maaneder
+        .filter((m) => m.amelding && avvik(m, iDag).some((a) => /^(I a-meldingen|I a-ordningen|A-meldingen for måneden er nullstilt)/.test(a)))
+        .map((m) => maanedNavn(`${m.maaned}-01`).split(" ")[0]);
       const ikkeBokfort = maaneder.filter((m) => avvik(m, iDag).some((a) => a.startsWith("Lønnen er ikke bokført") || a.startsWith("Bokført"))).map((m) => maanedNavn(`${m.maaned}-01`).split(" ")[0]);
       const deler = [
         ikkeLevert.length ? `A-meldingen er ikke levert for ${ikkeLevert.join(", ")}.` : "",

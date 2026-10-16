@@ -46,6 +46,19 @@ describe("avvikene i avstemmingen (uten database)", () => {
     ]);
   });
 
+  it("a-meldingene som gjelder (0117): rapportert dobbelt, og nullstilt", () => {
+    // To meldinger med innhold gjelder: de legges sammen i a-ordningen.
+    const dobbelt = maaned({ amelding: { status: "mottatt", dato: "2026-10-16", forskuddstrekk: 38000, aga: 19740, inntekter: { fastloenn: 140000 }, antall: 2 } });
+    expect(avvik(dobbelt, "2026-10-17")).toEqual([
+      "I a-ordningen gjelder 2 a-meldinger for måneden, og de legges sammen (rapportert dobbelt): nullstill den som ikke skal gjelde (Lønn → A-melding → måneden).",
+    ]);
+    // Bare en nullstilling gjelder: ingenting er rapportert for lønnen i måneden.
+    const nullstilt = maaned({ amelding: { status: "mottatt", dato: "2026-10-16", forskuddstrekk: 0, aga: 0, inntekter: {}, antall: 0 } });
+    expect(avvik(nullstilt, "2026-10-17")).toEqual(["A-meldingen for måneden er nullstilt, så lønnen er ikke rapportert: lag en ny a-melding for måneden."]);
+    // Uten lønn i måneden er det ingenting å rapportere.
+    expect(avvik({ ...nullstilt, lonn: null, bokfort: null }, "2026-10-17")).toEqual([]);
+  });
+
   it("bokføringen: ikke bokført, et øre forskjell, og bokført uten lønn", () => {
     expect(avvik(maaned({ bokfort: null }), "2026-10-09")).toEqual(["Lønnen er ikke bokført."]);
     expect(avvik(maaned({ bokfort: { forskuddstrekk: 19000, aga: 9869.99 } }), "2026-10-09")).toEqual([

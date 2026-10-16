@@ -14,7 +14,7 @@ import { adresser, EtatFeil, etatKall, hentToken, SCOPE } from "./maskinporten.j
 import { A_ORDNING } from "./altinn.js";
 import { harPakke, hentTilgang, melding, skjulFnr, utdrag } from "./skattekort.js";
 import { lagring, leggIKo } from "./tjenester.js";
-import { byggLeveranse, hentGrunnlag, kontroller, oppsummer, tilXml } from "./amelding.js";
+import { byggLeveranse, hentGrunnlag, kontroller, oppsummer, tilXml, tomtGrunnlag } from "./amelding.js";
 import { maanedNavn } from "./lonnsberegning.js";
 
 const logg = (severity: string, message: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ severity, message, ...data }));
@@ -29,13 +29,15 @@ type Rad = {
   status: string;
   forsendelse_id: string | null;
   dialog_id: string | null;
+  // En 0-melding som erstatter meldingen i erstatter og alt den inneholder (0117).
+  nullstilling: boolean;
 };
 
 const hentRad = (org: string, id: string) =>
   somSystem((db) =>
     en<Rad>(
       db,
-      `select id, org_id, to_char(maaned, 'YYYY-MM-DD') as maaned, meldings_id, erstatter, innsending, status, forsendelse_id, dialog_id
+      `select id, org_id, to_char(maaned, 'YYYY-MM-DD') as maaned, meldings_id, erstatter, innsending, status, forsendelse_id, dialog_id, nullstilling
          from faktura.ameldinger where org_id = $1 and id = $2`,
       [org, id],
     ),
@@ -145,15 +147,21 @@ async function varsle(org: string, tittel: string, tekst: string, tag: string) {
 
 const tidspunkt = () => `${new Date().toISOString().slice(0, 19)}Z`;
 
-// Lager fila eller sender meldingen (raden står som «lages»).
+// Lager fila eller sender meldingen (raden står som «lages»). En nullstilling er en 0-melding
+// (tomtGrunnlag): den trenger ingen fødselsnumre, og avvikene i grunnlaget for måneden stopper den
+// ikke.
 export async function lagAmelding(org: string, ameldingId: string) {
   const m = await hentRad(org, ameldingId);
   if (!m || m.status !== "lages") return;
   const maaned = m.maaned.slice(0, 7);
+  const hva = m.nullstilling ? "Nullstillingen" : "A-meldingen";
   try {
-    const g = await somSystem((db) => hentGrunnlag(db, org, maaned));
-    const feil = kontroller(g).filter((a) => a.niva === "feil");
-    if (feil.length) throw new Error(feil.map((f) => f.tekst).join(" "));
+    const hele = await somSystem((db) => hentGrunnlag(db, org, maaned));
+    const g = m.nullstilling ? tomtGrunnlag(hele) : hele;
+    if (!m.nullstilling) {
+      const feil = kontroller(g).filter((a) => a.niva === "feil");
+      if (feil.length) throw new Error(feil.map((f) => f.tekst).join(" "));
+    }
     const fnr = await fodselsnumre(
       org,
       g.arbeidsforhold.map((f) => f.id),
@@ -165,7 +173,7 @@ export async function lagAmelding(org: string, ameldingId: string) {
       const sti = `amelding/${org}/${maaned}/${m.meldings_id}.xml`;
       await lagring.lagre(config.filerBucket, sti, new TextEncoder().encode(tilXml(leveranse)), "application/xml");
       await oppdater(m.id, { status: "klar", fil_sti: sti, oppsummering, feil: null });
-      logg("INFO", "A-meldingsfila er laget", { org_id: org, maaned });
+      logg("INFO", "A-meldingsfila er laget", { org_id: org, maaned, nullstilling: m.nullstilling });
       return;
     }
     if (!config.ameldingInnsending) throw new EtatFeil("Innsending til Skatteetaten er ikke slått på ennå. Last ned fila og last den opp på skatteetaten.no.", 503);
@@ -207,15 +215,15 @@ export async function lagAmelding(org: string, ameldingId: string) {
       oppsummering,
       feil: null,
     });
-    logg("INFO", "A-meldingen er sendt", { org_id: org, maaned });
+    logg("INFO", "A-meldingen er sendt", { org_id: org, maaned, nullstilling: m.nullstilling });
     // Meldingen er sendt: går køen feil, tar hjerteslaget sjekken (planleggAmeldingssjekk).
     await leggIKo({ type: "amelding-status", org_id: org, amelding_id: m.id, forsok: 1 }, 120).catch((e) =>
       logg("WARNING", "Sjekken av tilbakemeldingen ble ikke lagt i kø", { org_id: org, maaned, feil: melding(e) }),
     );
   } catch (e) {
-    logg("WARNING", "A-meldingen ble ikke laget eller sendt", { org_id: org, maaned, feil: melding(e) });
+    logg("WARNING", "A-meldingen ble ikke laget eller sendt", { org_id: org, maaned, nullstilling: m.nullstilling, feil: melding(e) });
     await oppdater(m.id, { status: "feil", feil: melding(e) });
-    await varsle(org, "A-meldingen ble ikke sendt", `A-meldingen for ${maanedNavn(m.maaned)} ble ikke ${m.innsending === "fil" ? "laget" : "sendt"}: ${melding(e)}`, `amelding-${m.id}`);
+    await varsle(org, `${hva} ble ikke sendt`, `${hva} for ${maanedNavn(m.maaned)} ble ikke ${m.innsending === "fil" ? "laget" : "sendt"}: ${melding(e)}`, `amelding-${m.id}`);
   }
 }
 
@@ -433,14 +441,25 @@ export async function sjekkAmelding(org: string, ameldingId: string, forsok = 1)
     }
     await oppdater(m.id, { tilbakemelding: { ...tb, data: skjul(r.data) }, status: tb.status, feil: null });
     const mnd = maanedNavn(m.maaned);
-    await varsle(
-      org,
-      tb.status === "avvist" ? "A-meldingen er avvist" : "A-meldingen er mottatt",
-      tb.status === "avvist"
-        ? `A-meldingen for ${mnd} er avvist av Skatteetaten. Se avvikene i appen, rett dem og send på nytt.`
-        : `A-meldingen for ${mnd} er mottatt av Skatteetaten${tb.avvik.length ? ` med ${tb.avvik.length} avvik` : ""}.`,
-      `amelding-${m.id}`,
-    );
+    // En nullstilling som er mottatt: meldingen den erstatter, gjelder ikke lenger (0117).
+    if (m.nullstilling)
+      await varsle(
+        org,
+        tb.status === "avvist" ? "Nullstillingen er avvist" : "Nullstillingen er mottatt",
+        tb.status === "avvist"
+          ? `Nullstillingen av a-meldingen for ${mnd} er avvist av Skatteetaten, så meldingen gjelder fortsatt. Se avvikene i appen.`
+          : `Nullstillingen av a-meldingen for ${mnd} er mottatt av Skatteetaten. Meldingen den erstatter, gjelder ikke lenger.`,
+        `amelding-${m.id}`,
+      );
+    else
+      await varsle(
+        org,
+        tb.status === "avvist" ? "A-meldingen er avvist" : "A-meldingen er mottatt",
+        tb.status === "avvist"
+          ? `A-meldingen for ${mnd} er avvist av Skatteetaten. Se avvikene i appen, rett dem og send på nytt.`
+          : `A-meldingen for ${mnd} er mottatt av Skatteetaten${tb.avvik.length ? ` med ${tb.avvik.length} avvik` : ""}.`,
+        `amelding-${m.id}`,
+      );
   } catch (e) {
     logg("WARNING", "Tilbakemeldingen på a-meldingen ble ikke hentet", { org_id: org, feil: melding(e) });
     await oppdater(m.id, { feil: melding(e) });

@@ -1206,14 +1206,17 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   Avstemmingen regner for hver måned ut tre tall for forskuddstrekket og arbeidsgiveravgiften
   (`hentMaaned`): det lønnskjøringene gir i a-meldingen nå (de godkjente kjøringene med
   utbetaling i måneden, regnet som i meldingen, og eksakt fra slippene), det som står i
-  oppsummeringen til den siste a-meldingen som er levert for måneden (levert, sendt eller
-  mottatt), og det som er bokført i lønnsbilagene i måneden (kontoene for forskuddstrekk og
+  oppsummeringene til a-meldingene som gjelder for måneden (levert, sendt eller mottatt, og ikke
+  erstattet; flere som gjelder, legges sammen som i a-ordningen, og en nullstilling har ikke noe
+  innhold, `0117_amelding_nullstilling.sql`), og det som er bokført i lønnsbilagene i måneden (kontoene for forskuddstrekk og
   skyldig arbeidsgiveravgift i lønnsoppsettet). Avvikene (`avvik`) sier hva som bør gjøres: a-meldingen er
   ikke levert (ennå, med fristen), den stemmer ikke med lønnskjøringene (1 kr eller mer; da lages en
-  ny som erstatter den forrige), lønnen er ikke bokført eller bokføringen stemmer ikke (1 øre
-  eller mer), eller det er bokført lønn uten kjøringer. Månedene under Lønn → A-melding merkes
-  «Lønnen er endret» (`endret`) når forskuddstrekket eller antallet med lønn ikke er det samme som
-  i den siste meldingen som er levert. Rapportene «Avstemming per termin» (`lonn.avstemming`,
+  ny som erstatter den forrige), flere a-meldinger gjelder (rapportert dobbelt: nullstill den som
+  ikke skal gjelde), a-meldingen er nullstilt med lønn i måneden, lønnen er ikke bokført eller
+  bokføringen stemmer ikke (1 øre eller mer), eller det er bokført lønn uten kjøringer. Månedene
+  under Lønn → A-melding merkes «Lønnen er endret» (`endret`) når forskuddstrekket eller antallet
+  med lønn ikke er det samme som i meldingen som gjelder, «Rapportert dobbelt» (`dobbelt`) og
+  «Nullstilt» (`nullstilt`). Rapportene «Avstemming per termin» (`lonn.avstemming`,
   månedene i terminen) og «Årsavstemming» (`lonn.avstemming_aar`: lønnen etter beskrivelsen,
   forskuddstrekket, avgiften og feriepengene som er opptjent, med månedene som ikke er levert
   eller ikke stemmer), for dem som ser lønnen. Refusjonene fra NAV (`nav_refusjoner`: sykepenger,

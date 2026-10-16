@@ -71,6 +71,23 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    bare at «parameteren» er påkrevd, og testmiljøet svarte «Header mangler (AMLD_1028)» da den bare
    sto i adressen.
 
+5. **Meldingene som gjelder, og nullstilling** (`0117_amelding_nullstilling.sql`). A-meldinger for
+   samme måned legges sammen i a-ordningen, med mindre en melding erstatter en annen
+   (`erstatterMeldingsId`; en melding kan bare erstattes én gang). En melding gjelder når den er
+   lastet opp, sendt eller mottatt og ikke er erstattet av en annen melding som er det (en avvist
+   erstatning erstatter ingenting). En ny melding erstatter den siste meldingen med innhold som
+   gjelder. Gjelder to meldinger med innhold samtidig, er måneden rapportert dobbelt (det skjedde i
+   TT02 i oktober 2026, da appen trodde en mottatt melding var avvist, så den neste ble en
+   tilleggsmelding). Måneden er da merket «Rapportert dobbelt» i årslisten, måneden har et varsel om
+   det, og avstemmingen sier fra. «Nullstill meldingen» på en melding som gjelder (eier og
+   administrator) lager en 0-melding: bare opplysningspliktig og virksomheten, uten
+   inntektsmottakere, betaling og pensjonsinnretning, med `erstatterMeldingsId` til meldingen. Den
+   erstatter meldingen og alt den inneholder. Den sendes fra appen, eller lages som fil når appen
+   ikke kan sende (lastes opp og merkes som lastet opp). En nullstilling som avvises, erstatter
+   ingenting. Er bare en nullstilling igjen for måneden, er måneden merket «Nullstilt». Skatteetaten
+   beskriver 0-meldingen (blank eller med nullverdier) som en måte å rette feil på (se Kilder). 0-meldingen
+   følger skjemaet for format 2.3 (testen validerer den med xmllint).
+
 Flere virksomheter (underenheter): hver får sin `virksomhet` i meldingen med de ansatte som har
 lønnen og arbeidsforholdet der, og arbeidsgiveravgiften per sone; summene er for hele foretaket.
 AFP-premien rapporteres på hovedvirksomheten.
@@ -183,6 +200,10 @@ beskrevet i `docs/skattekort.md`; de skal aldri sendes på e-post, i chat eller 
 - Altinn, systembruker for systemleverandører:
   <https://docs.altinn.studio/nb/authorization/guides/system-vendor/system-user/>
 - Tenor testdatasøk: <https://www.skatteetaten.no/testdata/>
+- Skatteetaten, erstatningsmelding eller ny a-melding:
+  <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/a-meldingen/veiledning/feilmeldinger-magnetedag-og-tilbakemelding/erstatningsmelding-eller-ny-a-melding>
+- Skatteetaten, replacement a-melding or new a-melding (0-melding):
+  <https://www.skatteetaten.no/en/business-and-organisation/employer/the-a-melding/the-a-melding-guide/error-messages-magnetedag-and-feedback/replacement-a-melding-or-new-a-melding/>
 - Skatteetaten, lønn etter dødsfall:
   <https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/a-meldingen/veiledning/lonn-og-ytelser/oversikt-over-lonn-og-andre-ytelser/lonn-etter-dodsfall>
 - Skatteetaten, kildeskatt på lønn i a-meldingen:

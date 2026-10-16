@@ -484,6 +484,11 @@ export function kontroller(g: Grunnlag): Avvik[] {
   return a;
 }
 
+// Grunnlaget for en nullstilling (0117): uten arbeidsforhold, lønn, permisjoner og premier, så
+// meldingen bare har virksomheten. Det er en 0-melding, som erstatter en melding og alt den
+// inneholder.
+export const tomtGrunnlag = (g: Grunnlag): Grunnlag => ({ ...g, arbeidsforhold: [], slipper: [], utkast: [], permisjoner: [], premier: [], afpIkkeBetalt: null });
+
 // --- Oppsummeringen (uten fødselsnumre) -------------------------------------------------------
 
 export function oppsummer(g: Grunnlag) {

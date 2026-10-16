@@ -18,7 +18,7 @@ import { en, somSystem } from "../src/db.js";
 import { settKryptering } from "../src/kryptering.js";
 import { lagring, settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
 import { settEtatFetch } from "../src/maskinporten.js";
-import { avgiftsgrunnlag, byggLeveranse, kontroller, oppsummer, sumAvgift, tilXml, type Grunnlag } from "../src/amelding.js";
+import { avgiftsgrunnlag, byggLeveranse, kontroller, oppsummer, sumAvgift, tilXml, tomtGrunnlag, type Grunnlag } from "../src/amelding.js";
 import { ameldingFeil, forsendelseOversikt, tilbakemeldingUrl, tolkTilbakemelding, felterI } from "../src/ameldingInnsending.js";
 import { melding } from "../src/skattekort.js";
 import { frist } from "../src/ameldingRuter.js";
@@ -174,6 +174,27 @@ describe("a-meldingen (uten database)", () => {
     const tom = tilXml(byggLeveranse({ ...GRUNNLAG, slipper: [] }, VALG));
     expect(tom).not.toContain("betalingsinformasjon");
     if (harXmllint) valider(tom);
+  });
+
+  it("nullstillingen (0117): en 0-melding med bare virksomheten, som erstatter meldingen, og som følger skjemaet", () => {
+    const valg = { ...VALG, erstatter: "melding-som-ikke-skal-gjelde", fnr: () => null };
+    const { leveranse } = byggLeveranse(tomtGrunnlag(GRUNNLAG), valg) as any;
+    expect(leveranse).toMatchObject({
+      erstatterMeldingsId: "melding-som-ikke-skal-gjelde",
+      meldingsId: VALG.meldingsId,
+      kalendermaaned: "2026-11",
+      opplysningspliktig: { norskIdentifikator: "915000177" },
+    });
+    // Ingen inntektsmottakere, betaling eller pensjonsinnretning: bare virksomheten.
+    expect(leveranse.oppgave).toEqual({ virksomhet: [{ norskIdentifikator: "915000185" }] });
+    expect(oppsummer(tomtGrunnlag(GRUNNLAG))).toMatchObject({ antall_arbeidsforhold: 0, antall_med_lonn: 0, inntekt: 0, sum_forskuddstrekk: 0, arbeidsgiveravgift: 0, mottakere: [] });
+    // Også når foretaket har flere virksomheter: bare hovedvirksomheten.
+    const flere = { ...GRUNNLAG, virksomheter: [{ orgnr: "915000207", navn: "Avdeling", sone: "2" }] };
+    expect((byggLeveranse(tomtGrunnlag(flere), valg) as any).leveranse.oppgave).toEqual({ virksomhet: [{ norskIdentifikator: "915000185" }] });
+    const xml = tilXml(byggLeveranse(tomtGrunnlag(GRUNNLAG), valg));
+    expect(xml).toContain("<erstatterMeldingsId>melding-som-ikke-skal-gjelde</erstatterMeldingsId>");
+    expect(xml).not.toContain("inntektsmottaker");
+    if (harXmllint) valider(xml);
   });
 
   it("sone 1a: slippen der fribeløpet ble brukt opp, deles i redusert og full sats", () => {
@@ -761,5 +782,65 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     await kjor("altinn-endring");
     expect((await api("GET", `/api/org/${org}/skattekort`)).data.tilgang).toMatchObject({ endring_status: "godkjent", mangler: [], pakkenavn: ["Lønn", "A-ordningen"] });
     config.ameldingInnsending = false;
+  });
+
+  it("nullstilling (0117): to meldinger som gjelder (rapportert dobbelt), og 0-meldingen som erstatter den ene", async () => {
+    config.ameldingInnsending = true;
+    const mottatt = (id: string) => somSystem((db) => db.query("update faktura.ameldinger set status = 'mottatt' where id = $1", [id]));
+    const august = async () => (await api("GET", `/api/org/${org}/amelding?aar=2026`)).data.maaneder.find((m: any) => m.maaned === "2026-08");
+    try {
+      // To meldinger som gjelder: den andre erstatter ikke den første (som da appen trodde den var avvist).
+      const m1 = (await api("POST", `/api/org/${org}/amelding/2026-08`, { innsending: "api" })).data;
+      await kjor("amelding-lag");
+      await mottatt(m1.id);
+      const m2 = (await api("POST", `/api/org/${org}/amelding/2026-08`, { innsending: "api", erstatt: false })).data;
+      expect(m2.erstatter).toBeNull();
+      await kjor("amelding-lag");
+      await mottatt(m2.id);
+      let x = (await api("GET", `/api/org/${org}/amelding/2026-08`)).data;
+      expect(x.meldinger.map((m: any) => [m.id, m.gjelder, m.nullstilling, m.erstattet_av])).toEqual([
+        [m2.id, true, false, null],
+        [m1.id, true, false, null],
+      ]);
+      expect(await august()).toMatchObject({ dobbelt: true, nullstilt: false, endret: false });
+      expect((await api("POST", `/api/org/${org}/amelding/nullstill/${crypto.randomUUID()}`, { innsending: "api" })).status).toBe(404);
+
+      // Nullstillingen: workeren sender en 0-melding (bare virksomheten) som erstatter den første.
+      const n = await api("POST", `/api/org/${org}/amelding/nullstill/${m1.id}`, { innsending: "api" });
+      expect(n.status).toBe(201);
+      expect(n.data).toMatchObject({ maaned: "2026-08", nullstilling: true, erstatter: m1.meldings_id, status: "lages" });
+      await kjor("amelding-lag");
+      const sendt = [...kall].reverse().find((k) => k.metode === "POST" && k.url.startsWith("amelding.test/v1/innsending/2026-08/"))!;
+      expect(sendt.kropp.leveranse).toMatchObject({ erstatterMeldingsId: m1.meldings_id, meldingsId: n.data.meldings_id, kalendermaaned: "2026-08" });
+      expect(sendt.kropp.leveranse.oppgave).toEqual({ virksomhet: [{ norskIdentifikator: "915000185" }] });
+      // Tilbakemeldingen: nullstillingen er mottatt, og den første meldingen gjelder ikke lenger.
+      await kjor("amelding-status");
+      x = (await api("GET", `/api/org/${org}/amelding/2026-08`)).data;
+      expect(x.meldinger.find((m: any) => m.id === n.data.id)).toMatchObject({ status: "mottatt", gjelder: true, oppsummering: { antall_med_lonn: 0, sum_forskuddstrekk: 0 } });
+      expect(x.meldinger.find((m: any) => m.id === m1.id)).toMatchObject({ gjelder: false, erstattet_av: n.data.id });
+      expect(ko.filter((o: any) => o.type === "varsel" && o.varsel.tittel === "Nullstillingen er mottatt")).toHaveLength(1);
+      expect(await august()).toMatchObject({ dobbelt: false, nullstilt: false });
+
+      // Den nullstilte kan ikke nullstilles igjen, og en ny melding erstatter den som gjelder (ikke nullstillingen).
+      expect((await api("POST", `/api/org/${org}/amelding/nullstill/${m1.id}`, { innsending: "api" })).status).toBe(409);
+      const m3 = (await api("POST", `/api/org/${org}/amelding/2026-08`, { innsending: "fil" })).data;
+      expect(m3.erstatter).toBe(m2.meldings_id);
+      await kjor("amelding-lag");
+      // Uten innsending til Skatteetaten lages nullstillingen som fil.
+      config.ameldingInnsending = false;
+      expect((await api("POST", `/api/org/${org}/amelding/nullstill/${m2.id}`, { innsending: "api" })).data.error).toContain("ikke slått på ennå");
+      const f = (await api("POST", `/api/org/${org}/amelding/nullstill/${m2.id}`, { innsending: "fil" })).data;
+      await kjor("amelding-lag");
+      expect((await api("GET", `/api/org/${org}/amelding/2026-08`)).data.meldinger.find((m: any) => m.id === f.id)).toMatchObject({ status: "klar", nullstilling: true });
+      const xml = new TextDecoder().decode(filer.get(`amelding/${org}/2026-08/${f.meldings_id}.xml`)!);
+      expect(xml).toContain(`<erstatterMeldingsId>${m2.meldings_id}</erstatterMeldingsId>`);
+      expect(xml).not.toContain("inntektsmottaker");
+      if (harXmllint) valider(xml);
+      // Fila er lastet opp: måneden er nullstilt (ingen melding med innhold gjelder).
+      expect((await api("POST", `/api/org/${org}/amelding/fil/${f.id}/levert`, { levert: true })).status).toBe(200);
+      expect(await august()).toMatchObject({ dobbelt: false, nullstilt: true });
+    } finally {
+      config.ameldingInnsending = false;
+    }
   });
 });

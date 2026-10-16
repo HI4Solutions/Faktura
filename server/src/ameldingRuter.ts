@@ -1,7 +1,8 @@
 // A-meldingen i appen (0077_amelding.sql, amelding.ts, ameldingInnsending.ts): månedene i året
 // med det som skal rapporteres, grunnlaget og avvikene for en måned, bestilling av fila (XML til
-// opplasting på skatteetaten.no) eller innsending til Skatteetatens API, lenken til fila, og
-// merking av fila som lastet opp (så en ny melding for måneden erstatter den). Eier, administrator
+// opplasting på skatteetaten.no) eller innsending til Skatteetatens API, lenken til fila, merking
+// av fila som lastet opp (så en ny melding for måneden erstatter den), og nullstilling av en melding
+// som ikke skal gjelde (0117, når måneden er rapportert dobbelt). Eier, administrator
 // og regnskap ser alt; eier og administrator bestiller (med totrinnsbekreftelse, fila har
 // fødselsnumrene) og laster ned fila.
 import { Hono, type Context } from "hono";
@@ -24,10 +25,17 @@ const osloIDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo
 
 export { frist };
 
+// erstattet_av: meldingen som erstatter (eller nullstiller) denne (0117).
 const RAD = `
   select id, to_char(maaned, 'YYYY-MM') as maaned, meldings_id, erstatter, innsending, status, oppsummering, forsendelse_id, tilbakemelding,
-         feil, opprettet, sendt_at, sjekket, (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = laget_av) as laget_av
+         feil, opprettet, sendt_at, sjekket, (select coalesce(b.navn, b.epost) from faktura.brukere b where b.id = laget_av) as laget_av,
+         nullstilling, faktura.amelding_erstattet_av(org_id, maaned, meldings_id) as erstattet_av
     from faktura.ameldinger`;
+type Rad = { maaned: string; status: string; oppsummering: any; nullstilling: boolean; erstattet_av: string | null };
+
+// Meldingen gjelder i a-ordningen: levert (fila er lastet opp), sendt eller mottatt, og ikke erstattet
+// av en annen melding som er det (0117). Meldingene for samme måned som gjelder, legges sammen.
+const gjelder = (m: Rad) => ["levert", "sendt", "mottatt"].includes(m.status) && !m.erstattet_av;
 
 // Om meldingen kan sendes til API-et (slått på, og systembrukeren har «A-ordningen»).
 async function innsending(db: Db, org: string) {
@@ -66,16 +74,22 @@ export function ameldingRuter() {
             group by m`,
           [orgId(c), aar],
         );
-        const meldinger = await alle<any>(db, `${RAD} where org_id = $1 and extract(year from maaned) = $2 order by opprettet desc`, [orgId(c), aar]);
+        const meldinger = await alle<Rad>(db, `${RAD} where org_id = $1 and extract(year from maaned) = $2 order by opprettet desc`, [orgId(c), aar]);
         const iDag = osloIDag();
         const maaneder = Array.from({ length: 12 }, (_, i) => `${aar}-${String(i + 1).padStart(2, "0")}`)
           .filter((m) => `${m}-01` <= iDag)
           .map((m) => {
             const l = lonn.find((x) => x.maaned === m);
             const siste = meldinger.find((x) => x.maaned === m) ?? null;
+            // Meldingene med innhold som gjelder (0117): flere er rapportert dobbelt (de legges
+            // sammen), og ingen når måneden er nullstilt.
+            const gjeldende = meldinger.filter((x) => x.maaned === m && gjelder(x));
+            const medInnhold = gjeldende.filter((x) => !x.nullstilling);
+            const dobbelt = medInnhold.length > 1;
+            const nullstilt = !medInnhold.length && gjeldende.length > 0;
             // Endret etter levering: forskuddstrekket eller antallet med lønn er ikke det samme som i
-            // den siste meldingen som er levert (avstemmingen: avstemming.ts).
-            const levert = meldinger.find((x) => x.maaned === m && ["levert", "sendt", "mottatt"].includes(x.status) && x.oppsummering);
+            // meldingen som gjelder (avstemmingen: avstemming.ts).
+            const levert = medInnhold.length === 1 && medInnhold[0]!.oppsummering ? medInnhold[0]! : null;
             const endret =
               !!levert &&
               (Math.abs(Number(l?.trekk_avrundet ?? 0) - Number(levert.oppsummering.sum_forskuddstrekk ?? 0)) >= 1 ||
@@ -89,6 +103,8 @@ export function ameldingRuter() {
               brutto: l?.brutto ?? 0,
               siste,
               endret,
+              dobbelt,
+              nullstilt,
             };
           })
           .reverse();
@@ -109,29 +125,51 @@ export function ameldingRuter() {
           frist: frist(maaned),
           avvik: kontroller(g),
           grunnlag: oppsummer(g),
-          meldinger: await alle(db, `${RAD} where org_id = $1 and maaned = $2::date order by opprettet desc`, [orgId(c), `${maaned}-01`]),
+          meldinger: (await alle<Rad>(db, `${RAD} where org_id = $1 and maaned = $2::date order by opprettet desc`, [orgId(c), `${maaned}-01`])).map((m) => ({
+            ...m,
+            gjelder: gjelder(m),
+          })),
           innsending: await innsending(db, orgId(c)),
         };
       }),
     );
   });
 
+  // Innsendingen til Skatteetaten må være slått på, og systembrukeren må ha «A-ordningen».
+  const krevInnsending = async (db: Db, org: string) => {
+    const i = await innsending(db, org);
+    if (!i.pa) throw new ApiFeil(409, "Innsending til Skatteetaten er ikke slått på ennå. Last ned fila og last den opp på skatteetaten.no.");
+    if (!i.tilgang) throw new ApiFeil(409, "Gi tilgang til a-meldingen i Altinn først (Innstillinger → Lønn → Skattekort).");
+  };
+
   // Bestill fila eller innsendingen for måneden: workeren lager den. erstatt: den nye meldingen
-  // erstatter den siste som er levert for måneden (standard).
+  // erstatter den siste meldingen med innhold som gjelder for måneden (standard).
   r.post("/amelding/:maaned", async (c) => {
     krevMfa(c);
     const maaned = maanedS.parse(c.req.param("maaned"));
     const b = z.object({ innsending: z.enum(["fil", "api"]), erstatt: z.boolean().optional() }).parse(await c.req.json().catch(() => ({})));
     const m = await bruk(c, async (db) => {
       await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
-      if (b.innsending === "api") {
-        const i = await innsending(db, orgId(c));
-        if (!i.pa) throw new ApiFeil(409, "Innsending til Skatteetaten er ikke slått på ennå. Last ned fila og last den opp på skatteetaten.no.");
-        if (!i.tilgang) throw new ApiFeil(409, "Gi tilgang til a-meldingen i Altinn først (Innstillinger → Lønn → Skattekort).");
-      }
+      if (b.innsending === "api") await krevInnsending(db, orgId(c));
       const feil = kontroller(await hentGrunnlag(db, orgId(c), maaned)).filter((a) => a.niva === "feil");
       if (feil.length) throw new ApiFeil(400, feil.map((f) => f.tekst).join(" "));
       return (await en<{ id: string }>(db, "select id from faktura.bestill_amelding($1, $2::date, $3, $4)", [orgId(c), `${maaned}-01`, b.innsending, b.erstatt ?? true]))!;
+    });
+    await leggIKo({ type: "amelding-lag", org_id: orgId(c), amelding_id: m.id });
+    return c.json(await bruk(c, (db) => en(db, `${RAD} where org_id = $1 and id = $2`, [orgId(c), m.id])), 201);
+  });
+
+  // Nullstill en melding som gjelder (0117): workeren lager en 0-melding uten inntektsmottakere som
+  // erstatter den og alt den inneholder, og sender den (eller lager fila, som lastes opp på
+  // skatteetaten.no). Brukes når måneden er rapportert dobbelt.
+  r.post("/amelding/nullstill/:id", async (c) => {
+    krevMfa(c);
+    const id = uuid.parse(c.req.param("id"));
+    const b = z.object({ innsending: z.enum(["fil", "api"]) }).parse(await c.req.json().catch(() => ({})));
+    const m = await bruk(c, async (db) => {
+      await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+      if (b.innsending === "api") await krevInnsending(db, orgId(c));
+      return (await en<{ id: string }>(db, "select id from faktura.nullstill_amelding($1, $2, $3)", [orgId(c), id, b.innsending]))!;
     });
     await leggIKo({ type: "amelding-lag", org_id: orgId(c), amelding_id: m.id });
     return c.json(await bruk(c, (db) => en(db, `${RAD} where org_id = $1 and id = $2`, [orgId(c), m.id])), 201);

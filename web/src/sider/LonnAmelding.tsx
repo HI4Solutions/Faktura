@@ -36,6 +36,12 @@ type Melding = {
   sendt_at: string | null;
   sjekket: string | null;
   laget_av: string | null;
+  // En 0-melding som erstatter meldingen i erstatter og alt den inneholder (0117).
+  nullstilling: boolean;
+  // Meldingen som erstatter (eller nullstiller) denne, og om den gjelder i a-ordningen (levert,
+  // sendt eller mottatt, og ikke erstattet). Meldingene som gjelder, legges sammen.
+  erstattet_av: string | null;
+  gjelder?: boolean;
 };
 type Innsending = { pa: boolean; tilgang: boolean; miljo: "test" | "prod" };
 type Grunnlag = {
@@ -60,7 +66,20 @@ type Grunnlag = {
   }[];
 };
 // endret: lønnen i måneden er endret etter at meldingen ble levert (server/src/avstemming.ts).
-type Maaned = { maaned: string; frist: string; med_lonn: number; arbeidsforhold: number; skattetrekk: number; brutto: number; siste: Melding | null; endret?: boolean };
+// dobbelt: flere meldinger med innhold gjelder (de legges sammen); nullstilt: ingen gjelder, bare en
+// nullstilling (0117).
+type Maaned = {
+  maaned: string;
+  frist: string;
+  med_lonn: number;
+  arbeidsforhold: number;
+  skattetrekk: number;
+  brutto: number;
+  siste: Melding | null;
+  endret?: boolean;
+  dobbelt?: boolean;
+  nullstilt?: boolean;
+};
 
 const BESKRIVELSE: Record<string, string> = {
   fastloenn: "Fastlønn",
@@ -189,6 +208,16 @@ function AmeldingListe({ aar, velgAar, apne }: { aar: number; velgAar: (a: numbe
     m.siste ? (
       <>
         {merke(m.siste.status)}
+        {m.dobbelt && (
+          <span className="merke merke-fare" title="Flere a-meldinger gjelder for måneden, og a-ordningen legger dem sammen. Åpne måneden og nullstill den som ikke skal gjelde.">
+            Rapportert dobbelt
+          </span>
+        )}
+        {m.nullstilt && (
+          <span className="merke merke-advarsel" title="A-meldingen for måneden er nullstilt (0-melding), så ingenting er rapportert. Lag en ny melding om noe skal rapporteres.">
+            Nullstilt
+          </span>
+        )}
         {m.endret && (
           <span className="merke merke-advarsel" title="Lønnen i måneden er endret etter at a-meldingen ble levert. Lag en ny melding (den erstatter den forrige).">
             Lønnen er endret
@@ -310,11 +339,25 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
   const x = d.data;
   const g = x.grunnlag;
   const feil = x.avvik.filter((a) => a.niva === "feil");
-  const levert = x.meldinger.find((m) => ["levert", "sendt", "mottatt"].includes(m.status));
+  // Meldingene med innhold som gjelder (nyeste først): en ny melding erstatter den siste. Flere som
+  // gjelder, legges sammen i a-ordningen (rapportert dobbelt).
+  const medInnhold = x.meldinger.filter((m) => m.gjelder && !m.nullstilling);
+  const erstattes = medInnhold[0];
   const kanSende = x.innsending.pa && x.innsending.tilgang;
   const bestill = async (innsending: "fil" | "api") => {
     if (innsending === "api" && !confirm(`Sende a-meldingen for ${maanedTekst(`${maaned}-01`)} til Skatteetaten?`)) return;
-    if (await h.kjor(() => api<Melding>("POST", `/org/${org!.id}/amelding/${maaned}`, { innsending, erstatt: levert ? erstatt : true }))) void d.last();
+    if (await h.kjor(() => api<Melding>("POST", `/org/${org!.id}/amelding/${maaned}`, { innsending, erstatt: erstattes ? erstatt : true }))) void d.last();
+  };
+  const sendtTid = (m: Melding) => tid(m.sendt_at ?? m.opprettet);
+  const finn = (meldingsId: string | null) => (meldingsId ? x.meldinger.find((y) => y.meldings_id === meldingsId) : undefined);
+  // Nullstillingen (0117): en 0-melding som erstatter meldingen og alt den inneholder.
+  const nullstill = async (m: Melding) => {
+    const hvordan = kanSende
+      ? "Appen sender en 0-melding til Skatteetaten"
+      : "Appen lager en 0-melding som fil (last den opp på skatteetaten.no og merk den som lastet opp)";
+    if (!confirm(`Nullstille meldingen fra ${sendtTid(m)}? ${hvordan} som erstatter den og alt den inneholder. Gjør det bare når meldingen ikke skal gjelde, for eksempel når måneden er rapportert dobbelt.`))
+      return;
+    if (await h.kjor(() => api<Melding>("POST", `/org/${org!.id}/amelding/nullstill/${m.id}`, { innsending: kanSende ? "api" : "fil" }))) void d.last();
   };
   const lastNedFil = async (m: Melding) => {
     const vindu = window.open("", "_blank");
@@ -348,6 +391,13 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
         </div>
       )}
       <Feil melding={h.feil} />
+      {medInnhold.length > 1 && (
+        <div className="melding feil" role="alert">
+          <strong>Måneden er rapportert dobbelt.</strong> {medInnhold.length} a-meldinger gjelder for måneden, og a-ordningen legger dem sammen:{" "}
+          {medInnhold.map((m) => `meldingen fra ${sendtTid(m)}`).join(" og ")}. Nullstill den som ikke skal gjelde (under Meldinger). En ny melding erstatter bare den
+          siste.
+        </div>
+      )}
       {x.avvik.length > 0 && (
         <ul className="lonn-merknader amelding-avvik">
           {x.avvik.map((a, i) => (
@@ -420,10 +470,10 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
 
       {admin && (
         <div className="kort amelding-handling">
-          {levert && (
+          {erstattes && (
             <label>
               <input type="checkbox" checked={erstatt} onChange={(e) => settErstatt(e.target.checked)} />
-              Erstatt meldingen som er levert {tid(levert.sendt_at ?? levert.opprettet)} (en rettet a-melding)
+              Erstatt meldingen som er levert {sendtTid(erstattes)} (en rettet a-melding)
             </label>
           )}
           <div className="knapper">
@@ -455,12 +505,26 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
               <div key={m.id} className="amelding-rad">
                 <div className="linje">
                   <span>
-                    <strong>{m.innsending === "fil" ? "Fil" : "Sendt fra appen"}</strong> {tid(m.opprettet)}
+                    <strong>{m.nullstilling ? `Nullstilling${m.innsending === "fil" ? " (fil)" : ""}` : m.innsending === "fil" ? "Fil" : "Sendt fra appen"}</strong> {tid(m.opprettet)}
                     {m.laget_av ? ` av ${m.laget_av}` : ""}
                   </span>
                   {merke(m.status)}
                 </div>
-                {m.erstatter && <div className="liten dempet">Erstatter en melding som er levert.</div>}
+                {m.nullstilling ? (
+                  <div className="liten dempet">
+                    En 0-melding (uten inntektsmottakere) som erstatter {finn(m.erstatter) ? `meldingen fra ${sendtTid(finn(m.erstatter)!)}` : "en melding"} og alt den inneholder.
+                  </div>
+                ) : (
+                  m.erstatter && <div className="liten dempet">Erstatter {finn(m.erstatter) ? `meldingen fra ${sendtTid(finn(m.erstatter)!)}` : "en melding som er levert"}.</div>
+                )}
+                {m.erstattet_av && (
+                  <div className="liten dempet">
+                    {(() => {
+                      const av = x.meldinger.find((y) => y.id === m.erstattet_av);
+                      return av?.nullstilling ? `Nullstilt ${sendtTid(av)}: gjelder ikke lenger.` : `Erstattet${av ? ` av meldingen fra ${sendtTid(av)}` : ""}: gjelder ikke lenger.`;
+                    })()}
+                  </div>
+                )}
                 {m.feil && <div className="liten fare-tekst">{m.feil}</div>}
                 {m.status === "sendt" && m.sjekket && (
                   <div className="liten dempet">
@@ -504,6 +568,13 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
                         Ikke lastet opp likevel
                       </button>
                     )}
+                  </div>
+                )}
+                {admin && m.gjelder && !m.nullstilling && (
+                  <div className="knapper">
+                    <button type="button" className={medInnhold.length > 1 ? "fare" : "lenke"} disabled={h.opptatt || !!pagar} onClick={() => void nullstill(m)}>
+                      Nullstill meldingen
+                    </button>
                   </div>
                 )}
               </div>
