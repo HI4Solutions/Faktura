@@ -138,9 +138,13 @@ describe("a-meldingen (uten database)", () => {
     // Trekket er negativt for den ansatte; utgiften og trekket etter skatt er ikke med.
     expect(kari.forskuddstrekk).toEqual([{ beskrivelse: "ordinaert", beloep: -17500 }]);
     expect(kari.inntekt).toEqual([
-      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "50000.00", arbeidsforholdId: "1", loennsinntekt: { beskrivelse: "fastloenn" } },
-      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "5000.00", arbeidsforholdId: "1", loennsinntekt: { beskrivelse: "bonus" } },
+      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "50000.00", loennsinntekt: { beskrivelse: "fastloenn" } },
+      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "5000.00", loennsinntekt: { beskrivelse: "bonus" } },
     ]);
+    // ArbeidsforholdId bare på arbeidsforholdet: på inntekten avvises meldingen (MAGNET_EDAG-230B).
+    const inntekter = leveranse.oppgave.virksomhet.flatMap((x: any) => x.inntektsmottaker.flatMap((y: any) => y.inntekt ?? []));
+    expect(inntekter.length).toBeGreaterThan(0);
+    expect(inntekter.filter((i: any) => "arbeidsforholdId" in i)).toEqual([]);
     expect(per.arbeidsforhold[0]).toMatchObject({ sluttdato: "2026-11-30", stillingsprosent: "50", aarsakTilSluttdato: "kontraktEngasjementEllerVikariatErUtloept", formForAnsettelse: "midlertidigAnsattSomTilkallingsvikar" });
     expect(per.inntekt.map((i: any) => [i.loennsinntekt.beskrivelse, i.beloep, i.loennsinntekt.antall])).toEqual([
       ["timeloenn", "2000.00", "10"],
@@ -161,6 +165,10 @@ describe("a-meldingen (uten database)", () => {
     expect(xml).toContain("<Leveranse>");
     expect(xml).toContain("<norskIdentifikator>13830197340</norskIdentifikator>");
     expect(xml).toContain("<utloeserArbeidsgiveravgift>true</utloeserArbeidsgiveravgift>");
+    const inntektXml = xml.match(/<inntekt>[\s\S]*?<\/inntekt>/g) ?? [];
+    expect(inntektXml.length).toBeGreaterThan(0);
+    expect(inntektXml.filter((i) => i.includes("arbeidsforholdId"))).toEqual([]);
+    expect(xml).toContain("<arbeidsforholdId>1</arbeidsforholdId>");
     if (harXmllint) valider(xml);
     // Også uten lønn i måneden (bare arbeidsforholdene).
     const tom = tilXml(byggLeveranse({ ...GRUNNLAG, slipper: [] }, VALG));
@@ -225,10 +233,10 @@ describe("a-meldingen (uten database)", () => {
       { arbeidsforholdId: "3", typeArbeidsforhold: "frilanserOppdragstakerHonorarPersonerMm", startdato: "2026-11-02", sluttdato: "2026-11-30", yrke: "2211107" },
     ]);
     expect(lege.inntekt).toEqual([
-      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "17600.00", arbeidsforholdId: "3", loennsinntekt: { beskrivelse: "honorarAkkordProsentProvisjon" } },
+      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "17600.00", loennsinntekt: { beskrivelse: "honorarAkkordProsentProvisjon" } },
     ]);
     expect(styre.inntekt).toEqual([
-      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "60000.00", arbeidsforholdId: "4", loennsinntekt: { beskrivelse: "styrehonorarOgGodtgjoerelseVerv" } },
+      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "60000.00", loennsinntekt: { beskrivelse: "styrehonorarOgGodtgjoerelseVerv" } },
     ]);
     expect(leveranse.oppgave.virksomhet[0].arbeidsgiveravgift.loennOgGodtgjoerelse).toEqual([
       { beregningskodeForArbeidsgiveravgift: "generelleNaeringer", sone: "1", avgiftsgrunnlagBeloep: "77600.00", prosentsatsForAvgiftsberegning: "14.1" },
@@ -367,6 +375,34 @@ describe("a-meldingen (uten database)", () => {
       status: "mottatt",
       avvik: [{ kode: "F123", tekst: "Feil for •••••••••••", alvorlighet: "opplysning" }],
     });
+    // Skatteetatens format: id, navn (regelen), alvorlighetsgrad og detaljer. Det samme avviket flere
+    // ganger blir ett med antallet, og fødselsnummeret blir navnet på den ansatte når det er kjent.
+    const avvist = {
+      mottak: {
+        mottakstatus: "AVVIST",
+        avvik: [1, 2, 3].map(() => ({
+          id: "MAGNET_EDAG-230B",
+          navn: "Ugyldig verdi.",
+          alvorlighetsgrad: "avvisning",
+          detaljer: "ArbeidsforholdsID på inntekt skal ikke oppgis. Gjelder inntektsmottaker 13830197340 under virksomhet 215296172.",
+        })),
+      },
+    };
+    expect(tolkTilbakemelding(avvist)).toEqual({
+      status: "avvist",
+      avvik: [
+        {
+          kode: "MAGNET_EDAG-230B",
+          tekst: "Ugyldig verdi. ArbeidsforholdsID på inntekt skal ikke oppgis. Gjelder inntektsmottaker ••••••••••• under virksomhet 215296172.",
+          alvorlighet: "avvisning",
+          antall: 3,
+        },
+      ],
+    });
+    expect(tolkTilbakemelding(avvist, (f) => (f === "13830197340" ? "Kari Nordmann" : undefined)).avvik[0]!.tekst).toBe(
+      "Ugyldig verdi. ArbeidsforholdsID på inntekt skal ikke oppgis. Gjelder inntektsmottaker Kari Nordmann under virksomhet 215296172.",
+    );
+    expect(tolkTilbakemelding(avvist, () => undefined).avvik[0]!.tekst).toContain("inntektsmottaker ••••••••••• under");
     expect(tolkTilbakemelding({ mottak: { mottakstatus: "avvist" } }).status).toBe("avvist");
     expect(tolkTilbakemelding({}).status).toBe(null);
     expect(tolkTilbakemelding({ status: "IKKE_MOTTATT" }).status).toBe(null);
@@ -462,7 +498,15 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
           ],
         });
       if (u.host === "tilbakemelding.test" && u.pathname === "/v1/forsendelser/forsendelse-2")
-        return json(200, { mottak: { mottakstatus: "mottatt", avvik: [{ kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" }] } });
+        return json(200, {
+          mottak: {
+            mottakstatus: "mottatt",
+            avvik: [
+              { kode: "F999", beskrivelse: "Bare en opplysning", alvorlighetsgrad: "opplysning" },
+              ...[1, 2].map(() => ({ id: "MAGNET_EDAG-999", navn: "Til informasjon.", alvorlighetsgrad: "opplysning", detaljer: "Gjelder inntektsmottaker 13830197340." })),
+            ],
+          },
+        });
       // Systembrukeren til organisasjonen (ID-en trengs til endringsforespørselen).
       if (u.pathname === "/authentication/api/v1/systemuser/vendor/byquery")
         return u.searchParams.get("orgno") === "915000177"
@@ -583,7 +627,12 @@ describe.skipIf(!process.env.DATABASE_URL)("a-meldingen i appen", () => {
     rad = (await api("GET", `/api/org/${org}/amelding/2026-09`)).data.meldinger[0];
     expect(rad).toMatchObject({ status: "mottatt" });
     expect(rad.tilbakemelding.venter).toBeUndefined();
-    expect(rad.tilbakemelding.avvik).toEqual([{ kode: "F999", tekst: "Bare en opplysning", alvorlighet: "opplysning" }]);
+    expect(rad.tilbakemelding.avvik).toEqual([
+      { kode: "F999", tekst: "Bare en opplysning", alvorlighet: "opplysning" },
+      { kode: "MAGNET_EDAG-999", tekst: "Til informasjon. Gjelder inntektsmottaker Kari Melding.", alvorlighet: "opplysning", antall: 2 },
+    ]);
+    // Fødselsnummeret står ikke i det som er lagret.
+    expect(JSON.stringify(rad.tilbakemelding)).not.toContain("13830197340");
     expect(ko.filter((o: any) => o.type === "varsel" && o.varsel.tittel === "A-meldingen er mottatt")).toHaveLength(1);
     config.ameldingInnsending = false;
   });

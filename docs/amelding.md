@@ -36,7 +36,11 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
 4. **Innsendingen** (når den er slått på og kunden har gitt tilgang): «Send til Skatteetaten».
    Workeren sender meldingen til API-et, og henter tilbakemeldingen fra Dialogporten og Skatteetaten
    (første gang etter to minutter, så sjeldnere, og minst hver halvtime i en uke). Status og avvik
-   vises på måneden, og eier og administrator får varsel når den er mottatt eller avvist.
+   vises på måneden, og eier og administrator får varsel når den er mottatt eller avvist. Hvert
+   avvik viser alvorlighetsgraden, regelen og detaljene fra Skatteetaten (`navn` og `detaljer`) og
+   koden (f.eks. MAGNET_EDAG-230B); det samme avviket flere ganger står én gang med antallet, og
+   fødselsnummeret i teksten blir navnet på den ansatte (workeren slår det opp; ellers skjules det).
+   En avvist melding rettes og sendes på nytt som en ny melding (den erstatter ingenting).
    Dialogen har én forsendelse for innsendingen og en annen for tilbakemeldingen, og begge kan ha
    en lenke for API-et. Forsendelsen for innsendingen (ID-en i svaret på innsendingen, eller typen
    «Submission») hoppes over, og den nyeste tilbakemeldingen hentes. Til den er kommet, står det
@@ -82,7 +86,9 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
    yrkeskatalog, basert på STYRK-08; søk på yrket i feltet), arbeidstidsordningen og typen
    arbeidsforhold (standard: ordinært, ikke skift), og årsaken når den ansatte slutter.
    ArbeidsforholdID-en er ansattnummeret, eller den fra det forrige lønnssystemet når den er ført
-   (hentet fra a-ordningen, `docs/ansatte.md`), så arbeidsforholdet fortsetter. Stillingsprosenten og datoene for siste
+   (hentet fra a-ordningen, `docs/ansatte.md`), så arbeidsforholdet fortsetter. Den står bare på
+   arbeidsforholdet, ikke på inntektene: der er den et gammelt felt, og Skatteetaten avviser
+   meldingen (MAGNET_EDAG-230B, «ArbeidsforholdsID på inntekt skal ikke oppgis»). Stillingsprosenten og datoene for siste
    lønnsendring og endring i stillingsprosent kommer fra lønnshistorikken på den ansatte (det som
    gjelder ved utgangen av måneden); endres lønnen eller stillingen, velger du datoen den gjelder
    fra. Etterbetaling eller trekk for en tidligere måned får opptjeningsperioden i meldingen.

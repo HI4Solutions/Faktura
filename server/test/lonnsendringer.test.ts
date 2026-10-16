@@ -322,7 +322,7 @@ describe.skipIf(!process.env.DATABASE_URL)("lønnsendringer i appen", () => {
     const mottakere = (m.leveranse as any).oppgave.virksomhet[0].inntektsmottaker;
     const inntekt = (nr: string) => mottakere.find((x: any) => x.norskIdentifikator === nr).inntekt;
     expect(inntekt("13830197340")).toEqual([
-      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "43636.36", arbeidsforholdId: "1", loennsinntekt: { beskrivelse: "fastloenn" } },
+      { fordel: "kontantytelse", utloeserArbeidsgiveravgift: true, inngaarIGrunnlagForTrekk: true, beloep: "43636.36", loennsinntekt: { beskrivelse: "fastloenn" } },
       {
         startdatoOpptjeningsperiode: "2026-09-01",
         sluttdatoOpptjeningsperiode: "2026-09-30",
@@ -330,7 +330,6 @@ describe.skipIf(!process.env.DATABASE_URL)("lønnsendringer i appen", () => {
         utloeserArbeidsgiveravgift: true,
         inngaarIGrunnlagForTrekk: true,
         beloep: "2000.00",
-        arbeidsforholdId: "1",
         loennsinntekt: { beskrivelse: "fastloenn" },
       },
     ]);

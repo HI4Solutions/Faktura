@@ -285,19 +285,29 @@ const skjul = (x: unknown) => JSON.parse(JSON.stringify(x ?? null).replace(/\b\d
 
 // Status og avvik fra tilbakemeldingen (formatet tolkes forsiktig: status-feltene og listene med
 // avvik, hvor de enn står).
-export function tolkTilbakemelding(data: any): { status: "mottatt" | "avvist" | null; avvik: { kode: string | null; tekst: string; alvorlighet: string | null }[] } {
+// Et avvik i tilbakemeldingen. antall: når det samme avviket står flere ganger.
+export type Avvik = { kode: string | null; tekst: string; alvorlighet: string | null; antall?: number };
+
+// navnPaa: navnet på den ansatte med fødselsnummeret (avvikene sier hvem de gjelder); ellers skjules
+// det. Skatteetaten har id, navn (regelen), alvorlighetsgrad og detaljer på hvert avvik.
+export function tolkTilbakemelding(data: any, navnPaa?: (fnr: string) => string | undefined): { status: "mottatt" | "avvist" | null; avvik: Avvik[] } {
   const statuser: string[] = [];
-  const avvik: { kode: string | null; tekst: string; alvorlighet: string | null }[] = [];
+  const avvik: Avvik[] = [];
   const gjennom = (x: any, nokkel = "") => {
     if (x == null) return;
     if (Array.isArray(x)) {
       if (/avvik/i.test(nokkel))
         for (const a of x) {
           if (!a || typeof a !== "object") continue;
-          const tekst = [a.beskrivelse, a.melding, a.tekst, a.feilmelding, a.forklaring].find((v) => typeof v === "string") ?? JSON.stringify(skjul(a)).slice(0, 300);
+          const regel = typeof a.navn === "string" ? a.navn.trim() : "";
+          const detaljer = [a.detaljer, a.beskrivelse, a.melding, a.tekst, a.feilmelding, a.forklaring].find((v) => typeof v === "string" && v.trim());
+          const tekst = [regel, detaljer?.trim()].filter(Boolean).join(" ") || JSON.stringify(skjul(a)).slice(0, 300);
           const kode = [a.kode, a.regel, a.regelnummer, a.avvikskode, a.id].find((v) => typeof v === "string" || typeof v === "number");
-          const alvorlighet = [a.alvorlighetsgrad, a.alvorlighet, a.niva, a.type].find((v) => typeof v === "string");
-          avvik.push({ kode: kode == null ? null : String(kode), tekst: String(tekst).replace(/\b\d{11}\b/g, "•••••••••••"), alvorlighet: alvorlighet ?? null });
+          const alvorlighet = [a.alvorlighetsgrad, a.alvorlighet, a.niva, a.type].find((v) => typeof v === "string") ?? null;
+          const ny: Avvik = { kode: kode == null ? null : String(kode), tekst: tekst.replace(/\b\d{11}\b/g, (f) => navnPaa?.(f) ?? "•••••••••••"), alvorlighet };
+          const likt = avvik.find((y) => y.kode === ny.kode && y.tekst === ny.tekst && y.alvorlighet === ny.alvorlighet);
+          if (likt) likt.antall = (likt.antall ?? 1) + 1;
+          else avvik.push(ny);
         }
       x.forEach((v) => gjennom(v, nokkel));
       return;
@@ -310,6 +320,24 @@ export function tolkTilbakemelding(data: any): { status: "mottatt" | "avvist" | 
   const mottatt = (s: string) => /mottatt|godkjent|^ok$/.test(s) && !/ikke|under|venter/.test(s);
   const status = statuser.some((s) => s.includes("avvist")) ? "avvist" : statuser.some(mottatt) ? "mottatt" : null;
   return { status, avvik: avvik.slice(0, 100) };
+}
+
+// Navnene på de ansatte med fødselsnumrene i tilbakemeldingen, så avvikene sier hvem de gjelder
+// (bare workeren leser fødselsnumrene). Går det ikke, skjules de.
+async function navnForFnr(org: string, data: unknown): Promise<((fnr: string) => string | undefined) | undefined> {
+  const fnr = new Set(JSON.stringify(data ?? null).match(/\b\d{11}\b/g) ?? []);
+  if (!fnr.size) return undefined;
+  try {
+    const ansatte = await somSystem((db) =>
+      alle<{ id: string; navn: string }>(db, "select id, fornavn || ' ' || etternavn as navn from faktura.ansatte where org_id = $1 and fnr_kryptert is not null", [org]),
+    );
+    const nr = await fodselsnumre(org, ansatte.map((a) => a.id));
+    const navn = new Map(ansatte.flatMap((a): [string, string][] => (fnr.has(nr.get(a.id) ?? "") ? [[nr.get(a.id)!, a.navn]] : [])));
+    return (f) => navn.get(f);
+  } catch (e) {
+    logg("WARNING", "Navnene til avvikene i a-meldingen ble ikke hentet", { org_id: org, feil: melding(e) });
+    return undefined;
+  }
 }
 
 // Henter tilbakemeldingen (raden står som «sendt»). Er den ikke klar, prøves det igjen litt senere
@@ -352,7 +380,9 @@ export async function sjekkAmelding(org: string, ameldingId: string, forsok = 1)
     const r = await etatKall(url, await hentToken(SCOPE.amelding, t.orgnr), { hvem: "Skatteetaten" });
     if (r.status === 404 || r.status === 204) return void (await venter("Tilbakemeldingen er ikke klar hos Skatteetaten ennå.", { detaljer: { adresse: vertOgSti(url) } }));
     if (r.status >= 300) throw ameldingFeil(r);
-    const tb = tolkTilbakemelding(r.data);
+    let tb = tolkTilbakemelding(r.data);
+    // Avvik som gjelder en ansatt: med navnet i stedet for det skjulte fødselsnummeret.
+    if (tb.avvik.some((a) => a.tekst.includes("•••••••••••"))) tb = tolkTilbakemelding(r.data, await navnForFnr(org, r.data));
     if (!tb.status) {
       // Feltene (ikke verdiene) i loggen, så formatet kan sjekkes.
       const felt = r.data && typeof r.data === "object" ? Object.keys(r.data).slice(0, 30) : typeof r.data;

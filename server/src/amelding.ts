@@ -619,13 +619,14 @@ export function byggLeveranse(g: Grunnlag, v: Byggevalg) {
                   : { listeprisForBil: belop(y.bil.listepris), bilregistreringsnummer: y.bil.regnr ?? "" },
               };
             if (y.antall != null && y.antall > 0) loennsinntekt.antall = desimal(y.antall);
+            // ArbeidsforholdId står bare på arbeidsforholdet: på inntekten er den et gammelt felt,
+            // og meldingen avvises (MAGNET_EDAG-230B, «ArbeidsforholdsID på inntekt skal ikke oppgis»).
             return {
               ...(y.opptjent ? { startdatoOpptjeningsperiode: y.opptjent.fra, sluttdatoOpptjeningsperiode: y.opptjent.til } : {}),
               fordel: y.fordel,
               utloeserArbeidsgiveravgift: y.aga,
               inngaarIGrunnlagForTrekk: y.trekk,
               beloep: belop(y.belop),
-              arbeidsforholdId: arbeidsforholdId(f),
               loennsinntekt,
             };
           });

@@ -23,7 +23,12 @@ type Melding = {
   oppsummering: Grunnlag | null;
   forsendelse_id: string | null;
   // venter: hva den venter på når tilbakemeldingen ikke er kommet (sist den ble sjekket).
-  tilbakemelding: { status: string | null; avvik: { kode: string | null; tekst: string; alvorlighet: string | null }[]; venter?: string | null } | null;
+  // antall: når det samme avviket står flere ganger i tilbakemeldingen.
+  tilbakemelding: {
+    status: string | null;
+    avvik: { kode: string | null; tekst: string; alvorlighet: string | null; antall?: number }[];
+    venter?: string | null;
+  } | null;
   feil: string | null;
   opprettet: string;
   sendt_at: string | null;
@@ -465,9 +470,10 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
                   <ul className="liten amelding-tilbakemelding">
                     {m.tilbakemelding.avvik.map((a, i) => (
                       <li key={i}>
-                        {a.alvorlighet ? `${a.alvorlighet}: ` : ""}
+                        {a.alvorlighet ? `${a.alvorlighet.charAt(0).toUpperCase()}${a.alvorlighet.slice(1)}: ` : ""}
                         {a.tekst}
                         {a.kode ? ` (${a.kode})` : ""}
+                        {a.antall && a.antall > 1 ? ` · ${a.antall} ganger` : ""}
                       </li>
                     ))}
                   </ul>
