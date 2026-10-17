@@ -1,72 +1,44 @@
 name: Infrastruktur
 
-# Plan på pull requests, apply på main. Logger inn i GCP med Workload Identity
-# Federation (ingen nøkler). Variablene settes etter scripts/bootstrap-gcp.sh.
+# Plan på pull requests, apply på main (terraform.yml): først testflaten når den er satt opp, så
+# produksjon, som venter på godkjenning når miljøet «produksjon» i GitHub krever det. Variablene
+# settes etter scripts/bootstrap-gcp.sh (docs/miljoer.md).
 
 on:
   pull_request:
-    paths: ["infra/**", ".github/workflows/infra.yml"]
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+      - ".github/workflows/terraform.yml"
+      - ".github/workflows/miljoer.yml"
   push:
     branches: [main]
-    paths: ["infra/**", ".github/workflows/infra.yml"]
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+      - ".github/workflows/terraform.yml"
+      - ".github/workflows/miljoer.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: terraform
-  cancel-in-progress: false
-
 jobs:
-  terraform:
-    if: vars.GCP_PROJECT_ID != ''
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: infra/terraform
-    env:
-      TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-      TF_VAR_region: ${{ vars.GCP_REGION }}
-      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
-      TF_VAR_admin_eposter: ${{ vars.ADMIN_EPOSTER }}
-      TF_VAR_google_oauth_client_id: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
-      # AI (Gemini på Vertex AI): standardverdiene når variablene ikke er satt.
-      TF_VAR_ai_aktiv: ${{ vars.AI_AKTIV || 'true' }}
-      TF_VAR_ai_region: ${{ vars.AI_REGION || 'europe-west3' }}
-      TF_VAR_ai_modell: ${{ vars.AI_MODELL || 'gemini-3.5-flash' }}
-      TF_VAR_ai_grense: ${{ vars.AI_GRENSE || '1000' }}
-      # Skattekort fra Skatteetaten (docs/skattekort.md): skjult til klient-ID-en er satt.
-      TF_VAR_skatteetaten_miljo: ${{ vars.SKATTEETATEN_MILJO || 'test' }}
-      TF_VAR_maskinporten_klient_id: ${{ vars.MASKINPORTEN_KLIENT_ID }}
-      TF_VAR_maskinporten_nokkel_id: ${{ vars.MASKINPORTEN_NOKKEL_ID }}
-      TF_VAR_leverandor_orgnr: ${{ vars.LEVERANDOR_ORGNR || '936564046' }}
-      TF_VAR_altinn_systemnavn: ${{ vars.ALTINN_SYSTEMNAVN || 'Admin Konsoll' }}
-      TF_VAR_altinn_system_id: ${{ vars.ALTINN_SYSTEM_ID }}
-      # A-meldingen til Skatteetatens API (docs/amelding.md): av til scopet er godkjent.
-      TF_VAR_amelding_innsending: ${{ vars.AMELDING_INNSENDING || 'false' }}
-      # Sykepenger fra NAV (docs/nav.md): av til scopet nav:helseytelser/sykepenger er på klienten.
-      TF_VAR_nav_sykepenger: ${{ vars.NAV_SYKEPENGER || 'false' }}
-      # Krav og frister fra Skatteetaten (docs/skatteetaten-krav.md): av til scopene er på klienten.
-      TF_VAR_krav_og_frister: ${{ vars.KRAV_OG_FRISTER || 'false' }}
-    steps:
-      - uses: actions/checkout@v4
+  miljoer:
+    uses: ./.github/workflows/miljoer.yml
 
-      - uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SA }}
+  test:
+    needs: miljoer
+    if: needs.miljoer.outputs.test == 'true'
+    uses: ./.github/workflows/terraform.yml
+    with:
+      miljo: test
 
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.8
-
-      - run: terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
-
-      - name: Plan
-        run: terraform plan -input=false -no-color -out=tfplan
-
-      - name: Apply
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        run: terraform apply -input=false -auto-approve tfplan
+  # Etter testflaten, eller uten den når den ikke er satt opp.
+  produksjon:
+    needs: [miljoer, test]
+    if: ${{ !cancelled() && vars.GCP_PROJECT_ID != '' && needs.miljoer.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    uses: ./.github/workflows/terraform.yml
+    with:
+      miljo: produksjon

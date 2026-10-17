@@ -3335,3 +3335,23 @@ td.idag .pt-dato { background: var(--aksent); color: var(--aksent-tekst); }
   .sjekk-redigering .sjekk-punkt-knapper button.ikon { width: 32px; height: 32px; }
   .faner.valg.sjekk-frekvens button { padding-left: 4px; padding-right: 4px; white-space: nowrap; font-size: 0.86rem; }
 }
+
+/* Testflaten (main.tsx): et merke øverst på alle sider, så den ikke forveksles med produksjon. */
+html[data-miljo="test"] body::after {
+  content: "Testflate";
+  position: fixed;
+  top: env(safe-area-inset-top);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  pointer-events: none;
+  padding: 1px 10px 2px;
+  border-radius: 0 0 6px 6px;
+  /* Fast farge (advarsel i lys modus), så den hvite teksten kan leses også i mørk modus. */
+  background: #9a5b00;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+

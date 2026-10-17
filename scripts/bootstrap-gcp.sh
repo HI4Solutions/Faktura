@@ -4,18 +4,26 @@
 #
 #   PROJECT_ID=faktura-prod BILLING_ACCOUNT=XXXXXX-XXXXXX-XXXXXX bash scripts/bootstrap-gcp.sh
 #
+# Testflaten (docs/miljoer.md) settes opp på samme måte, med MILJO=test:
+#
+#   MILJO=test PROJECT_ID=hi4-faktura-test BILLING_ACCOUNT=XXXXXX-XXXXXX-XXXXXX bash scripts/bootstrap-gcp.sh
+#
 # Skriptet:
 #   1. oppretter prosjektet (hvis det ikke finnes) og kobler fakturering
 #   2. lager en bøtte for Terraform-tilstanden
 #   3. lager tjenestekontoen «faktura-deployer» som GitHub Actions ruller ut med
 #   4. setter opp Workload Identity Federation, så GitHub Actions logger inn uten nøkler,
 #      og bare fra repoet $GITHUB_REPO
-# Til slutt skriver det ut verdiene som skal inn som variabler i GitHub-repoet.
+# Til slutt skriver det ut verdiene som skal inn som variabler i GitHub: i repoet for produksjon,
+# og i miljøet «test» for testflaten.
 set -euo pipefail
 
 : "${PROJECT_ID:?Sett PROJECT_ID, f.eks. faktura-prod}"
 : "${BILLING_ACCOUNT:?Sett BILLING_ACCOUNT (gcloud billing accounts list)}"
 REGION="${REGION:-europe-north1}"
+MILJO="${MILJO:-}"
+NAVN="Faktura"
+[ "$MILJO" = "test" ] && NAVN="Faktura test"
 # Må stå nøyaktig som på GitHub; Google skiller mellom store og små bokstaver.
 GITHUB_REPO="${GITHUB_REPO:-HI4Solutions/Faktura}"
 STATE_BUCKET="${STATE_BUCKET:-${PROJECT_ID}-tfstate}"
@@ -25,7 +33,7 @@ PROVIDER="github"
 
 echo "==> Prosjekt $PROJECT_ID"
 if ! gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1; then
-  gcloud projects create "$PROJECT_ID" --name="Faktura"
+  gcloud projects create "$PROJECT_ID" --name="$NAVN"
 fi
 gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT" >/dev/null
 gcloud config set project "$PROJECT_ID" >/dev/null
@@ -71,6 +79,25 @@ gcloud iam service-accounts add-iam-policy-binding "$SA" \
   >/dev/null
 
 WIF_PROVIDER="projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL/providers/$PROVIDER"
+
+if [ "$MILJO" = "test" ]; then
+cat <<EOF
+
+Ferdig. Lag miljøet «test» i GitHub (Settings → Environments → New environment), og legg inn
+disse som variabler i miljøet (Environment variables, ikke i repoet og ikke som hemmeligheter):
+  https://github.com/$GITHUB_REPO/settings/environments
+
+  MILJO             = test
+  GCP_PROJECT_ID    = $PROJECT_ID
+  GCP_REGION        = $REGION
+  GCP_WIF_PROVIDER  = $WIF_PROVIDER
+  GCP_DEPLOY_SA     = $SA
+  TF_STATE_BUCKET   = $STATE_BUCKET
+
+Resten (Maskinporten-klienten, DNS og hemmelighetene) står i docs/miljoer.md.
+EOF
+exit 0
+fi
 
 cat <<EOF
 

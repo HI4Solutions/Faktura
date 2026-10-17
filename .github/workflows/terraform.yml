@@ -1,0 +1,85 @@
+name: Terraform
+
+# Plan, og apply på main, for ett miljø: «test» (testflaten) eller «produksjon» i GitHub. Logger
+# inn i GCP med Workload Identity Federation (ingen nøkler). Variablene i miljøet går foran dem i
+# repoet, og det som skiller miljøene ellers (domener, databasestørrelse, Skatteetatens miljø),
+# står i infra/terraform/miljo/<miljø>.tfvars (docs/miljoer.md). Kalles fra Infrastruktur.
+
+on:
+  workflow_call:
+    inputs:
+      miljo:
+        description: "«test» eller «produksjon»"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.miljo }}
+    concurrency:
+      group: terraform-${{ inputs.miljo }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: infra/terraform
+    env:
+      TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+      TF_VAR_region: ${{ vars.GCP_REGION }}
+      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+      TF_VAR_admin_eposter: ${{ vars.ADMIN_EPOSTER }}
+      TF_VAR_google_oauth_client_id: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+      # AI (Gemini på Vertex AI): standardverdiene når variablene ikke er satt.
+      TF_VAR_ai_aktiv: ${{ vars.AI_AKTIV || 'true' }}
+      TF_VAR_ai_region: ${{ vars.AI_REGION || 'europe-west3' }}
+      TF_VAR_ai_modell: ${{ vars.AI_MODELL || 'gemini-3.5-flash' }}
+      TF_VAR_ai_grense: ${{ vars.AI_GRENSE || '1000' }}
+      # Skattekort fra Skatteetaten (docs/skattekort.md): skjult til klient-ID-en er satt.
+      TF_VAR_skatteetaten_miljo: ${{ vars.SKATTEETATEN_MILJO || 'test' }}
+      TF_VAR_maskinporten_klient_id: ${{ vars.MASKINPORTEN_KLIENT_ID }}
+      TF_VAR_maskinporten_nokkel_id: ${{ vars.MASKINPORTEN_NOKKEL_ID }}
+      TF_VAR_leverandor_orgnr: ${{ vars.LEVERANDOR_ORGNR || '936564046' }}
+      TF_VAR_altinn_systemnavn: ${{ vars.ALTINN_SYSTEMNAVN || 'Admin Konsoll' }}
+      TF_VAR_altinn_system_id: ${{ vars.ALTINN_SYSTEM_ID }}
+      # A-meldingen til Skatteetatens API (docs/amelding.md): av til scopet er godkjent.
+      TF_VAR_amelding_innsending: ${{ vars.AMELDING_INNSENDING || 'false' }}
+      # Sykepenger fra NAV (docs/nav.md): av til scopet nav:helseytelser/sykepenger er på klienten.
+      TF_VAR_nav_sykepenger: ${{ vars.NAV_SYKEPENGER || 'false' }}
+      # Krav og frister fra Skatteetaten (docs/skatteetaten-krav.md): av til scopene er på klienten.
+      TF_VAR_krav_og_frister: ${{ vars.KRAV_OG_FRISTER || 'false' }}
+    steps:
+      - name: Riktig miljø
+        working-directory: .
+        env:
+          MILJO: ${{ vars.MILJO }}
+          ONSKET: ${{ inputs.miljo }}
+        run: |
+          # Testflaten må ha sine egne variabler, og produksjon må aldri få testflatens.
+          if [ "$ONSKET" = "test" ] && [ "$MILJO" != "test" ]; then echo "::error::Miljøet «test» har ikke MILJO=test."; exit 1; fi
+          if [ "$ONSKET" != "test" ] && [ "$MILJO" = "test" ]; then echo "::error::Miljøet «$ONSKET» har MILJO=test."; exit 1; fi
+          [ -n "$TF_VAR_project_id" ] || { echo "::error::GCP_PROJECT_ID mangler."; exit 1; }
+          echo "Terraform for prosjektet $TF_VAR_project_id ($ONSKET)."
+
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - run: terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: Plan
+        run: terraform plan -input=false -no-color -var-file="miljo/${{ inputs.miljo }}.tfvars" -out=tfplan
+
+      - name: Apply
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: terraform apply -input=false -auto-approve tfplan

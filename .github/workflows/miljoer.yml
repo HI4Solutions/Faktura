@@ -1,0 +1,68 @@
+name: Miljøene
+
+# Om testflaten er satt opp (docs/miljoer.md). Miljøet «test» i GitHub må ha MILJO=test og egne
+# verdier for prosjektet, innloggingen og tilstandsbøtta. Variablene i et miljø går foran dem i
+# repoet, så uten egne verdier ville testjobbene brukt produksjonens. Er testflaten ikke satt opp,
+# hoppes den over, og produksjon rulles ut som før. Kalles fra Utrulling og Infrastruktur.
+
+on:
+  workflow_call:
+    outputs:
+      test:
+        description: "«true» når testflaten er satt opp"
+        value: ${{ jobs.test.outputs.klar }}
+
+permissions:
+  contents: read
+
+jobs:
+  # Variablene i repoet, som produksjon bruker.
+  repo:
+    runs-on: ubuntu-latest
+    outputs:
+      prosjekt: ${{ vars.GCP_PROJECT_ID }}
+      wif: ${{ vars.GCP_WIF_PROVIDER }}
+      konto: ${{ vars.GCP_DEPLOY_SA }}
+      boette: ${{ vars.TF_STATE_BUCKET }}
+    steps:
+      - run: echo "Produksjon er prosjektet ${{ vars.GCP_PROJECT_ID }}."
+
+  test:
+    needs: repo
+    runs-on: ubuntu-latest
+    environment: test
+    outputs:
+      klar: ${{ steps.sjekk.outputs.klar }}
+    steps:
+      - id: sjekk
+        env:
+          MILJO: ${{ vars.MILJO }}
+          TEST_PROSJEKT: ${{ vars.GCP_PROJECT_ID }}
+          TEST_WIF: ${{ vars.GCP_WIF_PROVIDER }}
+          TEST_KONTO: ${{ vars.GCP_DEPLOY_SA }}
+          TEST_BOETTE: ${{ vars.TF_STATE_BUCKET }}
+          PROD_PROSJEKT: ${{ needs.repo.outputs.prosjekt }}
+          PROD_WIF: ${{ needs.repo.outputs.wif }}
+          PROD_KONTO: ${{ needs.repo.outputs.konto }}
+          PROD_BOETTE: ${{ needs.repo.outputs.boette }}
+        run: |
+          if [ "$MILJO" != "test" ]; then
+            echo "Testflaten er ikke satt opp (miljøet «test» har ikke MILJO=test), så den hoppes over."
+            echo "klar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          feil=0
+          # Navnet, verdien i miljøet «test» og verdien i repoet (produksjon).
+          egen() {
+            if [ -z "$2" ] || [ "$2" = "$3" ]; then
+              echo "::error::Miljøet «test» mangler sin egen $1 (den er tom eller lik produksjonens)."
+              feil=1
+            fi
+          }
+          egen GCP_PROJECT_ID "$TEST_PROSJEKT" "$PROD_PROSJEKT"
+          egen GCP_WIF_PROVIDER "$TEST_WIF" "$PROD_WIF"
+          egen GCP_DEPLOY_SA "$TEST_KONTO" "$PROD_KONTO"
+          egen TF_STATE_BUCKET "$TEST_BOETTE" "$PROD_BOETTE"
+          [ "$feil" = 0 ] || exit 1
+          echo "Testflaten er prosjektet $TEST_PROSJEKT."
+          echo "klar=true" >> "$GITHUB_OUTPUT"
