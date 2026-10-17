@@ -20,7 +20,7 @@
   // rulle feltet fram over tastaturet, og et trykk på «Send» må treffe knappen. Snappingen kommer
   // tilbake når delen med skjemaet er rullet helt ut av skjermen og siden står stille. Da ligger
   // nabodelen nesten på plass, så siden flytter seg knapt.
-  const kontakt = skjema ? skjema.closest(".ark") : null;
+  const kontakt = skjema ? skjema.closest(".blad") : null;
   if (kontakt) {
     let vent = 0;
     const ute = () => {

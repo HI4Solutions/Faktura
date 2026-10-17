@@ -52,10 +52,21 @@ lag_app() {
 }
 
 # Nettstedet, med lenkene til appen på appens hoveddomene. Testflaten skal ikke i søkemotorene.
+# felles.css og nettsted.js får en kontrollsum av innholdet i adressen (?v=…): sidene hentes alltid
+# på nytt, men stilarket lagres en time, og en ny side med et gammelt stilark mangler blant annet
+# den faste toppen. Med ny adresse henter nettleseren filen på nytt når den er endret.
 lag_nettsted() {
   mkdir -p "$1"
   cp -r landingsside/. "$1/"
   find "$1" -name '*.html' -exec sed -i "s#https://app\.adminkonsoll\.no#${APP_URL}#g" {} +
+  local css js
+  css="$(sha256sum "$1/felles.css" | cut -c1-12)"
+  js="$(sha256sum "$1/nettsted.js" | cut -c1-12)"
+  find "$1" -name '*.html' -exec sed -i -e "s#href=\"felles\.css\"#href=\"felles.css?v=${css}\"#g" \
+    -e "s#src=\"nettsted\.js\"#src=\"nettsted.js?v=${js}\"#g" {} +
+  if grep -L "felles\.css?v=${css}" "$1"/*.html | grep -q .; then
+    echo "::error::Fant ikke stilarket i alle sidene:"; grep -L "felles\.css?v=${css}" "$1"/*.html; exit 1
+  fi
   if [ "$MILJO" = "test" ]; then
     jq '.hosting.headers += [{"source": "**", "headers": [{"key": "X-Robots-Tag", "value": "noindex"}]}]' \
       "$1/firebase.json" >"$1/firebase.json.ny"

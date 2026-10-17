@@ -26,28 +26,39 @@ med luft mellom. Toppen står fast øverst, og lenkene står til høyre ved «Lo
 konto» når skjermen er minst 1100 px bred. Da viker skjemakoden «AK-1 · utg. 10.2026», som bare
 står på mellomstore skjermer; hvert ark har uansett «AK-1 · Side n av 10» øverst til høyre.
 
-På forsiden kommer én del om gangen (scroll-snap i `index.html`, uten skript): hvert ark fyller
-skjermen under toppen, og når man ruller, kommer neste ark opp og legger seg på plass rett under
-toppen. Et ark kan ikke hoppes over (`scroll-snap-stop: always`). Et ark som er høyere enn skjermen
-(på mobil gjelder det de fleste), rulles fritt gjennom, og bunnen av arket er også et stoppested
-(`.arkbunn`), så Page Down og mellomrom viser resten av arket før neste kommer. Underskriften («Ett
-skjema til») er det siste arket, og bunnen av siden det siste stoppestedet. Lenkene til delene
-legger delen rett under toppen (`scroll-padding-top` med høyden på toppen, `--hode`, som
-`nettsted.js` måler).
+På forsiden kommer én del om gangen (scroll-snap i `index.html`, uten skript): hvert ark har sin
+plass (`.blad`) som fyller skjermen under toppen, og når man ruller, kommer neste ark opp og legger
+seg på plass rett under toppen. Et ark kan ikke hoppes over (`scroll-snap-stop: always`). Et ark som
+er høyere enn skjermen (på mobil gjelder det de fleste), rulles fritt gjennom, og bunnen av plassen er
+også et stoppested (`.arkbunn`), så Page Down og mellomrom viser resten av arket før neste kommer.
+Underskriften («Ett skjema til») er det siste arket, og bunnen av siden det siste stoppestedet.
+Lenkene til delene legger delen rett under toppen (`scroll-padding-top` med høyden på toppen,
+`--hode`, som `nettsted.js` måler).
+
+Sideskiftet: når neste del kommer, blir arket liggende der det er, og det neste glir opp over det, med
+en skygge langs kanten øverst. Det er en scroll-drevet animasjon på arket (`animation-timeline`, uten
+skript), så den følger rullingen og går baklengs når man blar tilbake. Bare arket flytter seg, aldri
+plassen, så stoppestedene og lenkene ligger fast. Arket blir liggende til det neste ligger på plass
+over det, og forsvinner først da, så det ikke stikker fram over det neste. Chrome, Edge og Safari 26
+har scroll-drevne animasjoner; i andre nettlesere (Firefox, eldre Safari) blar siden like fullt én del
+om gangen, bare uten at arkene legger seg oppå hverandre.
 
 Mens man fyller ut kontaktskjemaet, står siden stille: nettleseren må få rulle feltet fram over
 tastaturet på mobilen, og et trykk på «Send» må treffe knappen uten at siden flytter seg. Når et
-felt i skjemaet får fokus, slår `nettsted.js` av snappingen (klassen `skriver`), og den kommer
-tilbake når arket med skjemaet er rullet helt ut av skjermen og siden står stille. Da ligger
-nabodelen nesten på plass, så siden flytter seg knapt. Uten skript står siden stille så lenge et
-felt i skjemaet har fokus.
+felt i skjemaet får fokus, slår `nettsted.js` av snappingen (klassen `skriver`), og skjemaarket blir
+ikke liggende under det neste. Begge deler kommer tilbake når arket med skjemaet er rullet helt ut av
+skjermen og siden står stille. Uten skript gjelder det så lenge et felt i skjemaet har fokus.
 
 Med redusert bevegelse (innstillingen i operativsystemet) og på utskrift ruller siden vanlig. De
 juridiske sidene snapper ikke.
 
-En ny del legges inn som et ark: `<div class="ark" id="…">` med `<span class="arkbunn">`,
-`<span class="sidetall">` og `<div class="inn">` rundt delen, og sidetallene («Side n av 10», også i
-tittelfeltet) rettes.
+En ny del legges inn som en plass med et ark: `<div class="blad" id="…">` med
+`<span class="arkbunn">` og `<div class="ark">`, og i arket `<span class="sidetall">` og
+`<div class="inn">` rundt delen. Sidetallene («Side n av 10», også i tittelfeltet) rettes.
+
+Bunnen er kort: logoen, de juridiske sidene og knappen «Kontakt oss» (til skjemaet på forsiden) på
+én rad, og selskapsopplysningene (navn, org.nr., adresse og e-post, som e-handelsloven krever) på
+linjen under.
 
 ## Kontaktskjemaet
 
@@ -93,8 +104,8 @@ slik:
   kundens.
 - Ikke skriv at Admin Konsoll «fører regnskapet», «bokfører for dere», «gjør årsoppgjøret», lager
   «ferdig regnskap» eller at noe «går av seg selv» uten at kunden har satt det opp og godkjent det.
-- Bruksvilkårene har egen paragraf om dette («Programvare, ikke regnskapsføring»), og bunnteksten sier at
-  Admin Konsoll ikke fører regnskap for kunder og ikke er autorisert regnskapsfører.
+- Bruksvilkårene har egen paragraf om dette («Programvare, ikke regnskapsføring»), og forsiden sier det
+  under Spørsmål og svar og i del 5 («Dere eier regnskapet»).
 
 ## Publisering
 
@@ -107,6 +118,9 @@ ut), og de juridiske sidene ligger ved siden av appen, så lenkene til vilkåren
   registreringen). På testflaten byttes de til testappens adresse, og sidene får `X-Robots-Tag:
   noindex`.
 - `canonical`, `sitemap.xml` og `og:url` bruker `https://adminkonsoll.no` som rot.
+- `felles.css` og `nettsted.js` får en kontrollsum av innholdet i adressen (`felles.css?v=…`) når de
+  publiseres. Sidene hentes alltid på nytt, men stilarket lagres en time, og en ny side med et gammelt
+  stilark mangler blant annet den faste toppen.
 - Når et dokument endres, oppdateres versjonen og datoen i dokumentet og i en ny migrering for
   `faktura.avtaler` samtidig (servertesten `avtaler.test.ts` sjekker at de stemmer). Organisasjonene
   må da godta den nye versjonen.

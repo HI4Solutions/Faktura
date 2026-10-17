@@ -55,20 +55,26 @@ img { max-width: 100%; }
 }
 
 /* Toppen, hver del av forsiden, dokumentet og bunnen er egne ark. Toppen står fast øverst. På
-   forsiden (.bunke) fyller hver del skjermen under toppen, og siden snapper til én del om gangen
-   (scroll-snap, i index.html). */
+   forsiden har hvert ark sin plass (.blad) som fyller skjermen under toppen: siden snapper til én
+   plass om gangen, og arket som går, legger seg bak det neste (index.html). */
 .top.ark { position: sticky; top: 0; z-index: 30; margin-block: 0; }
 .bunke { display: flow-root; padding-top: var(--luft); }
-main .ark, .ark.dok { margin: 0 auto var(--mellom); padding-block: clamp(28px, 4vw, 52px);
+main .blad { position: relative; max-width: 1240px; margin: 0 auto var(--mellom); }
+main .blad > .ark { margin: 0; }
+main .blad > .ark, .ark.dok { padding-block: clamp(28px, 4vw, 52px);
   box-shadow: 0 1px 0 #d3daee, 0 30px 60px -40px rgba(13, 21, 48, .35); }
-.bunke > .forside { padding-block: 0; }
-.ark.dok { margin-top: var(--mellom); padding-top: 0; }
+/* Skygge over kanten øverst, så arket som kommer, ser ut til å ligge oppå det forrige. */
+.bunke > .blad > .ark, main > .blad > .slutt { box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee, 0 -14px 28px -18px rgba(13, 21, 48, .26), 0 30px 60px -40px rgba(13, 21, 48, .35); }
+.bunke .forside { padding-block: 0; }
+.ark.dok { margin: var(--mellom) auto; padding-top: 0; }
 main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
 .bunke .delband { margin-top: 0; }
 .sidetall { position: absolute; top: clamp(8px, 1.4vw, 18px); right: calc(56px + clamp(12px, 3vw, 36px)); font: 500 11px var(--font-type); letter-spacing: .04em; color: var(--muted); }
 @media (max-width: 760px) {
-  main .ark, .ark.dok { margin: 0 0 var(--mellom); box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee; }
-  .ark.dok { margin-top: var(--mellom); }
+  main .blad { margin: 0 0 var(--mellom); }
+  main .blad > .ark, .ark.dok { box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee; }
+  .bunke > .blad > .ark, main > .blad > .slutt { box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee, 0 -12px 24px -20px rgba(13, 21, 48, .3); }
+  .ark.dok { margin: var(--mellom) 0; }
   .top.ark { box-shadow: 0 1px 0 var(--ink-line), 0 10px 20px -16px rgba(13, 21, 48, .45); }
   .sidetall { right: 16px; top: 8px; }
 }
@@ -118,23 +124,19 @@ main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
 @media (max-width: 640px) { .delband .h { display: none; } }
 
 /* Skjemafoten */
+/* Bunnen, kort: logoen, de juridiske sidene og «Kontakt oss» (til skjemaet på forsiden) på én rad,
+   og selskapsopplysningene på linjen under. På mobil står lenkene på egen rad. */
 .sitefoot { border-top: 3px double var(--ink); margin-top: clamp(48px, 7vw, 88px); font-size: 14px; color: var(--type-2); }
-.sitefoot .inn { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr)); gap: 0; padding-block: 0; }
-.sitefoot .inn > * { border-right: 1px solid var(--ink-line); padding: 18px 18px 22px; min-width: 0; }
-.sitefoot .inn > *:first-child { padding-left: 0; }
-.sitefoot .inn > *:nth-child(4) { border-right: 0; }
-.sitefoot h2 { font: 600 10.5px var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--ink); margin: 0 0 10px; }
-.sitefoot ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sitefoot .inn { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px; padding-block: 16px 0; }
+.sitefoot .brand svg.logo { height: 26px; }
+.sitefoot nav { flex: 1 1 0; min-width: 0; }
+.sitefoot ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
 .sitefoot a { text-decoration: none; }
 .sitefoot a:hover { text-decoration: underline; color: var(--ink-deep); }
-.sitefoot .om p { margin: 10px 0 0; color: var(--muted); max-width: 34ch; }
-.sitefoot address { font-style: normal; }
-.sitefoot .skriv { margin: 10px 0 0; }
-.sitefoot .skriv a { color: var(--ink-deep); font-weight: 600; }
+.sitefoot a.btn:hover { text-decoration: none; color: #fff; }
 .sitefoot.ark { margin: 0 auto clamp(0px, 3vw, 32px); border-top: 0; }
-.sitefoot .bunnlinje { grid-column: 1 / -1; border-top: 1px solid var(--ink-line); border-right: 0 !important; padding: 12px 0 18px !important; display: flex; flex-wrap: wrap; gap: 6px 24px; justify-content: space-between; font: 500 12px var(--font-type); color: var(--muted); }
-@media (max-width: 860px) { .sitefoot .inn { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sitefoot .inn > * { border-right: 0; padding-left: 0; } .sitefoot .om { grid-column: 1 / -1; } }
-@media (max-width: 480px) { .sitefoot .inn { grid-template-columns: minmax(0, 1fr); } }
+.sitefoot .bunnlinje { flex-basis: 100%; border-top: 1px solid var(--ink-line); padding: 10px 0 14px; display: flex; flex-wrap: wrap; gap: 4px 24px; justify-content: space-between; font: 500 12px var(--font-type); color: var(--muted); }
+@media (max-width: 760px) { .sitefoot .kontaktknapp { margin-left: auto; } .sitefoot nav { order: 2; flex-basis: 100%; } .sitefoot .bunnlinje { order: 3; } }
 .fyll { background: #fff1c9; color: #8a5200; padding: 0 4px; font-weight: 600; }
 
 /* Juridiske sider: samme blankett som forsiden. Tittelfelt med felter og innholdsliste,
