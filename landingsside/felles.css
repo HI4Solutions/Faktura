@@ -55,7 +55,8 @@ img { max-width: 100%; }
 .top { border-bottom: 3px double var(--ink); }
 .top .inn { display: flex; align-items: center; gap: 22px; padding-block: 18px 14px; flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font: 600 20px var(--font-display); letter-spacing: -0.015em; color: var(--type); }
-.brand svg { width: 28px; height: 28px; flex: none; }
+/* Logoen (symbolet og ordmerket, som i appen: web/src/Logo.tsx) i fargene for lys bunn. */
+.brand svg.logo { height: 32px; width: auto; aspect-ratio: 242.42 / 48; flex: none; display: block; }
 .k1 { fill: var(--type); } .k2 { fill: var(--ink); }
 .skjemakode { font: 500 12px var(--font-type); color: var(--ink); border: 1.5px solid var(--ink); padding: 3px 8px; letter-spacing: .04em; }
 .top nav { display: flex; gap: 22px; font-size: 14px; font-weight: 500; color: var(--ink-deep); }

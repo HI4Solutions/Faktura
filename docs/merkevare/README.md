@@ -25,6 +25,9 @@ I appen: `web/src/Logo.tsx` (stiene ligger i `web/src/logoStier.ts`), `web/publi
 og app-ikonene i `web/public/ikoner`. Fargene i appen settes med `--logo-farge` og `--logo-kile`
 i `web/src/styles.css`.
 
+På nettstedet (`landingsside/`): den samme logoen i toppen og bunnen av sidene, med de samme stiene,
+i fargene for lys bunn (`--type` og `--ink` i `felles.css`), og i delingsbildet `og-bilde.png`.
+
 ## Fargene
 
 | Navn | Hex | Bruk |
