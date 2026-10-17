@@ -116,8 +116,8 @@ Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og ve
    printf '%s' '...'    | gcloud secrets versions add google-oauth-client-secret --data-file=-
    ```
 
-4. **Testflaten** (app.test.adminkonsoll.no, med nettstedet på test.adminkonsoll.no) settes opp på samme måte, med sitt eget prosjekt og
-   miljøet «test» i GitHub. Se [docs/miljoer.md](docs/miljoer.md).
+4. **Testflaten** (app.test.adminkonsoll.no, med nettstedet på test.adminkonsoll.no) settes opp på
+   samme måte, med sitt eget prosjekt og miljøet «test» i GitHub. Se [docs/miljoer.md](docs/miljoer.md).
 
 ## Utvikling lokalt
 

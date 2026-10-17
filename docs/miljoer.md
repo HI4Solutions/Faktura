@@ -52,14 +52,14 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
      er satt.
 3. **Infrastrukturen.** Actions → Infrastruktur → Run workflow, fra grenen `main` (standardgrenen
    i repoet er en annen, og fra den lager Infrastruktur bare en plan). Første gang tar det rundt et
-   kvarter, mest for databasen. DNS-oppføringen står i loggen for testjobben (`dns_for_domener`);
-   første gang er lista tom, og den kommer med i neste kjøring.
-4. **DNS.** Legg inn oppføringen hos domeneleverandøren: `test`, CNAME, `hi4-faktura-test.web.app`.
-   Sertifikatet kommer av seg selv når den er på plass, etter noen minutter til en time. Til da
-   virker testflaten på https://hi4-faktura-test.web.app. Appen ligger på
-   `app.test.adminkonsoll.no` og nettstedet på `test.adminkonsoll.no` ([domene.md](domene.md),
-   «Nettstedet og appen»): `app.test`, CNAME, `hi4-faktura-test-app.web.app` (sjekk mot
-   `dns_for_domener`).
+   kvarter, mest for databasen. DNS-oppføringene står i loggen for testjobben (`dns_for_domener`);
+   første gang er lista tom, og de kommer med i neste kjøring.
+4. **DNS.** Appen ligger på `app.test.adminkonsoll.no` og nettstedet på `test.adminkonsoll.no`
+   ([domene.md](domene.md), «Nettstedet og appen»). Legg inn oppføringene hos domeneleverandøren
+   (sjekk mot `dns_for_domener`): `app.test`, CNAME, `hi4-faktura-test-app.web.app` (appen), og
+   `test`, CNAME, `hi4-faktura-test.web.app` (nettstedet). Sertifikatene kommer av seg selv når
+   oppføringene er på plass, etter noen minutter til en time. Til da virker appen på
+   https://hi4-faktura-test-app.web.app og nettstedet på https://hi4-faktura-test.web.app.
 5. **Hemmelighetene.** Når Infrastruktur er ferdig (den legger inn en plassholder først), kopier
    dem fra produksjon i Cloud Shell, uten at verdiene vises:
 
