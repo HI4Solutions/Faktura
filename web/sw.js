@@ -1,15 +1,17 @@
 /* Admin Konsoll – service worker.
  *
  * Bygges av vite.config.ts, som setter inn VERSJON og FILER (app-skallet i dette bygget).
- * - App-skallet lagres ved installasjon, så appen starter også uten nett.
+ * - App-skallet lagres ved installasjon, så appen starter også uten nett. Skriftene er en del av
+ *   skallet (de ligger i appen; ingenting hentes fra andre domener).
  * - API-et (/api/…) går alltid rett til nettet og lagres aldri: det er personopplysninger.
  * - Push-varsler vises som systemvarsler; et trykk åpner riktig side i appen.
  */
 const VERSJON = "__VERSJON__";
 const FILER = __FILER__;
 const SKALL = `skall-${VERSJON}`;
-const FONTER = "fonter-v1";
 const KONFIG = "konfig-v1";
+// Skriftene fra Google Fonts som eldre versjoner lagret; de slettes.
+const GAMLE = ["fonter-v1"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SKALL).then((c) => c.addAll(FILER)));
@@ -20,7 +22,9 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     (async () => {
-      for (const navn of await caches.keys()) if (navn.startsWith("skall-") && navn !== SKALL) await caches.delete(navn);
+      for (const navn of await caches.keys()) {
+        if ((navn.startsWith("skall-") && navn !== SKALL) || GAMLE.includes(navn)) await caches.delete(navn);
+      }
       await self.clients.claim();
     })(),
   );
@@ -41,9 +45,7 @@ self.addEventListener("fetch", (e) => {
     if (url.pathname.startsWith("/__/")) return; // Firebase sine egne sider
     if (req.mode === "navigate") return e.respondWith(side(req));
     if (url.pathname.startsWith("/assets/") || FILER.includes(url.pathname)) return e.respondWith(lagretForst(req, SKALL));
-    return;
   }
-  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") return e.respondWith(lagretForst(req, FONTER));
 });
 
 // Sider: nettet først (alltid nyeste versjon), app-skallet når man er frakoblet.

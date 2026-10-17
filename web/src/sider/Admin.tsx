@@ -840,6 +840,9 @@ type Slettet = {
   grunn: string;
   antall_fakturaer: number;
   oppbevares_til: string | null;
+  // Når materialet til en stengt organisasjon ble slettet etter oppbevaringstiden (og filene).
+  materiale_slettet_at: string | null;
+  filer_slettet_at: string | null;
 };
 function SlettedeOrganisasjoner() {
   const { data } = useData(() => hent<Slettet[]>("/admin/slettede"), []);
@@ -861,9 +864,15 @@ function SlettedeOrganisasjoner() {
                 {s.slettet_av_navn || s.slettet_av_epost ? ` (${s.slettet_av_navn ?? s.slettet_av_epost})` : ""}
               </span>
             </span>
-            <span className={`merke ${s.oppbevares_til ? "merke-advarsel" : "merke-noytral"}`}>
-              {s.oppbevares_til ? `Stengt · ${s.antall_fakturaer} ${s.antall_fakturaer === 1 ? "faktura" : "fakturaer"} til ${dato(s.oppbevares_til)}` : "Slettet"}
-            </span>
+            {s.materiale_slettet_at ? (
+              <span className="merke merke-noytral" title={s.filer_slettet_at ? undefined : "Filene i Cloud Storage slettes når oppbevaringsregelen slipper dem"}>
+                Slettet {dato(s.materiale_slettet_at)} etter oppbevaringstiden{s.filer_slettet_at ? "" : " · filene venter"}
+              </span>
+            ) : (
+              <span className={`merke ${s.oppbevares_til ? "merke-advarsel" : "merke-noytral"}`}>
+                {s.oppbevares_til ? `Stengt · ${s.antall_fakturaer} ${s.antall_fakturaer === 1 ? "faktura" : "fakturaer"} til ${dato(s.oppbevares_til)}` : "Slettet"}
+              </span>
+            )}
           </li>
         ))}
       </ul>

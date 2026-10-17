@@ -6,6 +6,14 @@
 locals {
   # Domenene appen svarer på: hoveddomenet, de andre og dem den er flyttet fra (docs/domene.md).
   app_domener = distinct(concat([var.app_domain], var.app_domains, var.gamle_domener))
+
+  # Siden i Firebase Hosting hvert eget domene ligger på: nettstedets domene på standardsiden, og
+  # appens domener på appens egen side. Så lenge appens hoveddomene er nettstedets domene (før
+  # flyttingen til app.<domene>), ligger det på standardsiden, som da har appen (docs/domene.md).
+  egne_domener = {
+    for d in distinct(compact(concat([var.nettsted_domene], local.app_domener))) :
+    d => d == var.nettsted_domene ? google_firebase_hosting_site.standard.site_id : google_firebase_hosting_site.appen.site_id
+  }
 }
 
 resource "google_identity_platform_config" "auth" {
@@ -17,6 +25,8 @@ resource "google_identity_platform_config" "auth" {
     "localhost",
     "${var.project_id}.firebaseapp.com",
     "${var.project_id}.web.app",
+    "${google_firebase_hosting_site.appen.site_id}.firebaseapp.com",
+    "${google_firebase_hosting_site.appen.site_id}.web.app",
   ], local.app_domener))
 
   sign_in {
@@ -42,7 +52,9 @@ resource "google_identity_platform_config" "auth" {
 }
 
 # ---------------------------------------------------------------------------
-# Firebase Hosting for nettappen (React). /api/** rutes til Cloud Run i firebase.json.
+# Firebase Hosting: nettstedet (landingsside/) på standardsiden og nettappen (React) på sin egen
+# side. /api/** rutes til Cloud Run i begge (firebase.json). scripts/publiser-hosting.sh
+# publiserer dem (docs/domene.md).
 # ---------------------------------------------------------------------------
 
 resource "google_firebase_project" "this" {
@@ -51,10 +63,28 @@ resource "google_firebase_project" "this" {
   depends_on = [google_project_service.apis]
 }
 
-resource "google_firebase_hosting_site" "app" {
+# Standardsiden (heter som prosjektet). Den har nettstedet, og appen til den har flyttet til sitt
+# eget domene.
+resource "google_firebase_hosting_site" "standard" {
   provider = google-beta
   project  = var.project_id
   site_id  = var.project_id
+
+  depends_on = [google_firebase_project.this]
+}
+
+moved {
+  from = google_firebase_hosting_site.app
+  to   = google_firebase_hosting_site.standard
+}
+
+# Appens egen side (<prosjekt>-app). Web-appen er knyttet til den, så /__/firebase/init.json
+# virker også her.
+resource "google_firebase_hosting_site" "appen" {
+  provider = google-beta
+  project  = var.project_id
+  site_id  = "${var.project_id}-app"
+  app_id   = google_firebase_web_app.app.app_id
 
   depends_on = [google_firebase_project.this]
 }
@@ -71,22 +101,23 @@ resource "google_firebase_web_app" "app" {
 
 # Egne domener. Terraform skriver ut DNS-oppføringene som må legges inn hos domeneleverandøren
 # (output «dns_for_domener»), og Firebase utsteder sertifikat selv når de er på plass. Nøkkelen er
-# domenenavnet, så hoveddomenet kan byttes uten at noe lages på nytt (docs/domene.md).
+# domenenavnet, så hoveddomenet kan byttes uten at noe lages på nytt, og et domene blir liggende
+# på samme side når appen flytter (docs/domene.md).
 resource "google_firebase_hosting_custom_domain" "domene" {
-  for_each              = toset(local.app_domener)
+  for_each              = local.egne_domener
   provider              = google-beta
   project               = var.project_id
-  site_id               = google_firebase_hosting_site.app.site_id
+  site_id               = each.value
   custom_domain         = each.key
   wait_dns_verification = false
 }
 
-# Domener som bare sender videre (301, samme sti) til et av domenene over, f.eks. www.
+# Domener som bare sender videre (301, samme sti) til nettstedets domene, f.eks. www.
 resource "google_firebase_hosting_custom_domain" "omdirigering" {
   for_each              = var.domene_omdirigeringer
   provider              = google-beta
   project               = var.project_id
-  site_id               = google_firebase_hosting_site.app.site_id
+  site_id               = google_firebase_hosting_site.standard.site_id
   custom_domain         = each.key
   redirect_target       = each.value
   wait_dns_verification = false
@@ -243,7 +274,10 @@ resource "google_apikeys_key" "picker" {
     browser_key_restrictions {
       allowed_referrers = concat(
         [for d in local.app_domener : "https://${d}/*"],
-        ["https://${google_firebase_hosting_site.app.site_id}.web.app/*"],
+        [
+          "https://${google_firebase_hosting_site.standard.site_id}.web.app/*",
+          "https://${google_firebase_hosting_site.appen.site_id}.web.app/*",
+        ],
       )
     }
   }

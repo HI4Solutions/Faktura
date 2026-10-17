@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin Konsoll – faktura, lønn, personal og regnskap i én løsning</title>
+<meta name="description" content="Admin Konsoll samler faktura, vaktplan, lønn og regnskap for norske foretak. EHF, a-melding, mva-melding og SAF-T i én løsning der alt henger sammen.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://adminkonsoll.no/">
+<meta name="theme-color" content="#0d1530">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="nb_NO">
+<meta property="og:site_name" content="Admin Konsoll">
+<meta property="og:title" content="Admin Konsoll – faktura, lønn, personal og regnskap i én løsning">
+<meta property="og:description" content="Admin Konsoll samler faktura, vaktplan, lønn og regnskap for norske foretak. EHF, a-melding, mva-melding og SAF-T i én løsning der alt henger sammen.">
+<meta property="og:url" content="https://adminkonsoll.no/">
+<meta property="og:image" content="https://adminkonsoll.no/og-bilde.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Admin Konsoll – faktura, personal, lønn og regnskap i én konsoll">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="fonter/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonter/schibsted-grotesk-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="felles.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Organization", "name": "Medinnova AS", "legalName": "Medinnova AS", "url": "https://adminkonsoll.no", "logo": "https://adminkonsoll.no/favicon.svg", "email": "post@adminkonsoll.no", "identifier": {"@type": "PropertyValue", "propertyID": "Organisasjonsnummer", "value": "936564046"}, "brand": {"@type": "Brand", "name": "Admin Konsoll"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "Admin Konsoll", "url": "https://adminkonsoll.no/", "inLanguage": "nb-NO"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Admin Konsoll", "applicationCategory": "BusinessApplication", "operatingSystem": "Nettleser, iOS, Android", "url": "https://adminkonsoll.no/", "inLanguage": "nb-NO", "description": "Admin Konsoll samler faktura, vaktplan, lønn og regnskap for norske foretak. EHF, a-melding, mva-melding og SAF-T i én løsning der alt henger sammen.", "publisher": {"@type": "Organization", "name": "Medinnova AS"}, "featureList": ["Faktura og kreditnota", "EHF / Peppol", "Vaktplan og turnus", "Timer, ferie og fravær", "Lønnskjøring og lønnsslipper", "A-melding", "Regnskap etter NS 4102", "Mva-melding", "SAF-T Regnskap"]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Fører Admin Konsoll regnskapet for oss?", "acceptedAnswer": {"@type": "Answer", "text": "Nei. Admin Konsoll er et verktøy dere bruker til deres eget regnskap. Verktøyet regner ut og foreslår, og dere kontrollerer og godkjenner. Dere fører regnskapet selv, eller lar en autorisert regnskapsfører gjøre det i verktøyet, og ansvaret er deres."}}, {"@type": "Question", "name": "Kan vi starte midt i året?", "acceptedAnswer": {"@type": "Answer", "text": "Ja. Dere velger en startdato og fører den inngående balansen som et bilag. Kundefordringene ved datoen blir med, og det som skjer etter, klargjøres i verktøyet for dere å kontrollere."}}, {"@type": "Question", "name": "Hvordan får vi inn de ansatte?", "acceptedAnswer": {"@type": "Answer", "text": "Importer fra lønnssystemet dere har, eller fra Excel og CSV. En lønnsslipp som PDF eller bilde kan også leses inn til ansattopplysninger."}}, {"@type": "Question", "name": "Hvordan sendes EHF?", "acceptedAnswer": {"@type": "Answer", "text": "Gjennom foretakets egen konto hos Recommand, som er tilkoblet Peppol-nettverket."}}, {"@type": "Question", "name": "Hvilke banker virker?", "acceptedAnswer": {"@type": "Answer", "text": "Banker som er tilgjengelige gjennom Enable Banking (PSD2). Flere kontoer og banker kan kobles til samme foretak."}}, {"@type": "Question", "name": "Kan de ansatte bruke mobilen?", "acceptedAnswer": {"@type": "Answer", "text": "Ja. De ansatte har egen innlogging, ser vaktene og lønnsslippene, fører timer, melder fravær og får push-varsler."}}, {"@type": "Question", "name": "Må vi ha alle modulene?", "acceptedAnswer": {"@type": "Answer", "text": "Nei. Faktura, Personal, Lønn og Regnskap slås på hver for seg. Lønn krever Personal."}}]}</script>
+<style>
+/* Forsiden som blankett: et forhåndstrykt skjema i merkets blå, utfylt i skrivemaskinskrift.
+   Delene er nummerert som på et ekte skjema, og postene «overføres» til hverandre. */
+
+/* Tittelfeltet */
+.tittel { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0; border-bottom: 1.5px solid var(--ink); }
+.tittel-v { padding: clamp(28px, 4vw, 52px) clamp(0px, 3vw, 40px) clamp(28px, 4vw, 44px) 0; border-right: 1.5px solid var(--ink); min-width: 0; }
+.tittel-h { padding: clamp(20px, 3vw, 32px) 0 clamp(20px, 3vw, 32px) clamp(20px, 3vw, 36px); display: flex; flex-direction: column; gap: 20px; min-width: 0; background: var(--ink-wash); }
+.skjemanavn { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 500 12px var(--font-type); color: var(--ink); letter-spacing: .03em; margin-bottom: 22px; }
+.skjemanavn b { font-weight: 500; background: var(--ink); color: #fff; padding: 2px 7px; }
+h1.stor { margin: 0; font: 700 clamp(44px, 6.4vw, 84px)/.94 var(--font-display); letter-spacing: -0.045em; color: var(--type); text-wrap: balance; }
+h1.stor .blaa { color: var(--ink); }
+.ingress { margin: 26px 0 0; font-size: clamp(17px, 1.7vw, 19px); color: var(--type-2); max-width: 46ch; }
+.felter { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); margin-top: 30px; border-top: 1px solid var(--ink-line); border-left: 1px solid var(--ink-line); }
+.felter > div { border-right: 1px solid var(--ink-line); border-bottom: 1px solid var(--ink-line); padding: 7px 10px 10px; display: grid; gap: 6px; min-width: 0; }
+.kryssrad { display: flex; flex-wrap: wrap; gap: 8px 16px; font: 500 14px var(--font-body); }
+.kryssrad span { display: inline-flex; gap: 7px; align-items: center; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; align-items: center; }
+.cta .liten { font: 500 12px var(--font-type); color: var(--muted); }
+@media (max-width: 980px) { .tittel { grid-template-columns: minmax(0, 1fr); } .tittel-v { border-right: 0; padding-right: 0; } .tittel-h { padding-left: 0; background: none; border-top: 1.5px solid var(--ink); } }
+@media (max-width: 560px) { .felter { grid-template-columns: minmax(0, 1fr); } }
+
+/* Lønnsslippen på løpende papir */
+.slipp { position: relative; background: #fff; padding: 0 30px 58px; border: 1px solid var(--ink-line); box-shadow: 0 18px 36px -24px rgba(13, 21, 48, .45); transform: rotate(1.2deg); }
+.slipp::before, .slipp::after { content: ""; position: absolute; top: 0; bottom: 0; width: 22px; background: radial-gradient(circle at 11px 10px, var(--ink-wash) 4px, transparent 4.5px) 0 0 / 22px 20px repeat-y; }
+.slipp::before { left: 0; border-right: 1px dashed var(--ink-line); }
+.slipp::after { right: 0; border-left: 1px dashed var(--ink-line); }
+.slipp-h { display: flex; justify-content: space-between; gap: 10px; padding: 14px 6px 10px; border-bottom: 1.5px solid var(--ink); }
+.slipp-h b { font: 600 15px var(--font-display); }
+.slipp-h span { font: 500 11px var(--font-type); color: var(--ink); }
+.slipp-p { padding: 8px 6px 4px; font: 500 12px var(--font-type); color: var(--type-2); display: grid; gap: 2px; }
+.slipp table { width: 100%; border-collapse: collapse; font: 500 12.5px var(--font-type); font-variant-numeric: tabular-nums; }
+.slipp td { padding: 6px; }
+.slipp td:last-child { text-align: right; white-space: nowrap; }
+.slipp tbody tr:nth-child(odd) td { background: var(--ink-wash); }
+.slipp tfoot td { border-top: 1.5px solid var(--ink); font-weight: 500; padding-top: 9px; padding-bottom: 14px; color: var(--type); }
+.slipp .stempel { position: absolute; right: 40px; bottom: 14px; transform: rotate(-11deg); font-size: 15px; }
+.eks { font: 500 11px var(--font-type); color: var(--muted); }
+
+
+/* Del 1: hvem gjør hva */
+.hvemgjor { width: 100%; border-collapse: collapse; border: 1.5px solid var(--ink); margin-top: 22px; font-size: 15px; min-width: 640px; }
+.hvemgjor th { font: 600 10.5px var(--font-body); letter-spacing: .07em; text-transform: uppercase; text-align: left; padding: 9px 14px; color: #fff; background: var(--ink); }
+.hvemgjor th:nth-child(4) { background: var(--type); }
+.hvemgjor td { padding: 12px 14px; border-bottom: 1px solid var(--ink-line); vertical-align: top; }
+.hvemgjor tbody tr:nth-child(even) td { background: var(--ink-wash); }
+.hvemgjor .p { font: 500 12px/1.9 var(--font-type); color: var(--ink); width: 56px; }
+.hvemgjor .n { font: 600 16px/1.3 var(--font-display); width: 24%; }
+.hvemgjor .du { font: 500 14px/1.45 var(--font-type); color: var(--type-2); width: 22%; border-right: 1.5px solid var(--ink); }
+.hvemgjor .ak { color: var(--type); }
+.hvemgjor .ak .mini-st { float: right; margin: 0 0 4px 12px; }
+.hvemgjor tbody tr:nth-child(even) td.p, .hvemgjor tbody tr:nth-child(even) td { background: var(--ink-wash); }
+.hvemgjor tfoot td { border-top: 1.5px solid var(--ink); border-bottom: 0; padding: 14px; vertical-align: middle; }
+.hvemgjor .sumrad { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+@media (max-width: 700px) {
+  .hvemgjor { min-width: 0; border: 0; }
+  .hvemgjor thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .hvemgjor tr { display: grid; grid-template-columns: 40px minmax(0, 1fr); border: 1.5px solid var(--ink); border-top: 0; }
+  .hvemgjor tbody tr:first-child { border-top: 1.5px solid var(--ink); }
+  .hvemgjor td { display: block; border: 0; padding: 8px 12px; width: auto !important; }
+  .hvemgjor .p { grid-row: span 3; border-right: 1px solid var(--ink-line); padding: 10px 8px; }
+  .hvemgjor .du { border-right: 0; padding-top: 0; }
+  .hvemgjor .du::before { content: "Dere: "; font-weight: 500; color: var(--ink); }
+  .hvemgjor .ak { border-top: 1px dashed var(--ink-line); }
+  .hvemgjor tfoot tr { border-top: 0; }
+  .hvemgjor tfoot td { border-top: 0; }
+}
+.hvemgjor .sum { font-size: 17px; }
+.hvemgjor tfoot .stempel { margin-left: auto; font-size: 15px; }
+
+/* Del 2: postene som overføres */
+.innledning { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px 48px; padding: 22px 0 6px; align-items: end; }
+.innledning p { margin: 0; color: var(--type-2); font-size: 17px; max-width: 54ch; }
+.innledning .stor2 { font: 700 clamp(30px, 4.2vw, 50px)/1 var(--font-display); letter-spacing: -0.035em; color: var(--type); margin: 0; }
+@media (max-width: 860px) { .innledning { grid-template-columns: minmax(0, 1fr); } }
+.poster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1.5px solid var(--ink); margin-top: 22px; }
+.post { border-right: 1.5px solid var(--ink); display: flex; flex-direction: column; min-width: 0; position: relative; }
+.post:last-child { border-right: 0; }
+.post-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ink-line); background: var(--ink-wash); }
+.post-h .lbl { font-size: 11px; }
+.post-h b { font: 600 17px var(--font-display); color: var(--type); letter-spacing: -0.01em; }
+.post-f { display: grid; }
+.post-f > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--ink-line); }
+.post-f .lbl { font-size: 10px; }
+.post-f .v { font-size: 14px; white-space: nowrap; }
+.post-s { padding: 18px 12px 10px; min-height: 64px; }
+.overfor { margin-top: auto; padding: 9px 12px; border-top: 1.5px solid var(--ink); font: 500 12px var(--font-type); color: var(--ink); display: flex; gap: 8px; align-items: center; }
+.overfor::after { content: "→"; margin-left: auto; font-size: 16px; }
+.post:last-child .overfor::after { content: "✓"; }
+.bilag { width: 100%; border-collapse: collapse; font: 500 12.5px var(--font-type); font-variant-numeric: tabular-nums; }
+.bilag th { font: 600 10px var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--ink); text-align: right; padding: 7px 12px 5px; border-bottom: 1px solid var(--ink-line); }
+.bilag th:first-child, .bilag td:first-child { text-align: left; }
+.bilag td { padding: 4px 12px; text-align: right; }
+.bilag tbody tr:nth-child(odd) td { background: var(--ink-wash); }
+.bilag td:first-child { color: var(--ink-deep); }
+.samme { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; border: 1.5px solid var(--ink); border-top: 0; padding: 10px 12px; font-size: 14.5px; color: var(--type-2); }
+.samme .lbl { margin-right: 6px; }
+.kode { font: 500 12.5px var(--font-type); color: var(--type); border: 1px solid var(--ink-line); background: #fff; padding: 1px 6px; white-space: nowrap; }
+.samme .pil { color: var(--ink); font-weight: 600; }
+@media (max-width: 980px) { .poster { grid-template-columns: repeat(2, minmax(0, 1fr)); } .post:nth-child(2) { border-right: 0; } .post:nth-child(-n+2) { border-bottom: 1.5px solid var(--ink); } }
+@media (max-width: 560px) { .poster { grid-template-columns: minmax(0, 1fr); } .post { border-right: 0; border-bottom: 1.5px solid var(--ink); } .post:last-child { border-bottom: 0; } }
+
+/* Del 2: modulene */
+.moduler { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-left: 1.5px solid var(--ink); border-top: 0; }
+.modul { border-right: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); padding: 0 0 18px; display: flex; flex-direction: column; min-width: 0; }
+.modul-h { display: flex; align-items: baseline; gap: 12px; padding: 16px 20px 6px; }
+.modul-h .bokst { font: 500 13px var(--font-type); color: #fff; background: var(--ink); padding: 2px 8px; }
+.modul-h h3 { margin: 0; font: 700 clamp(26px, 3vw, 34px)/1 var(--font-display); letter-spacing: -0.03em; }
+.modul > p { margin: 6px 20px 14px; color: var(--type-2); max-width: 52ch; }
+.liste { list-style: none; margin: 0 20px; padding: 0; display: grid; gap: 7px; font-size: 15px; }
+.liste li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start; }
+.liste .x { margin-top: 2px; }
+.utdrag { margin: 18px 20px 0; border: 1px solid var(--ink-line); background: #fff; }
+.utdrag-h { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--ink-line); }
+.rader { display: grid; }
+.rader > div { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--ink-line); font: 500 13px var(--font-type); }
+.rader > div:last-child { border-bottom: 0; }
+.rader .n { color: var(--ink); }
+.rader .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-body); font-weight: 500; }
+.rader .b { white-space: nowrap; }
+.mini-st { font: 700 10px var(--font-display); letter-spacing: .1em; text-transform: uppercase; border: 1.5px solid currentColor; padding: 2px 5px; transform: rotate(-4deg); white-space: nowrap; }
+.mini-st.r { color: var(--stamp); } .mini-st.g { color: var(--ok); } .mini-st.b { color: var(--ink-deep); }
+.uke { display: grid; grid-template-columns: 70px repeat(5, minmax(0, 1fr)); font: 500 12px var(--font-type); }
+.uke > span { padding: 6px 4px; border-right: 1px solid var(--ink-line); border-bottom: 1px solid var(--ink-line); text-align: center; white-space: nowrap; overflow: hidden; }
+.uke > span:nth-child(6n) { border-right: 0; }
+.uke .hd { color: var(--ink); font-size: 11px; }
+.uke .hd.hel { color: var(--stamp); }
+.uke .rl { text-align: left; color: var(--type-2); font-family: var(--font-body); }
+.uke .d { color: var(--ink-deep); } .uke .k { color: #6b3fc4; } .uke .nn { background: var(--type); color: #fff; } .uke .f { color: #9a5b00; } .uke .tom { color: var(--ink-line); }
+.uke .feil { outline: 2px solid var(--stamp); outline-offset: -3px; }
+.merknad { display: flex; gap: 10px; padding: 8px 10px; border-top: 1px solid var(--ink-line); font: 500 12.5px var(--font-type); color: var(--stamp); }
+.merknad b { font-family: var(--font-body); font-weight: 600; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+.am { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.am > div { padding: 8px 10px; border-right: 1px solid var(--ink-line); display: grid; gap: 4px; min-width: 0; }
+.am > div:last-child { border-right: 0; }
+.am .v { font-size: 14px; }
+@media (max-width: 860px) { .moduler { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .rader > div { grid-template-columns: 46px minmax(0, 1fr) auto; } .rader .st { display: none; } }
+
+/* Del 3: hvem */
+.hvem { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-left: 1.5px solid var(--ink); }
+.hvem > div { border-right: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); padding: 16px 20px 20px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.hvem .valg { display: flex; gap: 10px; align-items: center; font: 600 18px var(--font-display); letter-spacing: -0.01em; }
+.hvem p { margin: 0; color: var(--type-2); font-size: 15px; }
+.hvem .liste { margin: 4px 0 0; font-size: 14.5px; }
+@media (max-width: 900px) { .hvem { grid-template-columns: minmax(0, 1fr); } }
+
+/* Del 4: erklæringen */
+.erkl { display: grid; grid-template-columns: minmax(0, 1fr) 300px; border: 1.5px solid var(--ink); border-top: 0; }
+.erkl ol { list-style: none; margin: 0; padding: 8px 0; counter-reset: e; }
+.erkl li { counter-increment: e; display: grid; grid-template-columns: 44px 18px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 20px 12px 0; border-bottom: 1px solid var(--ink-line); }
+.erkl li:last-child { border-bottom: 0; }
+.erkl li::before { content: "5." counter(e); font: 500 12px/1.9 var(--font-type); color: var(--ink); text-align: right; }
+.erkl li .x { margin-top: 2px; }
+.erkl li b { display: block; font: 600 16px var(--font-display); }
+.erkl li span.t { color: var(--type-2); font-size: 15px; }
+.signatur { border-left: 1.5px solid var(--ink); padding: 18px 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 18px; background: var(--ink-wash); }
+.signatur .linje { border-bottom: 1.5px solid var(--ink); padding-bottom: 4px; min-height: 64px; display: flex; align-items: flex-end; }
+.signatur .hand { font: 600 26px var(--font-display); font-style: italic; color: var(--type); letter-spacing: -0.02em; transform: rotate(-3deg); }
+.sig-lenker { margin: 0; font-size: 14px; color: var(--type-2); }
+.sig-lenker a { color: var(--ink-deep); }
+@media (max-width: 860px) { .erkl { grid-template-columns: minmax(0, 1fr); } .signatur { border-left: 0; border-top: 1.5px solid var(--ink); } }
+
+/* Del 5: status */
+.status { width: 100%; border-collapse: collapse; border: 1.5px solid var(--ink); border-top: 0; font-size: 15px; }
+.status th { font: 600 10.5px var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--ink); text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--ink-line); background: var(--ink-wash); }
+.status td { padding: 12px 14px; border-bottom: 1px solid var(--ink-line); vertical-align: middle; }
+.status td:first-child { font: 500 12px var(--font-type); color: var(--ink); width: 56px; }
+.status td:nth-child(2) b { display: block; font-weight: 600; }
+.status td:nth-child(2) span { color: var(--muted); font-size: 14px; }
+.status td:last-child { text-align: right; width: 1%; white-space: nowrap; }
+.tabellramme { overflow-x: auto; }
+
+/* Del 6: veiledning */
+.veil { border: 1.5px solid var(--ink); border-top: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.veil details { border-bottom: 1px solid var(--ink-line); border-right: 1px solid var(--ink-line); }
+.veil details:nth-child(2n) { border-right: 0; }
+.veil details:nth-last-child(-n+2) { border-bottom: 0; }
+.veil details:last-child:nth-child(odd) { grid-column: 1 / -1; border-right: 0; }
+.veil details:nth-last-child(2):nth-child(even) { border-bottom: 1px solid var(--ink-line); }
+.veil summary { list-style: none; cursor: pointer; padding: 14px 16px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 18px; gap: 8px; align-items: baseline; font: 600 16px var(--font-display); }
+.veil summary::-webkit-details-marker { display: none; }
+.veil summary .n { font: 500 12px var(--font-type); color: var(--ink); }
+.veil summary::after { content: "+"; font: 500 18px var(--font-type); color: var(--ink); text-align: right; }
+.veil details[open] summary::after { content: "–"; }
+.veil summary:hover { color: var(--ink-deep); }
+.veil details p { margin: 0; padding: 0 16px 16px 58px; color: var(--type-2); font-size: 15px; }
+@media (max-width: 760px) { .veil { grid-template-columns: minmax(0, 1fr); } .veil details { border-right: 0; } .veil details:nth-last-child(2) { border-bottom: 1px solid var(--ink-line); } }
+
+/* Underskriften */
+.under { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); border: 1.5px solid var(--ink); margin-top: clamp(40px, 6vw, 72px); }
+.under-v { padding: clamp(24px, 4vw, 44px); border-right: 1.5px solid var(--ink); }
+.under-v h2 { margin: 0; font: 700 clamp(32px, 4.8vw, 60px)/.98 var(--font-display); letter-spacing: -0.04em; text-wrap: balance; }
+.under-v p { margin: 16px 0 0; color: var(--type-2); max-width: 44ch; }
+.under-h { display: grid; grid-template-rows: auto auto 1fr; }
+.under-h > div { border-bottom: 1px solid var(--ink-line); padding: 8px 14px 12px; display: grid; gap: 8px; }
+.under-h > div:last-child { border-bottom: 0; align-content: end; padding: 18px 14px; }
+.under-h .cta { margin-top: 0; }
+@media (max-width: 860px) { .under { grid-template-columns: minmax(0, 1fr); } .under-v { border-right: 0; border-bottom: 1.5px solid var(--ink); } }
+
+@media (prefers-reduced-motion: no-preference) {
+  .slipp .stempel { animation: slag .5s cubic-bezier(.2, 1.4, .4, 1) .35s both; }
+  @keyframes slag { from { transform: rotate(-11deg) scale(1.25); } to { transform: rotate(-11deg) scale(1); } }
+}
+
+.main-h .mh { display: block; font: 650 22px/1.08 var(--font-display); letter-spacing: -0.015em; }
+.card .h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+<a class="hopp" href="#innhold">Hopp til innholdet</a>
+<div class="ark">
+<header class="top">
+  <div class="inn">
+    <a class="brand" href="#" aria-label="Admin Konsoll, til forsiden"><svg viewBox="0 0 48 48" aria-hidden="true"><path class="k1" d="M14.41 1H10.5A9.5 9.5 0 0 0 1 10.5V37.5A9.5 9.5 0 0 0 10.5 47H14.41ZM18.41 1L18.41 19.99L42.1 2.19A9.5 9.5 0 0 0 37.5 1ZM18.41 47L18.41 28.01L42.1 45.81A9.5 9.5 0 0 1 37.5 47Z"/><path class="k2" d="M19.74 24L45.16 4.88A9.5 9.5 0 0 1 47 10.5V37.5A9.5 9.5 0 0 1 45.16 43.12Z"/></svg>Admin Konsoll</a>
+    <span class="skjemakode" title="Skjemanummer">AK-1 · utg. 10.2026</span>
+    <nav aria-label="Hovedmeny">
+      <a href="#automatikk">Slik virker det</a>
+      <a href="#moduler">Moduler</a>
+      <a href="#laget-for">Laget for</a>
+      <a href="#trygghet">Trygghet</a>
+      <a href="#sporsmal">Spørsmål</a>
+    </nav>
+    <div class="act">
+      <a class="btn txt" href="https://app.adminkonsoll.no">Logg inn</a>
+      <a class="btn pri" href="https://app.adminkonsoll.no/?konto=ny">Opprett konto</a>
+    </div>
+  </div>
+</header>
+<main id="innhold">
+<div class="inn">
+
+<section class="tittel" aria-labelledby="tittel-h">
+  <div class="tittel-v">
+    <p class="skjemanavn"><b>AK-1</b><span>Administrasjon for norske foretak</span><span>Side 1 av 1</span></p>
+    <h1 class="stor" id="tittel-h">Hele administrasjonen. <span class="blaa">Én konsoll.</span></h1>
+    <p class="ingress">Faktura, personal, lønn og regnskap for alle slags virksomheter. Verktøyet gjør grovarbeidet fra første bilag til regnskapet er klart for kontroll. Dere godkjenner.</p>
+    <div class="felter">
+      <div>
+        <span class="lbl"><span class="nr">0.1</span>Gjelder (sett kryss)</span>
+        <span class="kryssrad"><span><i class="x" aria-hidden="true"></i>Faktura</span><span><i class="x" aria-hidden="true"></i>Personal</span><span><i class="x" aria-hidden="true"></i>Lønn</span><span><i class="x" aria-hidden="true"></i>Regnskap</span></span>
+      </div>
+      <div>
+        <span class="lbl"><span class="nr">0.2</span>Kontrolleres og godkjennes av</span>
+        <span class="v">Dere</span>
+      </div>
+    </div>
+    <div class="cta">
+      <a class="btn pri" href="https://app.adminkonsoll.no/?konto=ny">Opprett konto →</a>
+      <a class="btn sec" href="#automatikk">Se hva verktøyet klargjør</a>
+    </div>
+  </div>
+  <div class="tittel-h">
+    <span class="lbl"><span class="nr">0.3</span>Vedlegg: lønnsslipp <span class="eks">(eksempel)</span></span>
+    <div class="slipp" role="img" aria-label="Eksempel på lønnsslipp for mars 2026, utbetalt 36 400 kroner">
+      <div class="slipp-h"><b>Lønnsslipp</b><span>MARS 2026</span></div>
+      <div class="slipp-p"><span>Fjordvik Service AS</span><span>Kari Nordmann · Prosjektleder · 100 %</span></div>
+      <table>
+        <tbody>
+          <tr><td>Fastlønn</td><td>50 000,00</td></tr>
+          <tr><td>Overtid 50 %, 2,0 t</td><td>2 000,00</td></tr>
+          <tr><td>Forskuddstrekk, tabell</td><td>−15 600,00</td></tr>
+        </tbody>
+        <tfoot><tr><td>Utbetalt 20.03.2026</td><td>36 400,00</td></tr></tfoot>
+      </table>
+      <span class="stempel">Utbetalt<small>20.03.2026</small></span>
+    </div>
+  </div>
+</section>
+
+<section id="automatikk" aria-labelledby="del1-h">
+  <div class="delband"><span class="nr">DEL 1</span><h2 id="del1-h">Fra bilag til regnskap klart for kontroll</h2><span class="h">Klargjort i Admin Konsoll</span></div>
+  <div class="innledning">
+    <p class="stor2">Verktøyet gjør grovarbeidet. Dere har kontrollen.</p>
+    <p>Hele veien fra kvitteringen til årsoppgjøret: hva dere gjør, og hva Admin Konsoll regner ut og klargjør for dere. Regnskapet er deres, ført av dere selv eller av regnskapsføreren deres.</p>
+  </div>
+  <div class="tabellramme">
+    <table class="hvemgjor">
+      <thead><tr><th scope="col">Post</th><th scope="col">Når</th><th scope="col">Dere gjør</th><th scope="col">Admin Konsoll klargjør</th></tr></thead>
+      <tbody>
+        <tr><td class="p">1.1</td><td class="n">Kvittering eller leverandørfaktura</td><td class="du">Tar bilde og godkjenner forslaget</td><td class="ak"><span class="mini-st b">Forslag</span>Leser bilaget med KI og foreslår konto og mva-fradrag. For leverandører dere har godkjent før, følger forslaget reglene dere har satt opp</td></tr>
+        <tr><td class="p">1.2</td><td class="n">Faktura sendt</td><td class="du">Lager og sender fakturaen</td><td class="ak"><span class="mini-st b">Utkast</span>Sender den som EHF eller e-post, setter opp posteringen med mva-kode og varsler når den forfaller</td></tr>
+        <tr><td class="p">1.3</td><td class="n">Penger inn og ut av banken</td><td class="du">Avklarer det som er usikkert</td><td class="ak"><span class="mini-st b">Forslag</span>Henter bankpostene tre ganger om dagen, foreslår kobling til fakturaer og bilag, og viser avstemmingen</td></tr>
+        <tr><td class="p">1.4</td><td class="n">Timer og lønn</td><td class="du">Godkjenner timene og lønnskjøringen</td><td class="ak"><span class="mini-st b">Utkast</span>Regner ut lønnen på nytt ved hver endring, og klargjør posteringer, betalingsfil og a-meldingsfil</td></tr>
+        <tr><td class="p">1.5</td><td class="n">Månedsslutt</td><td class="du">Går gjennom sjekklisten</td><td class="ak"><span class="mini-st b">Utregnet</span>Beregner avskrivninger og periodiseringer etter planene dere har lagt inn</td></tr>
+        <tr><td class="p">1.6</td><td class="n">Mva-termin</td><td class="du">Kontrollerer og leverer i Altinn</td><td class="ak"><span class="mini-st b">Utkast</span>Setter opp mva-meldingen fra bilagene og kjører kontroller</td></tr>
+        <tr><td class="p">1.7</td><td class="n">Årsslutt</td><td class="du">Kontrollerer og godkjenner, gjerne med regnskapsfører</td><td class="ak"><span class="mini-st b">Utkast</span>Setter opp resultat, balanse og utkast til årsoppgjør, og lager SAF-T-fila</td></tr>
+      </tbody>
+      <tfoot><tr><td class="p">1.8</td><td colspan="3"><div class="sumrad"><span class="lbl">Ansvar</span><span class="v sum">Regnskapet er deres. Verktøyet klargjør, dere godkjenner.</span><span class="stempel blaa">Klar til kontroll</span></div></td></tr></tfoot>
+    </table>
+  </div>
+</section>
+
+<section id="sammenheng" aria-labelledby="del2-h">
+  <div class="delband"><span class="nr">DEL 2</span><h2 id="del2-h">Eksempel: én time gjennom hele systemet</h2><span class="h">Ingen poster fylles ut to ganger</span></div>
+  <div class="innledning">
+    <p class="stor2">Registrer én gang. Resten overføres.</p>
+    <p>På et vanlig skjema står det «overfør beløpet til post 2.2». Her overføres det i verktøyet: timene, lønnen og bilagene ligger i samme database.</p>
+  </div>
+  <div class="poster">
+    <article class="post">
+      <div class="post-h"><span class="lbl"><span class="nr">2.1</span>Mandag 16.3</span><b>Timer</b></div>
+      <div class="post-f">
+        <div><span class="lbl">Ansatt</span><span class="v">Kari N.</span></div>
+        <div><span class="lbl">Ordinær tid</span><span class="v">37,5 t</span></div>
+        <div><span class="lbl">Overtid 50 %</span><span class="v">2,0 t</span></div>
+      </div>
+      <div class="post-s"><span class="stempel gronn">Godkjent</span></div>
+      <div class="overfor">Overføres til post 2.2</div>
+    </article>
+    <article class="post">
+      <div class="post-h"><span class="lbl"><span class="nr">2.2</span>Onsdag 18.3</span><b>Lønn</b></div>
+      <div class="post-f">
+        <div><span class="lbl">Brutto</span><span class="v">52 000</span></div>
+        <div><span class="lbl">Forskuddstrekk</span><span class="v">−15 600</span></div>
+        <div><span class="lbl">Til utbetaling</span><span class="v">36 400</span></div>
+      </div>
+      <div class="post-s"><span class="stempel gronn">Godkjent</span></div>
+      <div class="overfor">Overføres til post 2.3</div>
+    </article>
+    <article class="post">
+      <div class="post-h"><span class="lbl"><span class="nr">2.3</span>Når lønnen godkjennes</span><b>Bilag L-2026-3</b></div>
+      <table class="bilag">
+        <thead><tr><th scope="col">Konto</th><th scope="col">Debet</th><th scope="col">Kredit</th></tr></thead>
+        <tbody>
+          <tr><td>5000</td><td>52 000</td><td></td></tr>
+          <tr><td>2600</td><td></td><td>15 600</td></tr>
+          <tr><td>2930</td><td></td><td>36 400</td></tr>
+          <tr><td>5400</td><td>7 332</td><td></td></tr>
+          <tr><td>2770</td><td></td><td>7 332</td></tr>
+        </tbody>
+      </table>
+      <div class="post-s"><span class="stempel blaa">Bokført</span></div>
+      <div class="overfor">Overføres til post 2.4</div>
+    </article>
+    <article class="post">
+      <div class="post-h"><span class="lbl"><span class="nr">2.4</span>Innen 7.4</span><b>A-melding</b></div>
+      <div class="post-f">
+        <div><span class="lbl">Periode</span><span class="v">Mars 2026</span></div>
+        <div><span class="lbl">Avvik</span><span class="v">0</span></div>
+        <div><span class="lbl">Forskuddstrekk</span><span class="v">15 600</span></div>
+      </div>
+      <div class="post-s"><span class="stempel gronn">Klar til kontroll</span></div>
+      <div class="overfor">Kontrollert før fila lages</div>
+    </article>
+  </div>
+  <p class="samme"><span class="lbl">2.5 Fakturaene går samme vei</span>
+    Faktura <span class="kode">F · 1500 / 3000 / 2700</span><span class="pil">→</span>
+    innbetaling <span class="kode">B · 1920 / 1500</span><span class="pil">→</span>
+    mva-meldingen for terminen</p>
+</section>
+
+<section id="moduler" aria-labelledby="del3-h">
+  <div class="delband"><span class="nr">DEL 3</span><h2 id="del3-h">Modulene: kryss av for det dere trenger</h2><span class="h">Lønn bygger på Personal</span></div>
+  <div class="moduler">
+    <article class="modul">
+      <div class="modul-h"><span class="bokst">3A</span><h3>Faktura</h3></div>
+      <p>Send, purr og få betalt. Innbetalingene fra banken foreslås koblet til riktig faktura.</p>
+      <ul class="liste">
+        <li><i class="x" aria-hidden="true"></i>Faktura og kreditnota, hel eller delvis, med vedlegg</li>
+        <li><i class="x" aria-hidden="true"></i>EHF gjennom foretakets egen Peppol-konto hos Recommand</li>
+        <li><i class="x" aria-hidden="true"></i>Gjentakende fakturaer, purring og inkassovarsel</li>
+        <li><i class="x" aria-hidden="true"></i>Innbetalinger fra banken kl. 07, 12 og 18</li>
+      </ul>
+      <div class="utdrag" role="img" aria-label="Eksempel på fakturaliste">
+        <div class="utdrag-h"><span class="lbl">Fakturaer</span><span class="eks">eksempel</span></div>
+        <div class="rader">
+          <div><span class="n">10482</span><span class="t">Helse Vest IKT</span><span class="b">48 750</span><span class="st"><span class="mini-st b">EHF</span></span></div>
+          <div><span class="n">10481</span><span class="t">Bergen kommune</span><span class="b">12 400</span><span class="st"><span class="mini-st r">Purret</span></span></div>
+          <div><span class="n">10480</span><span class="t">Fjordlab AS</span><span class="b">6 875</span><span class="st"><span class="mini-st g">Betalt</span></span></div>
+        </div>
+      </div>
+    </article>
+    <article class="modul">
+      <div class="modul-h"><span class="bokst">3B</span><h3>Personal</h3></div>
+      <p>Vaktplan som kan arbeidsmiljøloven. Appen varsler når en vakt bryter reglene.</p>
+      <ul class="liste">
+        <li><i class="x" aria-hidden="true"></i>Turnus med dag-, kveld- og nattevakter, foreslått for opptil 13 uker</li>
+        <li><i class="x" aria-hidden="true"></i>Timer, overtid, timebank, feriebank og egenmelding</li>
+        <li><i class="x" aria-hidden="true"></i>Vaktbytte, tavle med rullering og sjekklister</li>
+        <li><i class="x" aria-hidden="true"></i>Egen innlogging og push-varsler for de ansatte</li>
+      </ul>
+      <div class="utdrag" role="img" aria-label="Eksempel på vaktplan for uke 14 med en advarsel om hviletid">
+        <div class="utdrag-h"><span class="lbl">Vaktplan uke 14</span><span class="eks">eksempel</span></div>
+        <div class="uke">
+          <span class="hd"></span><span class="hd">Ma 30</span><span class="hd">Ti 31</span><span class="hd">On 1</span><span class="hd hel">To 2</span><span class="hd hel">Fr 3</span>
+          <span class="rl">Kari N.</span><span class="d">D</span><span class="d">D</span><span class="tom">·</span><span class="tom">·</span><span class="tom">·</span>
+          <span class="rl">Amira S.</span><span class="k">K</span><span class="d feil">D</span><span class="tom">·</span><span class="tom">·</span><span class="tom">·</span>
+          <span class="rl">Jonas B.</span><span class="d">D</span><span class="k">K</span><span class="nn">N</span><span class="tom">·</span><span class="tom">·</span>
+        </div>
+        <div class="merknad"><b>Merknad</b><span>Amira S., tirsdag: Bare 9,5 timer hvile før vakten (minst 11)</span></div>
+      </div>
+    </article>
+    <article class="modul">
+      <div class="modul-h"><span class="bokst">3C</span><h3>Lønn</h3></div>
+      <p>Utkastet til lønnskjøring regnes ut fra timene, vaktene og fraværet som alt ligger inne. Dere kontrollerer og godkjenner.</p>
+      <ul class="liste">
+        <li><i class="x" aria-hidden="true"></i>Skattetrekk etter Skatteetatens trekktabeller</li>
+        <li><i class="x" aria-hidden="true"></i>Feriepenger, OTP, sykepenger og arbeidsgiveravgift per sone</li>
+        <li><i class="x" aria-hidden="true"></i>Lønnsslipper som PDF og betalingsfil til nettbanken</li>
+        <li><i class="x" aria-hidden="true"></i>A-melding og årsoversikt for hver ansatt</li>
+      </ul>
+      <div class="utdrag" role="img" aria-label="Eksempel på a-melding for mars med frist 7. april">
+        <div class="utdrag-h"><span class="lbl">A-melding mars 2026</span><span class="eks">eksempel</span></div>
+        <div class="am">
+          <div><span class="lbl">Frist</span><span class="v">7. april</span></div>
+          <div><span class="lbl">Avvik</span><span class="v">0</span></div>
+          <div><span class="lbl">Status</span><span class="v">Klar</span></div>
+        </div>
+      </div>
+    </article>
+    <article class="modul">
+      <div class="modul-h"><span class="bokst">3D</span><h3>Regnskap</h3></div>
+      <p>Fakturaer, lønn og bank blir forslag til posteringer i deres regnskap. Dere kontrollerer og godkjenner.</p>
+      <ul class="liste">
+        <li><i class="x" aria-hidden="true"></i>Bilag og hovedbok på kontoplanen etter NS 4102</li>
+        <li><i class="x" aria-hidden="true"></i>Kvitteringer og leverandørfakturaer lest av KI</li>
+        <li><i class="x" aria-hidden="true"></i>Mva-melding fra bilagene, med kontroller</li>
+        <li><i class="x" aria-hidden="true"></i>Årsoppgjør, periodelås og SAF-T Regnskap</li>
+      </ul>
+      <div class="utdrag" role="img" aria-label="Eksempel på bankposter med forslag til konto">
+        <div class="utdrag-h"><span class="lbl">Bank · må avklares</span><span class="eks">eksempel</span></div>
+        <div class="rader">
+          <div><span class="n">6540</span><span class="t">Kortkjøp Elkjøp, 25 % mva</span><span class="b">−2 490</span><span class="st"><span class="mini-st b">Forslag</span></span></div>
+          <div><span class="n">2600</span><span class="t">Skatteetaten, forskuddstrekk</span><span class="b">−15 600</span><span class="st"><span class="mini-st b">Forslag</span></span></div>
+          <div><span class="n">1500</span><span class="t">Fjordlab AS, faktura 10480</span><span class="b">6 875</span><span class="st"><span class="mini-st g">Koblet</span></span></div>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section id="laget-for" aria-labelledby="del4-h">
+  <div class="delband"><span class="nr">DEL 4</span><h2 id="del4-h">Hvem fyller ut? Alle slags virksomheter</h2></div>
+  <div class="hvem">
+    <div>
+      <span class="valg"><i class="x" aria-hidden="true"></i>Virksomheter som fakturerer</span>
+      <p>Konsulenter, håndverkere, byråer, butikker og alle andre som sender fakturaer.</p>
+      <ul class="liste">
+        <li><i class="x" aria-hidden="true"></i>Faktura, EHF og purring, med forslag til kobling av innbetalingene</li>
+        <li><i class="x" aria-hidden="true"></i>Gjentakende fakturaer og avtalte makstak</li>
+        <li><i class="x" aria-hidden="true"></i>Posteringene klargjort mens dere fakturerer</li>
+      </ul>
+    </div>
+    <div>
+      <span class="valg"><i class="x" aria-hidden="true"></i>Virksomheter med ansatte</span>
+      <p>Fast ansatte, vakter, turnus eller timelønn, i alle bransjer.</p>
+      <ul class="liste">
+        <li><i class="x" aria-hidden="true"></i>Vaktplan, turnus og timer med varsel på mobilen</li>
+        <li><i class="x" aria-hidden="true"></i>Overtid rett i lønnen, eller i timebanken</li>
+        <li><i class="x" aria-hidden="true"></i>Ansatte importeres fra lønnssystemet eller Excel</li>
+      </ul>
+    </div>
+    <div>
+      <span class="valg"><i class="x" aria-hidden="true"></i>Regnskapsbyråer</span>
+      <p>Alle klientene i én innlogging.</p>
+      <ul class="liste">
+        <li><i class="x" aria-hidden="true"></i>Klientliste med tilgang til å lese eller bokføre</li>
+        <li><i class="x" aria-hidden="true"></i>Tilgangen gis alltid med klientens samtykke</li>
+        <li><i class="x" aria-hidden="true"></i>Rapportene på e-post den 1. hver måned, og SAF-T</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="trygghet" aria-labelledby="del5-h">
+  <div class="delband"><span class="nr">DEL 5</span><h2 id="del5-h">Erklæring om sikkerhet</h2></div>
+  <div class="erkl">
+    <ol>
+      <li><i class="x" aria-hidden="true"></i><div><b>Hvert foretak har sine egne data</b><span class="t">Tilgangen håndheves i selve databasen, ikke bare i appen.</span></div></li>
+      <li><i class="x" aria-hidden="true"></i><div><b>Sikker innlogging</b><span class="t">Passord med tofaktor, eller passkey. Nye kontoer godkjennes før de slipper inn.</span></div></li>
+      <li><i class="x" aria-hidden="true"></i><div><b>Bilag endres aldri</b><span class="t">Feil rettes med reversering, og låste perioder står urørt.</span></div></li>
+      <li><i class="x" aria-hidden="true"></i><div><b>Lagret i EU</b><span class="t">Google Cloud i Europa. KI kjører i Frankfurt og foreslår bare.</span></div></li>
+      <li><i class="x" aria-hidden="true"></i><div><b>Dere eier regnskapet</b><span class="t">Admin Konsoll er programvare og fører ikke regnskap for andre. Dere, eller regnskapsføreren deres, kontrollerer og godkjenner.</span></div></li>
+      <li><i class="x" aria-hidden="true"></i><div><b>Ingen sporing</b><span class="t">Ingen informasjonskapsler, analyse eller annonser på nettstedet.</span></div></li>
+    </ol>
+    <div class="signatur">
+      <span class="lbl"><span class="nr">5.7</span>Underskrift</span>
+      <div class="linje"><span class="hand">Admin Konsoll</span></div>
+      <p class="sig-lenker">Les mer i <a href="personvern.html">personvernerklæringen</a> og <a href="databehandleravtale.html">databehandleravtalen</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="status" aria-labelledby="del6-h">
+  <div class="delband"><span class="nr">DEL 6</span><h2 id="del6-h">Status: i drift på adminkonsoll.no</h2></div>
+  <div class="tabellramme">
+    <table class="status">
+      <thead><tr><th scope="col">Post</th><th scope="col">Funksjon</th><th scope="col">Status</th></tr></thead>
+      <tbody>
+        <tr><td>6.1</td><td><b>Faktura, Personal, Lønn og Regnskap</b><span>Alle fire modulene, med rapporter og bank</span></td><td><span class="mini-st g">I drift</span></td></tr>
+        <tr><td>6.2</td><td><b>A-melding</b><span>Fila lastes opp på skatteetaten.no. Innsending fra appen kommer.</span></td><td><span class="mini-st r">Venter på tilgang</span></td></tr>
+        <tr><td>6.3</td><td><b>Skattekort og NAV</b><span>Henting av skattekort og sykmeldinger, og inntektsmelding</span></td><td><span class="mini-st r">Venter på tilgang</span></td></tr>
+        <tr><td>6.4</td><td><b>Mva-melding</b><span>Utregnet fra bilagene. Innsending fra appen kommer.</span></td><td><span class="mini-st b">Kommer</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="sporsmal" aria-labelledby="del7-h">
+  <div class="delband"><span class="nr">DEL 7</span><h2 id="del7-h">Veiledning til skjemaet</h2></div>
+  <div class="veil">
+    <details open>
+      <summary><span class="n">7.1</span>Fører Admin Konsoll regnskapet for oss?</summary>
+      <p>Nei. Admin Konsoll er et verktøy dere bruker til deres eget regnskap. Verktøyet regner ut og foreslår, og dere kontrollerer og godkjenner. Dere fører regnskapet selv, eller lar en autorisert regnskapsfører gjøre det i verktøyet, og ansvaret er deres.</p>
+    </details>
+    <details>
+      <summary><span class="n">7.2</span>Kan vi starte midt i året?</summary>
+      <p>Ja. Dere velger en startdato og fører den inngående balansen som et bilag. Kundefordringene ved datoen blir med, og det som skjer etter, klargjøres i verktøyet for dere å kontrollere.</p>
+    </details>
+    <details>
+      <summary><span class="n">7.3</span>Hvordan får vi inn de ansatte?</summary>
+      <p>Importer fra lønnssystemet dere har, eller fra Excel og CSV. En lønnsslipp som PDF eller bilde kan også leses inn til ansattopplysninger.</p>
+    </details>
+    <details>
+      <summary><span class="n">7.4</span>Hvordan sendes EHF?</summary>
+      <p>Gjennom foretakets egen konto hos Recommand, som er tilkoblet Peppol-nettverket.</p>
+    </details>
+    <details>
+      <summary><span class="n">7.5</span>Hvilke banker virker?</summary>
+      <p>Banker som er tilgjengelige gjennom Enable Banking (PSD2). Flere kontoer og banker kan kobles til samme foretak.</p>
+    </details>
+    <details>
+      <summary><span class="n">7.6</span>Kan de ansatte bruke mobilen?</summary>
+      <p>Ja. De ansatte har egen innlogging, ser vaktene og lønnsslippene, fører timer, melder fravær og får push-varsler.</p>
+    </details>
+    <details>
+      <summary><span class="n">7.7</span>Må vi ha alle modulene?</summary>
+      <p>Nei. Faktura, Personal, Lønn og Regnskap slås på hver for seg. Lønn krever Personal.</p>
+    </details>
+  </div>
+</section>
+
+<section class="under" aria-labelledby="under-h">
+  <div class="under-v">
+    <h2 id="under-h">Ett skjema til. Så klargjør verktøyet resten.</h2>
+    <p>Opprett konto, bekreft e-postadressen og kryss av for modulene. Vi godkjenner nye kontoer før første innlogging.</p>
+  </div>
+  <div class="under-h">
+    <div><span class="lbl"><span class="nr">8.1</span>Foretak</span><span class="v">Deres foretak AS</span></div>
+    <div><span class="lbl"><span class="nr">8.2</span>Moduler</span><span class="kryssrad"><span><i class="x" aria-hidden="true"></i>Faktura</span><span><i class="x tom" aria-hidden="true"></i>Personal</span><span><i class="x tom" aria-hidden="true"></i>Lønn</span><span><i class="x tom" aria-hidden="true"></i>Regnskap</span></span></div>
+    <div><div class="cta"><a class="btn pri" href="https://app.adminkonsoll.no/?konto=ny">Opprett konto →</a><a class="btn txt" href="https://app.adminkonsoll.no">Logg inn</a></div></div>
+  </div>
+</section>
+
+</div>
+</main>
+<footer class="sitefoot">
+  <div class="inn">
+    <div class="om">
+      <a class="brand" href="#" aria-label="Admin Konsoll, til forsiden"><svg viewBox="0 0 48 48" aria-hidden="true"><path class="k1" d="M14.41 1H10.5A9.5 9.5 0 0 0 1 10.5V37.5A9.5 9.5 0 0 0 10.5 47H14.41ZM18.41 1L18.41 19.99L42.1 2.19A9.5 9.5 0 0 0 37.5 1ZM18.41 47L18.41 28.01L42.1 45.81A9.5 9.5 0 0 1 37.5 47Z"/><path class="k2" d="M19.74 24L45.16 4.88A9.5 9.5 0 0 1 47 10.5V37.5A9.5 9.5 0 0 1 45.16 43.12Z"/></svg>Admin Konsoll</a>
+      <p>Programvare for faktura, personal, lønn og regnskap. Admin Konsoll fører ikke regnskap for kunder og er ikke autorisert regnskapsfører.</p>
+    </div>
+    <nav aria-label="Produktet">
+      <h2>Produktet</h2>
+      <ul>
+        <li><a href="#automatikk">Fra bilag til regnskap</a></li>
+        <li><a href="#sammenheng">Eksempel</a></li>
+        <li><a href="#moduler">Moduler</a></li>
+        <li><a href="#trygghet">Trygghet</a></li>
+        <li><a href="#status">Status</a></li>
+        <li><a href="#sporsmal">Spørsmål og svar</a></li>
+      </ul>
+    </nav>
+    <nav aria-label="Juridisk">
+      <h2>Juridisk</h2>
+      <ul>
+        <li><a href="personvern.html">Personvernerklæring</a></li>
+        <li><a href="vilkar.html">Bruksvilkår</a></li>
+        <li><a href="databehandleravtale.html">Databehandleravtale</a></li>
+        <li><a href="underleverandorer.html">Underleverandører</a></li>
+        <li><a href="informasjonskapsler.html">Informasjonskapsler</a></li>
+      </ul>
+    </nav>
+    <div>
+      <h2>Kontakt</h2>
+      <address>
+        Medinnova AS<br>
+        Olasrudveien 23, 1284 Oslo<br>
+        <a href="mailto:post@adminkonsoll.no">post@adminkonsoll.no</a>
+      </address>
+    </div>
+    <div class="bunnlinje">
+      <span>© 2026 Medinnova AS · Org.nr. 936 564 046</span>
+      <span>Ingen informasjonskapsler eller sporing på dette nettstedet.</span>
+    </div>
+  </div>
+</footer>
+</div>
+</body>
+</html>

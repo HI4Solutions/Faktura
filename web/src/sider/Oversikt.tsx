@@ -161,6 +161,13 @@ export function Oversikt() {
           </div>
         )}
       </div>
+      {/* Eier og administrator godtar dem før de kommer hit (App.tsx); de andre får beskjed. */}
+      {org?.avtaler_godtatt === false && !erAdmin(org) && (
+        <div className="melding advarsel">
+          {org.navn} har ikke godtatt bruksvilkårene og databehandleravtalen som gjelder. Be en eier eller administrator logge
+          inn og godta dem.
+        </div>
+      )}
       {faktura && org?.verifisering === "ny" && org.orgnr && (
         <div className="melding info">
           Organisasjonen er ikke verifisert ennå. Til den er det, kan dere sende opptil 20 fakturaer og 50 000 kr per måned.{" "}

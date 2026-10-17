@@ -67,6 +67,17 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med den siste lenken, og kan sende en ny eller bekrefte adressen for brukeren (også i
   Identity Platform; hvem og når lagres) når hen vet at den er riktig
   (`0105_epostbekreftelse.sql`, `server/src/epostbekreftelse.ts`)
+- `brukere.slettet_at` og statusen `slettet`: brukeren sletter sin egen konto under Innstillinger →
+  Min konto → Slett kontoen (og mens kontoen venter på godkjenning), og bekrefter med
+  e-postadressen sin (`DELETE /api/meg`, `slett_min_konto`). Den som er eneste eier av en
+  organisasjon, må gi eierrollen til en annen eller slette organisasjonen først. Medlemskapene,
+  passkeys, push-abonnementene og varselvalgene, Google Disk-koblingen, modulene, de leste
+  beskjedene, e-postbekreftelsene og invitasjonene som ikke er tatt imot, slettes, og brukeren
+  slettes i Identity Platform i samme transaksjon (feiler det, er ingenting endret). Raden i
+  `brukere` anonymiseres i stedet for å slettes («Slettet bruker», en adresse på `slettet.invalid`),
+  fordi fakturaer, bilag, lønn og revisjonsloggen viser til den. Ansattkortet blir stående uten
+  innloggingen, og en ny innlogging med samme adresse blir en ny konto. Innloggingssiden sier fra
+  at kontoen er slettet (`0123_slett_konto.sql`, `server/src/slettKonto.ts`, `web/src/slettKonto.tsx`)
 - `moduler` og `bruker_moduler`: plattformens moduler, Faktura, Personal, Lønn og Regnskap
   (`0110_moduler.sql`; Bemanning ble delt i Personal og Lønn), og hvilke en bruker har bedt om
   eller fått. Hver funksjon (`funksjoner.modul`) hører til en modul, og hver modul har en kjerne
@@ -762,6 +773,17 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   integrasjoner, logg og sletting, og nederst brukere uten organisasjon, funksjonene for nye
   organisasjoner og de slettede. Drift: e-post, EHF, AI, trekktabellene, banker og utboksen. Gamle lenker til
   Venter, Funksjoner og Brukere går til Plattformoversikt og Organisasjoner
+- `avtaler` og `avtalegodkjenninger`: bruksvilkårene og databehandleravtalen på nettstedet
+  (`landingsside/vilkar.html` og `databehandleravtale.html`). `avtaler` har versjonen som gjelder,
+  og en ny versjon legges inn med en migrering samtidig med at dokumentet endres (servertesten
+  `avtaler.test.ts` sjekker at versjonen og datoen står i dokumentene). Den som oppretter en
+  organisasjon, krysser av for at organisasjonen godtar dem (`POST /api/organisasjoner` med
+  `avtaler`), og hver godkjenning lagres med versjonene, hvem og når (`godta_avtaler`; bare eier og
+  administrator, og bare versjonene som gjelder). `mine_organisasjoner.avtaler_godtatt` sier om
+  versjonene som gjelder nå, er godtatt. Er de ikke det (organisasjoner fra før, eller en ny
+  versjon), må eier eller administrator godta dem før appen åpnes; de andre ser en melding på
+  oversikten. Godkjenningene står under Innstillinger → Organisasjon → Avtaler
+  (`0122_avtaler.sql`, `server/src/avtaler.ts`, `web/src/avtaler.tsx`)
 - `slettede_organisasjoner` og `organisasjoner.slettet_at`: sletting av organisasjoner. Eieren
   (Innstillinger → Organisasjon) eller plattformadministratoren (detaljene under Plattform → Organisasjoner)
   sletter, alltid med en grunn, og bekrefter med navnet; eieren må ha totrinnsinnlogging. Uten
@@ -773,8 +795,19 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   stoppes, og `har_funksjon` er av, så bakgrunnsjobbene hopper over den. Den kobles også fra
   Skatteetaten, Altinn og NAV, som «Koble fra» (`skattekort_tilgang` slettes, 0118), så ingen
   henting av skattekort, sykmeldinger, krav eller frister går for den. Fakturaene, kundene og
-  betalingene blir liggende til `oppbevares_til` (31.12. fem år etter siste faktura); selve
-  slettingen etter det er ikke laget ennå. Hver sletting logges med grunnen, også når alt er
+  betalingene blir liggende til `oppbevares_til` (31.12. fem år etter det siste av fakturaene,
+  lønnskjøringene og bilagene). Morgenjobben i workeren sletter så organisasjonen helt
+  (`slett_utlopt_materiale`, `server/src/oppbevaring.ts`, 0124): fakturaene, bilagene, lønnen, de
+  ansatte og alt annet, revisjonsloggen og utboksen. Låsene på bokført materiale slipper gjennom
+  slettingen når organisasjonen er stengt og oppbevaringstiden er ute (`materiale_kan_slettes`).
+  Raden i `slettede_organisasjoner` blir stående med `materiale_slettet_at`, men uten navnet og
+  e-postadressen til den som slettet (og uten navnet når det var en privatperson). Etterpå slettes
+  filene i Cloud Storage under organisasjonens mapper (`<org>/` i begge bøttene og
+  `amelding/<org>/`), med alle versjonene; holder fakturabøttas oppbevaringsregel (seks år fra hver
+  fil ble laget) fortsatt på noen, prøves det igjen neste morgen til `filer_slettet_at` er satt. Det
+  gjelder også organisasjonene som ble slettet helt med en gang. Databasetesten
+  `99_slett_utlopt.sql` stenger og sletter til slutt alle organisasjonene de andre testene har laget,
+  og sjekker at ingen rad med `org_id` blir igjen. Hver sletting logges med grunnen, også når alt er
   borte, og vises under Plattform → Organisasjoner → Slettede organisasjoner. Sletter
   eieren, får plattformadministratorene e-post med grunnen; sletter plattformadministratoren,
   får eierne det (`0046_slett_organisasjon.sql`, `server/src/slettOrg.ts`)

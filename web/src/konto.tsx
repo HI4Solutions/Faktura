@@ -34,6 +34,9 @@ export interface MinOrg {
   // den gir (de som er slått på).
   tilgangsrolle?: string | null;
   rollemoduler?: ModulKode[] | null;
+  // Organisasjonen har godtatt versjonene av bruksvilkårene og databehandleravtalen som gjelder
+  // (0122_avtaler.sql). Uten feltet (eldre API) regnes de som godtatt.
+  avtaler_godtatt?: boolean;
 }
 
 // Modulene: Faktura, Personal, Lønn og Regnskap.

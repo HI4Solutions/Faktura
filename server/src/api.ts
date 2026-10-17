@@ -7,6 +7,9 @@ import { hentFaktura, makstakLinjer, pdfData, pdfFilnavn, sikrePdf } from "./dok
 import { lagPdf } from "./pdf.js";
 import { erPng, normaliserLogo } from "./logo.js";
 import { config } from "./config.js";
+import { appUrler, domene } from "./appadresse.js";
+import { avtaleRuter, avtalerOffentlig, godkjenningSkjema, godtaAvtaler } from "./avtaler.js";
+import { slettMinKonto } from "./slettKonto.js";
 import { lagring, leggIKo } from "./tjenester.js";
 import { passkeyInnlogging, passkeyRuter } from "./passkey.js";
 import { adminRuter, erPlattformadmin, slaOppEnhet, verifiseringRuter } from "./verifisering.js";
@@ -281,6 +284,8 @@ export function lagApi() {
   app.route("/api/offentlig/passkey", passkeyInnlogging());
   app.route("/api/offentlig/resend", resendWebhook());
   app.route("/api/offentlig/google", googleCallback());
+  // Versjonene av bruksvilkårene og databehandleravtalen, med adressene på nettstedet.
+  app.route("/api/offentlig/avtaler", avtalerOffentlig());
   // Hoveddomenet, og domenene appen er flyttet fra (der viser appen en melding om den nye adressen).
   app.get("/api/offentlig/adresse", (c) => {
     c.header("cache-control", "public, max-age=300");
@@ -336,6 +341,9 @@ export function lagApi() {
 
   // Navnet, og modulene mens kontoen venter på godkjenning (også før e-postadressen er
   // bekreftet, rett fra registreringen).
+  // Brukeren sletter sin egen konto (slettKonto.ts).
+  api.delete("/meg", slettMinKonto);
+
   api.patch("/meg", async (c) => {
     const b = await kropp(
       c,
@@ -357,9 +365,23 @@ export function lagApi() {
   // fra registreringen. Vi sender den selv, fra Admin Konsoll (epostbekreftelse.ts).
   api.post("/meg/bekreftelse", async (c) => c.json(await sendBekreftelse(c)));
 
+  // Med versjonene av bruksvilkårene og databehandleravtalen brukeren godtok i skjemaet (appen sender
+  // dem alltid; uten dem ber appen eieren godta før organisasjonen tas i bruk).
   api.post("/organisasjoner", async (c) => {
-    const b = await kropp(c, z.object({ navn: tekstS(200).min(1), orgnr: z.string().regex(/^\d{9}$/).nullish(), type: z.enum(["foretak", "regnskapsbyraa", "privatperson"]).optional() }));
-    const o = await bruk(c, (db) => en(db, "select * from faktura.opprett_organisasjon($1, $2, $3)", [b.navn, b.orgnr ?? null, b.type ?? "foretak"]));
+    const b = await kropp(
+      c,
+      z.object({
+        navn: tekstS(200).min(1),
+        orgnr: z.string().regex(/^\d{9}$/).nullish(),
+        type: z.enum(["foretak", "regnskapsbyraa", "privatperson"]).optional(),
+        avtaler: godkjenningSkjema.optional(),
+      }),
+    );
+    const o = await bruk(c, async (db) => {
+      const ny = await en(db, "select * from faktura.opprett_organisasjon($1, $2, $3)", [b.navn, b.orgnr ?? null, b.type ?? "foretak"]);
+      if (b.avtaler) await godtaAvtaler(db, ny.id, b.avtaler);
+      return ny;
+    });
     return c.json(o, 201);
   });
 
@@ -468,6 +490,7 @@ export function lagApi() {
   });
 
   org.route("/verifisering", verifiseringRuter());
+  org.route("/avtaler", avtaleRuter());
   org.route("/", rapportRuter());
   org.route("/", vedleggRuter());
   org.route("/", ehfRuter());
@@ -1384,6 +1407,18 @@ export function lagApi() {
 
   api.route("/org/:org", org);
   app.route("/api", api);
-  app.notFound((c) => c.json({ error: "Finnes ikke" }, 404));
+  // Nettstedet sender adresser det ikke har selv hit (landingsside/firebase.json): gamle lenker til
+  // appen fra før den fikk sitt eget domene (e-post, bokmerker, banken, Altinn og varsler) sendes
+  // videre til appen med samme sti og spørring. API-adressene svarer som før, og forespørsler fra
+  // appens egne domener sendes ikke i ring.
+  app.notFound((c) => {
+    const sti = c.req.path;
+    const vert = c.req.header("x-forwarded-host")?.split(",")[0]?.trim().replace(/:\d+$/, "");
+    const fraAppen = !!vert && appUrler().some((u) => domene(u) === vert);
+    if ((c.req.method === "GET" || c.req.method === "HEAD") && sti !== "/api" && !sti.startsWith("/api/") && !fraAppen) {
+      return c.redirect(`${config.appUrl}${sti}${new URL(c.req.url).search}`, 301);
+    }
+    return c.json({ error: "Finnes ikke" }, 404);
+  });
   return app;
 }

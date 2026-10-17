@@ -10,6 +10,7 @@ import {
 import { Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
 import { BekreftEpost, BekreftLenke } from "./sider/Bekreftelse";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
+import { GodtaAvtaler } from "./avtaler";
 import { Oversikt } from "./sider/Oversikt";
 import { AnsattOversikt } from "./sider/AnsattOversikt";
 import { Kunder, Produkter } from "./sider/Register";
@@ -541,6 +542,36 @@ function Ramme() {
           Fått en invitasjon? Åpne lenken i e-posten. · <button className="lenke" onClick={loggUt}>Logg ut</button>
         </p>
       </div>
+    );
+  }
+
+  // Bruksvilkårene og databehandleravtalen som gjelder, må være godtatt før organisasjonen tas i
+  // bruk. Eier eller administrator godtar dem her; de andre ser en melding på oversikten.
+  if (org && org.avtaler_godtatt === false && org.direkte_medlem && erAdmin(org)) {
+    return (
+      <>
+        <GodtaAvtaler org={org} />
+        <p className="liten dempet" style={{ textAlign: "center" }}>
+          {orgs.length > 1 && (
+            <>
+              <label className="avtale-bytt">
+                Bytt organisasjon{" "}
+                <select value={org.id} onChange={(e) => velgOrg(e.target.value)}>
+                  {orgs.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.navn}
+                    </option>
+                  ))}
+                </select>
+              </label>{" "}
+              ·{" "}
+            </>
+          )}
+          <button className="lenke" onClick={loggUt}>
+            Logg ut
+          </button>
+        </p>
+      </>
     );
   }
 

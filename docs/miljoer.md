@@ -56,7 +56,10 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
    første gang er lista tom, og den kommer med i neste kjøring.
 4. **DNS.** Legg inn oppføringen hos domeneleverandøren: `test`, CNAME, `hi4-faktura-test.web.app`.
    Sertifikatet kommer av seg selv når den er på plass, etter noen minutter til en time. Til da
-   virker testflaten på https://hi4-faktura-test.web.app.
+   virker testflaten på https://hi4-faktura-test.web.app. Appen flytter til
+   `app.test.adminkonsoll.no` og nettstedet tar over `test.adminkonsoll.no`
+   ([domene.md](domene.md), «Nettstedet og appen»): `app.test`, CNAME,
+   `hi4-faktura-test-app.web.app` (sjekk mot `dns_for_domener`).
 5. **Hemmelighetene.** Når Infrastruktur er ferdig (den legger inn en plassholder først), kopier
    dem fra produksjon i Cloud Shell, uten at verdiene vises:
 

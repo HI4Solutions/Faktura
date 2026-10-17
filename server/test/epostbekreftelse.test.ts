@@ -64,6 +64,7 @@ describe.skipIf(!process.env.DATABASE_URL)("bekreftelse av e-postadressen", () =
         if (identitetFeiler) throw new Error(identitetFeiler);
         bekreftetHos.push(uid);
       },
+      async slettBruker() {},
     });
     config.adminEposter.push("bek-admin@server.test");
     (config as { resendWebhookHemmelighet?: string }).resendWebhookHemmelighet = hemmelighet;

@@ -47,6 +47,11 @@ export const config = {
   andreAppUrler: adresser(valgfri("ANDRE_APP_URLER")),
   // De av dem appen er flyttet fra: der vises en melding om den nye adressen.
   gamleAppUrler: adresser(valgfri("GAMLE_APP_URLER")),
+  // Nettstedet (landingssiden og de juridiske sidene, landingsside/), satt av Terraform. Lenkene til
+  // bruksvilkårene og databehandleravtalen peker hit (avtaler.ts), passkeys hører til domenet når
+  // appen ligger på et underdomene av det (passkey.ts), og gamle lenker til appen derfra sendes
+  // videre til appen (docs/domene.md).
+  nettstedUrl: valgfri("NETTSTED_URL"),
   epostAvsender: valgfri("EPOST_AVSENDER") ?? "post@adminkonsoll.no",
   // Brukes når Resend sier at avsenderdomenet over ikke er verifisert (tjenester.ts), så e-posten
   // likevel går.

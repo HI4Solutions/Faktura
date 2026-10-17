@@ -16,6 +16,7 @@ import { IkonHake } from "../ikoner";
 import { useKonto } from "../konto";
 import { api } from "../api";
 import { ModulValg, modulnavn, opplisting, useModuler } from "../moduler";
+import { KONTO_SLETTET, SlettKontoDialog } from "../slettKonto";
 
 // Venstre side av innloggingen: hva tjenesten gjør.
 function Merkevarepanel() {
@@ -64,14 +65,28 @@ const feiltekst: Record<string, string> = {
 const tekst = (e: unknown) => feiltekst[(e as { code?: string }).code ?? ""] ?? (e as Error).message;
 
 export function Innlogging() {
-  const [modus, settModus] = useState<"inn" | "ny" | "glemt">("inn");
+  // «Opprett konto» på nettstedet lenker hit med ?konto=ny.
+  const [modus, settModus] = useState<"inn" | "ny" | "glemt">(() =>
+    new URLSearchParams(window.location.search).get("konto") === "ny" ? "ny" : "inn",
+  );
   const [navn, settNavn] = useState("");
   const [epost, settEpost] = useState("");
   const [passord, settPassord] = useState("");
   const [kode, settKode] = useState("");
   const [resolver, settResolver] = useState<MultiFactorResolver | null>(null);
   const [feil, settFeil] = useState<string | null>(null);
-  const [info, settInfo] = useState<string | null>(null);
+  // Etter at kontoen er slettet (slettKonto.tsx) kommer brukeren hit, med en bekreftelse én gang.
+  const [info, settInfo] = useState<string | null>(() => {
+    try {
+      if (sessionStorage.getItem(KONTO_SLETTET)) {
+        sessionStorage.removeItem(KONTO_SLETTET);
+        return "Kontoen din er slettet.";
+      }
+    } catch {
+      /* uten lagring ingen melding */
+    }
+    return null;
+  });
   const [opptatt, settOpptatt] = useState(false);
   // Modulene den nye brukeren trenger (Faktura, Bemanning, ...); de kommer med i forespørselen.
   const moduler = useModuler(modus === "ny");
@@ -272,6 +287,7 @@ export function VenterPaaGodkjenning() {
   const mine = meg?.bruker.moduler ?? [];
   const [endrer, settEndrer] = useState(false);
   const [valgte, settValgte] = useState<string[]>(mine);
+  const [slett, settSlett] = useState(false);
   const velger = !avvist && !!moduler?.length && (!mine.length || endrer);
   async function sjekk() {
     settOpptatt(true);
@@ -388,8 +404,12 @@ export function VenterPaaGodkjenning() {
             <button className="lenke" onClick={loggUt}>
               Logg ut
             </button>
+            <button className="lenke" onClick={() => settSlett(true)}>
+              Slett kontoen
+            </button>
           </div>
         )}
+        <SlettKontoDialog apen={slett} lukk={() => settSlett(false)} />
       </div>
     </div>
   );

@@ -10,6 +10,19 @@ output "app_url" {
   value = "https://${var.app_domain}"
 }
 
+output "nettsted_url" {
+  value = var.nettsted_domene == "" ? "https://${google_firebase_hosting_site.standard.site_id}.web.app" : "https://${var.nettsted_domene}"
+}
+
+output "hosting_sider" {
+  description = "Sidene i Firebase Hosting: standardsiden (nettstedet, og appen til den har flyttet) og appens egen side, og domenene på hver (docs/domene.md)."
+  value = {
+    standard = google_firebase_hosting_site.standard.site_id
+    app      = google_firebase_hosting_site.appen.site_id
+    domener  = local.egne_domener
+  }
+}
+
 output "dns_for_domener" {
   description = "DNS-oppføringene som må legges inn hos domeneleverandøren, per domene (docs/domene.md)."
   value       = { for d, r in merge(google_firebase_hosting_custom_domain.domene, google_firebase_hosting_custom_domain.omdirigering) : d => r.required_dns_updates }

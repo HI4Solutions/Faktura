@@ -20,6 +20,9 @@ export interface Lagring {
   // valg: hele Content-Disposition (ellers «inline» med filnavnet) og Content-Type.
   signertUrl(bucket: string, sti: string, minutter: number, filnavn?: string, valg?: { disposisjon?: string; type?: string }): Promise<string>;
   slett(bucket: string, sti: string): Promise<void>;
+  // Sletter alle filene under prefikset, med alle versjonene (fakturabøtta har versjonering). De
+  // som oppbevaringsregelen fortsatt holder på, telles som venter og prøves igjen senere.
+  slettMappe(bucket: string, prefiks: string): Promise<{ slettet: number; venter: number }>;
 }
 
 export const lagring: Lagring = {
@@ -54,6 +57,28 @@ export const lagring: Lagring = {
   },
   async slett(bucket, sti) {
     await gcs().bucket(bucket).file(sti).delete({ ignoreNotFound: true });
+  },
+  async slettMappe(bucket, prefiks) {
+    const b = gcs().bucket(bucket);
+    const [filer] = await b.getFiles({ prefix: prefiks, versions: true });
+    let slettet = 0;
+    let venter = 0;
+    for (const f of filer) {
+      const utlop = f.metadata.retentionExpirationTime;
+      if (utlop && Date.parse(utlop) > Date.now()) {
+        venter++;
+        continue;
+      }
+      try {
+        await b.file(f.name, { generation: f.metadata.generation ?? undefined }).delete({ ignoreNotFound: true });
+        slettet++;
+      } catch (e) {
+        // 403: oppbevaringsregelen (eller et hold) holder fortsatt på filen.
+        if ((e as { code?: number }).code !== 403) throw e;
+        venter++;
+      }
+    }
+    return { slettet, venter };
   },
 };
 

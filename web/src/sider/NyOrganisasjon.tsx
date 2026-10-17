@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, hent } from "../api";
+import { AvtaleAvkrysning, useAvtaler, versjoner } from "../avtaler";
 import { Feil, useHandling } from "../felles";
 import { useKonto } from "../konto";
 import { orgnr as visOrgnr } from "../format";
@@ -26,6 +27,9 @@ export function NyOrganisasjon({ avbryt, opprettet }: { avbryt?: () => void; opp
   const [orgnr, settOrgnr] = useState("");
   const [oppslag, settOppslag] = useState<any>(null);
   const [navn, settNavn] = useState("");
+  // Bruksvilkårene og databehandleravtalen godtas når organisasjonen opprettes (versjonene lagres).
+  const { avtaler, feil: avtalefeil } = useAvtaler();
+  const [godtatt, settGodtatt] = useState(false);
   const { opptatt, feil, kjor, settFeil } = useHandling();
 
   // Uten Faktura blant brukerens moduler er det ingenting en privatperson kan bruke.
@@ -34,7 +38,7 @@ export function NyOrganisasjon({ avbryt, opprettet }: { avbryt?: () => void; opp
   const privat = type === "privatperson";
   const nr = orgnr.replace(/\s/g, "");
   const nrFeil = !privat && nr.length === 9 && !orgnrGyldig(nr) ? "Ugyldig organisasjonsnummer (kontrollsifferet stemmer ikke)" : null;
-  const kanOpprette = !!navn.trim() && (privat || orgnrGyldig(nr));
+  const kanOpprette = !!navn.trim() && (privat || orgnrGyldig(nr)) && !!avtaler && godtatt;
 
   async function slaOpp(n = nr) {
     settOppslag(null);
@@ -65,9 +69,9 @@ export function NyOrganisasjon({ avbryt, opprettet }: { avbryt?: () => void; opp
 
   async function opprett(ev: FormEvent) {
     ev.preventDefault();
-    if (!kanOpprette) return;
+    if (!kanOpprette || !avtaler) return;
     const o = await kjor(async () => {
-      const o = await api("POST", "/organisasjoner", { navn: navn.trim(), orgnr: privat ? null : nr, type });
+      const o = await api("POST", "/organisasjoner", { navn: navn.trim(), orgnr: privat ? null : nr, type, avtaler: versjoner(avtaler) });
       if (!privat && oppslag?.orgnr === nr) {
         await api("PATCH", `/org/${o.id}`, {
           adresse: oppslag.adresse,
@@ -156,7 +160,8 @@ export function NyOrganisasjon({ avbryt, opprettet }: { avbryt?: () => void; opp
         {privat ? " (det krever organisasjonsnummer)" : ""}. Ved å opprette organisasjonen bekrefter du at du har fullmakt
         til å fakturere på vegne av den.
       </p>
-      <Feil melding={feil} />
+      {avtaler && <AvtaleAvkrysning avtaler={avtaler} godtatt={godtatt} endre={settGodtatt} />}
+      <Feil melding={feil ?? avtalefeil} />
       <div className="knapper">
         <button className="primar" disabled={opptatt || !kanOpprette}>
           Opprett

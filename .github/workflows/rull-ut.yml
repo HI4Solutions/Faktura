@@ -81,8 +81,8 @@ jobs:
         working-directory: web
         run: npm ci && npm run build
       - name: Firebase Hosting
-        working-directory: web
-        run: |
-          # Nettstedet heter som prosjektet (google_firebase_hosting_site i Terraform).
-          jq --arg s "$PROSJEKT" '.hosting.site = $s' firebase.json > firebase.json.ny && mv firebase.json.ny firebase.json
-          npx --yes firebase-tools@latest deploy --only hosting --project "$PROSJEKT" --non-interactive
+        env:
+          MILJO: ${{ vars.MILJO }}
+        # Appen på sin egen side og nettstedet (landingsside/) på standardsiden, eller appen der så
+        # lenge hoveddomenet ligger der (docs/domene.md, «Nettstedet og appen»).
+        run: bash scripts/publiser-hosting.sh

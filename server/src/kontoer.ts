@@ -45,6 +45,8 @@ const APNE: [string, string][] = [
   ["PATCH", "/api/meg"],
   ["POST", "/api/meg/bekreftelse"],
   ["POST", "/api/invitasjoner/aksepter"],
+  // Også en konto som venter eller er avvist, kan slettes.
+  ["DELETE", "/api/meg"],
 ];
 
 export const krevGodkjentKonto: MiddlewareHandler = async (c, next) => {

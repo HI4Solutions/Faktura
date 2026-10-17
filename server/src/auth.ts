@@ -28,12 +28,14 @@ function firebase() {
 }
 
 // Det API-et gjør i Identity Platform utenom innloggingen (byttes ut i tester): lager lenken som
-// bekrefter e-postadressen (vi sender den selv, server/src/epostbekreftelse.ts), og merker
-// adressen som bekreftet når plattformadministratoren gjør det for brukeren.
+// bekrefter e-postadressen (vi sender den selv, server/src/epostbekreftelse.ts), merker adressen som
+// bekreftet når plattformadministratoren gjør det for brukeren, og sletter brukeren når den sletter
+// kontoen sin (slettKonto.ts).
 export interface Identitet {
   // Koden (oobCode) i en ny lenke som bekrefter e-postadressen.
   bekreftelseskode(epost: string): Promise<string>;
   bekreftEpost(eksternId: string): Promise<void>;
+  slettBruker(eksternId: string): Promise<void>;
 }
 
 export const identityPlatform: Identitet = {
@@ -45,6 +47,14 @@ export const identityPlatform: Identitet = {
   },
   async bekreftEpost(eksternId) {
     await firebase().updateUser(eksternId, { emailVerified: true });
+  },
+  async slettBruker(eksternId) {
+    try {
+      await firebase().deleteUser(eksternId);
+    } catch (e) {
+      // Allerede borte: det er det som skulle skje.
+      if ((e as { code?: string }).code !== "auth/user-not-found") throw e;
+    }
   },
 };
 
@@ -118,6 +128,8 @@ export const krevInnlogging: MiddlewareHandler = async (c, next) => {
 const UTEN_BEKREFTELSE: [string, string][] = [
   ["PATCH", "/api/meg"],
   ["POST", "/api/meg/bekreftelse"],
+  // Kontoen kan alltid slettes.
+  ["DELETE", "/api/meg"],
 ];
 export const krevBekreftetEpost: MiddlewareHandler = async (c, next) => {
   if (c.req.method !== "GET" && !c.get("bruker").epostBekreftet && !UTEN_BEKREFTELSE.some(([m, sti]) => m === c.req.method && sti === c.req.path)) {

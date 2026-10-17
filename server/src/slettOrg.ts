@@ -84,13 +84,15 @@ export function slettAdminRuter() {
     return c.json(s);
   });
 
-  // Organisasjonene som er slettet eller stengt, med grunnen.
+  // Organisasjonene som er slettet eller stengt, med grunnen, og når materialet og filene til de
+  // stengte ble slettet etter oppbevaringstiden (oppbevaring.ts).
   r.get("/slettede", async (c) =>
     c.json(
       await somBetrodd(c.get("bruker").id, (db) =>
         alle(
           db,
-          `select id, navn, orgnr, type, slettet_at, slettet_av_navn, slettet_av_epost, av_plattformen, grunn, antall_fakturaer, oppbevares_til::text
+          `select id, navn, orgnr, type, slettet_at, slettet_av_navn, slettet_av_epost, av_plattformen, grunn, antall_fakturaer, oppbevares_til::text,
+                  materiale_slettet_at, filer_slettet_at
              from faktura.slettede_organisasjoner order by slettet_at desc`,
         ),
       ),

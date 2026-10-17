@@ -81,6 +81,12 @@ variable "app_domain" {
   default     = "adminkonsoll.no"
 }
 
+variable "nettsted_domene" {
+  description = "Domenet til nettstedet (landingsside/: landingssiden og de juridiske sidene). Det ligger på standardsiden i Firebase Hosting; appens domener ligger på appens egen side. Så lenge app_domain er det samme domenet (før appen flytter til sitt eget), har standardsiden appen. Passkeys hører til dette domenet når appen ligger på et underdomene av det. Tom = ikke noe eget domene. Se docs/domene.md."
+  type        = string
+  default     = "adminkonsoll.no"
+}
+
 variable "epost_avsender" {
   description = "Avsenderadressen for e-post fra appen (fakturaer, bekreftelser, varsler). Domenet må være verifisert i Resend; ellers sendes e-posten fra reserveadressen (EPOST_AVSENDER_RESERVE, faktura@hi4.no). På fakturaene settes selgerens navn foran, og svar går til selgeren."
   type        = string

@@ -16,15 +16,27 @@ import { config } from "./config.js";
 import { alle, en, somBruker, somSystem } from "./db.js";
 import { ApiFeil } from "./feil.js";
 
+// Domenet en passkey hører til (rp_id). Ligger appen på et underdomene av nettstedets domene
+// (app.adminkonsoll.no under adminkonsoll.no), hører den til nettstedets domene, så passkeys som
+// ble laget før appen flyttet dit, virker videre, og nye virker på begge (WebAuthn tillater et
+// overordnet domene). Ellers hører den til domenet brukeren er på.
+export function passkeyDomene(vert: string, nettsted = config.nettstedUrl): string {
+  const felles = nettsted ? domene(nettsted) : null;
+  return felles && (vert === felles || vert.endsWith(`.${felles}`)) ? felles : vert;
+}
+
 // Domenet passkeyen lages og brukes på: det av appens domener brukeren er på. Navnet vises i
 // nettleserens passkey-vindu.
 const rp = (c: Context) => {
   const origin = appUrlFra(c);
-  return { id: domene(origin), origin, navn: "Admin Konsoll" };
+  return { id: passkeyDomene(domene(origin)), origin, navn: "Admin Konsoll" };
 };
 // Svaret fra nettleseren godtas fra alle appens domener (nettleseren har allerede sjekket at
 // passkeyen hører til domenet brukeren er på), og rp_id sier hvilket det var.
-const godkjenteDomener = () => ({ expectedOrigin: appUrler(), expectedRPID: appUrler().map(domene) });
+const godkjenteDomener = () => ({
+  expectedOrigin: appUrler(),
+  expectedRPID: [...new Set(appUrler().flatMap((u) => [domene(u), passkeyDomene(domene(u))]))],
+});
 
 // Enkel hastighetsgrense per IP for innlogging (per instans).
 const forsok = new Map<string, { n: number; tid: number }>();

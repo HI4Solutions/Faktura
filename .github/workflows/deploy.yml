@@ -1,9 +1,9 @@
 name: Utrulling
 
-# Tester, og ruller så ut bildene, databasemigreringene, API, worker og nettappen (rull-ut.yml):
-# først til testflaten når den er satt opp, så til produksjon. Produksjon venter på testflaten,
-# og på godkjenning når miljøet «produksjon» i GitHub krever det (docs/miljoer.md). Kjører på main
-# når server/, db/ eller web/ endres.
+# Tester, og ruller så ut bildene, databasemigreringene, API, worker, nettappen og nettstedet
+# (rull-ut.yml): først til testflaten når den er satt opp, så til produksjon. Produksjon venter på
+# testflaten, og på godkjenning når miljøet «produksjon» i GitHub krever det (docs/miljoer.md).
+# Kjører på main når server/, db/, web/ eller landingsside/ endres.
 
 on:
   push:
@@ -12,7 +12,9 @@ on:
       - "server/**"
       - "db/**"
       - "web/**"
+      - "landingsside/**"
       - "scripts/migrer.sh"
+      - "scripts/publiser-hosting.sh"
       - ".github/workflows/deploy.yml"
       - ".github/workflows/rull-ut.yml"
       - ".github/workflows/miljoer.yml"

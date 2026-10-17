@@ -29,6 +29,7 @@ import { planleggMaanedsrapporter, sendRapporter, valgSkjema } from "./rapportmo
 import { varsleAarsoversikter } from "./lonnAarsoversikt.js";
 import { varsleTrekktabeller } from "./trekktabeller.js";
 import { sendEpostbekreftelse } from "./epostbekreftelse.js";
+import { slettUtloptMateriale } from "./oppbevaring.js";
 
 // Workeren nås bare av Cloud Scheduler, Cloud Tasks og Pub/Sub. Cloud Run sjekker
 // OIDC-tokenet (roles/run.invoker) før forespørselen kommer hit.
@@ -291,6 +292,13 @@ export async function gjenta() {
     await ryddVedlegg();
   } catch (e) {
     logg("ERROR", "Opprydding av vedlegg feilet", { feil: (e as Error).message });
+  }
+
+  // Stengte organisasjoner der oppbevaringstiden er ute: alt slettes, også filene (oppbevaring.ts).
+  try {
+    await slettUtloptMateriale();
+  } catch (e) {
+    logg("ERROR", "Sletting etter oppbevaringstiden feilet", { feil: (e as Error).message });
   }
 
   // EHF: hvilke kunder som kan motta EHF, endres sjelden, men kan endres når som helst.

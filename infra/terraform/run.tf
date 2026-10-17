@@ -26,10 +26,13 @@ locals {
     NODE_ENV               = "production"
   }
 
-  # De andre domenene appen svarer på, og dem den er flyttet fra (server/src/appadresse.ts).
+  # De andre domenene appen svarer på, og dem den er flyttet fra (server/src/appadresse.ts), og
+  # nettstedet (de juridiske sidene, passkeys på underdomener og videresendingen av gamle lenker
+  # til appen). scripts/publiser-hosting.sh leser APP_URL og NETTSTED_URL fra API-et.
   domene_env = { for k, v in {
     ANDRE_APP_URLER = join(",", [for d in var.app_domains : "https://${d}" if d != var.app_domain])
     GAMLE_APP_URLER = join(",", [for d in var.gamle_domener : "https://${d}" if d != var.app_domain])
+    NETTSTED_URL    = var.nettsted_domene == "" ? "" : "https://${var.nettsted_domene}"
   } : k => v if v != "" }
 
   # AI: Gemini på Vertex AI i EU (fakturautkast i API-et, forslag på innbetalinger i

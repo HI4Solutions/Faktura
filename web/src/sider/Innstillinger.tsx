@@ -15,6 +15,8 @@ import { oppdaterLegitimasjon, passkeyHer } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
 import { SlettOrganisasjon } from "../slettOrg";
+import type { Avtaler } from "../avtaler";
+import { SlettKonto } from "../slettKonto";
 
 type OrgDel = "organisasjon" | "faktura" | "betaling";
 type InnstillingFane = "organisasjon" | "faktura" | "personal" | "lonn" | "konto" | "app";
@@ -47,6 +49,7 @@ function underfaner(fane: InnstillingFane, org: MinOrg | null, orgs: MinOrg[]): 
         ["brukere", "Brukere"],
         ["roller", "Roller"],
         ["regnskapsforer", byraa ? "Klienter" : "Regnskapsfører"],
+        ["avtaler", "Avtaler"],
         ...(org?.rolle === "eier" && org.direkte_medlem ? [["slett", "Slett organisasjonen"] as [string, string]] : []),
       ];
     case "faktura":
@@ -81,7 +84,11 @@ function underfaner(fane: InnstillingFane, org: MinOrg | null, orgs: MinOrg[]): 
         ["bokforing", "Bokføring"],
       ];
     case "konto":
-      return [["innlogging", "Innlogging"], ...(orgs.some((o) => harFunksjon(o, "google_disk")) ? [["disk", "Google Disk"] as [string, string]] : [])];
+      return [
+        ["innlogging", "Innlogging"],
+        ...(orgs.some((o) => harFunksjon(o, "google_disk")) ? [["disk", "Google Disk"] as [string, string]] : []),
+        ["slett", "Slett kontoen"],
+      ];
     case "app":
       return [
         ["app", "App"],
@@ -177,6 +184,7 @@ export function Innstillinger() {
           {del === "brukere" && <Medlemmer />}
           {del === "roller" && <Tilgangsroller />}
           {del === "regnskapsforer" && <Regnskapsforer />}
+          {del === "avtaler" && <AvtaleGodkjenninger />}
           {del === "slett" && <SlettOrg />}
         </>
       )}
@@ -213,6 +221,51 @@ function useRullTil(id: string | null) {
     }, 100);
     return () => window.clearInterval(t);
   }, [id]);
+}
+
+// Bruksvilkårene og databehandleravtalen organisasjonen har godtatt: versjonene, hvem og når
+// (0122_avtaler.sql). En ny versjon godtas når appen ber om det.
+type Godkjenning = { id: string; vilkar_versjon: string; databehandleravtale_versjon: string; godtatt_at: string; godtatt_av_navn: string | null; godtatt_av_epost: string | null };
+function AvtaleGodkjenninger() {
+  const { org } = useKonto();
+  const { data, feil } = useData<{ gjeldende: Avtaler; godtatt: boolean; godkjenninger: Godkjenning[] }>(() => hent(`/org/${org!.id}/avtaler`), [org?.id]);
+  if (feil) return <Feil melding={feil} />;
+  if (!data) return <Laster />;
+  const { vilkar, databehandleravtale } = data.gjeldende;
+  return (
+    <div className="kort">
+      <h2>Avtaler</h2>
+      <p className="dempet">
+        Organisasjonen bruker Admin Konsoll etter <a href={vilkar.url} target="_blank" rel="noopener">bruksvilkårene</a> (versjon {vilkar.versjon}) og{" "}
+        <a href={databehandleravtale.url} target="_blank" rel="noopener">databehandleravtalen</a> (versjon {databehandleravtale.versjon}).{" "}
+        {data.godtatt ? "Versjonene som gjelder, er godtatt." : "Versjonene som gjelder, er ikke godtatt ennå."}
+      </p>
+      {data.godkjenninger.length ? (
+        <table className="tabell">
+          <thead>
+            <tr>
+              <th>Godtatt</th>
+              <th>Bruksvilkår</th>
+              <th>Databehandleravtale</th>
+              <th>Av</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.godkjenninger.map((g) => (
+              <tr key={g.id}>
+                <td>{dato(g.godtatt_at.slice(0, 10))}</td>
+                <td>{g.vilkar_versjon}</td>
+                <td>{g.databehandleravtale_versjon}</td>
+                <td>{g.godtatt_av_navn ?? g.godtatt_av_epost ?? "Slettet bruker"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="dempet">Ingen har godtatt avtalene for organisasjonen ennå.</p>
+      )}
+    </div>
+  );
 }
 
 // Eieren kan slette organisasjonen, med en grunn (se slettOrg.tsx).
@@ -751,6 +804,7 @@ function PersonalOppsett({ del }: { del: string }) {
 function MinKonto({ del }: { del: string }) {
   const { meg } = useKonto();
   if (del === "disk") return <GoogleDisk />;
+  if (del === "slett") return <SlettKonto />;
   return (
     <div className="kort">
       <h2 style={{ marginTop: 0 }}>{meg?.bruker.navn}</h2>
