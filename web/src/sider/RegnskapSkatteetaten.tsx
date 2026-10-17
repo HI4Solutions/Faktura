@@ -196,8 +196,9 @@ export function Skatteetaten() {
           </p>
         ) : (
           <p className="liten">
-            Krav og frister hentes fra Skatteetaten hver morgen{sist ? `, sist ${tid(sist)}` : ""}. Skatteetaten gir bare tilgang når dere har sendt inn noe gjennom
-            Admin Konsoll (f.eks. a-meldingen).
+            {/* Tidspunktet er siste vellykkede henting. Avviser Skatteetaten tilgangen, står forklaringen i feilen under. */}
+            Krav og frister hentes fra Skatteetaten hver morgen{sist ? `, sist ${tid(sist)}` : ""}.
+            {sist && !s.krav.feil && !s.frister.feil && " Siste henting gikk uten feil."}
           </p>
         )}
         {s.krav.feil && <div className="melding feil">Kravene ble ikke hentet: {s.krav.feil}</div>}

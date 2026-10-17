@@ -68,24 +68,27 @@ deretter i produksjon.
      hente data» i samme portal, og trekkpålegg (`skatteetaten:trekkpaalegg`, lønnstrekkene) i test
      med e-post til fremtidensinnkreving@skatteetaten.no.
    - `nav:helseytelser/sykepenger` (NAV, `docs/nav.md`) er åpent for alle og trenger ingen søknad.
-3. **Nøkkelen.** Lag nøkkelparet i Cloud Shell, i prosjektet `hi4-faktura-prod`. Den private
-   nøkkelen legges rett i Secret Manager og slettes etterpå; den skal aldri sendes på e-post, i
-   chat eller som skjermbilde.
+3. **Nøkkelen.** I Cloud Shell, fra repoet (`cd Faktura && git pull`):
 
    ```sh
-   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out maskinporten.pem
-   gcloud secrets versions add maskinporten-nokkel --data-file=maskinporten.pem --project=hi4-faktura-prod
-   # Den offentlige nøkkelen (JWK) til Samarbeidsportalen; «medinnova-1» er nøkkel-ID-en (kid).
-   node -e 'const c=require("crypto"),f=require("fs");const j=c.createPublicKey(f.readFileSync("maskinporten.pem")).export({format:"jwk"});console.log(JSON.stringify({kty:j.kty,e:j.e,n:j.n,kid:process.argv[1],alg:"RS256",use:"sig"}))' medinnova-1
-   shred -u maskinporten.pem
+   MILJO=test bash scripts/maskinporten.sh nokkel   # testklienten (hi4-faktura-test)
+   bash scripts/maskinporten.sh nokkel              # produksjonsklienten (hi4-faktura-prod)
    ```
 
-   Den offentlige nøkkelen (JWK-en som skrives ut) er ikke hemmelig.
+   Skriptet lager nøkkelparet og legger den private nøkkelen rett i Secret Manager (hemmeligheten
+   `maskinporten-nokkel-ny`), uten at den skrives til disk eller vises. Den skal aldri sendes på
+   e-post, i chat eller som skjermbilde. Den offentlige nøkkelen (JWK-en som skrives ut, med
+   nøkkel-ID-en `medinnova-1` i test og `medinnova-prod-1` i produksjon) er ikke hemmelig. Appen
+   bruker hemmeligheten `maskinporten-nokkel`; nøkkelen flyttes dit når klienten er sjekket
+   (punkt 4 og [miljoer.md](miljoer.md)).
 4. **Maskinporten-klienten.** I Samarbeidsportalen: **Klienter → Opprett klient**, velg
    Maskinporten, visningsnavn «Admin Konsoll» og en beskrivelse, og legg til scopene over (de som er
    godkjent; resten legges på den samme klienten senere). Legg inn den offentlige nøkkelen (JWK-en
    fra punkt 3) under nøklene på klienten. Noter klient-ID-en og nøkkel-ID-en (`kid`). «Scopes» i
    menyen er for dem som lager egne API-er, og «Tilganger» viser tilgangene Medinnova har fått.
+   Sjekk klienten i Cloud Shell med `KLIENT_ID=<klient-ID-en> bash scripts/maskinporten.sh sjekk`
+   (`MILJO=test` for testklienten): den ber Maskinporten om et token for hvert scope appen bruker,
+   og viser hvilke som virker.
 5. **GitHub-variablene** (Settings → Secrets and variables → Actions → Variables):
    - `MASKINPORTEN_KLIENT_ID`: klient-ID-en;
    - `MASKINPORTEN_NOKKEL_ID`: nøkkel-ID-en (kid);
@@ -101,7 +104,8 @@ deretter i produksjon.
    (regnearket med testpersoner i dokumentasjonen til API-et). Skattekortene i testmiljøet
    oppdateres hver dag kl. 06.
 8. **Produksjon.** Gjenta punkt 1–6 i produksjonsmiljøet (<https://sjolvbetjening.samarbeid.digdir.no>)
-   med en ny nøkkel, og sett `SKATTEETATEN_MILJO` til `prod`. Adressene til API-ene følger
+   med en ny nøkkel, i rekkefølgen i [miljoer.md](miljoer.md) («Før Skatteetaten, Altinn og NAV går
+   i produksjon»), og sett `SKATTEETATEN_MILJO` til `prod`. Adressene til API-ene følger
    miljøet; de kan overstyres med `MASKINPORTEN_URL`, `ALTINN_URL` og `SKATTEKORT_URL`.
 
 ## Kilder

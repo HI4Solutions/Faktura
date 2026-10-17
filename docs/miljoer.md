@@ -78,14 +78,52 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
 
 ## Før Skatteetaten, Altinn og NAV går i produksjon
 
-TT02-testene gjøres på testflaten. Før produksjon slås på (punktet «Produksjon» i
-[skattekort.md](skattekort.md), [amelding.md](amelding.md) og [nav.md](nav.md)):
+TT02-testene gjøres på testflaten. Produksjon får sin egen klient i Maskinporten, og den prøves
+før appen tar den i bruk (punktet «Produksjon» i [skattekort.md](skattekort.md),
+[amelding.md](amelding.md) og [nav.md](nav.md)). Før punkt 5 merker produksjonen ingenting.
 
-- Slett testbedriftene fra Tenor i produksjon (organisasjonsnummer som begynner på 2 eller 3):
-  Plattform → Organisasjoner → bedriften → «Slett organisasjonen».
-- Legg produksjonsklienten i Maskinporten inn i variablene i repoet: `MASKINPORTEN_KLIENT_ID`,
-  `MASKINPORTEN_NOKKEL_ID` og `SKATTEETATEN_MILJO` = `prod`, med en ny nøkkel i Secret Manager i
-  `hi4-faktura-prod`. Testflaten er ikke berørt, siden den har sine egne.
+1. **Tilgangene.** Logg inn i Samarbeidsportalen for produksjon
+   (<https://sjolvbetjening.samarbeid.digdir.no>); ber den om det, signerer du de samme
+   bruksvilkårene som i test ([skattekort.md](skattekort.md), punkt 1). «Tilganger» viser scopene
+   Medinnova har fått i produksjon. De som mangler, er ikke gitt ennå.
+2. **Klienten.** Klienter → Opprett klient → Maskinporten, visningsnavn «Admin Konsoll», med scopene
+   fra «Tilganger». Noter klient-ID-en.
+3. **Nøkkelen.** I Cloud Shell (`cd Faktura && git pull`):
+
+   ```sh
+   bash scripts/maskinporten.sh nokkel
+   ```
+
+   Den private nøkkelen går rett i hemmeligheten `maskinporten-nokkel-ny` i `hi4-faktura-prod` og
+   vises aldri. Lim den offentlige nøkkelen (JWK-en som skrives ut, med nøkkel-ID-en
+   `medinnova-prod-1`) inn under nøklene på klienten.
+4. **Sjekken.**
+
+   ```sh
+   KLIENT_ID=<klient-ID-en> bash scripts/maskinporten.sh sjekk
+   ```
+
+   Skriptet ber Maskinporten om et token for hvert scope appen bruker, og viser ✓, eller ✗ med
+   feilen. `invalid_scope` betyr at scopet ikke er lagt på klienten eller ikke er gitt ennå. Feiler
+   alle likt med `invalid_grant`, stemmer ikke klient-ID-en, nøkkelen eller nøkkel-ID-en.
+   `MILJO=test` sjekker testklienten på samme måte.
+5. **Slå på produksjon**, når sjekken viser det som trengs, i denne rekkefølgen:
+   - Slett testbedriftene fra Tenor i produksjon (organisasjonsnummer som begynner på 2 eller 3):
+     Plattform → Organisasjoner → bedriften → «Slett organisasjonen».
+   - Ta nøkkelen i bruk, i Cloud Shell:
+
+     ```sh
+     gcloud secrets versions access latest --secret=maskinporten-nokkel-ny --project=hi4-faktura-prod \
+       | gcloud secrets versions add maskinporten-nokkel --data-file=- --project=hi4-faktura-prod
+     gcloud secrets delete maskinporten-nokkel-ny --project=hi4-faktura-prod
+     ```
+
+   - Variablene i repoet: `MASKINPORTEN_KLIENT_ID` (klient-ID-en), `MASKINPORTEN_NOKKEL_ID`
+     (`medinnova-prod-1`) og `SKATTEETATEN_MILJO` = `prod`. Testflaten er ikke berørt, siden den
+     har sine egne.
+   - Kjør Infrastruktur fra main, og godkjenn produksjon. Trykk så Plattform → Drift → «Registrer
+     systemet i Altinn» på adminkonsoll.no.
+   - Gi NAV beskjed første gang sykepenger brukes i produksjon ([nav.md](nav.md), punkt 6).
 
 ## Flytte prosjektene til medinnova.no
 
