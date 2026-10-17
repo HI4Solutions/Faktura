@@ -417,7 +417,7 @@ export async function lagSaft(db: Db, org: string, aar: number, bruker: { navn: 
     t("AuditFileVersion", versjon),
     t("AuditFileCountry", "NO"),
     t("AuditFileDateCreated", naa.dato),
-    t("SoftwareCompanyName", "HI4 Solutions"),
+    t("SoftwareCompanyName", "Medinnova AS"),
     t("SoftwareID", "Admin Konsoll"),
     t("SoftwareVersion", "1.0"),
     el("Company", [

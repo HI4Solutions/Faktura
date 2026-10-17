@@ -44,7 +44,7 @@ function Merkevarepanel() {
           </li>
         </ul>
       </div>
-      <div className="bunntekst">© {new Date().getFullYear()} HI4 Solutions</div>
+      <div className="bunntekst">© {new Date().getFullYear()} Medinnova AS</div>
     </aside>
   );
 }

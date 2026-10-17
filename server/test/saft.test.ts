@@ -184,6 +184,7 @@ describe.skipIf(!process.env.DATABASE_URL)("SAF-T-filen", () => {
     expect(a.Header).toMatchObject({
       AuditFileVersion: "1.30",
       AuditFileCountry: "NO",
+      SoftwareCompanyName: "Medinnova AS",
       SoftwareID: "Admin Konsoll",
       Company: { RegistrationNumber: "915000533", Name: "SAF-T Legesenter AS", Address: { StreetName: "Fjordgata 1", City: "Bergen", PostalCode: "5003", Country: "NO" } },
       DefaultCurrencyCode: "NOK",
