@@ -18,18 +18,22 @@ export const A_ORDNING = "urn:altinn:accesspackage:a-ordning";
 export const NAV_SYKEPENGER = "urn:altinn:accesspackage:lonn-personopplysninger-saerlig-kategori";
 // Tilgangspakken for krav og betalinger og frister fra Skatteetaten (docs/skatteetaten-krav.md).
 export const KRAV_OG_UTLEGG = "urn:altinn:accesspackage:krav-og-utlegg";
+// Tilgangspakken for årsregnskapet til Brønnøysundregistrene (docs/aarsregnskap.md).
+export const REGNSKAP_OKONOMI_RAPPORT = "urn:altinn:accesspackage:regnskap-okonomi-rapport";
 // Tilgangspakkene systemet trenger nå: «Lønn» alltid, og de for funksjonene som er slått på.
 export const tilgangspakker = () => [
   TILGANGSPAKKE,
   ...(config.ameldingInnsending ? [A_ORDNING] : []),
   ...(config.navSykepenger ? [NAV_SYKEPENGER] : []),
   ...(config.kravOgFrister ? [KRAV_OG_UTLEGG] : []),
+  ...(config.aarsregnskapInnsending ? [REGNSKAP_OKONOMI_RAPPORT] : []),
 ];
 export const PAKKENAVN: Record<string, string> = {
   [TILGANGSPAKKE]: "Lønn",
   [A_ORDNING]: "A-ordningen",
   [NAV_SYKEPENGER]: "Lønn med personopplysninger av særlig kategori",
   [KRAV_OG_UTLEGG]: "Krav, betalinger og utlegg",
+  [REGNSKAP_OKONOMI_RAPPORT]: "Regnskap og økonomirapportering",
 };
 // Hva hver tilgangspakke brukes til (teksten i appen når den mangler).
 export const PAKKEBRUK: Record<string, string> = {
@@ -37,6 +41,7 @@ export const PAKKEBRUK: Record<string, string> = {
   [A_ORDNING]: "a-meldingen",
   [NAV_SYKEPENGER]: "sykmeldinger og inntektsmeldinger hos NAV",
   [KRAV_OG_UTLEGG]: "krav, betalinger og frister fra Skatteetaten",
+  [REGNSKAP_OKONOMI_RAPPORT]: "årsregnskapet til Brønnøysundregistrene",
 };
 // Adressen Altinn sender brukeren tilbake til (må stå i systemregisteret, nøyaktig slik). Forespørslene
 // lages i bakgrunnen og bruker hoveddomenet; systemregisteret har adressen på alle appens domener, så
@@ -85,11 +90,18 @@ function beskrivelse(navn: string) {
         nn: `${navn} hentar skattekorta til dei tilsette frå Skatteetaten til lønnskøyringa.`,
         en: `${navn} retrieves the employees' tax deduction cards from the Norwegian Tax Administration for payroll.`,
       };
-  if (!krav) return tekst;
+  const medKrav = !krav
+    ? tekst
+    : {
+        nb: `${tekst.nb} Regnskapet viser kravene, betalingene og fristene hos Skatteetaten.`,
+        nn: `${tekst.nn} Rekneskapen viser krava, betalingane og fristane hos Skatteetaten.`,
+        en: `${tekst.en} The accounts show the claims, payments and deadlines at the Norwegian Tax Administration.`,
+      };
+  if (!config.aarsregnskapInnsending) return medKrav;
   return {
-    nb: `${tekst.nb} Regnskapet viser kravene, betalingene og fristene hos Skatteetaten.`,
-    nn: `${tekst.nn} Rekneskapen viser krava, betalingane og fristane hos Skatteetaten.`,
-    en: `${tekst.en} The accounts show the claims, payments and deadlines at the Norwegian Tax Administration.`,
+    nb: `${medKrav.nb} Årsregnskapet fylles ut i Altinn til Brønnøysundregistrene, og signeres der.`,
+    nn: `${medKrav.nn} Årsrekneskapen blir fylt ut i Altinn til Brønnøysundregistera, og signert der.`,
+    en: `${medKrav.en} The annual accounts are filled in in Altinn for the Brønnøysund Register Centre, and signed there.`,
   };
 }
 

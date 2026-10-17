@@ -2833,10 +2833,24 @@ table.aars-tabell tr.sum td { font-weight: 650; border-top: 1px solid var(--kant
 @media (max-width: 900px) {
   .aars-tabeller { grid-template-columns: 1fr; }
 }
-/* På mobil: bare året (fjoråret står i rapportene). */
+/* Regnskap → Årsregnskap (RegnskapAarsregnskap.tsx): oppstillingen med overskrifter, innrykk og
+   hovedsummer, fjorårstallene for hånd, og skjemaene for fastsettelsen og notene. */
+table.aarsregnskap-tabell tr.overskrift td { padding-top: 14px; padding-bottom: 4px; font-weight: 650; color: var(--tekst); border-bottom: none; }
+table.aarsregnskap-tabell tr.overskrift.niva-1 td { font-size: 1rem; padding-top: 18px; }
+table.aarsregnskap-tabell tr.overskrift.niva-3 td { font-weight: 600; color: var(--tekst-2); }
+table.aars-tabell td.innrykk { padding-left: 18px; }
+table.aars-tabell tr.sum.hoved td { font-weight: 700; border-top: 2px solid var(--kant-sterk); }
+.fjor-felt { width: 112px; max-width: 100%; text-align: right; padding: 4px 6px; }
+fieldset.aarsregnskap-skjema { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.aarsregnskap-skjema > .kort { margin-top: 16px; }
+.aarsregnskap-gjeld { margin: 6px 0 14px; }
+.aarsregnskap-gjeld summary { cursor: pointer; font-weight: 550; margin-bottom: 10px; }
+/* På mobil: bare året (fjoråret står i rapportene), unntatt når fjorårstallene legges inn. */
 @media (max-width: 700px) {
   table.aars-tabell td, table.aars-tabell th { padding-left: 6px; padding-right: 6px; }
   table.aars-tabell .aars-fjor { display: none; }
+  table.aars-tabell.fjor-redigering .aars-fjor { display: table-cell; }
+  table.aars-tabell td.innrykk { padding-left: 12px; }
 }
 /* Regnskap → Mva (RegnskapMva.tsx). */
 .mva-sum { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 12px 0 8px; }

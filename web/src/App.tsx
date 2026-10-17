@@ -43,7 +43,7 @@ import { iFakturadelen } from "./fakturameny";
 import { SkattekortGodkjent } from "./sider/Skattekort";
 import { Menyark, UlesteTall, bunnModuler, initialer, nye, snarveier, useBunnValg, type MenyIkon, type MenyPunkt, type Modul } from "./meny";
 import {
-  IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
+  IkonAarsoppgjor, IkonAarsregnskap, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
   IkonFravaer, IkonHoyre, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva,
   IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonRegnskap, IkonReise, IkonSjekkliste, IkonSkatteetaten, IkonSkattekort, IkonSkjold, IkonTavle,
   IkonTimebank, IkonUtgift, IkonVelg, IkonVenstre,
@@ -369,6 +369,7 @@ function Ramme() {
     ["saldobalanse", "Saldobalanse", IkonBalanse, "Avslutning"],
     ["periodiseringer", "Periodiseringer", IkonPeriodisering, "Avslutning"],
     ["aarsoppgjor", "Årsoppgjør", IkonAarsoppgjor, "Avslutning"],
+    ["aarsregnskap", "Årsregnskap", IkonAarsregnskap, "Avslutning"],
     ["anlegg", "Anleggsmidler", IkonAnlegg, "Eiendeler og kontoer"],
     ["saldo", "Saldoavskrivninger", IkonAvskrivning, "Eiendeler og kontoer"],
     ["kontoer", "Kontoer", IkonKontoplan, "Eiendeler og kontoer"],
@@ -807,7 +808,7 @@ function Ramme() {
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
             <Route path="/sjekklister" element={<Krever kode="sjekklister" navn="Sjekklister"><Sjekklister /></Krever>} />
             <Route path="/lonn" element={<Krever kode="lonn" navn="Lønn"><Lonn /></Krever>} />
-            <Route path="/skattekort/godkjent" element={<Krever kode="lonn" navn="Skattekort"><SkattekortGodkjent /></Krever>} />
+            <Route path="/skattekort/godkjent" element={<Krever kode={["lonn", "regnskap"]} navn="Tilgang i Altinn"><SkattekortGodkjent /></Krever>} />
             <Route path="/timer" element={<Timer />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="/verifisering" element={<Verifisering />} />

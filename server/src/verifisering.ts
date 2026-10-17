@@ -42,6 +42,9 @@ export const slaOppEnhet = (nr: string) => hentEnhet(nr, true);
 
 // Rollene i Brreg, men uten å stoppe verifiseringen om oppslaget feiler.
 const rollerEllerIngen = (orgnr: string) => hentRoller(orgnr).catch((): Rolle[] => []);
+// Rollene til skjemaene (årsregnskapet), med testbedriftene fra testmiljøet; tom liste om
+// oppslaget feiler.
+export const slaOppRoller = (orgnr: string) => hentRoller(orgnr, true).catch((): Rolle[] => []);
 const rolleTekst = (r: Rolle) => `${r.navn} står som ${r.rolle.toLowerCase()} i Enhetsregisteret`;
 
 export const erPlattformadmin = (epost: string) => config.adminEposter.includes(epost.toLowerCase());

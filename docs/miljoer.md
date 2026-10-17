@@ -48,7 +48,8 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
    disse, med de samme verdiene som i repoet i dag (Settings → Secrets and variables → Actions →
    Variables), så testflaten beholder testklienten i Maskinporten når produksjon får sin egen:
    - `MASKINPORTEN_KLIENT_ID` og `MASKINPORTEN_NOKKEL_ID`;
-   - `AMELDING_INNSENDING`, og `NAV_SYKEPENGER` og `KRAV_OG_FRISTER` om de er satt.
+   - `AMELDING_INNSENDING`, og `NAV_SYKEPENGER`, `KRAV_OG_FRISTER` og `AARSREGNSKAP_INNSENDING` om de
+     er satt.
 3. **Infrastrukturen.** Actions → Infrastruktur → Run workflow, fra grenen `main` (standardgrenen
    i repoet er en annen, og fra den lager Infrastruktur bare en plan). Første gang tar det rundt et
    kvarter, mest for databasen. DNS-oppføringen står i loggen for testjobben (`dns_for_domener`);

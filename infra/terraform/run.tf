@@ -43,15 +43,16 @@ locals {
   # Skattekort fra Skatteetaten (Maskinporten og systembruker i Altinn). Uten klient-ID er
   # funksjonen skjult. Nøkkelen har bare workeren (hemmeligheten maskinporten-nokkel).
   skattekort_env = { for k, v in {
-    SKATTEETATEN_MILJO     = var.skatteetaten_miljo
-    MASKINPORTEN_KLIENT_ID = var.maskinporten_klient_id
-    MASKINPORTEN_NOKKEL_ID = var.maskinporten_nokkel_id
-    LEVERANDOR_ORGNR       = var.leverandor_orgnr
-    ALTINN_SYSTEMNAVN      = var.altinn_systemnavn
-    ALTINN_SYSTEM_ID       = var.altinn_system_id
-    AMELDING_INNSENDING    = var.amelding_innsending ? "1" : ""
-    NAV_SYKEPENGER         = var.nav_sykepenger ? "1" : ""
-    KRAV_OG_FRISTER        = var.krav_og_frister ? "1" : ""
+    SKATTEETATEN_MILJO      = var.skatteetaten_miljo
+    MASKINPORTEN_KLIENT_ID  = var.maskinporten_klient_id
+    MASKINPORTEN_NOKKEL_ID  = var.maskinporten_nokkel_id
+    LEVERANDOR_ORGNR        = var.leverandor_orgnr
+    ALTINN_SYSTEMNAVN       = var.altinn_systemnavn
+    ALTINN_SYSTEM_ID        = var.altinn_system_id
+    AMELDING_INNSENDING     = var.amelding_innsending ? "1" : ""
+    NAV_SYKEPENGER          = var.nav_sykepenger ? "1" : ""
+    KRAV_OG_FRISTER         = var.krav_og_frister ? "1" : ""
+    AARSREGNSKAP_INNSENDING = var.aarsregnskap_innsending ? "1" : ""
   } : k => v if v != "" }
 }
 

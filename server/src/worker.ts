@@ -18,6 +18,7 @@ import { endreTilgang, hentSkattekort, hentSkattekortSvar, lagTilgang, planleggD
 import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingInnsending.js";
 import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepenger.js";
 import { hentKravOgFrister, planleggKravOgFrister } from "./skatteetatenKrav.js";
+import { planleggAarsregnskapssjekk, sendAarsregnskap, sjekkAarsregnskap, trekkTilbakeAarsregnskap } from "./aarsregnskapInnsending.js";
 import { hentFraAordningen } from "./aordning.js";
 import { aktiverLonnsendringer } from "./lonnsendringer.js";
 import { lonnHverMorgen, oppdaterLonnsutkast } from "./lonnAutomatikk.js";
@@ -179,6 +180,9 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "nav-hent") return hentFraNav(o.org_id);
   if (o.type === "nav-inntektsmelding") return sendInntektsmelding(o.org_id, o.inntektsmelding_id);
   if (o.type === "skatteetaten-hent") return void (await hentKravOgFrister(o.org_id));
+  if (o.type === "aarsregnskap-send") return sendAarsregnskap(o.org_id, o.aarsregnskap_id);
+  if (o.type === "aarsregnskap-status") return sjekkAarsregnskap(o.org_id, o.aarsregnskap_id);
+  if (o.type === "aarsregnskap-tilbake") return trekkTilbakeAarsregnskap(o.org_id, o.aarsregnskap_id);
   if (o.type === "aordning-hent") return void (await hentFraAordningen(o.org_id, o.bestilling, o.forsok, o.maaned));
   if (o.type === "rapport-send") return sendRapporter(o);
   if (o.type === "epostbekreftelse") return sendEpostbekreftelse(o);
@@ -649,6 +653,24 @@ export function lagWorker() {
     return c.json((await hentKravOgFrister(o.org_id)) ?? { ok: true });
   });
 
+  // Årsregnskapet i Altinn: sendingen til signering, statusen og tilbaketrekkingen.
+  const aarsregnskapOppgave = skattOppgave.extend({ aarsregnskap_id: z.string().uuid() });
+  app.post("/oppgaver/aarsregnskap-send", async (c) => {
+    const o = aarsregnskapOppgave.parse(await c.req.json());
+    await sendAarsregnskap(o.org_id, o.aarsregnskap_id);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/aarsregnskap-status", async (c) => {
+    const o = aarsregnskapOppgave.parse(await c.req.json());
+    await sjekkAarsregnskap(o.org_id, o.aarsregnskap_id);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/aarsregnskap-tilbake", async (c) => {
+    const o = aarsregnskapOppgave.parse(await c.req.json());
+    await trekkTilbakeAarsregnskap(o.org_id, o.aarsregnskap_id);
+    return c.json({ ok: true });
+  });
+
   // Ansatte fra a-ordningen: avstemmingsrapporten bestilles og hentes (aordning.ts).
   app.post("/oppgaver/aordning-hent", async (c) => {
     const o = skattOppgave
@@ -691,7 +713,8 @@ export function lagWorker() {
   // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker
   // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
   // a-meldingene som venter på tilbakemelding. Krav og frister fra Skatteetaten hentes når tilgangen
-  // er godkjent og hver morgen fra kl. 06 (skatteetatenKrav.ts). Lønnsutkastene der noe er endret, regnes ut på nytt,
+  // er godkjent og hver morgen fra kl. 06 (skatteetatenKrav.ts), og årsregnskapene som venter på
+  // signering i Altinn, sjekkes (aarsregnskapInnsending.ts). Lønnsutkastene der noe er endret, regnes ut på nytt,
   // fakturaene og innbetalingene som ikke er bokført, bokføres (salgBokforing.ts), og bankpostene
   // avstemmes (bankAvstemming.ts). Fra kl. 08 den 1. går månedsavslutningen (maanedsavslutning.ts), og
   // når den er ferdig for alle, månedsrapportene til regnskapsførerne som har bedt om dem.
@@ -705,6 +728,7 @@ export function lagWorker() {
     await planleggAmeldingssjekk().catch((e) => logg("ERROR", "Sjekk av a-meldingene feilet", { feil: (e as Error).message }));
     await planleggNavHenting().catch((e) => logg("ERROR", "Planlegging av hentingen fra NAV feilet", { feil: (e as Error).message }));
     await planleggKravOgFrister().catch((e) => logg("ERROR", "Planlegging av krav og frister fra Skatteetaten feilet", { feil: (e as Error).message }));
+    await planleggAarsregnskapssjekk().catch((e) => logg("ERROR", "Sjekk av årsregnskapene i Altinn feilet", { feil: (e as Error).message }));
     await oppdaterLonnsutkast().catch((e) => logg("ERROR", "Omregningen av lønnsutkastene feilet", { feil: (e as Error).message }));
     await bokforSalgForAlle().catch((e) => logg("ERROR", "Bokføringen av fakturaene og innbetalingene feilet", { feil: (e as Error).message }));
     await avstemBankForAlle().catch((e) => logg("ERROR", "Avstemmingen av banken feilet", { feil: (e as Error).message }));

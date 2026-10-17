@@ -43,6 +43,7 @@ const ADRESSER = {
     nav: "https://sykepenger-api.ekstern.dev.nav.no",
     krav: "https://kravogbetalinger.api.skatteetaten-test.no/v1/regnskapssystem",
     frister: "https://frister.api.skatteetaten-test.no/v1/regnskapssystem",
+    brreg: "https://brg.apps.tt02.altinn.no",
   },
   prod: {
     maskinporten: "https://maskinporten.no",
@@ -53,6 +54,7 @@ const ADRESSER = {
     nav: "https://sykepenger-api.nav.no",
     krav: "https://kravogbetalinger.api.skatteetaten.no/v1/regnskapssystem",
     frister: "https://frister.api.skatteetaten.no/v1/regnskapssystem",
+    brreg: "https://brg.apps.altinn.no",
   },
 };
 
@@ -67,6 +69,8 @@ export function adresser() {
     nav: config.navUrl ?? a.nav,
     krav: config.kravUrl ?? a.krav,
     frister: config.fristerUrl ?? a.frister,
+    // Brønnøysundregistrenes apper i Altinn 3 (årsregnskapet).
+    brreg: config.brregAppUrl ?? a.brreg,
   };
 }
 
@@ -91,6 +95,9 @@ export const SCOPE = {
   // Krav og betalinger og frister fra Skatteetaten (hvert sitt token, så det ene virker uten det andre).
   krav: "skatteetaten:kravogbetalinger",
   frister: "skatteetaten:frister",
+  // Årsregnskapet: instansene i Brønnøysunds app i Altinn (Maskinporten-tokenet byttes til et
+  // Altinn-token).
+  aarsregnskap: "altinn:instances.read altinn:instances.write",
 };
 
 const b64 = (x: string | Buffer) => Buffer.from(x).toString("base64url");

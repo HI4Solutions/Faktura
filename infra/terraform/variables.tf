@@ -159,6 +159,12 @@ variable "krav_og_frister" {
   default     = false
 }
 
+variable "aarsregnskap_innsending" {
+  description = "Årsregnskapet sendes til signering i Altinn (Brønnøysundregistrenes app for årsregnskapet; Medinnova AS har lagt scopene altinn:instances.read og altinn:instances.write på Maskinporten-klienten), og systemet i Altinn ber om tilgangspakken «Regnskap og økonomirapportering». Settes med GitHub-variabelen AARSREGNSKAP_INNSENDING (true)."
+  type        = bool
+  default     = false
+}
+
 variable "maskinporten_nokkel_id" {
   description = "Nøkkel-ID-en (kid) til nøkkelen på Maskinporten-klienten. Settes med GitHub-variabelen MASKINPORTEN_NOKKEL_ID."
   type        = string

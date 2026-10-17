@@ -52,6 +52,11 @@ describe("rapportmodulen: valg og perioder", () => {
     );
   });
 
+  it("årsregnskapet: for året, for Regnskap, ikke månedlig", () => {
+    const r = rapport("regnskap.aarsregnskap")!;
+    expect([r.modul, r.navn, r.parameter, r.tilgang, r.funksjon, r.maanedlig ?? false]).toEqual(["regnskap", "Årsregnskap", "aar", "regnskap", "regnskap", false]);
+  });
+
   it("kravene, fristene og betalingene fra Skatteetaten er med bare når hentingen er slått på", () => {
     const skatt = RAPPORTER.filter((r) => r.id.startsWith("regnskap.skatteetaten_"));
     expect(skatt.map((r) => [r.id, r.parameter, r.maanedlig, r.tilgang, r.funksjon])).toEqual([
@@ -218,6 +223,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "regnskap.mva",
         "regnskap.resultat",
         "regnskap.balanse",
+        "regnskap.aarsregnskap",
         "regnskap.mva_justering",
         "regnskap.naeringsspesifikasjon",
       ],
@@ -253,6 +259,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "regnskap.mva",
         "regnskap.resultat",
         "regnskap.balanse",
+        "regnskap.aarsregnskap",
         "regnskap.mva_justering",
         "regnskap.naeringsspesifikasjon",
       ]);

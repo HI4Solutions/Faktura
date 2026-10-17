@@ -5,9 +5,10 @@
 // (RegnskapPeriodiseringer.tsx), månedsavslutningen (RegnskapAvslutning.tsx), saldoavskrivningene
 // (skattemessig, med goodwill i gruppe b) og kontoene. Eier, administrator og regnskap, med
 // funksjonen «Regnskap». Kravene, betalingene og fristene hos Skatteetaten står i fanen «Skatteetaten»
-// (RegnskapSkatteetaten.tsx).
+// (RegnskapSkatteetaten.tsx), og årsregnskapet til Brønnøysundregistrene i fanen «Årsregnskap»
+// (RegnskapAarsregnskap.tsx).
 //
-// Fanen står i adressen (?fane=bilag|utgifter|bank|mva|skatteetaten|saldobalanse|aarsoppgjor|anlegg|periodiseringer|
+// Fanen står i adressen (?fane=bilag|utgifter|bank|mva|skatteetaten|saldobalanse|aarsoppgjor|aarsregnskap|anlegg|periodiseringer|
 // saldo|kontoer), og det som er åpent, med ?anlegg=, ?periodisering=, ?utgift=, ?post= eller ?aar= (og ?termin=).
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -23,6 +24,7 @@ import { Utgifter } from "./RegnskapUtgifter";
 import { Bank, visKonto, type Bankoversikt } from "./RegnskapBank";
 import { Mva } from "./RegnskapMva";
 import { Aarsoppgjor } from "./RegnskapAarsoppgjor";
+import { Aarsregnskap } from "./RegnskapAarsregnskap";
 import { Skatteetaten } from "./RegnskapSkatteetaten";
 import { Kapitalvare, justeringTekst, salgsforslag, type Kapitalvarestatus } from "./RegnskapMvaJustering";
 
@@ -131,6 +133,7 @@ export function Regnskap() {
     ["skatteetaten", "Skatteetaten"],
     ["saldobalanse", "Saldobalanse"],
     ["aarsoppgjor", "Årsoppgjør"],
+    ["aarsregnskap", "Årsregnskap"],
     ["anlegg", "Anleggsmidler"],
     ["periodiseringer", "Periodiseringer"],
     ["saldo", "Saldoavskrivninger"],
@@ -180,6 +183,7 @@ export function Regnskap() {
       {fane === "skatteetaten" && <Skatteetaten />}
       {fane === "saldobalanse" && <Saldobalansen />}
       {fane === "aarsoppgjor" && <Aarsoppgjor key={sok.get("aar") ?? ""} aar={sok.get("aar")} velg={(aar) => ga({ aar })} />}
+      {fane === "aarsregnskap" && <Aarsregnskap key={sok.get("aar") ?? ""} aar={sok.get("aar")} velg={(aar) => ga({ aar })} />}
       {fane === "anlegg" && <Anleggsmidler apne={(id) => ga({ anlegg: id })} />}
       {fane === "periodiseringer" && <Periodiseringer apne={(id) => ga({ periodisering: id })} />}
       {fane === "saldo" && <Saldoavskrivninger />}

@@ -1015,6 +1015,25 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `regnskap.skatteetaten_betalinger` (bare når hentingen er på, `Rapportdef.aktiv`). Av til
   `KRAV_OG_FRISTER` er satt; da ber systemet i Altinn også om tilgangspakken, og kunder som er
   koblet til, utvider tilgangen som for a-meldingen
+- Årsregnskapet til Brønnøysundregistrene (`0120_aarsregnskap.sql`, `server/src/aarsregnskap.ts`,
+  `server/src/aarsregnskapXml.ts`, `server/src/aarsregnskapInnsending.ts`,
+  `server/src/aarsregnskapPdf.ts`, `web/src/sider/RegnskapAarsregnskap.tsx`,
+  `docs/aarsregnskap.md`): oppstillingen for små foretak (resultatregnskapet og balansen med
+  fjoråret, postene i underskjemaet med kontointervallene i NS 4102, `RESULTAT` og `BALANSE`) regnes
+  fra `kontosummer` i årsoppgjøret og avrundes til hele kroner med øreavrundingen mot annen
+  egenkapital. Det brukeren fyller ut (fastsettelsen, revisjonen, notene og fjorårstall for hånd),
+  ligger i `aarsregnskap.opplysninger`, én rad per år; antall årsverk foreslås av `aarsverk` (security
+  definer, så Regnskap ser tallet uten personaldataene). Hovedskjemaet (1266/51820) og underskjemaet
+  (758/51980) valideres mot XSD-ene i testene. Innsendingen: `aarsregnskap-send` lager instansen i
+  Altinn-appen `brg/aarsregnskap-vanlig-202406` med systembrukeren (tilgangspakken «Regnskap og
+  økonomirapportering», Maskinporten-tokenet byttet til et Altinn-token), laster opp skjemaene,
+  validerer og låser for signering (`process/next` confirm; ikke når det skal revideres);
+  `aarsregnskap-tilbake` låser opp (reject); hjerteslaget sjekker de som venter på signering
+  (`aarsregnskap-status`: hvert kvarter det første døgnet, så hver sjette time i 90 dager) til
+  instansen er avsluttet (levert). Regnskap kan be om og utvide tilgangen i Altinn uten Lønn
+  (`be_om_altinntilgang_regnskap`, `be_om_utvidet_tilgang_regnskap`). Rapporten
+  `regnskap.aarsregnskap`. Av til `AARSREGNSKAP_INNSENDING` er satt; da ber systemet i Altinn også
+  om tilgangspakken
 - Lønns- og stillingsendringer (`0080_lonnsendringer.sql`, `server/src/lonnsendringer.ts`,
   `web/src/sider/Lonnsendringer.tsx`): lønnen og stillingsprosenten har en historikk
   (`lonnsendringer`). Hver endring gjelder fra en dato og har bare feltene som endres (lønnstypen,

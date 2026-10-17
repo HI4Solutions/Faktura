@@ -16,6 +16,7 @@ export interface Enhet {
   hjemmeside: string | null;
   epost: string | null;
   organisasjonsform?: string | null; // ENK, AS …
+  stiftelsesdato?: string | null; // ÅÅÅÅ-MM-DD
 }
 
 // testmiljo: testbedriftene (erTestbedrift) slås opp i Brønnøysundregistrenes testmiljø. Bare for
@@ -42,6 +43,7 @@ export async function hentEnhet(nr: string, testmiljo = false): Promise<Enhet> {
     hjemmeside: e.hjemmeside ?? null,
     epost: e.epostadresse ?? e.epost ?? null,
     organisasjonsform: e.organisasjonsform?.kode ?? null,
+    stiftelsesdato: e.stiftelsesdato ?? null,
   };
 }
 
@@ -89,9 +91,11 @@ const ROLLENAVN: Record<string, string> = {
 export const LEDERROLLER = new Set(["DAGL", "LEDE", "NEST", "MEDL", "INNH", "KOMP", "DTPR", "DTSO", "BEST", "REPR", "KONT", "FFØR"]);
 
 // Personene med roller i foretaket, fra Brregs åpne API (fratrådte og døde tas ikke med).
-export async function hentRoller(nr: string): Promise<Rolle[]> {
+// testmiljo: testbedriftene slås opp i testmiljøet (som hentEnhet).
+export async function hentRoller(nr: string, testmiljo = false): Promise<Rolle[]> {
   if (!orgnrGyldig(nr)) throw new ApiFeil(400, "Ugyldig organisasjonsnummer");
-  const r = await fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${nr}/roller`, { headers: { accept: "application/json" } });
+  const vert = testmiljo && erTestbedrift(nr) ? "data.ppe.brreg.no" : "data.brreg.no";
+  const r = await fetch(`https://${vert}/enhetsregisteret/api/enheter/${nr}/roller`, { headers: { accept: "application/json" } });
   if (r.status === 404 || r.status === 410) return [];
   if (!r.ok) throw new ApiFeil(502, "Enhetsregisteret svarer ikke");
   return tilRoller(await r.json());

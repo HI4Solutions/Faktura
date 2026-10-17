@@ -105,6 +105,12 @@ export const config = {
   kravOgFrister: ["1", "true", "ja"].includes((valgfri("KRAV_OG_FRISTER") ?? "").toLowerCase()),
   kravUrl: valgfri("KRAV_OG_BETALINGER_URL"),
   fristerUrl: valgfri("FRISTER_URL"),
+  // Årsregnskapet til Brønnøysundregistrene gjennom Altinn (docs/aarsregnskap.md): på når Medinnova
+  // AS har lagt scopene altinn:instances.read og altinn:instances.write på Maskinporten-klienten. Da
+  // ber systemet også om tilgangspakken «Regnskap og økonomirapportering», og årsregnskapet kan sendes
+  // til signering i Altinn. Adressen til Brønnøysunds app følger miljøet; den kan overstyres (tester).
+  aarsregnskapInnsending: ["1", "true", "ja"].includes((valgfri("AARSREGNSKAP_INNSENDING") ?? "").toLowerCase()),
+  brregAppUrl: valgfri("BRREG_APP_URL"),
 
   // AI: Gemini på Vertex AI i prosjektet (uten prosjekt er AI-funksjonene skjult), i EU.
   // Regionen kan også være multiregionen «eu» eller «global».

@@ -23,6 +23,7 @@ export const SCOPES = [
   ["nav:helseytelser/sykepenger", "Sykepenger fra NAV"],
   ["skatteetaten:kravogbetalinger", "Krav og betalinger"],
   ["skatteetaten:frister", "Frister"],
+  ["altinn:instances.read altinn:instances.write", "Årsregnskapet til Brønnøysundregistrene (Altinn)"],
 ];
 
 export const MASKINPORTEN = { test: "https://test.maskinporten.no", prod: "https://maskinporten.no" };

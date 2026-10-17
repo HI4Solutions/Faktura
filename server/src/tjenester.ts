@@ -94,6 +94,11 @@ export type Oppgave =
   | { type: "nav-inntektsmelding"; org_id: string; inntektsmelding_id: string }
   // Skatteetaten: kravene og betalingene, og fristene (skatteetatenKrav.ts).
   | { type: "skatteetaten-hent"; org_id: string }
+  // Årsregnskapet til Brønnøysundregistrene i Altinn (aarsregnskapInnsending.ts): sendingen til
+  // signering, statusen til det er signert, og tilbaketrekkingen.
+  | { type: "aarsregnskap-send"; org_id: string; aarsregnskap_id: string }
+  | { type: "aarsregnskap-status"; org_id: string; aarsregnskap_id: string }
+  | { type: "aarsregnskap-tilbake"; org_id: string; aarsregnskap_id: string }
   // Ansatte fra a-ordningen (aordning.ts): avstemmingsrapporten bestilles og hentes (bestilling:
   // den som er bestilt og ikke var klar; forsok: hvor mange ganger den er hentet).
   | { type: "aordning-hent"; org_id: string; bestilling?: string; forsok?: number; maaned?: string }
@@ -134,6 +139,9 @@ export const OPPGAVETYPER = [
   "nav-hent",
   "nav-inntektsmelding",
   "skatteetaten-hent",
+  "aarsregnskap-send",
+  "aarsregnskap-status",
+  "aarsregnskap-tilbake",
   "aordning-hent",
   "rapport-send",
 ] as const satisfies readonly Oppgave["type"][];

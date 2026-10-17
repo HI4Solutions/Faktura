@@ -12,9 +12,11 @@ Funksjonen er skjult til klient-ID-en til Maskinporten er satt (GitHub-variabele
 1. Medinnova har én klient i Maskinporten og ett system i Altinns systemregister (system-ID
    `936564046_lonn`, tilgangspakken «Lønn», `urn:altinn:accesspackage:lonn`). Når a-meldingen
    sendes fra appen, ber systemet også om «A-ordningen» (se [amelding.md](amelding.md)), med
-   sykepengene fra NAV «Lønn med personopplysninger av særlig kategori» (se [nav.md](nav.md)), og
-   med krav og frister fra Skatteetaten «Krav, betalinger og utlegg» (se
-   [skatteetaten-krav.md](skatteetaten-krav.md)).
+   sykepengene fra NAV «Lønn med personopplysninger av særlig kategori» (se [nav.md](nav.md)), med
+   krav og frister fra Skatteetaten «Krav, betalinger og utlegg» (se
+   [skatteetaten-krav.md](skatteetaten-krav.md)), og med årsregnskapet «Regnskap og
+   økonomirapportering» (se [aarsregnskap.md](aarsregnskap.md); en organisasjon med bare Regnskap
+   kobler til fra Regnskap → Årsregnskap).
 2. Kunden trykker «Koble til Skatteetaten» under Lønn → Skattekort. Appen lager en
    forespørsel om systemtilgang i Altinn, og daglig leder (eller den som har tilgangsstyring i
    Altinn) godkjenner den. Altinn sender brukeren tilbake til `<APP_URL>/skattekort/godkjent`.

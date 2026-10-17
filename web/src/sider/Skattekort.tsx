@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, hent } from "../api";
 import { Feil, Laster, useData, useHandling, useSmal } from "../felles";
-import { erAdmin, kanLonn, useKonto } from "../konto";
+import { erAdmin, harFunksjon, kanLonn, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { naarTekst } from "./Bank";
 
@@ -444,22 +444,40 @@ function AnsatteSkattekort() {
 
 // --- Tilbake fra Altinn --------------------------------------------------------------------------
 
+// Godkjenningen i Altinn startet fra årsregnskapet (Regnskap → Årsregnskap) de siste 30 minuttene:
+// merket i fanen før brukeren går til Altinn, så siden etterpå viser veien tilbake dit.
+export const ALTINN_FRA = "altinn-fra";
+const fraAarsregnskap = () => {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(ALTINN_FRA) ?? "null") as { fra?: string; tid?: number } | null;
+    return v?.fra === "aarsregnskap" && Date.now() - (v.tid ?? 0) < 30 * 60_000;
+  } catch {
+    return false;
+  }
+};
+
 export function SkattekortGodkjent() {
   const { org } = useKonto();
+  // Lønnssidene når organisasjonen har Lønn og brukeren har tilgang til den, ellers Regnskap
+  // (årsregnskapet til Altinn), med rutene der; og Regnskap når godkjenningen startet derfra.
+  const [viaRegnskap] = useState(fraAarsregnskap);
+  const lonn = harFunksjon(org, "lonn") && kanLonn(org) && !viaRegnskap;
   const [status, settStatus] = useState<Tilgangsstatus | "sjekker" | null>("sjekker");
   const [feil, settFeil] = useState<string | null>(null);
   useEffect(() => {
     if (!org) return;
     let stopp = false;
+    const sjekk = () => api("POST", lonn ? `/org/${org.id}/skattekort/sjekk` : `/org/${org.id}/regnskap/altinn/sjekk`);
+    const les = async () =>
+      lonn ? ((await hent<SkattekortStatus>(`/org/${org.id}/skattekort`)).tilgang?.status ?? null) : ((await hent<{ status: Tilgangsstatus | null }>(`/org/${org.id}/regnskap/altinn`)).status ?? null);
     (async () => {
       try {
-        await api("POST", `/org/${org.id}/skattekort/sjekk`);
+        await sjekk();
         for (let i = 0; i < 20 && !stopp; i++) {
           await new Promise((ok) => setTimeout(ok, 2000));
-          const s = await hent<SkattekortStatus>(`/org/${org.id}/skattekort`);
-          const st = s.tilgang?.status ?? null;
+          const st = await les();
           if (st !== "ny" && st !== "venter") return void (!stopp && settStatus(st));
-          if (i === 9) await api("POST", `/org/${org.id}/skattekort/sjekk`);
+          if (i === 9) await sjekk();
         }
         if (!stopp) settStatus("ny");
       } catch (e) {
@@ -469,24 +487,32 @@ export function SkattekortGodkjent() {
     return () => {
       stopp = true;
     };
-  }, [org?.id]);
+  }, [org?.id, lonn]);
 
   return (
     <div className="kort" style={{ maxWidth: 560 }}>
-      <h1>Skattekort fra Skatteetaten</h1>
+      <h1>{lonn ? "Skattekort fra Skatteetaten" : "Tilgang i Altinn"}</h1>
       {status === "sjekker" && !feil && (
         <p role="status">
           <span className="spinner" /> Sjekker godkjenningen i Altinn for {org?.navn} …
         </p>
       )}
-      {status === "godkjent" && <p className="ok-tekst">Tilgangen er godkjent. Skattekortene til de ansatte hentes nå.</p>}
+      {status === "godkjent" && (
+        <p className="ok-tekst">{lonn ? "Tilgangen er godkjent. Skattekortene til de ansatte hentes nå." : "Tilgangen er godkjent. Årsregnskapet kan sendes til Altinn."}</p>
+      )}
       {status === "ny" && <p>Altinn har ikke registrert godkjenningen ennå. Appen ser etter den av seg selv, så du kan gå videre.</p>}
-      {status && ["avslatt", "avvist", "utlopt", "feil"].includes(status) && <p className="fare-tekst">Tilgangen ble ikke godkjent. Du kan be om den på nytt under Lønn → Skattekort.</p>}
-      {status === null && <p>{org?.navn} har ikke bedt om tilgang til Skatteetaten. Velg organisasjonen øverst og prøv igjen, eller gå til Lønn → Skattekort.</p>}
+      {status && ["avslatt", "avvist", "utlopt", "feil"].includes(status) && (
+        <p className="fare-tekst">Tilgangen ble ikke godkjent. Du kan be om den på nytt under {lonn ? "Lønn → Skattekort" : "Regnskap → Årsregnskap"}.</p>
+      )}
+      {status === null && (
+        <p>
+          {org?.navn} har ikke bedt om tilgang i Altinn. Velg organisasjonen øverst og prøv igjen, eller gå til {lonn ? "Lønn → Skattekort" : "Regnskap → Årsregnskap"}.
+        </p>
+      )}
       <Feil melding={feil} />
       <div className="knapper">
-        <Link className="knapp primar" to="/lonn?fane=skattekort">
-          Til skattekortene
+        <Link className="knapp primar" to={lonn ? "/lonn?fane=skattekort" : "/regnskap?fane=aarsregnskap"}>
+          {lonn ? "Til skattekortene" : "Til årsregnskapet"}
         </Link>
       </div>
     </div>

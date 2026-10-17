@@ -76,7 +76,7 @@ describe("sjekken av Maskinporten-klienten (scripts/maskinporten.mjs)", () => {
     const tekst = r.linjer.join("\n");
     expect(tekst).toContain("Maskinporten produksjon (https://maskinporten.no), klient klient-1, nøkkel-ID medinnova-prod-1");
     expect(tekst).toContain("✓ skatteetaten:innrapporteringamelding  (A-meldingen og avstemmingsrapporten)");
-    expect(tekst).toContain("9 av 9 scopes virker.");
+    expect(tekst).toContain("10 av 10 scopes virker.");
     expect(tekst).not.toContain("✗");
     expect(tekst).not.toContain("hemmelig-token");
   });
@@ -89,7 +89,7 @@ describe("sjekken av Maskinporten-klienten (scripts/maskinporten.mjs)", () => {
     expect(tekst).toContain("✓ skatteetaten:skattekorttilarbeidsgiver  (Skattekort)");
     expect(tekst).toContain("✗ skatteetaten:kravogbetalinger  (Krav og betalinger)\n    invalid_scope: Scope skatteetaten:kravogbetalinger not allowed");
     expect(tekst).toContain("✗ skatteetaten:frister  (Frister)");
-    expect(tekst).toContain("7 av 9 scopes virker.");
+    expect(tekst).toContain("8 av 10 scopes virker.");
     expect(tekst).toContain("Tilganger i Samarbeidsportalen");
   });
 
@@ -97,7 +97,7 @@ describe("sjekken av Maskinporten-klienten (scripts/maskinporten.mjs)", () => {
     const mp = maskinporten(ALLE);
     const r = await sjekk({ miljo: "prod", klientId: "klient-1", kid: "feil-kid", nokkel, url: URL_PROD, hent: mp.hent });
     expect(r.ok).toBe(false);
-    expect(mp.scopes).toHaveLength(9);
+    expect(mp.scopes).toHaveLength(10);
     const tekst = r.linjer.join("\n");
     expect(tekst).toContain("✗ Alle scopene feilet: invalid_grant: Invalid assertion. Client authentication failed.");
     expect(tekst).toContain("stemmer ikke med klienten i Samarbeidsportalen for produksjon");

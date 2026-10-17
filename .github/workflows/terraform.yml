@@ -51,6 +51,8 @@ jobs:
       TF_VAR_nav_sykepenger: ${{ vars.NAV_SYKEPENGER || 'false' }}
       # Krav og frister fra Skatteetaten (docs/skatteetaten-krav.md): av til scopene er på klienten.
       TF_VAR_krav_og_frister: ${{ vars.KRAV_OG_FRISTER || 'false' }}
+      # Årsregnskapet til Altinn (docs/aarsregnskap.md): av til scopene altinn:instances.* er på klienten.
+      TF_VAR_aarsregnskap_innsending: ${{ vars.AARSREGNSKAP_INNSENDING || 'false' }}
     steps:
       - name: Riktig miljø
         working-directory: .

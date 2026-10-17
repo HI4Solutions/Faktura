@@ -1,15 +1,17 @@
-# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, mva-meldingen, årsoppgjøret og SAF-T, anleggsmidler, periodiseringer og saldoavskrivninger
+# Regnskap: bilag, hovedbok, fakturaer og innbetalinger, utgifter, banken, mva-meldingen, årsoppgjøret, årsregnskapet og SAF-T, anleggsmidler, periodiseringer og saldoavskrivninger
 
 Regnskapsmodulen er Admin Konsolls eget regnskap (ingen kobling til Tripletex, Fiken eller andre):
 bilagene fra alle kildene med manuelle bilag (også den inngående balansen), saldobalansen og
 hovedboken, fakturaene og innbetalingene som bokføres av seg selv, utgiftene (leverandørfakturaer og
 kvitteringer, lest med AI og vurdert av reglene), alle transaksjonene i banken (ført og avstemt av
-reglene), mva-meldingen for hver termin med oppgjøret, årsoppgjøret og periodelåsen, anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
+reglene), mva-meldingen for hver termin med oppgjøret, årsoppgjøret og periodelåsen, årsregnskapet til
+Brønnøysundregistrene, anleggsmidlene med avskrivningsplanen over flere år (også goodwill), bokføringen av
 avskrivninger, nedskrivning, salg og utrangering, periodiseringene over flere måneder og år,
 månedsavslutningen (som går av seg selv) og de skattemessige saldoavskrivningene.
 
 Modulen er funksjonen «Regnskap» (Plattform → Organisasjoner, i organisasjonen) og menyen «Regnskap» med fanene
-Bilag, Utgifter, Bank, Mva, Saldobalanse, Årsoppgjør, Anleggsmidler, Periodiseringer, Saldoavskrivninger og Kontoer. Eier,
+Bilag, Utgifter, Bank, Mva, Skatteetaten, Saldobalanse, Årsoppgjør, Årsregnskap, Anleggsmidler, Periodiseringer,
+Saldoavskrivninger og Kontoer. Eier,
 administrator og regnskapsføreren (rollen regnskap) ser og fører; fakturerer og les ser den ikke.
 
 ## Bilagene og hovedboken
@@ -332,6 +334,16 @@ kapittel 9; `server/src/mvaJustering.ts`, `0095_mva_justering.sql`), under Regns
 - **Anleggsmidlene** havner på posten etter hva de er (kategorien, og saldogruppen der den sier mer),
   når alle anleggsmidlene på en balansekonto hører til samme post: en varebil på kontoen for
   personbiler går til 1238, et forretningsbygg (gruppe i) til 1105.
+
+## Årsregnskapet til Brønnøysundregistrene
+
+Fanen «Årsregnskap» lager årsregnskapet for et aksjeselskap som er et lite foretak, etter
+oppstillingen i Brønnøysunds skjema: resultatregnskapet og balansen med fjoråret i hele kroner
+(fra kontoene etter årsoppgjøret, eller fjorårstallene for hånd), notene, fastsettelsen og
+revisjonen, kontrollene, PDF-en til signaturene og skjemaene (XML). Det sendes til signering i
+Altinn med systembrukeren (tilgangspakken «Regnskap og økonomirapportering»), og daglig leder
+signerer i Altinn. Rapporten «Årsregnskap» står under Rapporter → Regnskap. Se
+`docs/aarsregnskap.md`.
 
 ## SAF-T Regnskap
 

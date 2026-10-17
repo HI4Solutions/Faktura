@@ -62,7 +62,7 @@ const sumOver = (s: Map<string, number>, fra: string, til: string) => rund([...s
 
 // Summen per konto (debet positivt) for bilagene datert i perioden (fra kan være null: fra starten),
 // eventuelt uten årsoppgjørsbilaget for året.
-async function kontosummer(db: Db, org: string, fra: string | null, til: string, utenAarsoppgjor = false) {
+export async function kontosummer(db: Db, org: string, fra: string | null, til: string, utenAarsoppgjor = false) {
   const r = await alle<{ konto: string; sum: number }>(
     db,
     `select p.konto, sum(p.belop)::float8 as sum

@@ -369,6 +369,15 @@ export const IkonAarsoppgjor = (p: P) => (
     <path d="M9 7.5h6M9 11h4" />
   </Ikon>
 );
+// Årsregnskapet: et dokument med en signatur.
+export const IkonAarsregnskap = (p: P) => (
+  <Ikon {...p}>
+    <path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z" />
+    <path d="M14 3v5h5" />
+    <path d="M8.5 12.5h7M8.5 15.5h4" />
+    <path d="M8.5 18.5c1-.9 1.6-.9 2.2 0s1.3.9 2.3 0" />
+  </Ikon>
+);
 export const IkonAnlegg = (p: P) => (
   <Ikon {...p}>
     <path d="M3.5 20.5V10l5 3v-3l5 3V5.5l7 3v12z" />
