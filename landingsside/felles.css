@@ -66,10 +66,12 @@ main .ark, .ark.dok { margin: 0 auto var(--mellom); padding-block: clamp(28px, 4
   box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee, 0 -14px 28px -18px rgba(13, 21, 48, .26), 0 30px 60px -40px rgba(13, 21, 48, .35); }
 .bunke > .forside { padding-block: 0; }
 .ark.dok { margin-top: var(--mellom); padding-top: 0; }
-.stabel .bunke > .ark { position: sticky; top: var(--blad, calc(var(--hode, 80px) + var(--luft))); transition: opacity .3s ease; }
+.stabel .bunke > .ark { position: sticky; top: var(--blad, calc(var(--hode, 80px) + var(--luft))); }
 /* Bare arket som ligger øverst, og det som legges oppå, vises; arkene lenger ned i bunken (begravet)
-   blekner bort, så et høyere ark under ikke stikker fram nedenfor et lavere. */
-.stabel .bunke > .begravet { opacity: 0; pointer-events: none; }
+   blekner bort, så et høyere ark under ikke stikker fram nedenfor et lavere. Bare det å blekne bort
+   tar tid: et ark som kommer fram igjen (når man ruller tilbake), er helt synlig med en gang, så det
+   øverste arket aldri er gjennomsiktig. */
+.stabel .bunke > .begravet { opacity: 0; pointer-events: none; transition: opacity .3s ease; }
 /* Arket med fokus (tastaturet) legger seg øverst, så det som har fokus, ikke er dekket. */
 .stabel .bunke > .ark:has(:focus-visible) { z-index: 1; opacity: 1; }
 main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
