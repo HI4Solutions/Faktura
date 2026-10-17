@@ -227,9 +227,36 @@ h1.stor .blaa { color: var(--ink); }
 .under-h .cta { margin-top: 0; }
 @media (max-width: 860px) { .under { grid-template-columns: minmax(0, 1fr); } .under-v { border-right: 0; border-bottom: 1.5px solid var(--ink); } }
 
-/* Arkene: tittelfeltet fyller sitt ark, og underskriften står alene på det siste */
-.forside .tittel { border-bottom: 0; }
+/* Én del om gangen: hver del er et ark som fyller skjermen under toppen, og når man ruller, kommer
+   neste del opp og legger seg på plass (scroll-snap, uten skript). Den kan ikke hoppes over
+   (scroll-snap-stop). En del som er høyere enn skjermen, rulles gjennom før neste kommer. Med
+   redusert bevegelse ruller siden vanlig. */
+html { scroll-snap-type: y mandatory; scroll-padding-bottom: var(--luft); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-snap-type: none; } }
+/* Mens man fyller ut kontaktskjemaet, står siden stille: nettleseren må få rulle feltet fram (over
+   tastaturet på mobilen), og et trykk på «Send» må treffe knappen, uten at siden blar videre.
+   nettsted.js holder snappingen av («skriver») til delen med skjemaet er rullet ut av skjermen.
+   To regler, så nettlesere uten :has() likevel får den første. */
+html.skriver { scroll-snap-type: none; }
+html:has(form.kontakt:focus-within) { scroll-snap-type: none; }
+.bunke > .ark, main > .ark.slutt {
+  min-height: calc(100vh - var(--hode, 80px) - 2 * var(--luft));
+  min-height: calc(100svh - var(--hode, 80px) - 2 * var(--luft));
+  display: flex; flex-direction: column; justify-content: center;
+  scroll-snap-align: start; scroll-snap-stop: always;
+}
+.sitefoot { scroll-snap-align: end; }
+/* Bunnen av hvert ark er også et stoppested, så Page Down og mellomrom viser resten av en del som er
+   høyere enn skjermen, før neste del kommer. For en del som fyller skjermen, er det samme sted. */
+.arkbunn { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; pointer-events: none; scroll-snap-align: end; scroll-snap-stop: always; }
+/* Tittelfeltet fyller hele sitt ark, med innholdet midt i høyden. */
+.forside > .inn { flex: 1; display: flex; flex-direction: column; }
+.forside .tittel { flex: 1; border-bottom: 0; }
+.tittel-v { display: flex; flex-direction: column; justify-content: center; }
+.tittel-h { justify-content: center; }
 .slutt .under { margin-top: 0; }
+@media print { html { scroll-snap-type: none; } .bunke > .ark, main > .ark.slutt { min-height: 0; display: block; } }
 
 /* Del 8: kontaktskjemaet, fylt ut med skrivemaskin som resten */
 .kontakt { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); border: 1.5px solid var(--ink); border-top: 0; }
@@ -300,6 +327,7 @@ h1.stor .blaa { color: var(--ink); }
 <div class="bunke">
 
 <div class="ark forside">
+<span class="arkbunn" aria-hidden="true"></span>
 <div class="inn">
 <section class="tittel" aria-labelledby="tittel-h">
   <div class="tittel-v">
@@ -342,6 +370,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark" id="automatikk">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 2 av 10</span>
 <div class="inn">
 <section aria-labelledby="del1-h">
@@ -370,6 +399,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark" id="sammenheng">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 3 av 10</span>
 <div class="inn">
 <section aria-labelledby="del2-h">
@@ -434,6 +464,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark" id="moduler">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 4 av 10</span>
 <div class="inn">
 <section aria-labelledby="del3-h">
@@ -519,6 +550,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark" id="laget-for">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 5 av 10</span>
 <div class="inn">
 <section aria-labelledby="del4-h">
@@ -557,6 +589,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark" id="trygghet">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 6 av 10</span>
 <div class="inn">
 <section aria-labelledby="del5-h">
@@ -581,6 +614,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark" id="status">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 7 av 10</span>
 <div class="inn">
 <section aria-labelledby="del6-h">
@@ -601,6 +635,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark" id="sporsmal">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 8 av 10</span>
 <div class="inn">
 <section aria-labelledby="del7-h">
@@ -640,6 +675,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark" id="kontakt">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 9 av 10</span>
 <div class="inn">
 <section aria-labelledby="del8-h">
@@ -680,6 +716,7 @@ h1.stor .blaa { color: var(--ink); }
 </div>
 
 <div class="ark slutt">
+<span class="arkbunn" aria-hidden="true"></span>
 <span class="sidetall" aria-hidden="true">AK-1 · Side 10 av 10</span>
 <div class="inn">
 <section class="under" aria-labelledby="under-h">

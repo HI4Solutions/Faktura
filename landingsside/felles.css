@@ -54,37 +54,25 @@ img { max-width: 100%; }
   .inn { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 }
 
-/* Toppen, hver del av forsiden, dokumentet og bunnen er egne ark. På forsiden (.bunke) legger
-   arkene seg oppå hverandre når man ruller, som når man blar om i en blokk: nettsted.js setter
-   klassen stabel og --blad for hvert ark, der arket blir liggende, så hele arket er lest før det
-   neste dekker det. Uten skriptet, og med redusert bevegelse, ligger arkene under hverandre.
-   Kontaktskjemaet er det siste arket i bunken: det blir ikke liggende fast (bunken slutter), så
-   nettleseren kan rulle feltet man skriver i, fram når tastaturet på mobilen kommer opp. */
-.top.ark { position: sticky; top: 0; z-index: 30; margin-bottom: 0; }
-.bunke { display: flow-root; padding-top: var(--mellom); }
+/* Toppen, hver del av forsiden, dokumentet og bunnen er egne ark. Toppen står fast øverst. På
+   forsiden (.bunke) fyller hver del skjermen under toppen, og siden snapper til én del om gangen
+   (scroll-snap, i index.html). */
+.top.ark { position: sticky; top: 0; z-index: 30; margin-block: 0; }
+.bunke { display: flow-root; padding-top: var(--luft); }
 main .ark, .ark.dok { margin: 0 auto var(--mellom); padding-block: clamp(28px, 4vw, 52px);
-  box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee, 0 -14px 28px -18px rgba(13, 21, 48, .26), 0 30px 60px -40px rgba(13, 21, 48, .35); }
+  box-shadow: 0 1px 0 #d3daee, 0 30px 60px -40px rgba(13, 21, 48, .35); }
 .bunke > .forside { padding-block: 0; }
 .ark.dok { margin-top: var(--mellom); padding-top: 0; }
-.stabel .bunke > .ark { position: sticky; top: var(--blad, calc(var(--hode, 80px) + var(--luft))); }
-/* Bare arket som ligger øverst, og det som legges oppå, vises; arkene lenger ned i bunken (begravet)
-   blekner bort, så et høyere ark under ikke stikker fram nedenfor et lavere. Bare det å blekne bort
-   tar tid: et ark som kommer fram igjen (når man ruller tilbake), er helt synlig med en gang, så det
-   øverste arket aldri er gjennomsiktig. */
-.stabel .bunke > .begravet { opacity: 0; pointer-events: none; transition: opacity .3s ease; }
-/* Arket med fokus (tastaturet) legger seg øverst, så det som har fokus, ikke er dekket. */
-.stabel .bunke > .ark:has(:focus-visible) { z-index: 1; opacity: 1; }
 main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
 .bunke .delband { margin-top: 0; }
 .sidetall { position: absolute; top: clamp(8px, 1.4vw, 18px); right: calc(56px + clamp(12px, 3vw, 36px)); font: 500 11px var(--font-type); letter-spacing: .04em; color: var(--muted); }
 @media (max-width: 760px) {
-  main .ark, .ark.dok { margin: 0 0 var(--mellom); box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee, 0 -12px 24px -20px rgba(13, 21, 48, .3); }
+  main .ark, .ark.dok { margin: 0 0 var(--mellom); box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee; }
   .ark.dok { margin-top: var(--mellom); }
   .top.ark { box-shadow: 0 1px 0 var(--ink-line), 0 10px 20px -16px rgba(13, 21, 48, .45); }
   .sidetall { right: 16px; top: 8px; }
 }
-@media (prefers-reduced-motion: reduce) { .stabel .bunke > .ark { position: relative; top: auto; } }
-@media print { .top.ark, .stabel .bunke > .ark { position: relative; top: auto; } .stabel .bunke > .begravet { opacity: 1; } }
+@media print { .top.ark { position: relative; } }
 
 /* Skjemahodet */
 .top > .inn { border-bottom: 3px double var(--ink); }
