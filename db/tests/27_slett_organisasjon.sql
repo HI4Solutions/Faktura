@@ -1,8 +1,8 @@
 -- Sletting av organisasjoner (0046_slett_organisasjon.sql): bare eieren eller plattform-
 -- administratoren, alltid med grunn. Uten utstedte fakturaer slettes alt (også filene og
 -- revisjonsloggen); med utstedte fakturaer stenges organisasjonen: ingen har tilgang, utkast,
--- gjentakelser, påminnelser og purring stopper, funksjonene er av, og fakturaene oppbevares i
--- fem år etter regnskapsårets slutt. Begge logges med grunnen.
+-- gjentakelser, påminnelser og purring stopper, funksjonene er av, den kobles fra Skatteetaten
+-- (0118), og fakturaene oppbevares i fem år etter regnskapsårets slutt. Begge logges med grunnen.
 
 \set QUIET on
 \set ON_ERROR_STOP on
@@ -62,6 +62,8 @@ values (:'b', :'kb', '[{"beskrivelse": "Leie", "enhetspris": 100}]', 'maaned', 3
 
 \c :migrator
 update faktura.organisasjoner set logo_sti = 'slett/a/logo.png' where id = :'a';
+-- B er koblet til Skatteetaten (systembruker i Altinn).
+insert into faktura.skattekort_tilgang (org_id, status) values (:'b', 'godkjent');
 insert into faktura.vedlegg (org_id, faktura_id, filnavn, type, storrelse, sti) values (:'a', :'fa', 'Timeliste.pdf', 'application/pdf', 100, 'slett/a/vedlegg');
 
 \c :api
@@ -111,6 +113,8 @@ select test.er((select count(*) from faktura.fakturaer where id = :'ub'), 0::big
 select test.er((select bool_or(aktiv) from faktura.gjentakelser where org_id = :'b'), false, 'gjentakelsen er stoppet');
 select test.er((select purring_auto from faktura.organisasjoner where id = :'b'), false, 'purringen er stoppet');
 select test.er((select slettet_grunn from faktura.organisasjoner where id = :'b'), 'Konkurs', 'med grunnen');
+select test.er((select count(*) from faktura.skattekort_tilgang where org_id = :'b'), 0::bigint,
+               'koblet fra Skatteetaten, så ingen bakgrunnsjobb henter noe for den');
 -- Rydd bort filradene, så workerens opprydding i andre tester ikke teller dem.
 delete from faktura.slettede_filer where sti like 'slett/a/%';
 

@@ -727,7 +727,9 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   er regnskapsmateriale som skal oppbevares i fem år etter regnskapsårets slutt (bokføringsloven
   § 13), og er låst; da stenges organisasjonen i stedet: medlemmer, regnskapsførertilgang og
   invitasjoner fjernes, utkast slettes, gjentakelser, påminnelser og automatisk purring
-  stoppes, og `har_funksjon` er av, så bakgrunnsjobbene hopper over den. Fakturaene, kundene og
+  stoppes, og `har_funksjon` er av, så bakgrunnsjobbene hopper over den. Den kobles også fra
+  Skatteetaten, Altinn og NAV, som «Koble fra» (`skattekort_tilgang` slettes, 0118), så ingen
+  henting av skattekort, sykmeldinger, krav eller frister går for den. Fakturaene, kundene og
   betalingene blir liggende til `oppbevares_til` (31.12. fem år etter siste faktura); selve
   slettingen etter det er ikke laget ennå. Hver sletting logges med grunnen, også når alt er
   borte, og vises under Plattform → Organisasjoner → Slettede organisasjoner. Sletter
