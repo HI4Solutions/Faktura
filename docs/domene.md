@@ -124,8 +124,9 @@ og varsler peker til `app.adminkonsoll.no`, og den som åpner `adminkonsoll.no/<
 appen. Trykk «Oppdater i Altinn» under Plattform → Drift, så Altinn har den nye tilbakeadressen.
 Adressene på `adminkonsoll.no` hos Google og bankene kan fjernes når ingen bruker dem lenger.
 
-Testflaten gjør det samme med `test.adminkonsoll.no` (nettstedet) og `app.test.adminkonsoll.no`
-(appen), i `miljo/test.tfvars`, og bør gå først. Nettstedet der har `X-Robots-Tag: noindex`, så det
+Testflaten har tatt begge stegene (`miljo/test.tfvars`): nettstedet ligger på `test.adminkonsoll.no`
+og appen på `app.test.adminkonsoll.no`. Produksjon står på steg 1 til lanseringen, så
+`adminkonsoll.no` har appen, og nettstedet ligger bare i forhåndsvisningskanalen. Nettstedet der har `X-Robots-Tag: noindex`, så det
 ikke havner i søkemotorene.
 
 ## Et nytt domene senere

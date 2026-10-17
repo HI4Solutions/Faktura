@@ -116,7 +116,7 @@ Se [docs/arkitektur.md](docs/arkitektur.md) for arkitektur, tilgangsmodell og ve
    printf '%s' '...'    | gcloud secrets versions add google-oauth-client-secret --data-file=-
    ```
 
-4. **Testflaten** (test.adminkonsoll.no) settes opp på samme måte, med sitt eget prosjekt og
+4. **Testflaten** (app.test.adminkonsoll.no, med nettstedet på test.adminkonsoll.no) settes opp på samme måte, med sitt eget prosjekt og
    miljøet «test» i GitHub. Se [docs/miljoer.md](docs/miljoer.md).
 
 ## Utvikling lokalt
@@ -129,7 +129,7 @@ cd server && npm ci && npm run typecheck
 
 `server/` er ett Node-bilde med to roller: `ROLLE=api` (REST-API under `/api`) og
 `ROLLE=worker` (PDF, e-post via Resend, gjentakelser, utboks → Pub/Sub). Utrulling skjer
-med workflowen *Utrulling* ved push til `main`: først til testflaten (test.adminkonsoll.no), så
+med workflowen *Utrulling* ved push til `main`: først til testflaten (app.test.adminkonsoll.no), så
 til produksjon. Se [docs/miljoer.md](docs/miljoer.md).
 
 Migreringer ligger i `db/migrations` og kjøres i rekkefølge av `scripts/migrer.sh`.
