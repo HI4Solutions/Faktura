@@ -1632,6 +1632,18 @@ maks fem uverifiserte organisasjoner per bruker, reCAPTCHA Enterprise ved regist
 og hastighetsgrenser i API-et. Verifiseringen krever organisasjonsnummer, så en privatperson
 blir værende på grensene for nye organisasjoner (og har bare Faktura, `0119_uten_orgnr.sql`).
 
+### Kontaktskjemaet på nettstedet
+
+Forsiden på nettstedet (`landingsside/index.html`, del 8) har et kontaktskjema som sendes til
+`POST /api/offentlig/kontakt` (`kontakt.ts`, uten innlogging). `nettsted.js` sender JSON og får
+JSON tilbake; uten skript sendes det som et vanlig skjema, og nettleseren sendes tilbake til
+forsiden med svaret (`#kontakt-sendt` eller `#kontakt-feil`). Henvendelsen legges i køen som
+e-post (oppgaven `epost`) til `KONTAKT_EPOST` (standard `post@adminkonsoll.no`) med avsenderen
+som svaradresse. Ingenting lagres i databasen, og innholdet logges ikke. Et skjult felt som bare
+roboter fyller ut (de får et vanlig svar, men ingenting sendes), og en grense på fem henvendelser
+i timen per IP-adresse og 100 i timen i alt (per instans), hindrer at skjemaet brukes til å fylle
+innboksen.
+
 ## Forbedringer fra MedSide-modulen
 
 - Delvis kreditering per linje. Originalen blir `kreditert` først når alt er kreditert.

@@ -77,7 +77,7 @@ if [ -z "$NETTSTED_URL" ] || [ "$APP_URL" = "$NETTSTED_URL" ]; then
   for f in personvern vilkar databehandleravtale underleverandorer informasjonskapsler; do
     cp "$UT/nettsted/$f.html" "$UT/standard/dist/"
   done
-  cp "$UT/nettsted/felles.css" "$UT/nettsted/og-bilde.png" "$UT/standard/dist/"
+  cp "$UT/nettsted/felles.css" "$UT/nettsted/nettsted.js" "$UT/nettsted/og-bilde.png" "$UT/standard/dist/"
   cp -r "$UT/nettsted/fonter" "$UT/standard/dist/fonter"
   publiser "$UT/standard" "$PROSJEKT"
   if [ -n "$NETTSTED_URL" ]; then

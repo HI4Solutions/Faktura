@@ -10,6 +10,7 @@ import { config } from "./config.js";
 import { appUrler, domene } from "./appadresse.js";
 import { avtaleRuter, avtalerOffentlig, godkjenningSkjema, godtaAvtaler } from "./avtaler.js";
 import { slettMinKonto } from "./slettKonto.js";
+import { kontaktRuter } from "./kontakt.js";
 import { lagring, leggIKo } from "./tjenester.js";
 import { passkeyInnlogging, passkeyRuter } from "./passkey.js";
 import { adminRuter, erPlattformadmin, slaOppEnhet, verifiseringRuter } from "./verifisering.js";
@@ -286,6 +287,8 @@ export function lagApi() {
   app.route("/api/offentlig/google", googleCallback());
   // Versjonene av bruksvilkårene og databehandleravtalen, med adressene på nettstedet.
   app.route("/api/offentlig/avtaler", avtalerOffentlig());
+  // Kontaktskjemaet på nettstedet: henvendelsen sendes på e-post til oss.
+  app.route("/api/offentlig/kontakt", kontaktRuter());
   // Hoveddomenet, og domenene appen er flyttet fra (der viser appen en melding om den nye adressen).
   app.get("/api/offentlig/adresse", (c) => {
     c.header("cache-control", "public, max-age=300");

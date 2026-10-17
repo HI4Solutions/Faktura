@@ -53,6 +53,8 @@ export const config = {
   // videre til appen (docs/domene.md).
   nettstedUrl: valgfri("NETTSTED_URL"),
   epostAvsender: valgfri("EPOST_AVSENDER") ?? "post@adminkonsoll.no",
+  // Henvendelsene fra kontaktskjemaet på nettstedet sendes hit (kontakt.ts).
+  kontaktEpost: valgfri("KONTAKT_EPOST") ?? "post@adminkonsoll.no",
   // Brukes når Resend sier at avsenderdomenet over ikke er verifisert (tjenester.ts), så e-posten
   // likevel går.
   epostAvsenderReserve: valgfri("EPOST_AVSENDER_RESERVE") ?? "faktura@hi4.no",

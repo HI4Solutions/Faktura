@@ -12,11 +12,50 @@ bygges ikke; filene publiseres som de er.
 | `databehandleravtale.html` | Databehandleravtale etter GDPR art. 28, med vedlegg (behandlingen, sikkerhetstiltak, underdatabehandlere) |
 | `underleverandorer.html` | Underdatabehandlere, integrasjoner og andre mottakere |
 | `informasjonskapsler.html` | Informasjonskapsler og lokal lagring |
-| `felles.css` | Felles stil, skriftene og toppen og bunnen |
+| `felles.css` | Felles stil, skriftene, toppen, bunnen og arkene |
+| `nettsted.js` | Arkene på forsiden som legger seg oppå hverandre når man ruller, lenkene til delene, og kontaktskjemaet. Uten skriptet virker alt, bare uten stablingen |
 | `fonter/` | Inter, Schibsted Grotesk og IBM Plex Mono (SIL Open Font License, lisensene ligger ved) |
 | `robots.txt`, `sitemap.xml`, `og-bilde.png`, `favicon.svg` | SEO og deling |
 | `firebase.json` | Firebase Hosting: korte adresser (`/vilkar` → `/vilkar.html`), sikkerhetshoder, hurtigbuffer, og alt annet videre til API-et, som sender gamle lenker til appen |
 | `sw.js` | Fjerner den gamle appens service worker og hurtigbuffer hos dem som hadde appen på `adminkonsoll.no` |
+
+## Arkene
+
+Toppen, hver del av forsiden, dokumentet på de juridiske sidene og bunnen er egne ark på bordet,
+med luft mellom. Toppen står fast øverst, og lenkene står til høyre ved «Logg inn» og «Opprett
+konto» når skjermen er minst 1100 px bred. Da viker skjemakoden «AK-1 · utg. 10.2026», som bare
+står på mellomstore skjermer; hvert ark har uansett «AK-1 · Side n av 10» øverst til høyre.
+
+På forsiden legger arkene seg oppå hverandre når man ruller, som når man blar om i en blokk
+(`.bunke` og `nettsted.js`): hvert ark blir liggende når hele arket er lest (et lavt ark rett under
+toppen, et høyt når bunnen er nådd), og det neste legges oppå. Arkene lenger ned i bunken blekner
+bort, så et høyere ark under ikke stikker fram. Lenkene til delene (toppen, bunnen, «Skriv til
+oss») ruller skriptet selv, fordi nettleseren ellers ikke ruller tilbake til et ark som ligger
+under et annet. Med redusert bevegelse (innstillingen i operativsystemet), uten skript og på
+utskrift ligger arkene bare under hverandre.
+
+Kontaktskjemaet (del 8) er det siste arket i bunken. Det blir ikke liggende fast, så nettleseren
+kan rulle feltet man skriver i, fram når tastaturet på mobilen kommer opp. Underskriften («Ett
+skjema til») og bunnen ruller vanlig.
+
+En ny del legges inn som et ark i bunken: `<div class="ark" id="…">` med `<span class="sidetall">`
+og `<div class="inn">` rundt delen, og sidetallene («Side n av 10», også i tittelfeltet) rettes.
+
+## Kontaktskjemaet
+
+Del 8 på forsiden («Skriv til oss») sender en henvendelse rett til oss: navn, e-post, foretak
+(valgfritt) og henvendelsen. Adressen står ikke der, bare e-postadressen for den som vil skrive
+direkte.
+
+- Skjemaet sendes til `POST /api/offentlig/kontakt` (`server/src/kontakt.ts`), som nettstedet
+  sender videre til API-et som alt annet det ikke har selv. `nettsted.js` sender det som JSON og
+  viser svaret under skjemaet. Uten skript sendes det som et vanlig skjema, og nettleseren sendes
+  tilbake til forsiden med kvitteringen (`#kontakt-sendt`) eller feilen (`#kontakt-feil`).
+- Henvendelsen legges i køen som e-post til `post@adminkonsoll.no` (`KONTAKT_EPOST`), med
+  avsenderens e-postadresse som svaradresse, så man svarer rett fra innboksen. Ingenting lagres i
+  databasen, og innholdet havner ikke i loggen.
+- Et skjult felt (`nettsted`) fanger roboter: de får et vanlig svar, men ingenting sendes. Høyst fem
+  henvendelser i timen fra samme IP-adresse og 100 i timen i alt (per instans).
 
 ## Fylt inn og bekreftet
 
@@ -67,6 +106,9 @@ ut), og de juridiske sidene ligger ved siden av appen, så lenkene til vilkåren
 ## Personvern på nettstedet
 
 - Ingen informasjonskapsler, analyse eller sporing, så det trengs ikke samtykkebanner.
+- Kontaktskjemaet lagrer ingenting i nettleseren. Det man skriver, sendes på e-post til oss
+  (gjennom Resend, som står blant underleverandørene). Personvernerklæringen dekker det i § 3,
+  «Svare på henvendelser og gi brukerstøtte»; teksten er ikke endret.
 - Skriftene ligger på eget domene. Siden henter ingenting fra andre domener (sjekket i nettleser).
 
 ## Funn i appen (GDPR), rettet
