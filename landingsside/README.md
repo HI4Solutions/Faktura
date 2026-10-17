@@ -108,7 +108,9 @@ slik:
 Nettstedet skal ligge på `adminkonsoll.no`, og appen flytter til `app.adminkonsoll.no`. Det skjer i to
 steg ([docs/domene.md](../docs/domene.md), «Nettstedet og appen»): så lenge appen ligger på
 `adminkonsoll.no`, publiseres nettstedet til en forhåndsvisningskanal (adressen står i loggen fra Rull
-ut), og de juridiske sidene ligger ved siden av appen, så lenkene til vilkårene virker.
+ut), og de juridiske sidene ligger ved siden av appen, så lenkene til vilkårene virker. Testflaten
+har tatt begge stegene: nettstedet ligger på `test.adminkonsoll.no` og testappen på
+`app.test.adminkonsoll.no`. Produksjon venter med steg 2 til lanseringen.
 
 - «Logg inn» og «Opprett konto» peker til `https://app.adminkonsoll.no` (`?konto=ny` åpner
   registreringen). På testflaten byttes de til testappens adresse, og sidene får `X-Robots-Tag:

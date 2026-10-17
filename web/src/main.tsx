@@ -8,8 +8,9 @@ import { startTema } from "./tema";
 startTema();
 startPwa();
 
-// Testflaten (test.adminkonsoll.no, docs/miljoer.md) merkes, så den ikke forveksles med produksjon.
-if (/^test\.|-test\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) {
+// Testflaten (appen på app.test.adminkonsoll.no, docs/miljoer.md) merkes, så den ikke forveksles med
+// produksjon: «test.» som eget ledd i adressen, eller testprosjektets sider i Firebase Hosting.
+if (/(^|\.)test\.|-test(-app)?\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) {
   document.documentElement.dataset.miljo = "test";
   document.title = `Test · ${document.title}`;
 }
