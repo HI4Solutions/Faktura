@@ -348,17 +348,18 @@ strong { font-weight: 650; }
   .sidemeny { display: none; }
   body.skriver .bunnmeny { display: none; }
 
-  /* Menyarket (meny.tsx): et ark nederst på skjermen, som dialogene, med alle modulene og
-     sidene med navn (to kolonner), eller bare sidene i modulen man er i. Toppen (organisasjonen
-     og søket) og bunnen (navnet og logg ut) står fast, og lista ruller. */
+  /* Menyarket (meny.tsx): et ark nederst på skjermen, som dialogene, med modulene som rader som
+     åpner sidene sine (to kolonner), eller bare sidene i modulen man er i. Toppen (organisasjonen
+     og søket) og bunnen (navnet og logg ut) står fast, og lista ruller når den er for lang. Arket
+     er så høyt som innholdet, og kan dras ned for å lukkes (draNed.ts). */
   dialog.menyark {
     width: 100%; max-width: 560px; margin: auto auto 0; border-radius: 20px 20px 0 0; border-bottom: 0;
     max-height: calc(100dvh - 24px - env(safe-area-inset-top)); overflow: hidden;
   }
   dialog.menyark[open] { display: flex; flex-direction: column; animation: ark-inn .24s cubic-bezier(.2, .8, .2, 1); }
-  /* Hele menyen er like høy hele tiden: den krymper ikke mens man søker, og søkefeltet står
-     øverst på skjermen, over tastaturet. */
-  dialog.menyark:not(.modulark) { height: calc(100dvh - 24px - env(safe-area-inset-top)); }
+  /* Mens man søker, er menyen like høy hele tiden: den krymper ikke med treffene, og søkefeltet
+     står øverst på skjermen, over tastaturet. */
+  dialog.menyark.soker { height: calc(100dvh - 24px - env(safe-area-inset-top)); }
   .menyark-hode { position: relative; display: flex; align-items: center; gap: 10px; flex: none; padding: 20px 14px 10px; }
   .menyark-hode::before {
     content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px;
@@ -377,13 +378,10 @@ strong { font-weight: 650; }
   }
   .menyark-sok { flex: none; padding: 0 14px 6px; }
   .menyark-sok input { width: 100%; max-width: none; margin: 0; }
-  .menyark-liste { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 14px 18px; }
-  .menyark-liste section { margin-top: 16px; }
-  .menyark-liste h3 {
-    display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; font-size: 0.72rem; font-weight: 700;
-    letter-spacing: 0.08em; text-transform: uppercase; color: var(--dempet);
+  .menyark-liste {
+    position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    display: grid; align-content: start; gap: 6px; padding: 6px 14px 12px;
   }
-  .menyark-liste h3.her { color: var(--aksent); }
   .menyark-sider { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .menyark-gruppe { grid-column: 1 / -1; margin: 6px 2px 0; font-size: 0.74rem; font-weight: 600; color: var(--dempet); }
   .menyark-gruppe:first-child { margin-top: 0; }
@@ -399,14 +397,23 @@ strong { font-weight: 650; }
     background: var(--aksent-lys); border-color: color-mix(in srgb, var(--aksent) 35%, transparent); color: var(--aksent); font-weight: 650;
   }
   .menyark-side.valgt { border-color: var(--aksent); box-shadow: inset 0 0 0 1px var(--aksent); }
-  .menyark-rad { gap: 12px; min-height: 50px; margin-top: 8px; font-weight: 600; }
+  .menyark-rad { gap: 12px; font-weight: 600; }
   .menyark-rad svg { flex: none; color: var(--dempet); }
   .menyark-rad.active svg { color: var(--aksent); }
-  .menyark-liste > .menyark-rad:first-child { margin-top: 4px; }
+  /* En del (modul eller Konto): raden åpner og lukker sidene under den. Modulen man er i, er
+     markert med farge; pila snur når delen er åpen. */
+  button.menyark-rad { width: 100%; justify-content: flex-start; cursor: pointer; }
+  button.menyark-rad:hover:not(:disabled) { background: var(--flate-2); border-color: var(--kant); color: var(--tekst); }
+  .menyark-rad.her, button.menyark-rad.her:hover:not(:disabled) { color: var(--aksent); }
+  .menyark-rad.her svg { color: var(--aksent); }
+  .menyark-del.apen > .menyark-rad { border-color: var(--kant-sterk); background: var(--flate); }
+  .menyark-pil { display: grid; flex: none; color: var(--dempet); transition: transform .18s ease; }
+  .menyark-pil svg { color: inherit; }
+  .menyark-del.apen .menyark-pil { transform: rotate(180deg); }
+  .menyark-del-innhold { padding: 8px 0 4px; animation: menyark-del-inn .16s ease-out; }
   .menyark-navn { flex: 1 1 auto; min-width: 0; }
   .menyark-modul { flex: none; font-size: 0.78rem; font-weight: 500; color: var(--dempet); }
-  .menyark-treff { display: grid; gap: 6px; padding-top: 4px; }
-  .menyark-treff .menyark-rad { margin-top: 0; }
+  .menyark-treff { display: grid; gap: 6px; }
   .menyark-ingen { margin: 0; padding: 28px 0; text-align: center; color: var(--dempet); }
   .menyark-bunnvalg { display: grid; gap: 2px; margin: 10px 0 0; padding: 10px 12px 12px; border: 1px solid var(--kant); border-radius: 12px; }
   .menyark-bunnvalg legend { padding: 0 4px; font-size: 0.82rem; font-weight: 600; color: var(--tekst-2); }
@@ -679,6 +686,9 @@ dialog {
 dialog[open] { animation: dialog-inn .18s ease-out; }
 @keyframes dialog-inn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
 dialog::backdrop { background: rgba(8, 12, 28, 0.5); backdrop-filter: blur(3px); }
+/* Et ark som dras ned (draNed.ts), setter --dra fra 0 til 1, og bakgrunnen blekner med det. */
+@property --dra { syntax: "<number>"; inherits: true; initial-value: 0; }
+dialog::backdrop { opacity: calc(1 - var(--dra, 0)); }
 .dialog-topp { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--kant); position: sticky; top: 0; background: var(--flate); z-index: 1; }
 .dialog-topp h2 { margin: 0; }
 .dialog-topp button { border: 0; box-shadow: none; padding: 6px; color: var(--dempet); background: transparent; }
@@ -969,6 +979,7 @@ input.sok { max-width: 340px; margin-bottom: 14px; }
   .dialog-innhold .knapper > button { flex: 1 1 auto; justify-content: center; }
 }
 @keyframes ark-inn { from { transform: translateY(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes menyark-del-inn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
 /* --------------------------------------------------------------------------
    Låseskjerm (applås med Face ID / Touch ID)
@@ -2308,7 +2319,7 @@ table.bemanning { width: max-content; min-width: 100%; border-collapse: separate
 @media (display-mode: standalone) and (max-width: 860px) {
   .bunnmeny { bottom: auto; top: 100lvh; translate: 0 -100%; }
   dialog.menyark { margin: 0 auto; top: 100lvh; bottom: auto; translate: 0 -100%; max-height: calc(100lvh - 24px - env(safe-area-inset-top)); }
-  dialog.menyark:not(.modulark) { height: calc(100lvh - 24px - env(safe-area-inset-top)); }
+  dialog.menyark.soker { height: calc(100lvh - 24px - env(safe-area-inset-top)); }
   .bannere { top: calc(100lvh - 76px - env(safe-area-inset-bottom)); }
   .assistent-knapp { bottom: auto; top: calc(100lvh - 76px - env(safe-area-inset-bottom)); translate: 0 -100%; }
 }

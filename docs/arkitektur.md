@@ -698,10 +698,18 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   bunnmenyen, er «Meny» markert. «Meny» og logoen øverst åpner menyarket (en `dialog` nederst på
   skjermen): organisasjonen (bytt eller lag en ny), «Finn en side» (søk i navnet på sidene og
   modulene, uten aksenter og med æ, ø og å som ae, o og a; Enter åpner det første treffet), alle
-  modulene med sidene med navn i to kolonner (gruppene i Regnskap som overskrifter), Konto, og
-  navnet og «Logg ut» nederst. Arket åpner ved modulen man er i, lukkes med krysset, Escape, et
-  trykk utenfor eller når man velger en side, og hele menyen er like høy mens man søker, så
-  søkefeltet står over tastaturet.
+  modulene og Konto som rader, og navnet og «Logg ut» nederst. Radene er lukket til man trykker
+  på dem, og da vises sidene med navn i to kolonner under (gruppene i Regnskap som overskrifter);
+  én er åpen om gangen, så arket er kort og ikke må rulles. Modulen man er i, er markert, og
+  tallet på nye beskjeder står på raden mens den er lukket. Arket er så høyt som innholdet, men
+  like høyt hele tiden mens man søker, så søkefeltet står over tastaturet. Det lukkes med
+  krysset, Escape, et trykk utenfor, når man velger en side, eller ved å dra det ned.
+- Arkene nederst på skjermen på mobil (menyarket, dialogene og AI-assistenten) kan dras ned for å
+  lukkes, som grepet øverst viser (`web/src/draNed.ts`): arket følger fingeren og bakgrunnen
+  blekner (`--dra`), og slippes det en tredel ned (høyst 150 px) eller med fart nedover, glir det
+  ut og lukkes; ellers glir det tilbake. Menyarket kan dras fra hvor som helst (lista bare når den
+  er rullet helt opp, ellers ruller den), dialogene og assistenten bare i toppen, så et skjema
+  ikke lukkes når man ruller i det. Bare med berøring, og bare der dialogen er et ark.
 - Hver har sin egen oversikt, satt sammen av de samme delene (`OversiktDeler.tsx`: hilsenen,
   nøkkeltallene, som lenker til siden de hører til, og «Til oppfølging» med én linje per ting som
   venter). Hvert kort henter sitt fra de samme rutene som sidene, så et kort som er tregt eller

@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, hent, sendLyd } from "./api";
+import { useDraNed } from "./draNed";
 import { dataEndret, Feil, useData } from "./felles";
 import { kanTaOpp, useOpptak, type AiUtkast } from "./ai";
 import { IkonGnist, IkonLukk, IkonMikrofon, IkonTastatur } from "./ikoner";
@@ -402,6 +403,8 @@ export function Assistent() {
     }
     settApen(false);
   };
+  // På mobil kan arket dras ned i toppen, som X (ikke i samtalen, som ruller).
+  useDraNed(ref, lukk, { medie: "(max-width: 700px)", fra: ".assistent-topp" });
   const gaa = (til: string, state?: unknown) => {
     lukk();
     nav(til, state ? { state } : undefined);

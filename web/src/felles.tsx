@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useDraNed } from "./draNed";
 
 // Noe er endret utenfor siden (f.eks. av AI-assistenten): sider som viser fakturaer,
 // innbetalinger, vakter, timer og ferie henter dem på nytt.
@@ -114,6 +115,9 @@ export function Tom({ ikon, tittel, children }: { ikon?: ReactNode; tittel: stri
 
 export function Dialog({ apen, lukk, tittel, children, bred }: { apen: boolean; lukk: () => void; tittel: string; children: ReactNode; bred?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // På mobil er dialogen et ark som kan dras ned i toppen (som X); ikke i innholdet, så et skjema
+  // ikke lukkes når man ruller.
+  useDraNed(ref, lukk, { medie: "(max-width: 700px)", fra: ".dialog-topp" });
   useEffect(() => {
     const d = ref.current;
     if (!d) return;

@@ -5,10 +5,13 @@
 // i modulen når organisasjonen bare har én modul med flere sider (Faktura: Fakturaer, plussen
 // for ny faktura og Kunder). En modul i bunnmenyen åpner siden man sist var på i den, og
 // modulen man er i, viser sidene sine i et ark. «Meny» (og logoen) åpner menyarket med alle
-// modulene og sidene med navn, et søk, kontoen og valget av moduler i bunnmenyen.
+// modulene og sidene med navn, et søk, kontoen og valget av moduler i bunnmenyen. Modulene og
+// kontoen er lukket til man trykker på dem (én er åpen om gangen), så arket er kort. Arkene
+// lukkes med X, ved å trykke utenfor eller ved å dra dem ned (draNed.ts).
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { IkonLoggUt, IkonLukk } from "./ikoner";
+import { useDraNed } from "./draNed";
+import { IkonInnstillinger, IkonLoggUt, IkonLukk, IkonNed } from "./ikoner";
 
 export type MenyIkon = (p: { storrelse?: number }) => ReactNode;
 // gruppe: overskriften punktet står under (Regnskap). kort: navnet i bunnmenyen på mobil.
@@ -131,6 +134,45 @@ function Sider({ punkter }: { punkter: MenyPunkt[] }) {
   );
 }
 
+// En del av menyen (en modul med flere sider, eller Konto): én rad som åpner og lukker sidene
+// under seg. Modulen med siden man er på, er markert, og tallet på de nye står på raden mens
+// den er lukket.
+function Del({
+  id,
+  Ikon,
+  navn,
+  her,
+  nye: tall,
+  apen,
+  veksle,
+  children,
+}: {
+  id: string;
+  Ikon: MenyIkon;
+  navn: string;
+  her: boolean;
+  nye: number;
+  apen: boolean;
+  veksle: (id: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`menyark-del${apen ? " apen" : ""}`} data-del={id}>
+      <button type="button" className={`menyark-rad${her ? " her" : ""}`} aria-expanded={apen} aria-controls={`menyark-${id}`} onClick={() => veksle(id)}>
+        <Ikon />
+        <span className="menyark-navn">{navn}</span>
+        {!apen && <UlesteTall n={tall} />}
+        <span className="menyark-pil" aria-hidden="true">
+          <IkonNed storrelse={18} />
+        </span>
+      </button>
+      <div id={`menyark-${id}`} className="menyark-del-innhold" hidden={!apen}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
 // ark: «meny» (hele menyen), id-en til en modul (bare sidene i den) eller null (lukket).
 export function Menyark({
   ark,
@@ -161,10 +203,21 @@ export function Menyark({
   const liste = useRef<HTMLDivElement>(null);
   const nav = useNavigate();
   const [sok, settSok] = useState("");
+  // Søkefeltet har fokus: arket er da høyt (se soker under). Når feltet mister fokus, krymper
+  // arket litt etter, så trykket som tok fokuset bort, treffer det det var ment for.
+  const [iSok, settISok] = useState(false);
+  const blurTid = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(blurTid.current), []);
+  // Delen av menyen som er åpen (id-en til modulen, eller «konto»); alle er lukket til man trykker.
+  const [apenDel, settApenDel] = useState<string | null>(null);
   const [velgBunn, settVelgBunn] = useState(false);
   const modul = ark && ark !== "meny" ? moduler.find((m) => m.id === ark && m.punkter.length > 1) : undefined;
   const apen = ark === "meny" || !!modul;
   const treff = sokIMenyen(moduler, konto, sok);
+  // Mens man søker, er arket like høyt hele tiden (styles.css): det krymper ikke med treffene, og
+  // søkefeltet står øverst på skjermen, over tastaturet. Ellers er det så høyt som innholdet.
+  const soker = !modul && (iSok || sok.trim() !== "");
+  useDraNed(ref, lukk, { medie: "(max-width: 860px)", liste: ".menyark-liste" });
 
   useEffect(() => {
     const d = ref.current;
@@ -176,17 +229,28 @@ export function Menyark({
     }
     if (!apen && d.open) d.close();
     if (!apen) {
+      clearTimeout(blurTid.current);
       settSok("");
+      settISok(false);
+      settApenDel(null);
       settVelgBunn(false);
     }
   }, [apen]);
-  // Hele menyen åpner ved modulen man er i (siden man er på, er markert).
+  // Fra modularket til hele menyen («Hele menyen»): lista begynner øverst.
+  useEffect(() => {
+    if (liste.current) liste.current.scrollTop = 0;
+  }, [ark]);
+  // En del som åpnes nederst (eller valget av bunnmenyen i Konto), rulles fram når den ikke får
+  // plass.
   useEffect(() => {
     const l = liste.current;
-    if (ark !== "meny" || !l) return;
-    const her = l.querySelector<HTMLElement>("[aria-current='page']")?.closest<HTMLElement>("section");
-    l.scrollTop = her ? Math.max(0, her.offsetTop - 8) : 0;
-  }, [ark]);
+    if (!l || !apenDel) return;
+    const mal = (velgBunn && apenDel === "konto" ? l.querySelector<HTMLElement>(".menyark-bunnvalg") : null) ?? l.querySelector<HTMLElement>(`[data-del="${apenDel}"]`);
+    if (!mal) return;
+    const bunn = mal.offsetTop + mal.offsetHeight;
+    if (bunn > l.scrollTop + l.clientHeight) l.scrollTo({ top: Math.min(mal.offsetTop - 6, bunn - l.clientHeight + 12), behavior: "smooth" });
+  }, [apenDel, velgBunn]);
+  const veksle = (id: string) => settApenDel((d) => (d === id ? null : id));
 
   const ga = (e: FormEvent) => {
     e.preventDefault();
@@ -199,13 +263,17 @@ export function Menyark({
     <dialog
       ref={ref}
       id="mobilmeny"
-      className={`menyark${modul ? " modulark" : ""}`}
+      className={`menyark${modul ? " modulark" : ""}${soker ? " soker" : ""}`}
       aria-label={modul ? modul.navn : "Meny"}
       onClose={lukk}
       onCancel={lukk}
       onClick={(e) => {
         // Trykk utenfor arket (på bakgrunnen) eller på en side lukker det, også siden man er på.
-        if (e.target === e.currentTarget || (e.target as HTMLElement).closest("a")) lukk();
+        // Bakgrunnen kjennes på hvor trykket er: endrer arket høyde midt i et trykk (søkefeltet
+        // får fokus), havner klikket på selve dialogen, men innenfor arket.
+        const r = e.currentTarget.getBoundingClientRect();
+        const utenfor = e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right;
+        if ((e.target === e.currentTarget && utenfor) || (e.target as HTMLElement).closest("a")) lukk();
       }}
     >
       {apen && (
@@ -225,7 +293,21 @@ export function Menyark({
           </div>
           {!modul && (
             <form className="menyark-sok" role="search" onSubmit={ga}>
-              <input type="search" value={sok} onChange={(e) => settSok(e.target.value)} placeholder="Finn en side" aria-label="Finn en side" enterKeyHint="go" />
+              <input
+                type="search"
+                value={sok}
+                onChange={(e) => settSok(e.target.value)}
+                onFocus={() => {
+                  clearTimeout(blurTid.current);
+                  settISok(true);
+                }}
+                onBlur={() => {
+                  blurTid.current = setTimeout(() => settISok(false), 250);
+                }}
+                placeholder="Finn en side"
+                aria-label="Finn en side"
+                enterKeyHint="go"
+              />
             </form>
           )}
           <div ref={liste} className="menyark-liste">
@@ -255,18 +337,21 @@ export function Menyark({
                       <UlesteTall n={nye(m)} />
                     </Link>
                   ) : (
-                    <section key={m.id} aria-labelledby={`menyark-${m.id}`}>
-                      <h3 id={`menyark-${m.id}`} className={m.aktiv ? "her" : undefined}>
-                        <m.Ikon storrelse={16} />
-                        {m.navn}
-                      </h3>
+                    <Del key={m.id} id={m.id} Ikon={m.Ikon} navn={m.navn} her={m.aktiv} nye={nye(m)} apen={apenDel === m.id} veksle={veksle}>
                       <Sider punkter={m.punkter} />
-                    </section>
+                    </Del>
                   ),
                 )}
                 {(konto.length > 0 || installer || bunnvalg) && (
-                  <section aria-labelledby="menyark-konto">
-                    <h3 id="menyark-konto">Konto</h3>
+                  <Del
+                    id="konto"
+                    Ikon={IkonInnstillinger}
+                    navn="Konto"
+                    her={konto.some((x) => x.aktiv)}
+                    nye={konto.reduce((n, x) => n + (x.teller ?? 0), 0)}
+                    apen={apenDel === "konto"}
+                    veksle={veksle}
+                  >
                     <div className="menyark-sider">
                       {konto.map((x) => (
                         <Side key={x.til} x={x} />
@@ -283,7 +368,7 @@ export function Menyark({
                       )}
                     </div>
                     {bunnvalg && velgBunn && <BunnValg {...bunnvalg} />}
-                  </section>
+                  </Del>
                 )}
               </>
             )}
