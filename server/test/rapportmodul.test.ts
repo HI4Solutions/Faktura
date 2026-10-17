@@ -52,6 +52,11 @@ describe("rapportmodulen: valg og perioder", () => {
     );
   });
 
+  it("skatteberegningen: for året, for Regnskap, ikke månedlig", () => {
+    const r = rapport("regnskap.skatteberegning")!;
+    expect([r.modul, r.navn, r.parameter, r.tilgang, r.funksjon, r.maanedlig ?? false]).toEqual(["regnskap", "Skatteberegning", "aar", "regnskap", "regnskap", false]);
+  });
+
   it("årsregnskapet: for året, for Regnskap, ikke månedlig", () => {
     const r = rapport("regnskap.aarsregnskap")!;
     expect([r.modul, r.navn, r.parameter, r.tilgang, r.funksjon, r.maanedlig ?? false]).toEqual(["regnskap", "Årsregnskap", "aar", "regnskap", "regnskap", false]);
@@ -223,6 +228,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "regnskap.mva",
         "regnskap.resultat",
         "regnskap.balanse",
+        "regnskap.skatteberegning",
         "regnskap.aarsregnskap",
         "regnskap.mva_justering",
         "regnskap.naeringsspesifikasjon",
@@ -259,6 +265,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
         "regnskap.mva",
         "regnskap.resultat",
         "regnskap.balanse",
+        "regnskap.skatteberegning",
         "regnskap.aarsregnskap",
         "regnskap.mva_justering",
         "regnskap.naeringsspesifikasjon",

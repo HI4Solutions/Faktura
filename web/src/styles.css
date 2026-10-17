@@ -2833,6 +2833,20 @@ table.aars-tabell tr.sum td { font-weight: 650; border-top: 1px solid var(--kant
 @media (max-width: 900px) {
   .aars-tabeller { grid-template-columns: 1fr; }
 }
+/* Skatteberegningen (forslaget til betalbar og utsatt skatt): lukket når årsoppgjøret er bokført. */
+details.aars-skatt { margin-top: 14px; border-top: 1px solid var(--kant); padding-top: 12px; }
+details.aars-skatt > summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+details.aars-skatt > summary .dempet { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+details.aars-skatt[open] > summary { margin-bottom: 6px; }
+details.aars-skatt p { margin: 6px 0; max-width: 80ch; }
+details.aars-skatt td input:not(.fjor-felt) { width: 100%; min-width: 0; padding: 4px 6px; }
+.aars-skattefordel { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 4px; }
+.aars-skattefordel input[type="checkbox"] { flex: none; margin-top: 2px; }
+.aars-underskudd label { max-width: 320px; }
+@media (max-width: 700px) {
+  details.aars-skatt table.aars-tabell td, details.aars-skatt table.aars-tabell th { padding-left: 4px; padding-right: 4px; }
+  details.aars-skatt .fjor-felt { width: 78px; }
+}
 /* Regnskap → Årsregnskap (RegnskapAarsregnskap.tsx): oppstillingen med overskrifter, innrykk og
    hovedsummer, fjorårstallene for hånd, og skjemaene for fastsettelsen og notene. */
 table.aarsregnskap-tabell tr.overskrift td { padding-top: 14px; padding-bottom: 4px; font-weight: 650; color: var(--tekst); border-bottom: none; }

@@ -81,7 +81,19 @@ describe.skipIf(!process.env.DATABASE_URL)("årsoppgjøret i appen", () => {
     expect([linje(s.balanse, "bank"), linje(s.balanse, "eiendeler"), linje(s.balanse, "egenkapital"), linje(s.balanse, "udisponert"), linje(s.balanse, "ek_gjeld")]).toEqual([
       100000, 100000, 50000, 50000, 100000,
     ]);
-    expect(s.oppgjor).toEqual({ skatt: 0, utbytte: 0, resultat: 50000, aarsresultat: 50000, overforing: 50000, bilag: null, stemmer: false, trengs: true });
+    expect(s.oppgjor).toEqual({
+      skatt: 0,
+      utbytte: 0,
+      utsatt_skatt: null,
+      utsatt_for: { skatt: 0, fordel: 0 },
+      endring_utsatt: 0,
+      resultat: 50000,
+      aarsresultat: 50000,
+      overforing: 50000,
+      bilag: null,
+      stemmer: false,
+      trengs: true,
+    });
 
     const r = await ok("POST", o("/regnskap/aarsoppgjor/2025"), { skatt: 11000, utbytte: 20000 });
     expect(r.bilag.bilagsnummer).toBe("Å-2025-1");

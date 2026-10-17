@@ -295,13 +295,27 @@ kapittel 9; `server/src/mvaJustering.ts`, `0095_mva_justering.sql`), under Regns
   årsresultatet) og **balansen** 31. desember (anleggsmidler, varer, fordringer, investeringer, bank,
   egenkapital, langsiktig og kortsiktig gjeld), etter kontoklassene i NS 4102, med fjoråret.
   Resultatet som ikke er ført mot egenkapitalen, står på en egen linje i balansen, så den går opp.
-- **Årsoppgjøret** (serie Å, 31. desember, når året er over): skattekostnaden (8300 mot 2500) og
-  utbyttet (8920 mot 2800) når de er oppgitt, og resten av årsresultatet overført til annen
-  egenkapital (8960 mot 2050), eller underskuddet dekket av den. Resultatkontoene går da i null for
-  året, og «resultat fra tidligere år» i saldobalansen forsvinner. Disponeringer som er ført i andre
+- **Skatteberegningen** (forslag, `server/src/skatteberegning.ts`): resultatet før skattekostnad,
+  pluss de permanente forskjellene (kostnadene på kontoene uten fradrag i NS 4102 – representasjon
+  7360, annen salgskostnad 7395, kontingenter 7410, gaver 7430 og renter 8140 – minus skattefrie
+  renter 8040 og aksjeinntektene etter fritaksmetoden, pluss 3 % av utbyttet), minus økningen i de
+  midlertidige forskjellene (driftsmidlene: bokført verdi i anleggsregisteret minus den skattemessige
+  saldoen i saldoskjemaet; gevinst- og tapskontoen), minus fremførbart underskudd som brukes, gir
+  alminnelig inntekt, og betalbar skatt er 22 % av den. Utsatt skatt 31. desember er 22 % av de
+  midlertidige forskjellene minus underskuddet som kan fremføres; en utsatt skattefordel
+  balanseføres bare når brukeren velger det. Skattekostnaden er betalbar skatt pluss endringen i
+  utsatt skatt. Underskuddet og de andre midlertidige forskjellene følger med fra året før; det
+  første året (og når skattemeldingen sier noe annet) legges underskuddet inn, og andre permanente
+  og midlertidige forskjeller kan legges til. «Bruk forslaget» fyller ut feltene for årsoppgjøret.
+  Rapporten «Skatteberegning» står under Rapporter → Regnskap. Skattemeldingen gjelder.
+- **Årsoppgjøret** (serie Å, 31. desember, når året er over): betalbar skatt (8300 mot 2500),
+  endringen i utsatt skatt (8320 mot 2120 utsatt skatt eller 1070 utsatt skattefordel, når den
+  utsatte skatten 31. desember er oppgitt) og utbyttet (8920 mot 2800), og resten av årsresultatet
+  overført til annen egenkapital (8960 mot 2050), eller underskuddet dekket av den.
+  Resultatkontoene går da i null for året, og «resultat fra tidligere år» i saldobalansen forsvinner. Disponeringer som er ført i andre
   bilag (8800–8999), trekkes fra. Endres året etterpå, sier appen fra, og årsoppgjøret føres på nytt
-  (det gamle reverseres). Kontoene kan endres under Kontoer. Skattekostnaden står i skattemeldingen
-  (regnskapsføreren regner den ofte ut), og utbyttet er det generalforsamlingen vedtar.
+  (det gamle reverseres). Kontoene kan endres under Kontoer. Utbyttet er det generalforsamlingen
+  vedtar.
 - **Periodelåsen**: regnskapet kan låses til og med en dato (et år, en termin som er levert, eller en
   annen dato som er over). Et bilag med dato i en låst periode føres på den første åpne dagen, med den
   opprinnelige datoen i teksten; det gjelder alle bilagene, også reverseringene og det automatikken

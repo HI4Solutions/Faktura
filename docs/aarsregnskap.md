@@ -5,7 +5,8 @@ Regnskapsregisteret i Brønnøysund vil ha det (RR-0002, «Årsregnskap for vanl
 
 - **Resultatregnskapet** for året og **balansen** 31. desember, med fjoråret, etter postene i
   Brønnøysunds skjema. Tallene hentes fra kontoene (NS 4102) etter årsoppgjøret (skattekostnaden og
-  disponeringene, se `docs/regnskap.md`) og vises i hele kroner. Øreavrundingen føres mot annen
+  disponeringene; skatteberegningen der foreslår betalbar og utsatt skatt, se `docs/regnskap.md`) og
+  vises i hele kroner. Øreavrundingen føres mot annen
   egenkapital og overføringene til annen egenkapital, så summene går opp. Bare postene med beløp
   vises (og summene Brønnøysund krever).
 - **Fjorårstallene** kommer fra regnskapet når fjoråret ligger her. Ellers (f.eks. det første året

@@ -2,9 +2,10 @@
 //
 // Årsoppgjøret for et år: sjekklisten for året (det som gjenstår i månedsavslutningene: bankpostene,
 // utgiftene, lønnen, avskrivningene, periodiseringene og merverdiavgiften), resultatregnskapet og
-// balansen med fjoråret, og bilaget i serie Å den 31. desember: skattekostnaden og utbyttet når de er
-// oppgitt, og overføringen av resten av årsresultatet til annen egenkapital (eller dekningen av
-// underskuddet), så resultatkontoene går i null for året. Endres året etterpå, sier appen fra, og
+// balansen med fjoråret, og bilaget i serie Å den 31. desember: betalbar skatt, endringen i utsatt
+// skatt og utbyttet når de er oppgitt, og overføringen av resten av årsresultatet til annen
+// egenkapital (eller dekningen av underskuddet), så resultatkontoene går i null for året. Forslaget
+// til skatten regnes i skatteberegning.ts. Endres året etterpå, sier appen fra, og
 // årsoppgjøret føres på nytt. Etterpå låses året: et bilag med dato i en låst periode føres på den
 // første åpne dagen (databasen), og et manuelt bilag dit avvises.
 import { Hono, type Context } from "hono";
@@ -17,6 +18,7 @@ import { gjenstar, maanedsstatus, type Punkt } from "./maanedsavslutning.js";
 import type { Rapportdef } from "./rapportmodul.js";
 import { dato as visDato, kr } from "./regler.js";
 import { bokforSalgNaa } from "./salgBokforing.js";
+import { skatteberegning, skatteinndataS, utsattFor, type Skatteberegning } from "./skatteberegning.js";
 
 const rund = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const osloIDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
@@ -118,22 +120,35 @@ export async function balanse(db: Db, org: string, til: string) {
 
 export type Postering = { konto: string; belop: number; tekst: string };
 
-// Bilaget for årsoppgjøret fra summene for året (uten årsoppgjørsbilaget): skattekostnaden og
-// utbyttet som er oppgitt, og overføringen av resten av årsresultatet til annen egenkapital.
-// Disponeringer som er ført i andre bilag (8800–8999), er trukket fra.
-export function disponering(s: Map<string, number>, k: Record<Regnskapsrolle, string>, skatt: number, utbytte: number) {
+// Utsatt skatt i årsoppgjøret: saldoene før årsoppgjøret (utsatt skatt kredit positivt, utsatt
+// skattefordel debet positivt) og den utsatte skatten 31. desember (negativ: utsatt skattefordel).
+export type Utsatt = { for: { skatt: number; fordel: number }; ub: number };
+
+// Bilaget for årsoppgjøret fra summene for året (uten årsoppgjørsbilaget): betalbar skatt, endringen
+// i utsatt skatt (når den utsatte skatten 31. desember er oppgitt) og utbyttet, og overføringen av
+// resten av årsresultatet til annen egenkapital. Disponeringer som er ført i andre bilag
+// (8800–8999), er trukket fra.
+export function disponering(s: Map<string, number>, k: Record<Regnskapsrolle, string>, skatt: number, utbytte: number, utsatt: Utsatt | null = null) {
   const resultat = -sumOver(s, "3000", "8799");
   const disponert = sumOver(s, "8800", "8999");
-  const aarsresultat = rund(resultat - skatt);
+  // Utsatt skatt (gjeld) og utsatt skattefordel (eiendel) til saldoene 31. desember; endringen er
+  // kostnaden (eller inntekten) i resultatet.
+  const dSkatt = utsatt ? rund(Math.max(utsatt.ub, 0) - utsatt.for.skatt) : 0;
+  const dFordel = utsatt ? rund(Math.max(-utsatt.ub, 0) - utsatt.for.fordel) : 0;
+  const endringUtsatt = rund(dSkatt - dFordel);
+  const aarsresultat = rund(resultat - skatt - endringUtsatt);
   const overforing = rund(aarsresultat - utbytte - disponert);
   const p: Postering[] = [];
   if (skatt) p.push({ konto: k.skattekostnad, belop: skatt, tekst: "Betalbar skatt" }, { konto: k.betalbar_skatt, belop: -skatt, tekst: "Betalbar skatt" });
+  if (endringUtsatt) p.push({ konto: k.endring_utsatt_skatt, belop: endringUtsatt, tekst: "Endring i utsatt skatt" });
+  if (dSkatt) p.push({ konto: k.utsatt_skatt, belop: -dSkatt, tekst: "Endring i utsatt skatt" });
+  if (dFordel) p.push({ konto: k.utsatt_skattefordel, belop: dFordel, tekst: "Endring i utsatt skattefordel" });
   if (utbytte) p.push({ konto: k.utbytte, belop: utbytte, tekst: "Avsatt utbytte" }, { konto: k.avsatt_utbytte, belop: -utbytte, tekst: "Avsatt utbytte" });
   if (overforing) {
     const tekst = overforing > 0 ? "Overført til annen egenkapital" : "Underskudd dekket av annen egenkapital";
     p.push({ konto: k.disponering, belop: overforing, tekst }, { konto: k.annen_egenkapital, belop: -overforing, tekst });
   }
-  return { resultat, aarsresultat, overforing, disponert, posteringer: p };
+  return { resultat, aarsresultat, overforing, disponert, endring_utsatt: endringUtsatt, posteringer: p };
 }
 
 const perKonto = (l: { konto: string; belop: number }[]) => {
@@ -148,10 +163,11 @@ const like = (a: Record<string, number>, b: Record<string, number>) => {
 
 async function aarsrad(db: Db, org: string, aar: number, lag = false) {
   if (lag) await db.query("insert into faktura.aarsoppgjor (org_id, aar) values ($1, $2) on conflict (org_id, aar) do nothing", [org, aar]);
-  return en<{ id: string; skatt: number; utbytte: number }>(db, "select id, skatt::float8 as skatt, utbytte::float8 as utbytte from faktura.aarsoppgjor where org_id = $1 and aar = $2", [
-    org,
-    aar,
-  ]);
+  return en<{ id: string; skatt: number; utbytte: number; utsatt_skatt: number | null }>(
+    db,
+    "select id, skatt::float8 as skatt, utbytte::float8 as utbytte, utsatt_skatt::float8 as utsatt_skatt from faktura.aarsoppgjor where org_id = $1 and aar = $2",
+    [org, aar],
+  );
 }
 
 async function gjeldende(db: Db, org: string, id: string | undefined) {
@@ -176,8 +192,11 @@ export type Aarsstatus = {
   resultat: Linje[];
   balanse: Linje[];
   oppgjor: {
-    skatt: number;
+    skatt: number; // betalbar skatt
     utbytte: number;
+    utsatt_skatt: number | null; // utsatt skatt 31.12 (negativ: utsatt skattefordel); null: føres ikke
+    utsatt_for: { skatt: number; fordel: number }; // saldoene før årsoppgjøret
+    endring_utsatt: number;
     resultat: number; // resultatet før skatten som oppgis
     aarsresultat: number;
     overforing: number;
@@ -185,6 +204,8 @@ export type Aarsstatus = {
     stemmer: boolean;
     trengs: boolean;
   };
+  // Forslaget til skatten (bare når årsoppgjøret vises).
+  skatteberegning: Skatteberegning | null;
 };
 
 // Det som gjenstår i månedsavslutningene for månedene i året som er over, samlet per punkt.
@@ -222,7 +243,9 @@ export async function aarsstatus(db: Db, org: string, aar: number, iDag = osloID
   const opp = await gjeldende(db, org, rad?.id);
   const skatt = rad?.skatt ?? 0;
   const utbytte = rad?.utbytte ?? 0;
-  const d = disponering(await kontosummer(db, org, `${aar}-01-01`, til, true), k, skatt, utbytte);
+  const utsattSkatt = rad?.utsatt_skatt ?? null;
+  const utsattForAar = await utsattFor(db, org, aar, k);
+  const d = disponering(await kontosummer(db, org, `${aar}-01-01`, til, true), k, skatt, utbytte, utsattSkatt === null ? null : { for: utsattForAar, ub: utsattSkatt });
   const onsket = perKonto(d.posteringer);
   return {
     aar,
@@ -235,6 +258,9 @@ export async function aarsstatus(db: Db, org: string, aar: number, iDag = osloID
     oppgjor: {
       skatt,
       utbytte,
+      utsatt_skatt: utsattSkatt,
+      utsatt_for: utsattForAar,
+      endring_utsatt: d.endring_utsatt,
       resultat: d.resultat,
       aarsresultat: d.aarsresultat,
       overforing: d.overforing,
@@ -242,21 +268,36 @@ export async function aarsstatus(db: Db, org: string, aar: number, iDag = osloID
       stemmer: opp ? like(onsket, opp.kontoer) : !d.posteringer.length,
       trengs: d.posteringer.length > 0,
     },
+    skatteberegning: medSjekkliste ? await skatteberegning(db, org, aar) : null,
   };
 }
 
-// Fører årsoppgjøret (eller på nytt), med skattekostnaden og utbyttet. Gir bilaget, eller null når det
-// stemte (eller ikke var noe å føre).
-export async function bokforAarsoppgjor(db: Db, org: string, aar: number, v: { skatt?: number; utbytte?: number }, iDag = osloIDag()) {
+// Fører årsoppgjøret (eller på nytt), med betalbar skatt, utsatt skatt 31. desember (null: føres ikke)
+// og utbyttet. Gir bilaget, eller null når det stemte (eller ikke var noe å føre).
+export async function bokforAarsoppgjor(
+  db: Db,
+  org: string,
+  aar: number,
+  v: { skatt?: number; utbytte?: number; utsatt_skatt?: number | null },
+  iDag = osloIDag(),
+) {
   if (`${aar}-12-31` >= iDag) throw new ApiFeil(409, "Året er ikke over");
   await bokforSalgNaa(db, org);
   const rad = (await aarsrad(db, org, aar, true))!;
   const skatt = v.skatt ?? rad.skatt;
   const utbytte = v.utbytte ?? rad.utbytte;
-  if (skatt !== rad.skatt || utbytte !== rad.utbytte)
-    await db.query("update faktura.aarsoppgjor set skatt = $3, utbytte = $4, oppdatert = now() where org_id = $1 and id = $2", [org, rad.id, skatt, utbytte]);
+  const utsattSkatt = v.utsatt_skatt !== undefined ? v.utsatt_skatt : rad.utsatt_skatt;
+  if (skatt !== rad.skatt || utbytte !== rad.utbytte || utsattSkatt !== rad.utsatt_skatt)
+    await db.query("update faktura.aarsoppgjor set skatt = $3, utbytte = $4, utsatt_skatt = $5, oppdatert = now() where org_id = $1 and id = $2", [
+      org,
+      rad.id,
+      skatt,
+      utbytte,
+      utsattSkatt,
+    ]);
   const k = regnskapskontoer(await hentRegnskapsoppsett(db, org));
-  const d = disponering(await kontosummer(db, org, `${aar}-01-01`, `${aar}-12-31`, true), k, skatt, utbytte);
+  const utsatt = utsattSkatt === null ? null : { for: await utsattFor(db, org, aar, k), ub: utsattSkatt };
+  const d = disponering(await kontosummer(db, org, `${aar}-01-01`, `${aar}-12-31`, true), k, skatt, utbytte, utsatt);
   const opp = await gjeldende(db, org, rad.id);
   if (!d.posteringer.length) {
     if (opp) await db.query("select faktura.angre_aarsoppgjor($1, $2)", [org, rad.id]);
@@ -293,6 +334,7 @@ const bruk = <T>(c: Context, fn: (db: Db) => Promise<T>) => somBruker<T>(c.get("
 const krev = (db: Db, org: string) => db.query("select faktura.krev($1, 'regnskap')", [org]);
 const aarS = z.coerce.number({ error: "Ugyldig år" }).int("Ugyldig år").min(2000, "Ugyldig år").max(2100, "Ugyldig år");
 const belopS = z.number({ error: "Ugyldig beløp" }).finite().min(0, "Beløpet kan ikke være negativt").lt(1e11, "Beløpet er for stort");
+const utsattS = z.number({ error: "Ugyldig beløp" }).finite().gt(-1e11, "Beløpet er for stort").lt(1e11, "Beløpet er for stort").nullable();
 
 export function aarsoppgjorRuter() {
   const r = new Hono();
@@ -316,10 +358,10 @@ export function aarsoppgjorRuter() {
     );
   });
 
-  // Fører årsoppgjøret (eller på nytt), med skattekostnaden og utbyttet.
+  // Fører årsoppgjøret (eller på nytt), med betalbar skatt, utsatt skatt og utbyttet.
   r.post("/regnskap/aarsoppgjor/:aar", async (c) => {
     const aar = aarS.parse(c.req.param("aar"));
-    const b = z.object({ skatt: belopS.optional(), utbytte: belopS.optional() }).parse(await c.req.json().catch(() => ({})));
+    const b = z.object({ skatt: belopS.optional(), utbytte: belopS.optional(), utsatt_skatt: utsattS.optional() }).parse(await c.req.json().catch(() => ({})));
     return c.json(
       await bruk(c, async (db) => {
         await krev(db, orgId(c));
@@ -327,6 +369,24 @@ export function aarsoppgjorRuter() {
         return { bilag, status: await aarsstatus(db, orgId(c), aar) };
       }),
       201,
+    );
+  });
+
+  // Det brukeren legger inn i skatteberegningen for året (det som sendes, slås sammen med det som er
+  // lagret; null fjerner). Gir årsoppgjøret med det nye forslaget.
+  r.put("/regnskap/aarsoppgjor/:aar/skatteberegning", async (c) => {
+    const aar = aarS.parse(c.req.param("aar"));
+    const b = skatteinndataS.parse(await c.req.json().catch(() => ({})));
+    return c.json(
+      await bruk(c, async (db) => {
+        await krev(db, orgId(c));
+        if (aar > Number(osloIDag().slice(0, 4))) throw new ApiFeil(400, "Året har ikke begynt");
+        await aarsrad(db, orgId(c), aar, true);
+        const gammel = (await en<{ s: Record<string, unknown> }>(db, "select skatteberegning as s from faktura.aarsoppgjor where org_id = $1 and aar = $2", [orgId(c), aar]))?.s ?? {};
+        const ny = Object.fromEntries(Object.entries({ ...gammel, ...b }).filter(([, v]) => v !== null && v !== undefined && v !== ""));
+        await db.query("update faktura.aarsoppgjor set skatteberegning = $3::jsonb, oppdatert = now() where org_id = $1 and aar = $2", [orgId(c), aar, JSON.stringify(ny)]);
+        return aarsstatus(db, orgId(c), aar);
+      }),
     );
   });
 

@@ -71,6 +71,9 @@ export type Regnskapsrolle =
   | "oreavrunding"
   | "skattekostnad"
   | "betalbar_skatt"
+  | "endring_utsatt_skatt"
+  | "utsatt_skatt"
+  | "utsatt_skattefordel"
   | "utbytte"
   | "avsatt_utbytte"
   | "disponering"
@@ -117,10 +120,15 @@ export const REGNSKAPSKONTOER: { rolle: Regnskapsrolle; navn: string; standard: 
   { rolle: "oppgjor_mva", navn: "Oppgjørskonto merverdiavgift", standard: "2740" },
   // Mva-oppgjøret (mva.ts): mva-meldingen er i hele kroner, og øredifferansen føres her.
   { rolle: "oreavrunding", navn: "Øreavrunding", standard: "7740" },
-  // Årsoppgjøret (aarsoppgjor.ts): skattekostnaden, utbyttet og overføringen av årsresultatet til
+  // Årsoppgjøret (aarsoppgjor.ts): betalbar skatt, utbyttet og overføringen av årsresultatet til
   // annen egenkapital.
   { rolle: "skattekostnad", navn: "Betalbar skatt (skattekostnad)", standard: "8300" },
   { rolle: "betalbar_skatt", navn: "Betalbar skatt, ikke fastsatt", standard: "2500" },
+  // Utsatt skatt (skatteberegning.ts): endringen i resultatet, og utsatt skatt (gjeld) eller utsatt
+  // skattefordel (eiendel) i balansen.
+  { rolle: "endring_utsatt_skatt", navn: "Endring i utsatt skatt/skattefordel", standard: "8320" },
+  { rolle: "utsatt_skatt", navn: "Utsatt skatt", standard: "2120" },
+  { rolle: "utsatt_skattefordel", navn: "Utsatt skattefordel", standard: "1070" },
   { rolle: "utbytte", navn: "Avsatt utbytte (disponering)", standard: "8920" },
   { rolle: "avsatt_utbytte", navn: "Avsatt utbytte (gjeld)", standard: "2800" },
   { rolle: "disponering", navn: "Overføringer annen egenkapital", standard: "8960" },

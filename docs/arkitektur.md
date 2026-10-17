@@ -927,6 +927,17 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   API-et avviser manuelle bilag i en låst periode (`krevAapenPeriode`). Årsoppgjøret føres med
   `bokfor_aarsoppgjor` (serie Å, kilde aarsoppgjor, `kilde_id` er raden i `aarsoppgjor` med skatten og
   utbyttet; ett gjeldende per år) og angres med `angre_aarsoppgjor`; begge avviser et låst år.
+  Skatteberegningen (`0121_skatteberegning.sql`, `server/src/skatteberegning.ts`): forslaget til
+  betalbar og utsatt skatt regnes når årsoppgjøret vises, år for år fra det første året med
+  resultatposter (så fremførbart underskudd og andre midlertidige forskjeller følger med): resultatet
+  før skatt, de permanente forskjellene fra kontoene uten fradrag og de skattefrie kontoene i NS 4102
+  (og fritaksmetoden), de midlertidige forskjellene for driftsmidlene (bokført verdi i
+  anleggsregisteret minus saldoen i saldoskjemaet, og gevinst- og tapskontoen), skattesatsen for
+  året, og det brukeren legger inn (`aarsoppgjor.skatteberegning`). `aarsoppgjor.utsatt_skatt` er
+  den utsatte skatten 31.12 som årsoppgjøret fører (negativ: utsatt skattefordel; null: føres ikke):
+  endringen mot saldoene før årsoppgjøret går til 8320 mot 2120 og 1070 (rollene
+  `endring_utsatt_skatt`, `utsatt_skatt` og `utsatt_skattefordel`). Rapporten
+  `regnskap.skatteberegning`.
   SAF-T Regnskap (`server/src/saft.ts`, `GET /regnskap/saft?aar=`): filen bygges fra bilagene og
   posteringene til og med året (saldoene), med kunden fra fakturaen eller innbetalingen og
   leverandøren fra utgiften bilaget kommer fra, grupperingen fra næringsspesifikasjonen

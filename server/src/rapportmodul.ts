@@ -36,6 +36,7 @@ import { maanedsavslutningRapporter } from "./maanedsavslutning.js";
 import { mvaRapporter } from "./mva.js";
 import { aarsoppgjorRapporter } from "./aarsoppgjor.js";
 import { aarsregnskapRapporter } from "./aarsregnskap.js";
+import { skatteberegningRapporter } from "./skatteberegning.js";
 import { mvaJusteringRapporter } from "./mvaJustering.js";
 import { naeringsspesifikasjonRapporter } from "./naeringsspesifikasjon.js";
 import { skatteetatenRapporter } from "./skatteetatenRapporter.js";
@@ -101,6 +102,7 @@ export const RAPPORTER: Rapportdef[] = [
   ...maanedsavslutningRapporter,
   ...mvaRapporter,
   ...aarsoppgjorRapporter,
+  ...skatteberegningRapporter,
   ...aarsregnskapRapporter,
   ...mvaJusteringRapporter,
   ...naeringsspesifikasjonRapporter,
