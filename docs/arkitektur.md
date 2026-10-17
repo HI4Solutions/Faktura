@@ -584,8 +584,7 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   felt og rader (fortsatt 16 px tekst i feltene, så iPhone ikke zoomer), vaktplanen én dag om
   gangen med en dagvelger (ukedagene med hvor mange som er på jobb, og «!» når en vakt mangler
   vikar; samme ukedag når uka byttes), navnene på tavla ved siden av hverandre under oppgaven,
-  forklaringen i vaktplanen for måneden i «Forklaring», og bunnmenyen med personaldelen (Ansatte,
-  Vaktplan og Timer) der. PC og fakturadelen er som før
+  og forklaringen i vaktplanen for måneden i «Forklaring». PC og fakturadelen er som før
 - `ansattgrupper` og `ansatte.gruppe_id`: rollene (i appen «Roller»; f.eks. lege og sekretær),
   med hvor mange som trengs på jobb per dag, om de med rollen er ansatt (`ikke_ansatt`), og om
   de er med på tavla (`tavle`, se over).
@@ -621,8 +620,8 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   som skrev den, kommer fra ansattregisteret (ellers fra innloggingen), og beskjeden kan ikke
   endres; den som skrev den, og eier og administrator, kan slette den. `beskjed_lest` har når
   hver bruker sist så beskjedene: nye er andres beskjeder etter det, høyst 14 dager gamle. De
-  står merket på siden, og tallet på dem står i menyen (i bunnmenyen for de ansatte, ellers som
-  en prikk på «Mer»); siden henter nye beskjeder hvert minutt mens den er åpen
+  står merket på siden, og tallet på dem står i menyen (på mobil ved Personal i bunnmenyen, ellers
+  som en prikk på «Meny»); siden henter nye beskjeder hvert minutt mens den er åpen
 - Sjekklister (`0114_sjekklister.sql`, `server/src/sjekklister.ts`, `web/src/sider/Sjekklister.tsx`,
   funksjonen `sjekklister` i Personal; se `docs/sjekklister.md`): administrator (`personal`) lager
   `sjekklister` med `sjekkliste_punkter` som gjøres daglig, ukentlig, månedlig eller ved behov, av
@@ -679,14 +678,26 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   modul med flere sider seg på den første, hovedmenyen blir en smal stripe med ikonene og et kort
   navn under hvert, og undermenyen ved siden av viser sidene i modulen; den følger siden man er
   på, kan skjules (pila øverst, eller modulen man er i) og åpnes igjen, og fanene på Regnskap
-  vises ikke på siden mens den er åpen. På mobil er menyen en skuff med det samme: i en modul er
-  hovedmenyen en smal stripe med bare ikonene, og undermenyen ligger ved siden av. Et ikon viser
-  sidene i den modulen uten å bytte side, pila gir hele menyen med navn, og skuffen åpner på
-  modulen man er i.
+  vises ikke på siden mens den er åpen.
   Tallet på nye beskjeder står ved modulen og siden. Lista ruller, og bunnen (utseendet, navnet og
   «Logg ut») står fast. Det rollen og modulene ikke gir tilgang til, er ikke med. De ansatte har
   sin egen meny (under Roller). Et regnskapsbyrå har Klienter i stedet for Oversikt og ikke
   Faktura.
+- Menyen på mobil (`web/src/meny.tsx`, under 861 px) har de samme modulene og sidene, men ingen
+  sidemeny. Bunnmenyen står fast og er den samme på alle sider: Oversikt, opptil tre snarveier og
+  «Meny». Snarveiene er modulene, de tre første i menyen, eller de brukeren velger under «Tilpass
+  bunnmenyen» i menyarket (lagret på enheten per organisasjon, `bunnmeny:<org>`, i menyens
+  rekkefølge). Har organisasjonen bare én modul med flere sider, er snarveiene sidene i den: med
+  bare Faktura Fakturaer, plussen for ny faktura og Kunder, som før (da er knappene for ny kunde
+  og ny faktura skjult på Oversikt, ellers vises de der). En modul i bunnmenyen åpner siden man
+  sist var på i den, modulen man er i, viser sidene sine i et ark, og står siden ikke i
+  bunnmenyen, er «Meny» markert. «Meny» og logoen øverst åpner menyarket (en `dialog` nederst på
+  skjermen): organisasjonen (bytt eller lag en ny), «Finn en side» (søk i navnet på sidene og
+  modulene, uten aksenter og med æ, ø og å som ae, o og a; Enter åpner det første treffet), alle
+  modulene med sidene med navn i to kolonner (gruppene i Regnskap som overskrifter), Konto, og
+  navnet og «Logg ut» nederst. Arket åpner ved modulen man er i, lukkes med krysset, Escape, et
+  trykk utenfor eller når man velger en side, og hele menyen er like høy mens man søker, så
+  søkefeltet står over tastaturet.
 - Hver har sin egen oversikt, satt sammen av de samme delene (`OversiktDeler.tsx`: hilsenen,
   nøkkeltallene, som lenker til siden de hører til, og «Til oppfølging» med én linje per ting som
   venter). Hvert kort henter sitt fra de samme rutene som sidene, så et kort som er tregt eller
@@ -1462,7 +1473,8 @@ smale menyen):
 Gruppene er kategorier som foldes ut og sammen, som for de andre, og Innstillinger (Min konto og App)
 ligger under Konto nederst. Punktet for siden og fanen man står på, er valgt, og fanene på sidene er
 der fortsatt. Bunnmenyen på mobil har Oversikt, Kalender, Ekstra
-timer og Fravær, og resten under «Mer» (med en prikk når det er nye beskjeder).
+timer og Fravær, og resten under «Meny» (menyarket i `meny.tsx`, med en prikk når det er nye
+beskjeder).
 
 Eier og administrator har Timer og Ferie som ett punkt, «Timer og ferie» (`timerOgFerie` i
 `konto.tsx`): Ferie er siste fane på Timer og åpner `/ferie`, som har de samme fanene

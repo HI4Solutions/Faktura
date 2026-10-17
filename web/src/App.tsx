@@ -41,6 +41,7 @@ import { installer } from "./pwa";
 import { Assistent } from "./assistent";
 import { iFakturadelen } from "./fakturameny";
 import { SkattekortGodkjent } from "./sider/Skattekort";
+import { Menyark, UlesteTall, bunnModuler, initialer, nye, snarveier, useBunnValg, type MenyIkon, type MenyPunkt, type Modul } from "./meny";
 import {
   IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
   IkonFravaer, IkonHoyre, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva,
@@ -48,26 +49,11 @@ import {
   IkonTimebank, IkonUtgift, IkonVelg, IkonVenstre,
 } from "./ikoner";
 
-const initialer = (navn: string) =>
-  navn
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((d) => d[0]!.toUpperCase())
-    .join("");
-
 const orgType: Record<string, string> = { foretak: "Foretak", regnskapsbyraa: "Regnskapsbyrå", privatperson: "Privatperson" };
-// Antall nye beskjeder (99+ over det).
-const UlesteTall = ({ n }: { n: number }) => (n > 0 ? <span className="ulest-tall" aria-label={`${n} nye`}>{n > 99 ? "99+" : n}</span> : null);
 
-// Sidemenyen i to nivåer: modulene (Oversikt, Plattform, Faktura, Personal, Lønn, Regnskap og
-// Rapporter; de ansatte har sine egne) i hovedmenyen, og sidene i modulen man er i, i undermenyen
-// ved siden av. gruppe: overskriften punktet står under i undermenyen (Regnskap). kort: navnet
-// under ikonet når hovedmenyen er smal.
-type MenyIkon = (p: { storrelse?: number }) => ReactNode;
-type MenyPunkt = { til: string; Ikon: MenyIkon; tekst: string; aktiv: boolean; teller?: number; gruppe?: string };
-type Modul = { id: string; navn: string; kort?: string; Ikon: MenyIkon; punkter: MenyPunkt[]; aktiv: boolean };
-
+// Sidemenyen på PC i to nivåer: modulene (Oversikt, Plattform, Faktura, Personal, Lønn, Regnskap
+// og Rapporter; de ansatte har sine egne) i hovedmenyen, og sidene i modulen man er i, i
+// undermenyen ved siden av (typene og menyen på mobil: meny.tsx).
 function MenyLenke({ x }: { x: MenyPunkt }) {
   return (
     <Link to={x.til} className={x.aktiv ? "active" : undefined} aria-current={x.aktiv ? "page" : undefined}>
@@ -81,7 +67,7 @@ function MenyLenke({ x }: { x: MenyPunkt }) {
 // En modul i hovedmenyen: en lenke når modulen har én side, ellers en knapp som viser sidene i
 // undermenyen. Antall nye (beskjedene) står ved modulen.
 function ModulKnapp({ m, apen, velg }: { m: Modul; apen: boolean; velg: (m: Modul) => void }) {
-  const teller = m.punkter.reduce((n, x) => n + (x.teller ?? 0), 0);
+  const teller = nye(m);
   const innhold = (
     <>
       <m.Ikon />
@@ -206,9 +192,9 @@ function NyFaktura() {
 function Ramme() {
   const { meg, org, velgOrg, loggUt } = useKonto();
   const [ny, settNy] = useState(false);
-  const [menyApen, settMenyApen] = useState(false);
-  // Modulen undermenyen viser: undefined følger siden man er på, null er lukket, og på mobil
-  // modulen man har trykket på i menyen.
+  // Menyarket på mobil (meny.tsx): «meny» er hele menyen, id-en til en modul bare sidene i den.
+  const [ark, settArk] = useState<string | null>(null);
+  // Modulen undermenyen på PC viser: undefined følger siden man er på, null er lukket.
   const [valgtModul, settValgtModul] = useState<string | null | undefined>(undefined);
   const { kanInstallere } = usePwa();
   useVarselNavigering();
@@ -216,7 +202,7 @@ function Ramme() {
   const nav = useNavigate();
   // Ny side: lukk menyen og start øverst (ellers lander man midt på siden etter en lang liste).
   useEffect(() => {
-    settMenyApen(false);
+    settArk(null);
     window.scrollTo(0, 0);
   }, [sted.pathname]);
 
@@ -276,8 +262,7 @@ function Ramme() {
     ((visFaktura && harFunksjon(org, "rapporter")) || visRegnskap || (kanSePersonal(org) && harFunksjon(org, "ansatte")) || (kanSeLonn(org) && harFunksjon(org, "lonn")));
   const uleste = useUlesteBeskjeder(org?.id, visBeskjeder);
   const nyeBeskjeder = sted.pathname === "/beskjeder" ? 0 : uleste;
-  // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css),
-  // og bunnmenyen viser personaldelen i stedet for fakturadelen der.
+  // Personalmodulen (Ansatte, Vaktplan, Timer, Ferie og Beskjeder): tettere på mobil (styles.css).
   const iPersonal = /^\/(ansatte|vakter|timer|ferie|beskjeder|sjekklister|lonn|fravaer|meg)(\/|$)/.test(sted.pathname);
   // Eier og administrator har Timer og Ferie som ett punkt, «Timer og ferie» (Ferie er en fane på Timer).
   const iTimerOgFerie = sted.pathname === "/timer" || (timerOgFerie(org) && sted.pathname === "/ferie");
@@ -372,8 +357,6 @@ function Ramme() {
       </Link>
     );
   };
-  // Bunnmenyen viser personaldelen på personalsidene, og alltid når fakturadelen ikke er med.
-  const personalmeny = !ansatt && (iPersonal || (!visFaktura && org?.type !== "regnskapsbyraa")) && (visAnsatte || visTimer || visBeskjeder);
   // Regnskapet: fanene på Regnskap som sider, i grupper (Regnskap.tsx; uten fane i adressen er det
   // bilagene).
   const regnskapFane = sted.pathname === "/regnskap" ? (her.get("fane") ?? "bilag") : null;
@@ -393,10 +376,11 @@ function Ramme() {
   // Plattformadministratoren (GitHub-variabelen ADMIN_EPOSTER) har sin egen oversikt over plattformen,
   // organisasjonene og driften (fanene i Admin.tsx).
   const adminFane = sted.pathname === "/admin" ? (her.get("fane") ?? "oversikt") : null;
-  const plattformPunkter: [string, string, string[], (p: { storrelse?: number }) => ReactNode][] = [
-    ["/admin", "Plattformoversikt", ["oversikt"], IkonNokkel],
-    ["/admin?fane=organisasjoner", "Organisasjoner", ["organisasjoner", "funksjoner", "brukere"], IkonSkjold],
-    ["/admin?fane=drift", "Drift", ["drift"], IkonDrift],
+  // Det siste er navnet i bunnmenyen på mobil.
+  const plattformPunkter: [string, string, string[], MenyIkon, string][] = [
+    ["/admin", "Plattformoversikt", ["oversikt"], IkonNokkel, "Oversikt"],
+    ["/admin?fane=organisasjoner", "Organisasjoner", ["organisasjoner", "funksjoner", "brukere"], IkonSkjold, "Organisasjoner"],
+    ["/admin?fane=drift", "Drift", ["drift"], IkonDrift, "Drift"],
   ];
 
   // Sidemenyen: modulene i hovedmenyen (Oversikt øverst, så Plattform for plattformadministratoren
@@ -425,7 +409,7 @@ function Ramme() {
         "plattform",
         "Plattform",
         IkonNokkel,
-        plattformPunkter.map(([til, tekst, faner, Ikon]) => punkt(til, Ikon, tekst, !!adminFane && faner.includes(adminFane))),
+        plattformPunkter.map(([til, tekst, faner, Ikon, kort]) => ({ ...punkt(til, Ikon, tekst, !!adminFane && faner.includes(adminFane)), kort })),
         sted.pathname === "/admin",
       ),
     ...(org && !ansatt
@@ -439,7 +423,7 @@ function Ramme() {
           modul("personal", "Personal", IkonAnsatte, [
             visAnsatte && punkt("/ansatte", IkonAnsatte, "Ansatte", sted.pathname.startsWith("/ansatte")),
             visTimer && visVakter && punkt("/vakter", IkonKalender, "Vaktplan", sted.pathname === "/vakter"),
-            visTimer && punkt("/timer", IkonKlokke, timerOgFerie(org) ? "Timer og ferie" : "Timer", iTimerOgFerie),
+            visTimer && { ...punkt("/timer", IkonKlokke, timerOgFerie(org) ? "Timer og ferie" : "Timer", iTimerOgFerie), kort: "Timer" },
             visBeskjeder && punkt("/beskjeder", IkonBjelle, "Beskjeder", sted.pathname === "/beskjeder", nyeBeskjeder),
             visSjekklister && punkt("/sjekklister", IkonSjekkliste, "Sjekklister", sted.pathname === "/sjekklister"),
           ]),
@@ -491,15 +475,42 @@ function Ramme() {
   const aktivModul = moduler.find((m) => m.aktiv && m.punkter.length > 1)?.id ?? null;
   const apenId = valgtModul === undefined ? aktivModul : valgtModul;
   const apen = moduler.find((m) => m.id === apenId && m.punkter.length > 1) ?? null;
-  // I en annen modul følger undermenyen siden igjen, og menyen på mobil starter der hver gang den åpnes.
-  useEffect(() => settValgtModul(undefined), [aktivModul, menyApen]);
+  // I en annen modul følger undermenyen siden igjen.
+  useEffect(() => settValgtModul(undefined), [aktivModul]);
   const velgModul = (m: Modul) => {
-    // Mobil: sidene i modulen vises i skuffen, uten å gå dit (modulen som vises, skjuler dem igjen).
-    if (window.matchMedia("(max-width: 860px)").matches) return settValgtModul(apen?.id === m.id ? null : m.id);
-    // PC: modulen man er i, viser eller skjuler undermenyen; en annen modul åpnes på første side.
+    // Modulen man er i, viser eller skjuler undermenyen; en annen modul åpnes på første side.
     if (m.id === aktivModul) return settValgtModul(apen?.id === m.id ? null : undefined);
     nav(m.punkter[0]!.til);
   };
+
+  // Mobil (meny.tsx): siden man sist var på i hver modul, som modulen i bunnmenyen åpner.
+  const [sisteSide, settSisteSide] = useState<Record<string, string>>({});
+  const herSide = moduler.find((m) => m.id === aktivModul)?.punkter.find((x) => x.aktiv)?.til;
+  useEffect(() => {
+    if (aktivModul && herSide) settSisteSide((s) => (s[aktivModul] === herSide ? s : { ...s, [aktivModul]: herSide }));
+  }, [aktivModul, herSide]);
+  const modulSide = (m: Modul) => m.punkter.find((x) => x.til === sisteSide[m.id])?.til ?? m.punkter[0]!.til;
+  // Bunnmenyen: Oversikt, snarveiene og «Meny» (de ansatte har sine egne punkter). Modulene i den
+  // velges i menyarket når det er flere enn det er plass til.
+  const [bunnValg, settBunnValg] = useBunnValg(org?.id);
+  const snarvei = ansatt ? [] : snarveier(moduler, bunnValg, !!org && visFaktura && kanSkrive(org));
+  const bunnmoduler = moduler.filter((m) => m.id !== "oversikt");
+  const velgBareModuler = snarvei.some((s) => s.type === "modul") && bunnmoduler.length > snarvei.length;
+  // Nye beskjeder som ikke står på en snarvei, gir en prikk på «Meny».
+  const vist = snarvei.reduce((n, s) => n + (s.type === "modul" ? nye(s.modul) : s.type === "side" ? (s.punkt.teller ?? 0) : 0), 0);
+  const prikkPaaMeny = nyeBeskjeder > vist;
+  // Er siden ikke i bunnmenyen (en modul som ikke står der, eller Innstillinger), er «Meny» markert.
+  const iBunnmenyen =
+    sted.pathname === "/" ||
+    snarvei.some((s) => (s.type === "modul" ? s.modul.aktiv : s.type === "side" ? s.punkt.aktiv : sted.pathname === "/fakturaer/ny")) ||
+    ansattGrupper.some(([, punkter]) => punkter.some((x) => x.bunn && (x.bunnAktiv ?? x.aktiv)));
+  // Kontoen nederst i menyarket, som i sidemenyen på PC.
+  const konto: MenyPunkt[] = [
+    ...(org ? [{ til: "/innstillinger", Ikon: IkonInnstillinger, tekst: "Innstillinger", aktiv: sted.pathname === "/innstillinger" }] : []),
+    ...(org?.verifisering === "ny" && org.direkte_medlem && erAdmin(org)
+      ? [{ til: "/verifisering", Ikon: IkonSkjold, tekst: "Verifiser organisasjon", aktiv: sted.pathname === "/verifisering" }]
+      : []),
+  ];
 
   // Plattformadministratoren kommer inn også uten organisasjon (til sin egen oversikt).
   if (ny || (orgs.length === 0 && !meg?.plattformadmin)) {
@@ -529,12 +540,44 @@ function Ramme() {
     );
   }
 
+  // Organisasjonen øverst i menyen (på PC og i menyarket på mobil): trykk for å bytte eller lage en ny.
+  const orgvelger = (
+    <div className="orgvelger" title={org?.navn}>
+      <span className="avatar">{initialer(org?.navn ?? "?")}</span>
+      <div style={{ minWidth: 0 }}>
+        <div className="navn">{org?.navn ?? "Ingen organisasjon"}</div>
+        <div className="type">
+          {/* Med en egen rolle: navnet på rollen (f.eks. Personalansvarlig). */}
+          {org ? (org.rolle === "tilpasset" && org.tilgangsrolle ? org.tilgangsrolle : ansatt ? "Ansatt" : (orgType[org.type] ?? org.type)) : "Plattformadministrator"}
+          {org && !org.direkte_medlem ? " · klient" : ""}
+        </div>
+      </div>
+      <span className="pil">
+        <IkonVelg storrelse={16} />
+      </span>
+      <select value={org?.id ?? ""} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
+        {!org && (
+          <option value="" disabled>
+            Ingen organisasjon
+          </option>
+        )}
+        {orgs.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.navn}
+            {o.direkte_medlem ? "" : " (klient)"}
+          </option>
+        ))}
+        <option value="__ny">+ Ny organisasjon</option>
+      </select>
+    </div>
+  );
+
   return (
-    <div className={`ramme${apen ? " med-undermeny" : ""}`}>
+    <div className={`ramme${apen ? " med-undermeny" : ""}${snarvei.some((s) => s.type === "ny-faktura") ? " med-pluss" : ""}`}>
       {/* Mobil: logo øverst (trykk for menyen), utseende og logg ut til høyre; menyen ligger
-          også i bunnmenyen («Mer»). */}
+          også i bunnmenyen («Meny»). */}
       <header className="mobiltopp">
-        <button type="button" className="logo-knapp" aria-label="Åpne menyen" aria-controls="hovedmeny" aria-expanded={menyApen} onClick={() => settMenyApen(true)}>
+        <button type="button" className="logo-knapp" aria-label="Åpne menyen" aria-haspopup="dialog" aria-controls="mobilmeny" aria-expanded={ark === "meny"} onClick={() => settArk("meny")}>
           <Logo storrelse={30} />
         </button>
         <div className="topp-knapper">
@@ -550,94 +593,100 @@ function Ramme() {
           </button>
         </div>
       </header>
+      {/* Bunnmenyen på mobil står fast: Oversikt, snarveiene og «Meny» (meny.tsx). Modulen man er
+          i, viser sidene sine i et ark; en annen modul åpner siden man sist var på i den. */}
       <nav className="bunnmeny" aria-label="Hovedmeny">
-        {!org ? (
-          <NavLink to="/admin">
-            <IkonNokkel storrelse={22} />
-            <span>Plattform</span>
-          </NavLink>
-        ) : ansatt ? (
-          <>
-            <NavLink to="/" end>
-              <IkonOversikt storrelse={22} />
-              <span>Oversikt</span>
-            </NavLink>
-            {ansattGrupper.flatMap(([, punkter]) => punkter.filter((x) => x.bunn)).map((x) => ansattLenke(x, true))}
-          </>
-        ) : (
+        {org && (
           <NavLink to="/" end>
             <IkonOversikt storrelse={22} />
-            <span>{org?.type === "regnskapsbyraa" ? "Klienter" : "Oversikt"}</span>
+            <span>{forside}</span>
           </NavLink>
         )}
-        {personalmeny && (
-          <>
-            {visAnsatte && (
-              <NavLink to="/ansatte">
-                <IkonAnsatte storrelse={22} />
-                <span>Ansatte</span>
-              </NavLink>
-            )}
-            {visTimer && visVakter && (
-              <NavLink to="/vakter">
-                <IkonKalender storrelse={22} />
-                <span>Vaktplan</span>
-              </NavLink>
-            )}
-            {visTimer && (
-              <NavLink to="/timer" className={({ isActive }) => (isActive || iTimerOgFerie ? "active" : undefined)}>
-                <IkonKlokke storrelse={22} />
-                <span>Timer</span>
-              </NavLink>
-            )}
-          </>
-        )}
-        {org && !ansatt && !personalmeny && visFaktura && (
-          <>
-            <NavLink to="/fakturaer" end={false} className={({ isActive }) => (isActive || iFakturadelen(sted.pathname) ? "active" : undefined)}>
-              <IkonFaktura storrelse={22} />
-              <span>Fakturaer</span>
-            </NavLink>
-            {kanSkrive(org) && (
-              <NavLink to="/fakturaer/ny" className="ny" aria-label="Ny faktura">
+        {ansatt && ansattGrupper.flatMap(([, punkter]) => punkter.filter((x) => x.bunn)).map((x) => ansattLenke(x, true))}
+        {snarvei.map((s) => {
+          if (s.type === "ny-faktura")
+            return (
+              <NavLink key="ny-faktura" to="/fakturaer/ny" className="ny" aria-label="Ny faktura">
                 <span className="pluss">
                   <IkonPluss storrelse={24} />
                 </span>
               </NavLink>
-            )}
-            <NavLink to="/kunder">
-              <IkonKunder storrelse={22} />
-              <span>Kunder</span>
-            </NavLink>
-          </>
-        )}
-        {org?.type === "regnskapsbyraa" && !ansatt && (
-          <NavLink to="/innstillinger">
-            <IkonInnstillinger storrelse={22} />
-            <span>Innstillinger</span>
-          </NavLink>
-        )}
-        <button type="button" className={menyApen ? "aktiv" : ""} onClick={() => settMenyApen(true)} aria-label={nyeBeskjeder ? `Mer (${nyeBeskjeder} nye beskjeder)` : undefined}>
+            );
+          const x = s.type === "side" ? { id: s.punkt.til, ...s.punkt, navn: s.punkt.kort ?? s.punkt.tekst, teller: s.punkt.teller ?? 0 } : { ...s.modul, teller: nye(s.modul) };
+          const innhold = (
+            <>
+              <span className="bunn-ikon">
+                <x.Ikon storrelse={22} />
+                <UlesteTall n={x.teller} />
+              </span>
+              <span>{x.navn}</span>
+            </>
+          );
+          if (s.type === "modul" && s.modul.aktiv && s.modul.punkter.length > 1)
+            return (
+              <button
+                key={x.id}
+                type="button"
+                className="active"
+                aria-current="true"
+                aria-haspopup="dialog"
+                aria-expanded={ark === s.modul.id}
+                aria-controls="mobilmeny"
+                onClick={() => settArk(s.modul.id)}
+              >
+                {innhold}
+              </button>
+            );
+          return (
+            <Link key={x.id} to={s.type === "modul" ? modulSide(s.modul) : s.punkt.til} className={x.aktiv ? "active" : undefined} aria-current={x.aktiv ? "page" : undefined}>
+              {innhold}
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          className={ark === "meny" || !iBunnmenyen ? "aktiv" : undefined}
+          aria-haspopup="dialog"
+          aria-expanded={ark === "meny"}
+          aria-controls="mobilmeny"
+          aria-label={prikkPaaMeny ? `Meny (${nyeBeskjeder} nye beskjeder)` : undefined}
+          onClick={() => settArk("meny")}
+        >
           <span className="bunn-ikon">
             <IkonMeny storrelse={22} />
-            {nyeBeskjeder > 0 && <span className="ulest-prikk" />}
+            {prikkPaaMeny && <span className="ulest-prikk" />}
           </span>
-          <span>Mer</span>
+          <span>Meny</span>
         </button>
       </nav>
-      <div className={`meny-skygge${menyApen ? " apen" : ""}`} onClick={() => settMenyApen(false)} />
-      {/* Hovedmenyen med modulene, og i en modul med flere sider blir den en smal stripe med
-          ikonene, og undermenyen ved siden av viser sidene. På mobil er begge i en skuff, og
-          stripa har bare ikonene. */}
-      <div
-        className={`sidemeny${menyApen ? " apen" : ""}`}
-        onClick={(e) => {
-          // Skuffen lukkes når man velger en side, også den man er på (da endres ikke adressen).
-          if ((e.target as HTMLElement).closest("a")) settMenyApen(false);
-        }}
-      >
+      <Menyark
+        ark={ark}
+        lukk={() => settArk(null)}
+        visMeny={() => settArk("meny")}
+        moduler={moduler}
+        konto={konto}
+        orgvelger={orgvelger}
+        bruker={{ navn: meg?.bruker.navn, epost: meg?.bruker.epost }}
+        loggUt={() => void loggUt()}
+        installer={
+          kanInstallere
+            ? () => {
+                settArk(null);
+                void installer();
+              }
+            : undefined
+        }
+        bunnvalg={
+          velgBareModuler
+            ? { moduler: bunnmoduler, valgte: bunnModuler(bunnmoduler, bunnValg).map((m) => m.id), velg: settBunnValg, egetValg: bunnValg !== null }
+            : undefined
+        }
+      />
+      {/* PC: hovedmenyen med modulene, og i en modul med flere sider blir den en smal stripe med
+          ikonene, og undermenyen ved siden av viser sidene. */}
+      <div className="sidemeny">
         <nav id="hovedmeny" className={`meny${apen ? " har-undermeny" : ""}`} aria-label="Moduler">
-          <div className="logo" onClick={() => settMenyApen(false)}>
+          <div className="logo">
             <span className="logo-full">
               <Logo />
             </span>
@@ -645,34 +694,7 @@ function Ramme() {
               <LogoIkon storrelse={34} />
             </span>
           </div>
-          <div className="orgvelger" title={org?.navn}>
-            <span className="avatar">{initialer(org?.navn ?? "?")}</span>
-            <div style={{ minWidth: 0 }}>
-              <div className="navn">{org?.navn ?? "Ingen organisasjon"}</div>
-              <div className="type">
-                {/* Med en egen rolle: navnet på rollen (f.eks. Personalansvarlig). */}
-                {org ? (org.rolle === "tilpasset" && org.tilgangsrolle ? org.tilgangsrolle : ansatt ? "Ansatt" : (orgType[org.type] ?? org.type)) : "Plattformadministrator"}
-                {org && !org.direkte_medlem ? " · klient" : ""}
-              </div>
-            </div>
-            <span className="pil">
-              <IkonVelg storrelse={16} />
-            </span>
-            <select value={org?.id ?? ""} onChange={(e) => (e.target.value === "__ny" ? settNy(true) : velgOrg(e.target.value))} aria-label="Bytt organisasjon">
-              {!org && (
-                <option value="" disabled>
-                  Ingen organisasjon
-                </option>
-              )}
-              {orgs.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.navn}
-                  {o.direkte_medlem ? "" : " (klient)"}
-                </option>
-              ))}
-              <option value="__ny">+ Ny organisasjon</option>
-            </select>
-          </div>
+          {orgvelger}
           {/* Lista ruller, og bunnen (utseende, navn og logg ut) står fast. Oversikt øverst: forsiden
               for hver rolle (de ansatte har sin egen, AnsattOversikt.tsx; et regnskapsbyrå ser
               klientene). */}
