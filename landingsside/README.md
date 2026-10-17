@@ -30,6 +30,20 @@ denne mappen, og den ligger utenfor `web/`.
 - Dokumentene er skrevet ut fra hvordan løsningen faktisk virker, men bør gjennomgås av en advokat
   før de tas i bruk.
 
+## Språkregel: programvare, ikke regnskapsføring
+
+Bare autoriserte regnskapsførere kan føre regnskap for andre (regnskapsførerloven). Admin Konsoll er
+programvare kunden fører sitt eget regnskap i, og all tekst (nettstedet, avtalene, appen) skal si det
+slik:
+
+- Verktøyet **regner ut, foreslår, klargjør og setter opp utkast**. Kunden **kontrollerer og godkjenner**.
+- Kunden fører regnskapet selv, eller lar en autorisert regnskapsfører gjøre det i verktøyet. Ansvaret er
+  kundens.
+- Ikke skriv at Admin Konsoll «fører regnskapet», «bokfører for dere», «gjør årsoppgjøret», lager
+  «ferdig regnskap» eller at noe «går av seg selv» uten at kunden har satt det opp og godkjent det.
+- Bruksvilkårene har egen paragraf om dette («Programvare, ikke regnskapsføring»), og bunnteksten sier at
+  Admin Konsoll ikke fører regnskap for kunder og ikke er autorisert regnskapsfører.
+
 ## Publisering
 
 Appen ligger i dag på roten av `adminkonsoll.no`. Skal nettstedet ligge der, må appen flyttes (for

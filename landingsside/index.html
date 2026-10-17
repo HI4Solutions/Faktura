@@ -26,7 +26,7 @@
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Organization", "name": "Medinnova AS", "legalName": "Medinnova AS", "url": "https://adminkonsoll.no", "logo": "https://adminkonsoll.no/favicon.svg", "email": "post@adminkonsoll.no", "identifier": {"@type": "PropertyValue", "propertyID": "Organisasjonsnummer", "value": "936564046"}, "brand": {"@type": "Brand", "name": "Admin Konsoll"}}</script>
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "Admin Konsoll", "url": "https://adminkonsoll.no/", "inLanguage": "nb-NO"}</script>
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Admin Konsoll", "applicationCategory": "BusinessApplication", "operatingSystem": "Nettleser, iOS, Android", "url": "https://adminkonsoll.no/", "inLanguage": "nb-NO", "description": "Admin Konsoll samler faktura, vaktplan, lønn og regnskap for norske foretak. EHF, a-melding, mva-melding og SAF-T i én løsning der alt henger sammen.", "publisher": {"@type": "Organization", "name": "Medinnova AS"}, "featureList": ["Faktura og kreditnota", "EHF / Peppol", "Vaktplan og turnus", "Timer, ferie og fravær", "Lønnskjøring og lønnsslipper", "A-melding", "Regnskap etter NS 4102", "Mva-melding", "SAF-T Regnskap"]}</script>
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Kan vi starte midt i året?", "acceptedAnswer": {"@type": "Answer", "text": "Ja. Dere velger en startdato og fører den inngående balansen som et bilag. Kundefordringene ved datoen blir med, og det som skjer etter, bokføres av seg selv."}}, {"@type": "Question", "name": "Hvordan får vi inn de ansatte?", "acceptedAnswer": {"@type": "Answer", "text": "Importer fra lønnssystemet dere har, eller fra Excel og CSV. En lønnsslipp som PDF eller bilde kan også leses inn til ansattopplysninger."}}, {"@type": "Question", "name": "Hvordan sendes EHF?", "acceptedAnswer": {"@type": "Answer", "text": "Gjennom foretakets egen konto hos Recommand, som er tilkoblet Peppol-nettverket."}}, {"@type": "Question", "name": "Hvilke banker virker?", "acceptedAnswer": {"@type": "Answer", "text": "Banker som er tilgjengelige gjennom Enable Banking (PSD2). Flere kontoer og banker kan kobles til samme foretak."}}, {"@type": "Question", "name": "Kan de ansatte bruke mobilen?", "acceptedAnswer": {"@type": "Answer", "text": "Ja. De ansatte har egen innlogging, ser vaktene og lønnsslippene, fører timer, melder fravær og får push-varsler."}}, {"@type": "Question", "name": "Må vi ha alle modulene?", "acceptedAnswer": {"@type": "Answer", "text": "Nei. Faktura, Personal, Lønn og Regnskap slås på hver for seg. Lønn krever Personal."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Fører Admin Konsoll regnskapet for oss?", "acceptedAnswer": {"@type": "Answer", "text": "Nei. Admin Konsoll er et verktøy dere bruker til deres eget regnskap. Verktøyet regner ut og foreslår, og dere kontrollerer og godkjenner. Dere fører regnskapet selv, eller lar en autorisert regnskapsfører gjøre det i verktøyet, og ansvaret er deres."}}, {"@type": "Question", "name": "Kan vi starte midt i året?", "acceptedAnswer": {"@type": "Answer", "text": "Ja. Dere velger en startdato og fører den inngående balansen som et bilag. Kundefordringene ved datoen blir med, og det som skjer etter, klargjøres i verktøyet for dere å kontrollere."}}, {"@type": "Question", "name": "Hvordan får vi inn de ansatte?", "acceptedAnswer": {"@type": "Answer", "text": "Importer fra lønnssystemet dere har, eller fra Excel og CSV. En lønnsslipp som PDF eller bilde kan også leses inn til ansattopplysninger."}}, {"@type": "Question", "name": "Hvordan sendes EHF?", "acceptedAnswer": {"@type": "Answer", "text": "Gjennom foretakets egen konto hos Recommand, som er tilkoblet Peppol-nettverket."}}, {"@type": "Question", "name": "Hvilke banker virker?", "acceptedAnswer": {"@type": "Answer", "text": "Banker som er tilgjengelige gjennom Enable Banking (PSD2). Flere kontoer og banker kan kobles til samme foretak."}}, {"@type": "Question", "name": "Kan de ansatte bruke mobilen?", "acceptedAnswer": {"@type": "Answer", "text": "Ja. De ansatte har egen innlogging, ser vaktene og lønnsslippene, fører timer, melder fravær og får push-varsler."}}, {"@type": "Question", "name": "Må vi ha alle modulene?", "acceptedAnswer": {"@type": "Answer", "text": "Nei. Faktura, Personal, Lønn og Regnskap slås på hver for seg. Lønn krever Personal."}}]}</script>
 <style>
 /* Forsiden som blankett: et forhåndstrykt skjema i merkets blå, utfylt i skrivemaskinskrift.
    Delene er nummerert som på et ekte skjema, og postene «overføres» til hverandre. */
@@ -205,6 +205,8 @@ h1.stor .blaa { color: var(--ink); }
 .veil details { border-bottom: 1px solid var(--ink-line); border-right: 1px solid var(--ink-line); }
 .veil details:nth-child(2n) { border-right: 0; }
 .veil details:nth-last-child(-n+2) { border-bottom: 0; }
+.veil details:last-child:nth-child(odd) { grid-column: 1 / -1; border-right: 0; }
+.veil details:nth-last-child(2):nth-child(even) { border-bottom: 1px solid var(--ink-line); }
 .veil summary { list-style: none; cursor: pointer; padding: 14px 16px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 18px; gap: 8px; align-items: baseline; font: 600 16px var(--font-display); }
 .veil summary::-webkit-details-marker { display: none; }
 .veil summary .n { font: 500 12px var(--font-type); color: var(--ink); }
@@ -242,7 +244,7 @@ h1.stor .blaa { color: var(--ink); }
     <a class="brand" href="#" aria-label="Admin Konsoll, til forsiden"><svg viewBox="0 0 48 48" aria-hidden="true"><path class="k1" d="M14.41 1H10.5A9.5 9.5 0 0 0 1 10.5V37.5A9.5 9.5 0 0 0 10.5 47H14.41ZM18.41 1L18.41 19.99L42.1 2.19A9.5 9.5 0 0 0 37.5 1ZM18.41 47L18.41 28.01L42.1 45.81A9.5 9.5 0 0 1 37.5 47Z"/><path class="k2" d="M19.74 24L45.16 4.88A9.5 9.5 0 0 1 47 10.5V37.5A9.5 9.5 0 0 1 45.16 43.12Z"/></svg>Admin Konsoll</a>
     <span class="skjemakode" title="Skjemanummer">AK-1 · utg. 10.2026</span>
     <nav aria-label="Hovedmeny">
-      <a href="#automatikk">Av seg selv</a>
+      <a href="#automatikk">Slik virker det</a>
       <a href="#moduler">Moduler</a>
       <a href="#laget-for">Laget for</a>
       <a href="#trygghet">Trygghet</a>
@@ -261,20 +263,20 @@ h1.stor .blaa { color: var(--ink); }
   <div class="tittel-v">
     <p class="skjemanavn"><b>AK-1</b><span>Administrasjon for norske foretak</span><span>Side 1 av 1</span></p>
     <h1 class="stor" id="tittel-h">Hele administrasjonen. <span class="blaa">Én konsoll.</span></h1>
-    <p class="ingress">Faktura, personal, lønn og regnskap for alle slags virksomheter. Fra første bilag til ferdig regnskap går det meste av seg selv. Dere godkjenner.</p>
+    <p class="ingress">Faktura, personal, lønn og regnskap for alle slags virksomheter. Verktøyet gjør grovarbeidet fra første bilag til regnskapet er klart for kontroll. Dere godkjenner.</p>
     <div class="felter">
       <div>
         <span class="lbl"><span class="nr">0.1</span>Gjelder (sett kryss)</span>
         <span class="kryssrad"><span><i class="x" aria-hidden="true"></i>Faktura</span><span><i class="x" aria-hidden="true"></i>Personal</span><span><i class="x" aria-hidden="true"></i>Lønn</span><span><i class="x" aria-hidden="true"></i>Regnskap</span></span>
       </div>
       <div>
-        <span class="lbl"><span class="nr">0.2</span>Fylles ut av</span>
-        <span class="v">Admin Konsoll, av seg selv</span>
+        <span class="lbl"><span class="nr">0.2</span>Kontrolleres og godkjennes av</span>
+        <span class="v">Dere</span>
       </div>
     </div>
     <div class="cta">
       <a class="btn pri" href="https://adminkonsoll.no">Opprett konto →</a>
-      <a class="btn sec" href="#automatikk">Se hva som går av seg selv</a>
+      <a class="btn sec" href="#automatikk">Se hva verktøyet klargjør</a>
     </div>
   </div>
   <div class="tittel-h">
@@ -296,24 +298,24 @@ h1.stor .blaa { color: var(--ink); }
 </section>
 
 <section id="automatikk" aria-labelledby="del1-h">
-  <div class="delband"><span class="nr">DEL 1</span><h2 id="del1-h">Fra bilag til ferdig regnskap, av seg selv</h2><span class="h">Fylles ut av Admin Konsoll</span></div>
+  <div class="delband"><span class="nr">DEL 1</span><h2 id="del1-h">Fra bilag til regnskap klart for kontroll</h2><span class="h">Klargjort i Admin Konsoll</span></div>
   <div class="innledning">
-    <p class="stor2">Dere godkjenner. Resten gjør konsollen.</p>
-    <p>Hele veien fra kvitteringen til årsoppgjøret: her er hva dere gjør, og hva Admin Konsoll gjør av seg selv.</p>
+    <p class="stor2">Verktøyet gjør grovarbeidet. Dere har kontrollen.</p>
+    <p>Hele veien fra kvitteringen til årsoppgjøret: hva dere gjør, og hva Admin Konsoll regner ut og klargjør for dere. Regnskapet er deres, ført av dere selv eller av regnskapsføreren deres.</p>
   </div>
   <div class="tabellramme">
     <table class="hvemgjor">
-      <thead><tr><th scope="col">Post</th><th scope="col">Når</th><th scope="col">Dere gjør</th><th scope="col">Admin Konsoll gjør av seg selv</th></tr></thead>
+      <thead><tr><th scope="col">Post</th><th scope="col">Når</th><th scope="col">Dere gjør</th><th scope="col">Admin Konsoll klargjør</th></tr></thead>
       <tbody>
-        <tr><td class="p">1.1</td><td class="n">Kvittering eller leverandørfaktura</td><td class="du">Tar bilde eller laster opp</td><td class="ak"><span class="mini-st b">Auto</span>Leser bilaget med KI, foreslår konto og mva-fradrag, og bokfører fra kjente leverandører</td></tr>
-        <tr><td class="p">1.2</td><td class="n">Faktura sendt</td><td class="du">Lager fakturaen</td><td class="ak"><span class="mini-st b">Auto</span>Sender som EHF eller e-post, bokfører med riktig mva-kode og purrer når den forfaller</td></tr>
-        <tr><td class="p">1.3</td><td class="n">Penger inn og ut av banken</td><td class="du">Ingenting</td><td class="ak"><span class="mini-st b">Auto</span>Henter bankpostene tre ganger om dagen, kobler dem til fakturaer og bilag, og viser avstemmingen mot banken</td></tr>
-        <tr><td class="p">1.4</td><td class="n">Timer og lønn</td><td class="du">Godkjenner timene og lønnen</td><td class="ak"><span class="mini-st b">Auto</span>Regner ut lønnen på nytt ved hver endring, bokfører den, lager betalingsfil og a-melding</td></tr>
-        <tr><td class="p">1.5</td><td class="n">Månedsslutt</td><td class="du">Ingenting</td><td class="ak"><span class="mini-st b">Auto</span>Bokfører avskrivninger og periodiseringer, og viser sjekklisten for måneden</td></tr>
-        <tr><td class="p">1.6</td><td class="n">Mva-termin</td><td class="du">Leverer i Altinn</td><td class="ak"><span class="mini-st b">Auto</span>Regner ut mva-meldingen fra bilagene, kontrollerer den og bokfører oppgjøret</td></tr>
-        <tr><td class="p">1.7</td><td class="n">Årsslutt</td><td class="du">Godkjenner</td><td class="ak"><span class="mini-st b">Auto</span>Lager resultat og balanse, fører årsoppgjøret og lager SAF-T-fila</td></tr>
+        <tr><td class="p">1.1</td><td class="n">Kvittering eller leverandørfaktura</td><td class="du">Tar bilde og godkjenner forslaget</td><td class="ak"><span class="mini-st b">Forslag</span>Leser bilaget med KI og foreslår konto og mva-fradrag. For leverandører dere har godkjent før, følger forslaget reglene dere har satt opp</td></tr>
+        <tr><td class="p">1.2</td><td class="n">Faktura sendt</td><td class="du">Lager og sender fakturaen</td><td class="ak"><span class="mini-st b">Utkast</span>Sender den som EHF eller e-post, setter opp posteringen med mva-kode og varsler når den forfaller</td></tr>
+        <tr><td class="p">1.3</td><td class="n">Penger inn og ut av banken</td><td class="du">Avklarer det som er usikkert</td><td class="ak"><span class="mini-st b">Forslag</span>Henter bankpostene tre ganger om dagen, foreslår kobling til fakturaer og bilag, og viser avstemmingen</td></tr>
+        <tr><td class="p">1.4</td><td class="n">Timer og lønn</td><td class="du">Godkjenner timene og lønnskjøringen</td><td class="ak"><span class="mini-st b">Utkast</span>Regner ut lønnen på nytt ved hver endring, og klargjør posteringer, betalingsfil og a-meldingsfil</td></tr>
+        <tr><td class="p">1.5</td><td class="n">Månedsslutt</td><td class="du">Går gjennom sjekklisten</td><td class="ak"><span class="mini-st b">Utregnet</span>Beregner avskrivninger og periodiseringer etter planene dere har lagt inn</td></tr>
+        <tr><td class="p">1.6</td><td class="n">Mva-termin</td><td class="du">Kontrollerer og leverer i Altinn</td><td class="ak"><span class="mini-st b">Utkast</span>Setter opp mva-meldingen fra bilagene og kjører kontroller</td></tr>
+        <tr><td class="p">1.7</td><td class="n">Årsslutt</td><td class="du">Kontrollerer og godkjenner, gjerne med regnskapsfører</td><td class="ak"><span class="mini-st b">Utkast</span>Setter opp resultat, balanse og utkast til årsoppgjør, og lager SAF-T-fila</td></tr>
       </tbody>
-      <tfoot><tr><td class="p">1.8</td><td colspan="3"><div class="sumrad"><span class="lbl">Manuell føring</span><span class="v sum">Bare det reglene ikke er sikre på</span><span class="stempel blaa">Ferdig regnskap</span></div></td></tr></tfoot>
+      <tfoot><tr><td class="p">1.8</td><td colspan="3"><div class="sumrad"><span class="lbl">Ansvar</span><span class="v sum">Regnskapet er deres. Verktøyet klargjør, dere godkjenner.</span><span class="stempel blaa">Klar til kontroll</span></div></td></tr></tfoot>
     </table>
   </div>
 </section>
@@ -322,7 +324,7 @@ h1.stor .blaa { color: var(--ink); }
   <div class="delband"><span class="nr">DEL 2</span><h2 id="del2-h">Eksempel: én time gjennom hele systemet</h2><span class="h">Ingen poster fylles ut to ganger</span></div>
   <div class="innledning">
     <p class="stor2">Registrer én gang. Resten overføres.</p>
-    <p>På et vanlig skjema står det «overfør beløpet til post 2.2». Her skjer det av seg selv: timene, lønnen og bilagene ligger i samme database.</p>
+    <p>På et vanlig skjema står det «overfør beløpet til post 2.2». Her overføres det i verktøyet: timene, lønnen og bilagene ligger i samme database.</p>
   </div>
   <div class="poster">
     <article class="post">
@@ -346,7 +348,7 @@ h1.stor .blaa { color: var(--ink); }
       <div class="overfor">Overføres til post 2.3</div>
     </article>
     <article class="post">
-      <div class="post-h"><span class="lbl"><span class="nr">2.3</span>Samme sekund</span><b>Bilag L-2026-3</b></div>
+      <div class="post-h"><span class="lbl"><span class="nr">2.3</span>Når lønnen godkjennes</span><b>Bilag L-2026-3</b></div>
       <table class="bilag">
         <thead><tr><th scope="col">Konto</th><th scope="col">Debet</th><th scope="col">Kredit</th></tr></thead>
         <tbody>
@@ -367,7 +369,7 @@ h1.stor .blaa { color: var(--ink); }
         <div><span class="lbl">Avvik</span><span class="v">0</span></div>
         <div><span class="lbl">Forskuddstrekk</span><span class="v">15 600</span></div>
       </div>
-      <div class="post-s"><span class="stempel gronn">Klar</span></div>
+      <div class="post-s"><span class="stempel gronn">Klar til kontroll</span></div>
       <div class="overfor">Kontrollert før fila lages</div>
     </article>
   </div>
@@ -382,7 +384,7 @@ h1.stor .blaa { color: var(--ink); }
   <div class="moduler">
     <article class="modul">
       <div class="modul-h"><span class="bokst">3A</span><h3>Faktura</h3></div>
-      <p>Send, purr og få betalt. Innbetalingene fra banken kobles til fakturaene av seg selv.</p>
+      <p>Send, purr og få betalt. Innbetalingene fra banken foreslås koblet til riktig faktura.</p>
       <ul class="liste">
         <li><i class="x" aria-hidden="true"></i>Faktura og kreditnota, hel eller delvis, med vedlegg</li>
         <li><i class="x" aria-hidden="true"></i>EHF gjennom foretakets egen Peppol-konto hos Recommand</li>
@@ -420,7 +422,7 @@ h1.stor .blaa { color: var(--ink); }
     </article>
     <article class="modul">
       <div class="modul-h"><span class="bokst">3C</span><h3>Lønn</h3></div>
-      <p>Kjøringen lages ut fra timene, vaktene og fraværet som alt ligger inne. Dere kontrollerer og godkjenner.</p>
+      <p>Utkastet til lønnskjøring regnes ut fra timene, vaktene og fraværet som alt ligger inne. Dere kontrollerer og godkjenner.</p>
       <ul class="liste">
         <li><i class="x" aria-hidden="true"></i>Skattetrekk etter Skatteetatens trekktabeller</li>
         <li><i class="x" aria-hidden="true"></i>Feriepenger, OTP, sykepenger og arbeidsgiveravgift per sone</li>
@@ -438,7 +440,7 @@ h1.stor .blaa { color: var(--ink); }
     </article>
     <article class="modul">
       <div class="modul-h"><span class="bokst">3D</span><h3>Regnskap</h3></div>
-      <p>Fakturaer, lønn og bank blir bilag av seg selv. Det reglene er usikre på, får et forslag.</p>
+      <p>Fakturaer, lønn og bank blir forslag til posteringer i deres regnskap. Dere kontrollerer og godkjenner.</p>
       <ul class="liste">
         <li><i class="x" aria-hidden="true"></i>Bilag og hovedbok på kontoplanen etter NS 4102</li>
         <li><i class="x" aria-hidden="true"></i>Kvitteringer og leverandørfakturaer lest av KI</li>
@@ -464,9 +466,9 @@ h1.stor .blaa { color: var(--ink); }
       <span class="valg"><i class="x" aria-hidden="true"></i>Virksomheter som fakturerer</span>
       <p>Konsulenter, håndverkere, byråer, butikker og alle andre som sender fakturaer.</p>
       <ul class="liste">
-        <li><i class="x" aria-hidden="true"></i>Faktura, EHF og purring, og innbetalingene koblet av seg selv</li>
+        <li><i class="x" aria-hidden="true"></i>Faktura, EHF og purring, med forslag til kobling av innbetalingene</li>
         <li><i class="x" aria-hidden="true"></i>Gjentakende fakturaer og avtalte makstak</li>
-        <li><i class="x" aria-hidden="true"></i>Regnskapet ført mens dere fakturerer</li>
+        <li><i class="x" aria-hidden="true"></i>Posteringene klargjort mens dere fakturerer</li>
       </ul>
     </div>
     <div>
@@ -498,10 +500,11 @@ h1.stor .blaa { color: var(--ink); }
       <li><i class="x" aria-hidden="true"></i><div><b>Sikker innlogging</b><span class="t">Passord med tofaktor, eller passkey. Nye kontoer godkjennes før de slipper inn.</span></div></li>
       <li><i class="x" aria-hidden="true"></i><div><b>Bilag endres aldri</b><span class="t">Feil rettes med reversering, og låste perioder står urørt.</span></div></li>
       <li><i class="x" aria-hidden="true"></i><div><b>Lagret i EU</b><span class="t">Google Cloud i Europa. KI kjører i Frankfurt og foreslår bare.</span></div></li>
+      <li><i class="x" aria-hidden="true"></i><div><b>Dere eier regnskapet</b><span class="t">Admin Konsoll er programvare og fører ikke regnskap for andre. Dere, eller regnskapsføreren deres, kontrollerer og godkjenner.</span></div></li>
       <li><i class="x" aria-hidden="true"></i><div><b>Ingen sporing</b><span class="t">Ingen informasjonskapsler, analyse eller annonser på nettstedet.</span></div></li>
     </ol>
     <div class="signatur">
-      <span class="lbl"><span class="nr">5.6</span>Underskrift</span>
+      <span class="lbl"><span class="nr">5.7</span>Underskrift</span>
       <div class="linje"><span class="hand">Admin Konsoll</span></div>
       <p class="sig-lenker">Les mer i <a href="personvern.html">personvernerklæringen</a> og <a href="databehandleravtale.html">databehandleravtalen</a>.</p>
     </div>
@@ -527,27 +530,31 @@ h1.stor .blaa { color: var(--ink); }
   <div class="delband"><span class="nr">DEL 7</span><h2 id="del7-h">Veiledning til skjemaet</h2></div>
   <div class="veil">
     <details open>
-      <summary><span class="n">7.1</span>Kan vi starte midt i året?</summary>
-      <p>Ja. Dere velger en startdato og fører den inngående balansen som et bilag. Kundefordringene ved datoen blir med, og det som skjer etter, bokføres av seg selv.</p>
+      <summary><span class="n">7.1</span>Fører Admin Konsoll regnskapet for oss?</summary>
+      <p>Nei. Admin Konsoll er et verktøy dere bruker til deres eget regnskap. Verktøyet regner ut og foreslår, og dere kontrollerer og godkjenner. Dere fører regnskapet selv, eller lar en autorisert regnskapsfører gjøre det i verktøyet, og ansvaret er deres.</p>
     </details>
     <details>
-      <summary><span class="n">7.2</span>Hvordan får vi inn de ansatte?</summary>
+      <summary><span class="n">7.2</span>Kan vi starte midt i året?</summary>
+      <p>Ja. Dere velger en startdato og fører den inngående balansen som et bilag. Kundefordringene ved datoen blir med, og det som skjer etter, klargjøres i verktøyet for dere å kontrollere.</p>
+    </details>
+    <details>
+      <summary><span class="n">7.3</span>Hvordan får vi inn de ansatte?</summary>
       <p>Importer fra lønnssystemet dere har, eller fra Excel og CSV. En lønnsslipp som PDF eller bilde kan også leses inn til ansattopplysninger.</p>
     </details>
     <details>
-      <summary><span class="n">7.3</span>Hvordan sendes EHF?</summary>
+      <summary><span class="n">7.4</span>Hvordan sendes EHF?</summary>
       <p>Gjennom foretakets egen konto hos Recommand, som er tilkoblet Peppol-nettverket.</p>
     </details>
     <details>
-      <summary><span class="n">7.4</span>Hvilke banker virker?</summary>
+      <summary><span class="n">7.5</span>Hvilke banker virker?</summary>
       <p>Banker som er tilgjengelige gjennom Enable Banking (PSD2). Flere kontoer og banker kan kobles til samme foretak.</p>
     </details>
     <details>
-      <summary><span class="n">7.5</span>Kan de ansatte bruke mobilen?</summary>
+      <summary><span class="n">7.6</span>Kan de ansatte bruke mobilen?</summary>
       <p>Ja. De ansatte har egen innlogging, ser vaktene og lønnsslippene, fører timer, melder fravær og får push-varsler.</p>
     </details>
     <details>
-      <summary><span class="n">7.6</span>Må vi ha alle modulene?</summary>
+      <summary><span class="n">7.7</span>Må vi ha alle modulene?</summary>
       <p>Nei. Faktura, Personal, Lønn og Regnskap slås på hver for seg. Lønn krever Personal.</p>
     </details>
   </div>
@@ -555,7 +562,7 @@ h1.stor .blaa { color: var(--ink); }
 
 <section class="under" aria-labelledby="under-h">
   <div class="under-v">
-    <h2 id="under-h">Ett skjema til. Så fyller resten seg selv.</h2>
+    <h2 id="under-h">Ett skjema til. Så klargjør verktøyet resten.</h2>
     <p>Opprett konto, bekreft e-postadressen og kryss av for modulene. Vi godkjenner nye kontoer før første innlogging.</p>
   </div>
   <div class="under-h">
@@ -571,7 +578,7 @@ h1.stor .blaa { color: var(--ink); }
   <div class="inn">
     <div class="om">
       <a class="brand" href="#" aria-label="Admin Konsoll, til forsiden"><svg viewBox="0 0 48 48" aria-hidden="true"><path class="k1" d="M14.41 1H10.5A9.5 9.5 0 0 0 1 10.5V37.5A9.5 9.5 0 0 0 10.5 47H14.41ZM18.41 1L18.41 19.99L42.1 2.19A9.5 9.5 0 0 0 37.5 1ZM18.41 47L18.41 28.01L42.1 45.81A9.5 9.5 0 0 1 37.5 47Z"/><path class="k2" d="M19.74 24L45.16 4.88A9.5 9.5 0 0 1 47 10.5V37.5A9.5 9.5 0 0 1 45.16 43.12Z"/></svg>Admin Konsoll</a>
-      <p>Faktura, personal, lønn og regnskap for norske foretak.</p>
+      <p>Programvare for faktura, personal, lønn og regnskap. Admin Konsoll fører ikke regnskap for kunder og er ikke autorisert regnskapsfører.</p>
     </div>
     <nav aria-label="Produktet">
       <h2>Produktet</h2>
