@@ -1,4 +1,4 @@
-// Skattekort fra Skatteetaten (skattekort.ts): tilgangen under Innstillinger → Lønn og henting
+// Skattekort fra Skatteetaten (skattekort.ts): tilgangen under Lønn → Skattekort og henting
 // for hånd, og oppsettet hos plattformadministratoren (systemet i Altinns systemregister).
 //
 // Eier og administrator ber om tilgang (med totrinnsbekreftelse); workeren lager forespørselen i

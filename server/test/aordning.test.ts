@@ -338,7 +338,7 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte fra a-ordningen i appen", ()
   });
 
   it("kan brukes når organisasjonen er koblet til Skatteetaten med tilgangspakken «A-ordningen»", async () => {
-    expect((await api("GET", `/api/org/${org}/ansatte/aordning`)).data).toEqual({ tilgjengelig: false, grunn: "Koble til Skatteetaten først under Innstillinger → Lønn → Skattekort.", henting: null });
+    expect((await api("GET", `/api/org/${org}/ansatte/aordning`)).data).toEqual({ tilgjengelig: false, grunn: "Koble til Skatteetaten først under Lønn → Skattekort.", henting: null });
     await somSystem((db) => db.query("insert into faktura.skattekort_tilgang (org_id, status, pakker) values ($1, 'godkjent', $2)", [org, [TILGANGSPAKKE]]));
     const r = await api("POST", `/api/org/${org}/ansatte/aordning/hent`);
     expect(r.status).toBe(409);

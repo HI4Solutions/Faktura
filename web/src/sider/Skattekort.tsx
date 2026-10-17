@@ -1,10 +1,10 @@
-// Skattekort fra Skatteetaten (server/src/skattekort.ts): koblingen under Innstillinger → Ansatte
-// og timer, siden Altinn sender brukeren tilbake til etter godkjenningen, skattekortet på den
-// ansatte og oppsettet hos plattformadministratoren.
+// Skattekort fra Skatteetaten (server/src/skattekort.ts): fanen Lønn → Skattekort med koblingen og
+// skattekortene til de ansatte, siden Altinn sender brukeren tilbake til etter godkjenningen,
+// skattekortet på den ansatte og oppsettet hos plattformadministratoren.
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, hent } from "../api";
-import { Feil, Laster, useData, useHandling } from "../felles";
+import { Feil, Laster, useData, useHandling, useSmal } from "../felles";
 import { erAdmin, kanLonn, useKonto } from "../konto";
 import { dato, kr } from "../format";
 import { naarTekst } from "./Bank";
@@ -77,9 +77,22 @@ export const trekkTekst = (t: Trekk) =>
         ? `Prosenttrekk ${prosent(t.prosent)}`
         : "–";
 
-// --- Innstillinger → Lønn → Skattekort --------------------------------------------------------
+// --- Lønn → Skattekort --------------------------------------------------------------------------
 
-export function SkattekortKobling() {
+// Skattekortene der de brukes: koblingen til Skatteetaten (hentingen) øverst, og skattekortene
+// lønnskjøringen bruker for hver ansatt under.
+export function LonnSkattekort() {
+  return (
+    <>
+      <SkattekortKobling />
+      <AnsatteSkattekort />
+    </>
+  );
+}
+
+// Koblingen til Skatteetaten (systembrukeren i Altinn, som a-meldingen, NAV og kravene og fristene
+// også bruker) og hentingen av skattekortene.
+function SkattekortKobling() {
   const { org } = useKonto();
   const s = useData(() => hent<SkattekortStatus>(`/org/${org!.id}/skattekort`), [org?.id]);
   const h = useHandling();
@@ -112,7 +125,7 @@ export function SkattekortKobling() {
   if (!s.data.tilgjengelig)
     return (
       <div className="kort skattekort-kobling" id="skattekort">
-        <h2 style={{ marginTop: 0 }}>Skattekort fra Skatteetaten</h2>
+        <h2 style={{ marginTop: 0 }}>Henting fra Skatteetaten</h2>
         <p className="dempet">
           Henting av skattekortene fra Skatteetaten (og a-meldingen og sykepengene gjennom Altinn) er ikke satt opp på plattformen ennå. Skattekortet kan
           registreres på hver ansatt så lenge.
@@ -146,7 +159,7 @@ export function SkattekortKobling() {
   return (
     <div className="kort skattekort-kobling" id="skattekort">
       <h2>
-        Skattekort fra Skatteetaten {d.miljo === "test" && <span className="merke merke-noytral">Testmiljø</span>}
+        Henting fra Skatteetaten {d.miljo === "test" && <span className="merke merke-noytral">Testmiljø</span>}
       </h2>
       {!t && (
         <>
@@ -310,6 +323,125 @@ export function SkattekortKobling() {
   );
 }
 
+// Skattekortene til de ansatte (de aktive som er ansatt, som tellingen over): trekket
+// lønnskjøringen bruker, året, om det er hentet fra Skatteetaten eller registrert for hånd, og det
+// som mangler. Den ansatte åpnes under Ansatte, der skattekortet kan endres.
+type AnsattSkattekort = {
+  id: string;
+  fornavn: string;
+  etternavn: string;
+  aktiv: boolean;
+  arbeidstaker: boolean;
+  har_fnr: boolean;
+  skattekort: "tabell" | "prosent" | "frikort" | null;
+  skatt_tabell: number | null;
+  skatt_prosent: number | null;
+  skatt_frikort: number | null;
+  skattekort_aar: number | null;
+  skattekort_kilde: "manuell" | "skatteetaten" | null;
+  skattekort_hentet: string | null;
+  skattekort_resultat: string | null;
+};
+const trekket = (a: AnsattSkattekort) =>
+  a.skattekort === "tabell"
+    ? `Tabell ${a.skatt_tabell ?? "–"} (${prosent(a.skatt_prosent ?? 0)})`
+    : a.skattekort === "prosent"
+      ? `Prosenttrekk ${prosent(a.skatt_prosent ?? 0)}`
+      : a.skattekort === "frikort"
+        ? a.skatt_frikort == null
+          ? "Frikort uten beløpsgrense"
+          : `Frikort ${kr(a.skatt_frikort)}`
+        : "Uten skattekort (50 %)";
+// Hvor skattekortet kom fra, eller hva som er galt: [tekst, merke].
+function kilde(a: AnsattSkattekort): [string, string] {
+  if (a.skattekort_resultat && a.skattekort_resultat !== "skattekortopplysningerOK")
+    return [RESULTAT[a.skattekort_resultat] ?? a.skattekort_resultat, a.skattekort_resultat.startsWith("ugyldig") || a.skattekort_resultat === "vurderArbeidstillatelse" ? "merke-fare" : "merke-advarsel"];
+  if (a.skattekort_kilde === "skatteetaten") return [`Fra Skatteetaten${a.skattekort_hentet ? `, ${naarTekst(a.skattekort_hentet)}` : ""}`, "merke-ok"];
+  if (a.skattekort_hentet) return ["Endret for hånd", "merke-noytral"];
+  if (a.skattekort) return ["Registrert for hånd", "merke-noytral"];
+  // Uten skattekort: fødselsnummeret trengs for å hente det fra Skatteetaten.
+  if (!a.har_fnr) return ["Mangler fødselsnummer", "merke-advarsel"];
+  return ["Mangler skattekort", "merke-advarsel"];
+}
+
+function AnsatteSkattekort() {
+  const { org } = useKonto();
+  const smal = useSmal();
+  const nav = useNavigate();
+  const d = useData(() => hent<AnsattSkattekort[]>(`/org/${org!.id}/ansatte`), [org?.id], { oppdater: true });
+  const iAar = new Date().getFullYear();
+  if (d.feil) return <Feil melding={d.feil} />;
+  if (!d.data) return <Laster />;
+  const ansatte = d.data
+    .filter((a) => a.aktiv && a.arbeidstaker !== false)
+    .sort((x, y) => `${x.fornavn} ${x.etternavn}`.localeCompare(`${y.fornavn} ${y.etternavn}`, "nb"));
+  const aar = (a: AnsattSkattekort) =>
+    a.skattekort_aar == null ? "–" : a.skattekort_aar < iAar ? <span className="advarsel-tekst" title="Skattekortet er for et tidligere år">{a.skattekort_aar}</span> : a.skattekort_aar;
+  const apne = (a: AnsattSkattekort) => nav(`/ansatte?ansatt=${a.id}`);
+  return (
+    <>
+      <h2>Skattekortene til de ansatte</h2>
+      {!ansatte.length ? (
+        <p className="dempet">Ingen ansatte ennå.</p>
+      ) : smal ? (
+        <div className="kort liste">
+          {ansatte.map((a) => {
+            const [tekst, merke] = kilde(a);
+            return (
+              <button key={a.id} type="button" className="liste-rad" onClick={() => apne(a)}>
+                <span className="linje">
+                  <span className="tittel">
+                    {a.fornavn} {a.etternavn}
+                  </span>
+                  <span className={`merke ${merke}`}>{tekst}</span>
+                </span>
+                <span className="linje">
+                  <span className="under">
+                    {trekket(a)} · {aar(a)}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="kort tabell">
+          <table>
+            <thead>
+              <tr>
+                <th>Ansatt</th>
+                <th>Trekk</th>
+                <th>År</th>
+                <th>Skattekortet</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ansatte.map((a) => {
+                const [tekst, merke] = kilde(a);
+                return (
+                  <tr key={a.id} className="klikkbar" onClick={() => apne(a)}>
+                    <td>
+                      <strong>
+                        {a.fornavn} {a.etternavn}
+                      </strong>
+                    </td>
+                    <td>{trekket(a)}</td>
+                    <td>{aar(a)}</td>
+                    <td>
+                      <span className={`merke ${merke}`}>{tekst}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="liten dempet">Trykk på en ansatt for å se hele skattekortet, eller registrere det for hånd.</p>
+    </>
+  );
+}
+
 // --- Tilbake fra Altinn --------------------------------------------------------------------------
 
 export function SkattekortGodkjent() {
@@ -349,12 +481,12 @@ export function SkattekortGodkjent() {
       )}
       {status === "godkjent" && <p className="ok-tekst">Tilgangen er godkjent. Skattekortene til de ansatte hentes nå.</p>}
       {status === "ny" && <p>Altinn har ikke registrert godkjenningen ennå. Appen ser etter den av seg selv, så du kan gå videre.</p>}
-      {status && ["avslatt", "avvist", "utlopt", "feil"].includes(status) && <p className="fare-tekst">Tilgangen ble ikke godkjent. Du kan be om den på nytt under Innstillinger.</p>}
-      {status === null && <p>{org?.navn} har ikke bedt om tilgang til Skatteetaten. Velg organisasjonen øverst og prøv igjen, eller gå til Innstillinger.</p>}
+      {status && ["avslatt", "avvist", "utlopt", "feil"].includes(status) && <p className="fare-tekst">Tilgangen ble ikke godkjent. Du kan be om den på nytt under Lønn → Skattekort.</p>}
+      {status === null && <p>{org?.navn} har ikke bedt om tilgang til Skatteetaten. Velg organisasjonen øverst og prøv igjen, eller gå til Lønn → Skattekort.</p>}
       <Feil melding={feil} />
       <div className="knapper">
-        <Link className="knapp primar" to="/innstillinger?fane=lonn&del=skattekort">
-          Til innstillingene
+        <Link className="knapp primar" to="/lonn?fane=skattekort">
+          Til skattekortene
         </Link>
       </div>
     </div>
@@ -467,7 +599,7 @@ export function SkattekortOppsett() {
           <p className="liten dempet">
             A-meldingen:{" "}
             {o.amelding
-              ? "sendes til Skatteetatens API (AMELDING_INNSENDING er på). Kundene som har koblet til, utvider tilgangen i Altinn fra innstillingene."
+              ? "sendes til Skatteetatens API (AMELDING_INNSENDING er på). Kundene som har koblet til, utvider tilgangen i Altinn under Lønn → Skattekort."
               : "som fil til opplasting på skatteetaten.no. Innsending fra appen slås på med AMELDING_INNSENDING (se docs/amelding.md)."}
           </p>
           <div className="knapper">

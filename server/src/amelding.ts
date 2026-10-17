@@ -413,16 +413,16 @@ export function kontroller(g: Grunnlag): Avvik[] {
   if (!g.virksomhet)
     a.push({
       niva: "feil",
-      tekst: "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Innstillinger → Lønn → A-melding.",
+      tekst: "Legg inn organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) under Lønn → A-melding → Oppsett.",
     });
   // Virksomheten er alltid en underenhet, aldri foretaket (den juridiske enheten) selv.
   else if (g.virksomhet === g.org.orgnr)
     a.push({
       niva: "feil",
-      tekst: "Virksomheten under Innstillinger → Lønn → A-melding er organisasjonsnummeret til foretaket. Bruk organisasjonsnummeret til underenheten (virksomheten) i Enhetsregisteret.",
+      tekst: "Virksomheten under Lønn → A-melding → Oppsett er organisasjonsnummeret til foretaket. Bruk organisasjonsnummeret til underenheten (virksomheten) i Enhetsregisteret.",
     });
   if (g.slipper.some((s) => s.otp > 0) && !g.pensjonsinnretning)
-    a.push({ niva: "feil", tekst: "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Innstillinger → Lønn → A-melding." });
+    a.push({ niva: "feil", tekst: "Det er OTP i måneden: legg inn organisasjonsnummeret til pensjonsleverandøren under Lønn → A-melding → Oppsett." });
   const iMelding = new Set(g.slipper.map((s) => s.ansatt_id));
   for (const f of g.arbeidsforhold) {
     if (!f.har_fnr) a.push({ niva: "feil", tekst: `${f.navn} mangler fødselsnummer (eller D-nummer).`, ansatt_id: f.id });

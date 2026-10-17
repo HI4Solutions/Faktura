@@ -15,7 +15,7 @@ Funksjonen er skjult til klient-ID-en til Maskinporten er satt (GitHub-variabele
    sykepengene fra NAV «Lønn med personopplysninger av særlig kategori» (se [nav.md](nav.md)), og
    med krav og frister fra Skatteetaten «Krav, betalinger og utlegg» (se
    [skatteetaten-krav.md](skatteetaten-krav.md)).
-2. Kunden trykker «Koble til Skatteetaten» under Innstillinger → Lønn → Skattekort. Appen lager en
+2. Kunden trykker «Koble til Skatteetaten» under Lønn → Skattekort. Appen lager en
    forespørsel om systemtilgang i Altinn, og daglig leder (eller den som har tilgangsstyring i
    Altinn) godkjenner den. Altinn sender brukeren tilbake til `<APP_URL>/skattekort/godkjent`.
 3. Workeren henter et token fra Maskinporten for kundens systembruker, bestiller skattekortene til
@@ -27,6 +27,9 @@ Funksjonen er skjult til klient-ID-en til Maskinporten er satt (GitHub-variabele
 4. Avviser Skatteetaten en bestilling, står svaret deres (med korrelasjons-ID-en, som Skatteetaten
    trenger om feilen meldes) under «Siste henting feilet». Hele svaret, uten fødselsnumre, står i
    loggen til workeren («Skatteetaten avviste bestillingen av skattekort»).
+5. Under koblingen på Lønn → Skattekort står skattekortene til de ansatte: trekket lønnskjøringen
+   bruker, året, om det er hentet fra Skatteetaten eller registrert for hånd, og det som mangler
+   (fødselsnummer eller skattekort). En ansatt åpnes under Ansatte, der skattekortet kan endres.
 
 Koden: `server/src/maskinporten.ts` (token), `server/src/altinn.ts` (systemregisteret og
 forespørslene), `server/src/skattekort.ts` (bestilling, svar og lagring),
@@ -99,7 +102,7 @@ deretter i produksjon.
    Kjør så workflowen «Infrastruktur» (Actions → Infrastruktur → Run workflow).
 6. **Systemet i Altinn.** Plattform → Drift → «Skattekort (Skatteetaten)» → «Registrer
    systemet i Altinn». Det samme oppdaterer navnet og klient-ID-en senere.
-7. **Test.** En testorganisasjon i TT02 kobler til under Innstillinger → Lønn → Skattekort,
+7. **Test.** En testorganisasjon i TT02 kobler til under Lønn → Skattekort,
    godkjenner i Altinn TT02 og henter skattekortene til Skatteetatens testpersoner
    (regnearket med testpersoner i dokumentasjonen til API-et). Skattekortene i testmiljøet
    oppdateres hver dag kl. 06.

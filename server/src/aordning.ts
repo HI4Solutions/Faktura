@@ -373,7 +373,7 @@ function avstemmingFeil(r: { status: number; data: any; tekst: string }): EtatFe
   if (r.status === 401 || r.status === 403)
     return new EtatFeil(
       med(`Skatteetaten avviste tilgangen til avstemmingsrapporten (${r.status})`) +
-        ". Sjekk at tilgangen i Altinn har tilgangspakken «A-ordningen» (Innstillinger → Lønn → Skattekort).",
+        ". Sjekk at tilgangen i Altinn har tilgangspakken «A-ordningen» (Lønn → Skattekort).",
       r.status,
       kode,
     );
@@ -493,8 +493,8 @@ export async function hentFraAordningen(org: string, bestilling?: string, forsok
   try {
     if (!config.ameldingInnsending) throw new EtatFeil("Hentingen fra a-ordningen er ikke slått på ennå (den bruker samme tilgang som innsendingen av a-meldingen).", 503);
     const t = await hentTilgang(org);
-    if (!t?.orgnr || t.status !== "godkjent") throw new EtatFeil("Koble til Skatteetaten først (Innstillinger → Lønn → Skattekort).", 409);
-    if (!harPakke(t, A_ORDNING)) throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Innstillinger → Lønn → Skattekort.", 409);
+    if (!t?.orgnr || t.status !== "godkjent") throw new EtatFeil("Koble til Skatteetaten først (Lønn → Skattekort).", 409);
+    if (!harPakke(t, A_ORDNING)) throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Lønn → Skattekort.", 409);
     const token = await hentToken(SCOPE.amelding, t.orgnr);
     const maaneder = maanederFor(iDag());
     let mnd = maaned && /^\d{4}-\d{2}$/.test(maaned) ? maaned : maaneder[0]!;
@@ -629,12 +629,12 @@ async function tilgjengelig(db: Db, org: string): Promise<{ ok: boolean; grunn: 
   if (t?.status !== "godkjent")
     return {
       ok: false,
-      grunn: "Koble til Skatteetaten først under Innstillinger → Lønn → Skattekort.",
+      grunn: "Koble til Skatteetaten først under Lønn → Skattekort.",
     };
   if (!t.pakker.includes(A_ORDNING))
     return {
       ok: false,
-      grunn: "Gi tilgang til a-ordningen i Altinn først: trykk «Utvid tilgangen i Altinn» under Innstillinger → Lønn → Skattekort.",
+      grunn: "Gi tilgang til a-ordningen i Altinn først: trykk «Utvid tilgangen i Altinn» under Lønn → Skattekort.",
     };
   return { ok: true, grunn: null };
 }

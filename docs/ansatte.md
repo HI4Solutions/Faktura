@@ -43,7 +43,7 @@ Hentingen bruker systembrukeren organisasjonen har gitt Admin Konsoll i Altinn, 
 tilgangspakken **«A-ordningen»** og scopet `skatteetaten:innrapporteringamelding`. Dette er de
 samme som for innsendingen av a-meldingen. Knappen virker derfor når `AMELDING_INNSENDING` er på
 og organisasjonen er koblet til Skatteetaten med «A-ordningen» (ellers sier dialogen hva som
-mangler, med lenke til Innstillinger → Lønn → Skattekort).
+mangler, med lenke til Lønn → Skattekort).
 
 Bestillingen og hentingen tar gjerne et par minutter. Workeren spør etter statusen hvert tredje
 sekund i halvannet minutt, og deretter hvert minutt i opptil tjue minutter. Lederen får varsel når

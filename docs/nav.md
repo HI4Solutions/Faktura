@@ -62,10 +62,10 @@ Koden: `server/src/navSykepenger.ts` (workeren: hentingen, innsendingen og statu
 
 ## Hos kunden
 
-1. **Virksomheten** (underenheten der de ansatte jobber) under Innstillinger → Lønn →
-   A-melding, og **fødselsnummeret** på de ansatte.
+1. **Virksomheten** (underenheten der de ansatte jobber) under Lønn → A-melding →
+   Oppsett, og **fødselsnummeret** på de ansatte.
 2. **Tilgang i Altinn.** Kunder som allerede har koblet til Skatteetaten, trykker «Utvid
-   tilgangen i Altinn» under Innstillinger → Lønn → Skattekort, og daglig leder godkjenner
+   tilgangen i Altinn» under Lønn → Skattekort, og daglig leder godkjenner
    tilgangspakken «Lønn med personopplysninger av særlig kategori» i Altinn. Nye kunder får den
    med en gang de kobler til.
 3. **Valget for lønn under sykdom** under Innstillinger → Lønn → Lønn.

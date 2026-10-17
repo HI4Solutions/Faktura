@@ -82,8 +82,8 @@ export function navRuter() {
       return status(db, orgId(c));
     });
     if (!s.pa) throw new ApiFeil(409, "Hentingen fra NAV er ikke slått på ennå.");
-    if (!s.tilgang) throw new ApiFeil(409, `Gi tilgang hos NAV i Altinn først (tilgangspakken «${s.pakke}», Innstillinger → Lønn → Skattekort).`);
-    if (!s.virksomhet) throw new ApiFeil(409, "Legg inn virksomheten (underenheten) under Innstillinger → Lønn → A-melding først.");
+    if (!s.tilgang) throw new ApiFeil(409, `Gi tilgang hos NAV i Altinn først (tilgangspakken «${s.pakke}», Lønn → Skattekort).`);
+    if (!s.virksomhet) throw new ApiFeil(409, "Legg inn virksomheten (underenheten) under Lønn → A-melding → Oppsett først.");
     await leggIKo({ type: "nav-hent", org_id: orgId(c) });
     return c.json({ ok: true });
   });

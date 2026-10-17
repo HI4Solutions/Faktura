@@ -2658,7 +2658,13 @@ button.lenke.lonn-pdf { padding: 0 16px; flex: none; }
 .lonn-endringsdato { margin: 4px 0 12px; padding: 10px 12px; border: 1px solid var(--kant); border-radius: var(--radius-s); background: var(--flate-2); }
 .lonn-endringsdato .rad { margin-bottom: 4px; }
 
-/* Skattekort fra Skatteetaten (Innstillinger → Lønn → Skattekort, og på den ansatte) */
+/* Oppsettet for a-meldingen øverst på Lønn → A-melding (LonnAmeldingOppsett.tsx): én linje når det er lagt inn. */
+.kort.amelding-oppsett:not(form) { padding-top: 12px; padding-bottom: 12px; }
+.amelding-oppsett-linje { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 22px; }
+.amelding-oppsett-linje > button.lenke { margin-left: auto; }
+.amelding-oppsett .melding { margin-bottom: 12px; }
+
+/* Skattekort fra Skatteetaten (Lønn → Skattekort, og på den ansatte) */
 .skattekort-kobling h2 .merke { margin-left: 6px; vertical-align: middle; font-size: 0.7em; }
 .skattekort-fra-skatteetaten { margin: 8px 0 4px; padding: 10px 12px; border: 1px solid var(--kant); border-radius: 10px; background: var(--flate-2); }
 .skattekort-fra-skatteetaten p { margin: 0 0 6px; }

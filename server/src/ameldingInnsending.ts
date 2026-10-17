@@ -179,7 +179,7 @@ export async function lagAmelding(org: string, ameldingId: string) {
     if (!config.ameldingInnsending) throw new EtatFeil("Innsending til Skatteetaten er ikke slått på ennå. Last ned fila og last den opp på skatteetaten.no.", 503);
     const t = await hentTilgang(org);
     if (!t?.orgnr || !harPakke(t, A_ORDNING))
-      throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Innstillinger → Lønn → Skattekort.", 409);
+      throw new EtatFeil("Tilgangen i Altinn mangler tilgangspakken «A-ordningen». Utvid tilgangen under Lønn → Skattekort.", 409);
     const token = await hentToken(SCOPE.amelding, t.orgnr);
     // Idempotensnøkkelen er en påkrevd «parameter» uten at dokumentasjonen sier hvor. Med den bare i
     // adressen svarte testmiljøet «Header mangler (AMLD_1028)», så den sendes også som hode, både med

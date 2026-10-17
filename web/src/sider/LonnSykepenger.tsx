@@ -190,11 +190,11 @@ function Oversikt({ apne }: { apne: (id: string) => void }) {
         ) : !s.tilgang ? (
           <p className="liten">
             Gi Admin Konsoll tilgang hos NAV i Altinn: tilgangspakken «{s.pakke}». Trykk «Utvid tilgangen i Altinn» under{" "}
-            <Link to="/innstillinger?fane=lonn&del=skattekort">Innstillinger → Lønn → Skattekort</Link>, og la daglig leder godkjenne i Altinn.
+            <Link to="/lonn?fane=skattekort">Lønn → Skattekort</Link>, og la daglig leder godkjenne i Altinn.
           </p>
         ) : !s.virksomhet ? (
           <p className="liten">
-            Legg inn virksomheten (underenheten der de ansatte jobber) under <Link to="/innstillinger?fane=lonn&del=amelding">Innstillinger → Lønn → A-melding</Link>.
+            Legg inn virksomheten (underenheten der de ansatte jobber) under <Link to="/lonn?fane=amelding&oppsett=1">Lønn → A-melding → Oppsett</Link>.
           </p>
         ) : (
           <p className="liten">

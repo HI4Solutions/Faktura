@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api, hent, lastOppLogo } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
 import { erAdmin, harFunksjon, harModul, MODULNAVN, useKonto, type MinOrg, type ModulKode } from "../konto";
@@ -8,8 +8,8 @@ import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
 import { EhfSending } from "./Ehf";
 import { BankKobling, kontoerEndret } from "./Bank";
-import { SkattekortKobling } from "./Skattekort";
 import { BokforingOppsett } from "./LonnBokforing";
+import { AGA_SONER } from "./LonnAmeldingOppsett";
 import { oppdaterLegitimasjon, passkeyHer } from "../applaas";
 import { forberedVelger, velgMappe } from "../googleVelger";
 import { erAvbrutt, foreslattNavn, leggTilPasskey, passkeyFeil, stotterPasskey } from "../passkey";
@@ -77,8 +77,6 @@ function underfaner(fane: InnstillingFane, org: MinOrg | null, orgs: MinOrg[]): 
       return [
         ["lonn", "Lønn"],
         ["betalingsfil", "Betalingsfil"],
-        ["amelding", "A-melding"],
-        ["skattekort", "Skattekort"],
         ["bokforing", "Bokføring"],
       ];
     case "konto":
@@ -92,26 +90,31 @@ function underfaner(fane: InnstillingFane, org: MinOrg | null, orgs: MinOrg[]): 
 }
 
 // Gamle adresser (lenker og varsler bruker dem fortsatt): fanen og underfanen de er nå. Fra før
-// lå lønnen på fanen Ansatte og timer (#lonn, #afp, #amelding, #skattekort), og betalingen,
-// EHF, brukerne og skattekortene var egne faner.
+// lå lønnen på fanen Ansatte og timer (#lonn, #afp), og betalingen, EHF og brukerne var egne faner.
 function nyAdresse(fane: string | null, del: string | null, sted: string, bank: boolean): [string | null, string | null] {
   if (fane === "betaling") return ["faktura", bank ? "bank" : "betaling"];
   if (fane === "ehf") return ["faktura", "ehf"];
   if (fane === "brukere") return ["organisasjon", "brukere"];
-  if (fane === "skattekort") return ["lonn", "skattekort"];
-  if (fane === "personal" && !del) {
-    if (sted === "lonn" || sted === "afp") return ["lonn", "lonn"];
-    if (sted === "amelding") return ["lonn", "amelding"];
-    if (sted === "skattekort") return ["lonn", "skattekort"];
-  }
+  if (fane === "personal" && !del && (sted === "lonn" || sted === "afp")) return ["lonn", "lonn"];
   return [fane, del];
+}
+
+// Skattekortene og oppsettet for a-meldingen er flyttet til Lønn, der de brukes (Lønn → Skattekort
+// og Lønn → A-melding); de gamle adressene (lenker, varsler og e-post) går dit.
+function flyttetTilLonn(sok: URLSearchParams, hash: string): string | null {
+  const fane = sok.get("fane");
+  const del = sok.get("del");
+  const sted = hash.replace(/^#/, "");
+  if (fane === "skattekort" || (fane === "lonn" && del === "skattekort") || (fane === "personal" && !del && sted === "skattekort")) return "/lonn?fane=skattekort";
+  if ((fane === "lonn" && del === "amelding") || (fane === "personal" && !del && sted === "amelding")) return "/lonn?fane=amelding&oppsett=1";
+  return null;
 }
 
 // Innstillingene er delt i faner, og hver fane i underfaner. Fanen og underfanen står i adressen
 // (?fane=&del=), så lenker kan gå rett dit. Organisasjon har opplysningene, brukerne, rollene,
 // regnskapsføreren og slettingen; Faktura oppsettet av fakturaene, logoen, betalingen, kontonumrene,
 // banken og EHF; Personal arbeidstiden, ferien, vaktbyttene, timebanken og bursdagene; Lønn
-// lønnsoppsettet, betalingsfila, a-meldingen, skattekortene og bokføringen.
+// lønnsoppsettet, betalingsfila og bokføringen (skattekortene og a-meldingen er under Lønn).
 // Fanen og underfanen adressen gir (også de gamle adressene), med fanene og underfanene som finnes.
 function valgtInnstilling(org: MinOrg | null, orgs: MinOrg[], sok: URLSearchParams, hash: string) {
   const faner = innstillingFaner(org);
@@ -140,6 +143,8 @@ export function Innstillinger() {
   // Til en annen fane eller underfane (uten det som var med i adressen fra før, f.eks. svaret fra
   // banken eller Google).
   const ga = (f: InnstillingFane, d?: string) => settSok(d ? { fane: f, del: d } : { fane: f }, { replace: true });
+  const flyttet = flyttetTilLonn(sok, hash);
+  if (flyttet) return <Navigate to={flyttet} replace />;
 
   return (
     <>
@@ -179,8 +184,7 @@ export function Innstillinger() {
           {del === "ehf" && <EhfSending />}
         </>
       )}
-      {(fane === "personal" || (fane === "lonn" && ["lonn", "betalingsfil", "amelding"].includes(del))) && <PersonalOppsett del={del} />}
-      {fane === "lonn" && del === "skattekort" && <SkattekortKobling />}
+      {(fane === "personal" || (fane === "lonn" && ["lonn", "betalingsfil"].includes(del))) && <PersonalOppsett del={del} />}
       {fane === "lonn" && del === "bokforing" && <BokforingOppsett />}
       {fane === "konto" && <MinKonto del={del} />}
       {fane === "app" && <AppOgVarsler del={del === "varsler" ? "varsler" : "app"} />}
@@ -244,115 +248,6 @@ function SlettOrg() {
 // OTP, feriepenger, lønnsdag og måneden med halv skatt).
 type Bursdagsvarsel = "av" | "push" | "epost" | "begge";
 type Vaktbytte = "av" | "godkjenning" | "fritt";
-const AGA_SONER: [string, string][] = [
-  ["1", "Sone 1 – 14,1 %"],
-  ["1a", "Sone 1a – 10,6 % til fribeløpet er brukt, deretter 14,1 %"],
-  ["2", "Sone 2 – 10,6 %"],
-  ["3", "Sone 3 – 6,4 %"],
-  ["4", "Sone 4 – 5,1 %"],
-  ["4a", "Sone 4a – 7,9 %"],
-  ["5", "Sone 5 – 0 % (Finnmark og Nord-Troms)"],
-];
-// Flere virksomheter (0101_virksomheter.sql): underenhetene i foretaket med sonen for
-// arbeidsgiveravgift. Den ansatte velger virksomheten i ansattskjemaet; uten valg er det
-// hovedvirksomheten (A-melding over). Lagres for seg (ikke med skjemaet rundt).
-type Virksomhet = { id: string; orgnr: string; navn: string; aga_sone: string; ansatte: number };
-function FlereVirksomheter({ enhetsregisteret, hoved }: { enhetsregisteret: { orgnr: string; navn: string }[]; hoved: string }) {
-  const { org } = useKonto();
-  const { data, last } = useData(() => hent<{ andre: Virksomhet[] }>(`/org/${org!.id}/lonn/virksomheter`), [org?.id]);
-  const tom = { orgnr: "", navn: "", aga_sone: "1" };
-  const [ny, settNy] = useState(tom);
-  const h = useHandling();
-  const kan = Boolean(org && erAdmin(org));
-  const andre = data?.andre ?? [];
-  async function leggTil() {
-    const r = await h.kjor(() => api("POST", `/org/${org!.id}/lonn/virksomheter`, { ...ny, orgnr: ny.orgnr.replace(/\s/g, ""), navn: ny.navn.trim() }));
-    if (r) {
-      settNy(tom);
-      last();
-    }
-  }
-  const sone = (v: Virksomhet, aga_sone: string) => h.kjor(() => api("PATCH", `/org/${org!.id}/lonn/virksomheter/${v.id}`, { aga_sone })).then(last);
-  const fjern = (v: Virksomhet) => confirm(`Fjerne ${v.navn}?`) && h.kjor(() => api("DELETE", `/org/${org!.id}/lonn/virksomheter/${v.id}`)).then(last);
-  return (
-    <>
-      <h4 className="lonn-under">Flere virksomheter</h4>
-      <p className="felt-hjelp">
-        Har foretaket flere virksomheter (underenheter), kanskje i andre soner for arbeidsgiveravgift? Legg dem inn her, og velg virksomheten på hver ansatt (uten valg:
-        hovedvirksomheten over). Lønnskjøringen regner avgiften med sonen til virksomheten, og a-meldingen får én virksomhet per underenhet.
-      </p>
-      {andre.length > 0 && (
-        <table className="kompakt virksomheter">
-          <tbody>
-            {andre.map((v) => (
-              <tr key={v.id}>
-                <td>
-                  {v.navn}
-                  <div className="dempet liten">
-                    {orgnr(v.orgnr)} · {v.ansatte === 1 ? "1 ansatt" : `${v.ansatte} ansatte`}
-                  </div>
-                </td>
-                <td>
-                  <select aria-label={`Sone for ${v.navn}`} value={v.aga_sone} disabled={!kan || h.opptatt} onChange={(e) => sone(v, e.target.value)}>
-                    {AGA_SONER.map(([z, t]) => (
-                      <option key={z} value={z}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="hoyre">
-                  {kan && (
-                    <button type="button" className="lenke" onClick={() => fjern(v)}>
-                      Fjern
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {kan && (
-        <div className="rad" style={{ alignItems: "end" }}>
-          <label>
-            Organisasjonsnummer
-            <input
-              inputMode="numeric"
-              list="amelding-virksomheter"
-              placeholder="9 siffer"
-              value={ny.orgnr}
-              onChange={(e) => {
-                const treff = enhetsregisteret.find((x) => x.orgnr === e.target.value.replace(/\s/g, ""));
-                settNy({ ...ny, orgnr: e.target.value, navn: ny.navn || treff?.navn || "" });
-              }}
-            />
-          </label>
-          <label>
-            Navn
-            <input value={ny.navn} onChange={(e) => settNy({ ...ny, navn: e.target.value })} />
-          </label>
-          <label>
-            Sone
-            <select value={ny.aga_sone} onChange={(e) => settNy({ ...ny, aga_sone: e.target.value })}>
-              {AGA_SONER.map(([z, t]) => (
-                <option key={z} value={z}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <button type="button" onClick={leggTil} disabled={h.opptatt || !ny.orgnr.trim() || !ny.navn.trim() || ny.orgnr.replace(/\s/g, "") === hoved}>
-              Legg til
-            </button>
-          </label>
-        </div>
-      )}
-      <Feil melding={h.feil} />
-    </>
-  );
-}
 // Egenmelding (0071_egenmelding.sql): lovens regler, IA-ordningen eller en egen ordning.
 type Egenmeldingsordning = "lov" | "ia" | "egen";
 const ordning = (dager: number, ganger: number | null, dagerAar: number | null): Egenmeldingsordning =>
@@ -378,16 +273,10 @@ const TITTEL: Record<string, string> = {
   bursdager: "Bursdager",
   lonn: "Lønn",
   betalingsfil: "Betalingsfil til nettbanken",
-  amelding: "A-melding",
 };
 function PersonalOppsett({ del }: { del: string }) {
   const { org, oppdater } = useKonto();
   const { data } = useData(() => hent(`/org/${org!.id}/lonn-oppsett`), [org?.id]);
-  // Virksomhetene (underenhetene) i Enhetsregisteret, til a-meldingen (null: ikke slått opp).
-  const virksomheter = useData<{ orgnr: string; navn: string; adresse: string | null }[] | null>(
-    () => (harFunksjon(org, "lonn") ? hent<{ orgnr: string; navn: string; adresse: string | null }[]>(`/org/${org!.id}/amelding-virksomheter`).catch(() => null) : Promise.resolve(null)),
-    [org?.id],
-  );
   const [o, settO] = useState<{
     aktiv: boolean;
     daglig_grense: string;
@@ -413,8 +302,6 @@ function PersonalOppsett({ del }: { del: string }) {
     skatt_kontonr: string;
     bank_bic: string;
     betalingsfil_format: "pain.001.001.03" | "pain.001.001.09";
-    virksomhet_orgnr: string;
-    pensjonsinnretning_orgnr: string;
     sykepenger_refusjon: boolean;
     reise_satser: "staten" | "trekkfri";
     auto_kjoring: boolean;
@@ -454,8 +341,6 @@ function PersonalOppsett({ del }: { del: string }) {
         skatt_kontonr: data.skatt_kontonr ? data.skatt_kontonr.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1.$2.$3") : "",
         bank_bic: data.bank_bic ?? "",
         betalingsfil_format: data.betalingsfil_format ?? "pain.001.001.03",
-        virksomhet_orgnr: data.virksomhet_orgnr ?? "",
-        pensjonsinnretning_orgnr: data.pensjonsinnretning_orgnr ?? "",
         sykepenger_refusjon: data.sykepenger_refusjon ?? true,
         reise_satser: data.reise_satser ?? "staten",
         auto_kjoring: data.auto_kjoring ?? true,
@@ -499,8 +384,6 @@ function PersonalOppsett({ del }: { del: string }) {
               skatt_kontonr: o!.skatt_kontonr.trim() || null,
               bank_bic: o!.bank_bic.trim() || null,
               betalingsfil_format: o!.betalingsfil_format,
-              virksomhet_orgnr: o!.virksomhet_orgnr.replace(/\s/g, "") || null,
-              pensjonsinnretning_orgnr: o!.pensjonsinnretning_orgnr.replace(/\s/g, "") || null,
               sykepenger_refusjon: o!.sykepenger_refusjon,
               reise_satser: o!.reise_satser,
               auto_kjoring: o!.auto_kjoring,
@@ -675,7 +558,7 @@ function PersonalOppsett({ del }: { del: string }) {
             </select>
             <span className="felt-hjelp">
               Sonen der (hoved)virksomheten er registrert (kommunen). I sone 1a gjelder den reduserte satsen til den sparte avgiften i året når 850 000 kr, for hele
-              foretaket. Virksomheter i andre soner legges inn under A-melding.
+              foretaket. Virksomheter i andre soner legges inn under <Link to="/lonn?fane=amelding&oppsett=1">Lønn → A-melding → Oppsett</Link>.
             </span>
           </label>
           <div className="rad">
@@ -823,53 +706,6 @@ function PersonalOppsett({ del }: { del: string }) {
               nettbanken.
             </span>
           </label>
-        </>
-      )}
-      {del === "amelding" && harFunksjon(org, "lonn") && (
-        <>
-          <div className="rad">
-            <label>
-              Virksomhet (underenhet)
-              <input inputMode="numeric" list="amelding-virksomheter" placeholder="9 siffer" value={o.virksomhet_orgnr} onChange={(e) => settO({ ...o, virksomhet_orgnr: e.target.value })} />
-              <datalist id="amelding-virksomheter">
-                {(virksomheter.data ?? []).map((v) => (
-                  <option key={v.orgnr} value={v.orgnr}>
-                    {v.navn}
-                    {v.adresse ? `, ${v.adresse}` : ""}
-                  </option>
-                ))}
-              </datalist>
-              <span className="felt-hjelp">
-                Organisasjonsnummeret til virksomheten (underenheten i Enhetsregisteret) der de ansatte jobber.
-                {virksomheter.data?.length === 1 && o.virksomhet_orgnr !== virksomheter.data[0]!.orgnr && (
-                  <>
-                    {" "}
-                    <button type="button" className="lenke" onClick={() => settO({ ...o, virksomhet_orgnr: virksomheter.data![0]!.orgnr })}>
-                      Bruk {virksomheter.data[0]!.navn} ({virksomheter.data[0]!.orgnr})
-                    </button>
-                  </>
-                )}
-                {virksomheter.data?.length === 0 && org!.orgnr && (
-                  <>
-                    {" "}
-                    {/^[23]\d{8}$/.test(org!.orgnr)
-                      ? "Testbedriften har ingen underenhet i Brønnøysundregistrenes testmiljø (der testdataene fra Tenor ligger). A-meldingen må ha en, så bruk en testbedrift som har en underenhet."
-                      : "Enhetsregisteret har ingen underenhet for foretaket. A-meldingen må ha en: registrer virksomheten med Samordnet registermelding i Altinn, og skriv nummeret her når den er registrert."}
-                  </>
-                )}
-              </span>
-            </label>
-            <label>
-              Pensjonsleverandør (OTP)
-              <input inputMode="numeric" placeholder="9 siffer" value={o.pensjonsinnretning_orgnr} onChange={(e) => settO({ ...o, pensjonsinnretning_orgnr: e.target.value })} />
-              <span className="felt-hjelp">Organisasjonsnummeret til pensjonsinnretningen (står i OTP-avtalen). Må med i a-meldingen når det er OTP.</span>
-            </label>
-          </div>
-          <FlereVirksomheter enhetsregisteret={virksomheter.data ?? []} hoved={o.virksomhet_orgnr.replace(/\s/g, "")} />
-          <p className="liten dempet">
-            Skattekortet registreres på hver ansatt, eller hentes fra Skatteetaten når dere har koblet til (under). Lønnskjøringene og a-meldingen er under{" "}
-            <Link to="/lonn">Lønn</Link>.
-          </p>
         </>
       )}
       {del === "bursdager" && (

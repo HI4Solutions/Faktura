@@ -105,7 +105,7 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
 
 ## Hos kunden
 
-1. **Innstillinger → Lønn → A-melding:** organisasjonsnummeret til virksomheten
+1. **Lønn → A-melding → Oppsett:** organisasjonsnummeret til virksomheten
    (underenheten i Enhetsregisteret; appen foreslår den når det bare er én) og til
    pensjonsleverandøren når de har OTP. Har foretaket ingen underenhet, sier feltet det (den
    registreres med Samordnet registermelding i Altinn). Foretakets eget organisasjonsnummer (den
@@ -151,7 +151,7 @@ Koden: `server/src/amelding.ts` (grunnlaget, kontrollen og meldingen som JSON og
    a-melding, som erstatter den forrige. Rapportene «Avstemming per termin» og «Årsavstemming»
    (Rapporter → Lønn) sammenligner lønnskjøringene, a-meldingene som er levert, og bokføringen.
 4. **Tilgang for innsending fra appen** (når den er slått på): kunder som allerede har koblet til
-   Skatteetaten for skattekortene, trykker «Utvid tilgangen i Altinn» under Innstillinger → Lønn →
+   Skatteetaten for skattekortene, trykker «Utvid tilgangen i Altinn» under Lønn →
    Skattekort, og daglig leder godkjenner tilgangspakken «A-ordningen» i Altinn. Nye kunder får den
    med en gang de kobler til.
 

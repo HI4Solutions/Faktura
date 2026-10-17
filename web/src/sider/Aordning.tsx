@@ -150,7 +150,7 @@ export function Aordning({ endret }: { endret: () => void }) {
         <p>Hent de ansatte fra a-meldingene som er sendt fra et annet lønnssystem: arbeidsforholdet, lønnen og fødselsnummeret, uten å skrive dem inn.</p>
         <div className="melding info">
           {o.grunn}{" "}
-          <Link to="/innstillinger?fane=lonn&del=skattekort">Gå til Innstillinger → Lønn → Skattekort</Link>
+          <Link to="/lonn?fane=skattekort">Gå til Lønn → Skattekort</Link>
         </div>
       </div>
     );

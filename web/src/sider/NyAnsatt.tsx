@@ -256,7 +256,7 @@ export function NyAnsatt({ ferdig, heleSkjemaet }: { ferdig: (a: Lagret | null) 
           </div>
           <p className="felt-hjelp">
             {medLonn
-              ? "Skattekortet hentes fra Skatteetaten når fødselsnummeret er registrert (med koblingen under Innstillinger → Lønn → Skattekort). Faste tillegg, arbeidsplan og rolle legger du inn i ansattkortet."
+              ? "Skattekortet hentes fra Skatteetaten når fødselsnummeret er registrert (med koblingen under Lønn → Skattekort). Faste tillegg, arbeidsplan og rolle legger du inn i ansattkortet."
               : "Faste tillegg, arbeidsplan og rolle legger du inn i ansattkortet."}
           </p>
         </>

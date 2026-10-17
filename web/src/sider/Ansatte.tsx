@@ -592,7 +592,7 @@ function AnsattSkjema({
     [org?.id],
   );
   const bursdager = !!oppsett.data && oppsett.data.bursdag_varsel !== "av";
-  // Virksomhetene (0101, Innstillinger → Lønn → A-melding): valget vises når foretaket har flere.
+  // Virksomhetene (0101, Lønn → A-melding → Oppsett): valget vises når foretaket har flere.
   const virksomheter = useData(
     () =>
       harFunksjon(org, "lonn")
@@ -1353,7 +1353,7 @@ function AnsattSkjema({
                         : "Uten skattekort trekkes 50 %."}{" "}
                 {ansatt.skattekort_kilde === "skatteetaten" || ansatt.skattekort_hentet
                   ? "Hentes fra Skatteetaten; som biarbeidsgiver brukes trekket for biarbeidsgiver."
-                  : "Med koblingen til Skatteetaten (Innstillinger → Lønn → Skattekort) hentes skattekortet av seg selv når fødselsnummeret er registrert."}
+                  : "Med koblingen til Skatteetaten (Lønn → Skattekort) hentes skattekortet av seg selv når fødselsnummeret er registrert."}
               </p>
               {ansatt.id && <SkattekortFraSkatteetaten a={ansatt as Ansatt} />}
               <h3>A-melding</h3>

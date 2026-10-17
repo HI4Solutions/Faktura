@@ -45,7 +45,7 @@ import { Menyark, UlesteTall, bunnModuler, initialer, nye, snarveier, useBunnVal
 import {
   IkonAarsoppgjor, IkonAnlegg, IkonAnsatte, IkonAvskrivning, IkonBalanse, IkonBank, IkonBilag, IkonBjelle, IkonBytte, IkonDrift, IkonEkstraTimer, IkonFaktura, IkonFerie,
   IkonFravaer, IkonHoyre, IkonInnstillinger, IkonInstaller, IkonKalender, IkonKlokke, IkonKontoplan, IkonKunder, IkonLedigeVakter, IkonLoggUt, IkonLonn, IkonMeny, IkonMineVakter, IkonMva,
-  IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonRegnskap, IkonReise, IkonSjekkliste, IkonSkatteetaten, IkonSkjold, IkonTavle,
+  IkonNokkel, IkonOversikt, IkonPeriodisering, IkonPerson, IkonPluss, IkonProdukter, IkonRapport, IkonRegnskap, IkonReise, IkonSjekkliste, IkonSkatteetaten, IkonSkattekort, IkonSkjold, IkonTavle,
   IkonTimebank, IkonUtgift, IkonVelg, IkonVenstre,
 } from "./ikoner";
 
@@ -435,6 +435,8 @@ function Ramme() {
               [
                 lonnLeder && punkt("/lonn?fane=kjoringer", IkonLonn, "Lønnskjøringer", paa("/lonn", "kjoringer", true)),
                 lonnLeder && punkt("/lonn?fane=amelding", IkonRapport, "A-melding", paa("/lonn", "amelding")),
+                // Skattekortene (koblingen til Skatteetaten og de ansattes skattekort), også siden Altinn sender tilbake til.
+                lonnLeder && punkt("/lonn?fane=skattekort", IkonSkattekort, "Skattekort", paa("/lonn", "skattekort") || sted.pathname.startsWith("/skattekort")),
                 lonnLeder && kanLonn(org) && punkt("/lonn?fane=sykepenger", IkonFravaer, "Sykepenger", paa("/lonn", "sykepenger")),
                 lonnLeder && punkt("/lonn?fane=aar", IkonKalender, "Årsoversikt", paa("/lonn", "aar")),
                 lonnLeder && punkt("/lonn?fane=reiser", IkonReise, "Reiser", paa("/lonn", "reiser")),

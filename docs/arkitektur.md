@@ -659,18 +659,22 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   (opplysningene, brukerne, rollene, regnskapsføreren eller klientene, og sletting for eieren),
   Faktura (fakturaoppsettet, logoen, betaling og purring, kontonumrene, banken og EHF), Personal
   (arbeidstid og overtid, ferie og egenmelding, vaktbytte, timebanken og bursdagene), Lønn
-  (lønnsoppsettet, betalingsfila, a-meldingen, skattekortene og bokføringen), Min konto
+  (lønnsoppsettet, betalingsfila og bokføringen), Min konto
   (innloggingen og Google Disk) og App (appen og varslene). Organisasjon, Faktura, Personal og
   Lønn er bare for eier og administrator, og bare når modulene er på. Hver del lagrer bare sine
   felt (`PATCH /org/:id` tar imot deler av organisasjonen), og det som ikke er lagret, blir med
-  mellom underfanene. Gamle lenker og varsler (`?fane=betaling`, `?fane=ehf`, `?fane=brukere`,
-  `?fane=skattekort` og `?fane=personal#lonn`, `#afp`, `#amelding`, `#skattekort`) går til fanen og
-  underfanen der delen er nå (`nyAdresse`)
+  mellom underfanene. Gamle lenker og varsler (`?fane=betaling`, `?fane=ehf`, `?fane=brukere` og
+  `?fane=personal#lonn`, `#afp`) går til fanen og underfanen der delen er nå (`nyAdresse`).
+  Skattekortene og oppsettet for a-meldingen er flyttet til Lønn, der de brukes: koblingen til
+  Skatteetaten og hentingen på Lønn → Skattekort (med skattekortene til de ansatte), og
+  virksomheten, pensjonsleverandøren og de andre virksomhetene på Lønn → A-melding
+  (`LonnAmeldingOppsett.tsx`, `?oppsett=1`). De gamle adressene (`?fane=lonn&del=skattekort`,
+  `&del=amelding`, `?fane=skattekort`, `#skattekort`, `#amelding`) går dit (`flyttetTilLonn`)
 - Sidemenyen (`App.tsx`) har to nivåer. Hovedmenyen har modulene: Oversikt øverst, forsiden for
   hver rolle (se under), Plattform (bare for plattformadministratorene), Faktura (Fakturaer, Kunder
   og Produkter), Personal (Ansatte, Vaktplan, Timer eller «Timer og ferie», Beskjeder og
-  Sjekklister), Lønn (fanene på Lønn: Lønnskjøringer, A-melding, Sykepenger, Årsoversikt, Reiser og
-  Mine lønnsslipper), Regnskap (delene av Regnskap, som `?fane=` på `/regnskap`, i gruppene Daglig:
+  Sjekklister), Lønn (fanene på Lønn: Lønnskjøringer, A-melding, Skattekort, Sykepenger, Årsoversikt,
+  Reiser og Mine lønnsslipper), Regnskap (delene av Regnskap, som `?fane=` på `/regnskap`, i gruppene Daglig:
   Bilag, Utgifter og Bank; Skatt og avgift: Mva og Skatteetaten; Avslutning: Saldobalanse,
   Periodiseringer og Årsoppgjør; Eiendeler og kontoer: Anleggsmidler, Saldoavskrivninger og
   Kontoer) og Rapporter, og nederst Konto (Innstillinger, Verifiser organisasjon for eier og

@@ -11,6 +11,7 @@ import { dato, kr } from "../format";
 import { IkonVenstre } from "../ikoner";
 import { maaned as maanedTekst } from "../lonn";
 import { PERMISJONSARTER, type PermisjonsArt } from "./Fravaer";
+import { AmeldingOppsett } from "./LonnAmeldingOppsett";
 
 type Status = "lages" | "klar" | "levert" | "sendt" | "mottatt" | "avvist" | "feil";
 type Melding = {
@@ -166,7 +167,15 @@ export function Ameldinger() {
     settSok(p);
   };
   if (maaned && /^\d{4}-\d{2}$/.test(maaned)) return <AmeldingMaaned maaned={maaned} tilbake={() => sett({ maaned: null })} />;
-  return <AmeldingListe aar={Number(sok.get("aar")) || Number(iDagOslo().slice(0, 4))} velgAar={(a) => sett({ aar: String(a) })} apne={(m) => sett({ maaned: m })} />;
+  return (
+    <AmeldingListe
+      aar={Number(sok.get("aar")) || Number(iDagOslo().slice(0, 4))}
+      velgAar={(a) => sett({ aar: String(a) })}
+      apne={(m) => sett({ maaned: m, oppsett: null })}
+      oppsett={sok.get("oppsett") === "1"}
+      visOppsett={(apen) => sett({ oppsett: apen ? "1" : null })}
+    />
+  );
 }
 
 function Innsendingstekst({ i }: { i: Innsending }) {
@@ -183,7 +192,7 @@ function Innsendingstekst({ i }: { i: Innsending }) {
           </a>
           {i.pa ? (
             <>
-              , eller gi tilgang i Altinn (<Link to="/innstillinger?fane=lonn&del=skattekort">Innstillinger → Lønn → Skattekort</Link>), så sender appen den.
+              , eller gi tilgang i Altinn (<Link to="/lonn?fane=skattekort">Lønn → Skattekort</Link>), så sender appen den.
             </>
           ) : (
             "."
@@ -195,7 +204,21 @@ function Innsendingstekst({ i }: { i: Innsending }) {
   );
 }
 
-function AmeldingListe({ aar, velgAar, apne }: { aar: number; velgAar: (a: number) => void; apne: (m: string) => void }) {
+// Oppsettet (virksomheten og pensjonsleverandøren, LonnAmeldingOppsett.tsx) står øverst, der
+// a-meldingen lages; ?oppsett=1 åpner det.
+function AmeldingListe({
+  aar,
+  velgAar,
+  apne,
+  oppsett,
+  visOppsett,
+}: {
+  aar: number;
+  velgAar: (a: number) => void;
+  apne: (m: string) => void;
+  oppsett: boolean;
+  visOppsett: (apen: boolean) => void;
+}) {
   const { org } = useKonto();
   const smal = useSmal();
   const d = useData(() => hent<{ aar: number; maaneder: Maaned[]; innsending: Innsending }>(`/org/${org!.id}/amelding?aar=${aar}`), [org?.id, aar], { oppdater: true });
@@ -232,6 +255,7 @@ function AmeldingListe({ aar, velgAar, apne }: { aar: number; velgAar: (a: numbe
   return (
     <>
       <Innsendingstekst i={d.data.innsending} />
+      <AmeldingOppsett apen={oppsett} settApen={visOppsett} />
       <div className="knapper lonn-knapper lonn-aar-valg">
         <label>
           År{" "}
@@ -414,8 +438,10 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
                 </select>
               ) : a.ansatt_id ? (
                 <Link to={`/ansatte/${a.ansatt_id}`}>Åpne den ansatte</Link>
-              ) : /Innstillinger/.test(a.tekst) ? (
-                <Link to="/innstillinger?fane=lonn&del=amelding">Til innstillingene</Link>
+              ) : /A-melding → Oppsett/.test(a.tekst) ? (
+                <Link to="/lonn?fane=amelding&oppsett=1">Til oppsettet</Link>
+              ) : /Lønn → Skattekort/.test(a.tekst) ? (
+                <Link to="/lonn?fane=skattekort">Til skattekortene</Link>
               ) : null}
             </li>
           ))}
@@ -491,7 +517,7 @@ function AmeldingMaaned({ maaned, tilbake }: { maaned: string; tilbake: () => vo
             {kanSende
               ? "Fila lastes opp på skatteetaten.no om du ikke vil sende fra appen."
               : x.innsending.pa
-                ? "Gi tilgang til a-meldingen i Altinn (Innstillinger → Lønn → Skattekort), så kan appen sende den."
+                ? "Gi tilgang til a-meldingen i Altinn (Lønn → Skattekort), så kan appen sende den."
                 : "Fila lastes opp på skatteetaten.no (a-melding som fil). Merk den som lastet opp etterpå, så erstatter en ny fil for måneden den."}
           </p>
         </div>

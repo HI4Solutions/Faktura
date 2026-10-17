@@ -69,9 +69,9 @@ og `db/migrations/0112_skatteetaten_krav.sql`.
 
 ## Hos kunden
 
-1. **Koblet til Skatteetaten** under Innstillinger → Lønn → Skattekort (som for skattekortene).
+1. **Koblet til Skatteetaten** under Lønn → Skattekort (som for skattekortene).
 2. **Tilgang i Altinn.** Kunder som allerede er koblet til, trykker «Utvid tilgangen i Altinn»
-   under Innstillinger → Lønn → Skattekort, og daglig leder godkjenner tilgangspakken «Krav,
+   under Lønn → Skattekort, og daglig leder godkjenner tilgangspakken «Krav,
    betalinger og utlegg» i Altinn. Nye kunder får den med en gang de kobler til.
 3. **Rapportert minst én gang** gjennom Admin Konsoll (f.eks. a-meldingen), som Skatteetaten
    krever.

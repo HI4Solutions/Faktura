@@ -139,7 +139,7 @@ export function ameldingRuter() {
   const krevInnsending = async (db: Db, org: string) => {
     const i = await innsending(db, org);
     if (!i.pa) throw new ApiFeil(409, "Innsending til Skatteetaten er ikke slått på ennå. Last ned fila og last den opp på skatteetaten.no.");
-    if (!i.tilgang) throw new ApiFeil(409, "Gi tilgang til a-meldingen i Altinn først (Innstillinger → Lønn → Skattekort).");
+    if (!i.tilgang) throw new ApiFeil(409, "Gi tilgang til a-meldingen i Altinn først (Lønn → Skattekort).");
   };
 
   // Bestill fila eller innsendingen for måneden: workeren lager den. erstatt: den nye meldingen

@@ -34,7 +34,7 @@ async function status(db: Db, org: string) {
   return {
     pa: config.kravOgFrister,
     miljo: config.skatteetatenMiljo,
-    // Koblet til Skatteetaten (Innstillinger → Lønn → Skattekort), og med tilgangspakken.
+    // Koblet til Skatteetaten (Lønn → Skattekort), og med tilgangspakken.
     koblet: t?.status === "godkjent",
     tilgang: Boolean(t?.status === "godkjent" && t.pakker.includes(KRAV_OG_UTLEGG)),
     pakke: PAKKENAVN[KRAV_OG_UTLEGG],
@@ -53,9 +53,9 @@ export function skatteetatenRuter() {
   r.post("/regnskap/skatteetaten/hent", async (c) => {
     const s = await bruk(c, (db) => status(db, orgId(c)));
     if (!s.pa) throw new ApiFeil(409, "Krav og frister fra Skatteetaten er ikke slått på ennå.");
-    if (!s.koblet) throw new ApiFeil(409, "Koble til Skatteetaten først (Innstillinger → Lønn → Skattekort).");
+    if (!s.koblet) throw new ApiFeil(409, "Koble til Skatteetaten først (Lønn → Skattekort).");
     if (!s.tilgang)
-      throw new ApiFeil(409, `Gi tilgang til kravene og fristene i Altinn først: tilgangspakken «${s.pakke}» (Innstillinger → Lønn → Skattekort → «Utvid tilgangen i Altinn»).`);
+      throw new ApiFeil(409, `Gi tilgang til kravene og fristene i Altinn først: tilgangspakken «${s.pakke}» (Lønn → Skattekort → «Utvid tilgangen i Altinn»).`);
     if (s.forsokt && Date.now() - Date.parse(s.forsokt) < 60_000) return c.json({ ok: true, allerede: true });
     await leggIKo({ type: "skatteetaten-hent", org_id: orgId(c) });
     return c.json({ ok: true });

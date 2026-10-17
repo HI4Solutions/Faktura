@@ -186,13 +186,13 @@ export function Skatteetaten() {
           </p>
         ) : !s.koblet ? (
           <p className="liten">
-            Koble til Skatteetaten først under <Link to="/innstillinger?fane=lonn&del=skattekort">Innstillinger → Lønn → Skattekort</Link>, og la daglig leder
+            Koble til Skatteetaten først under <Link to="/lonn?fane=skattekort">Lønn → Skattekort</Link>, og la daglig leder
             godkjenne i Altinn.
           </p>
         ) : !s.tilgang ? (
           <p className="liten">
             Gi Admin Konsoll tilgang til kravene og fristene i Altinn: tilgangspakken «{s.pakke}». Trykk «Utvid tilgangen i Altinn» under{" "}
-            <Link to="/innstillinger?fane=lonn&del=skattekort">Innstillinger → Lønn → Skattekort</Link>, og la daglig leder godkjenne i Altinn.
+            <Link to="/lonn?fane=skattekort">Lønn → Skattekort</Link>, og la daglig leder godkjenne i Altinn.
           </p>
         ) : (
           <p className="liten">

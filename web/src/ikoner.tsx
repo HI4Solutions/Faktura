@@ -311,6 +311,15 @@ export const IkonReise = (p: P) => (
 // (prosent), saldobalanse (vekt), årsoppgjør (bok), anleggsmidler (bygning), periodiseringer
 // (tidslinje), saldoavskrivninger (synkende kurve) og kontoene (nummerert liste).
 // Skatteetaten (krav og frister): et ark med en klokke.
+// Skattekortet: et kort med prosenttegn (trekket).
+export const IkonSkattekort = (p: P) => (
+  <Ikon {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M9.5 14.5l5-5" />
+    <circle cx="9.5" cy="9.5" r="1" />
+    <circle cx="14.5" cy="14.5" r="1" />
+  </Ikon>
+);
 export const IkonSkatteetaten = (p: P) => (
   <Ikon {...p}>
     <path d="M12.5 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l4 4v3.5" />
