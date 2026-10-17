@@ -1,6 +1,6 @@
 # Nettstedet: landingsside og juridiske sider
 
-Statisk nettsted for Admin Konsoll. Det er **ikke rullet ut**: ingen workflow bygger eller publiserer
+Statisk nettsted for Admin Konsoll, designet som et forhåndstrykt norsk skjema («blanketten»). Det er **ikke rullet ut**: ingen workflow bygger eller publiserer
 denne mappen, og den ligger utenfor `web/`.
 
 | Fil | Hva |
