@@ -27,7 +27,7 @@
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-type: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --luft: 16px;                         /* mellom toppen og arket som ligger øverst */
-  --mellom: clamp(16px, 4.5vw, 56px);  /* mellom arkene */
+  --mellom: clamp(40px, 7vw, 96px);    /* mellom arkene */
 }
 * { box-sizing: border-box; }
 /* Lenker til en del av siden havner under toppen, som står fast. nettsted.js setter --hode. */
@@ -55,10 +55,10 @@ img { max-width: 100%; }
 }
 
 /* Toppen, hver del av forsiden, dokumentet og bunnen er egne ark. Toppen står fast øverst. På
-   forsiden har hvert ark sin plass (.blad) som fyller skjermen under toppen: siden snapper til én
-   plass om gangen, og arket som går, legger seg bak det neste (index.html). */
+   forsiden har hvert ark sin plass (.blad), og neste del glir opp over den forrige, som blir liggende
+   (sideskiftet i index.html). */
 .top.ark { position: sticky; top: 0; z-index: 30; margin-block: 0; }
-.bunke { display: flow-root; padding-top: var(--luft); }
+.bunke { display: flow-root; padding-top: var(--mellom); }
 main .blad { position: relative; max-width: 1240px; margin: 0 auto var(--mellom); }
 main .blad > .ark { margin: 0; }
 main .blad > .ark, .ark.dok { padding-block: clamp(28px, 4vw, 52px);

@@ -13,7 +13,7 @@ bygges ikke; filene publiseres som de er.
 | `underleverandorer.html` | Underdatabehandlere, integrasjoner og andre mottakere |
 | `informasjonskapsler.html` | Informasjonskapsler og lokal lagring |
 | `felles.css` | Felles stil, skriftene, toppen, bunnen og arkene |
-| `nettsted.js` | Måler høyden på toppen (`--hode`), holder siden stille mens man fyller ut kontaktskjemaet, og sender skjemaet. Å bla én del om gangen gjør nettleseren selv (scroll-snap). Uten skriptet virker alt |
+| `nettsted.js` | Måler høyden på toppen (`--hode`), holder skjemaarket unna sideskiftet mens man fyller ut kontaktskjemaet, og sender skjemaet. Sideskiftet gjør nettleseren selv. Uten skriptet virker alt |
 | `fonter/` | Inter, Schibsted Grotesk og IBM Plex Mono (SIL Open Font License, lisensene ligger ved) |
 | `robots.txt`, `sitemap.xml`, `og-bilde.png`, `favicon.svg` | SEO og deling |
 | `firebase.json` | Firebase Hosting: korte adresser (`/vilkar` → `/vilkar.html`), sikkerhetshoder, hurtigbuffer, og alt annet videre til API-et, som sender gamle lenker til appen |
@@ -26,35 +26,31 @@ med luft mellom. Toppen står fast øverst, og lenkene står til høyre ved «Lo
 konto» når skjermen er minst 1100 px bred. Da viker skjemakoden «AK-1 · utg. 10.2026», som bare
 står på mellomstore skjermer; hvert ark har uansett «AK-1 · Side n av 10» øverst til høyre.
 
-På forsiden kommer én del om gangen (scroll-snap i `index.html`, uten skript): hvert ark har sin
-plass (`.blad`) som fyller skjermen under toppen, og når man ruller, kommer neste ark opp og legger
-seg på plass rett under toppen. Et ark kan ikke hoppes over (`scroll-snap-stop: always`). Et ark som
-er høyere enn skjermen (på mobil gjelder det de fleste), rulles fritt gjennom, og bunnen av plassen er
-også et stoppested (`.arkbunn`), så Page Down og mellomrom viser resten av arket før neste kommer.
-Underskriften («Ett skjema til») er det siste arket, og bunnen av siden det siste stoppestedet.
-Lenkene til delene legger delen rett under toppen (`scroll-padding-top` med høyden på toppen,
-`--hode`, som `nettsted.js` måler).
+På forsiden har hvert ark sin plass (`.blad`) og sin egen høyde, med god luft mellom arkene og over
+det første (`--mellom`, 40–96 px etter skjermbredden). Siden ruller fritt. En periode snappet den til
+én del om gangen, med ark som fylte hele skjermen, men det gjorde rullingen stiv og delene tette, og
+er tatt bort. Lenkene til delene legger delen rett under toppen (`scroll-padding-top` med høyden på
+toppen, `--hode`, som `nettsted.js` måler).
 
 Sideskiftet: når neste del kommer, blir arket liggende der det er, og det neste glir opp over det, med
-en skygge langs kanten øverst. Det er en scroll-drevet animasjon på arket (`animation-timeline`, uten
-skript), så den følger rullingen og går baklengs når man blar tilbake. Bare arket flytter seg, aldri
-plassen, så stoppestedene og lenkene ligger fast. Arket blir liggende til det neste ligger på plass
-over det, og forsvinner først da, så det ikke stikker fram over det neste. Chrome, Edge og Safari 26
-har scroll-drevne animasjoner; i andre nettlesere (Firefox, eldre Safari) blar siden like fullt én del
-om gangen, bare uten at arkene legger seg oppå hverandre.
+en skygge langs kanten øverst. Et ark som er høyere enn skjermen (på mobil gjelder det de fleste),
+rulles gjennom til bunnen er nådd, og blir liggende da. Det er en scroll-drevet animasjon på arket
+(`animation-timeline`, uten skript), så den følger rullingen og går baklengs når man ruller tilbake.
+Bare arket flytter seg, aldri plassen, så lenkene treffer. Arket blir liggende til det neste ligger på
+plass over det, og forsvinner først da, så det ikke stikker fram over det neste. Chrome, Edge og
+Safari 26 har scroll-drevne animasjoner; i andre nettlesere (Firefox, eldre Safari) ruller arkene
+forbi som vanlig.
 
-Mens man fyller ut kontaktskjemaet, står siden stille: nettleseren må få rulle feltet fram over
-tastaturet på mobilen, og et trykk på «Send» må treffe knappen uten at siden flytter seg. Når et
-felt i skjemaet får fokus, slår `nettsted.js` av snappingen (klassen `skriver`), og skjemaarket blir
-ikke liggende under det neste. Begge deler kommer tilbake når arket med skjemaet er rullet helt ut av
-skjermen og siden står stille. Uten skript gjelder det så lenge et felt i skjemaet har fokus.
+Kontaktskjemaet er det siste arket i bunken (`.bunke`) og blir ikke liggende: det neste dekker aldri
+feltene eller «Send», heller ikke når tastaturet på mobilen kommer opp og nettleseren ruller feltet
+fram. Underskriften («Ett skjema til») står utenfor bunken og ruller som vanlig.
 
-Med redusert bevegelse (innstillingen i operativsystemet) og på utskrift ruller siden vanlig. De
-juridiske sidene snapper ikke.
+Med redusert bevegelse (innstillingen i operativsystemet) og på utskrift ruller arkene bare forbi, og
+lenkene hopper rett til delen.
 
-En ny del legges inn som en plass med et ark: `<div class="blad" id="…">` med
-`<span class="arkbunn">` og `<div class="ark">`, og i arket `<span class="sidetall">` og
-`<div class="inn">` rundt delen. Sidetallene («Side n av 10», også i tittelfeltet) rettes.
+En ny del legges inn som en plass med et ark: `<div class="blad" id="…">` med `<div class="ark">`,
+og i arket `<span class="sidetall">` og `<div class="inn">` rundt delen. Sidetallene («Side n av 10»,
+også i tittelfeltet) rettes.
 
 Bunnen er kort: logoen, de juridiske sidene og knappen «Kontakt oss» (til skjemaet på forsiden) på
 én rad, og selskapsopplysningene (navn, org.nr., adresse og e-post, som e-handelsloven krever) på

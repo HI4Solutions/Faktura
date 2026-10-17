@@ -227,66 +227,37 @@ h1.stor .blaa { color: var(--ink); }
 .under-h .cta { margin-top: 0; }
 @media (max-width: 860px) { .under { grid-template-columns: minmax(0, 1fr); } .under-v { border-right: 0; border-bottom: 1.5px solid var(--ink); } }
 
-/* Én del om gangen: hvert ark har en plass (.blad) som fyller skjermen under toppen. Når man ruller,
-   kommer neste ark opp og legger seg på plass (scroll-snap, uten skript), og en del kan ikke hoppes
-   over (scroll-snap-stop). En del som er høyere enn skjermen, rulles gjennom før neste kommer. Med
-   redusert bevegelse ruller siden vanlig. */
-html { scroll-snap-type: y mandatory; scroll-padding-bottom: var(--luft); }
+/* Arkene på forsiden: hvert ark har sin plass (.blad) og sin egen høyde, med god luft mellom, og siden
+   ruller fritt. (Snapping til én del om gangen gjorde rullingen stiv, og ark som fylte hele skjermen,
+   gjorde at delene virket tette; begge deler er tatt bort.) */
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
-@media (prefers-reduced-motion: reduce) { html { scroll-snap-type: none; } }
-/* Mens man fyller ut kontaktskjemaet, står siden stille: nettleseren må få rulle feltet fram (over
-   tastaturet på mobilen), og et trykk på «Send» må treffe knappen, uten at siden blar videre.
-   nettsted.js holder snappingen av («skriver») til delen med skjemaet er rullet ut av skjermen.
-   To regler, så nettlesere uten :has() likevel får den første. */
-html.skriver { scroll-snap-type: none; }
-html:has(form.kontakt:focus-within) { scroll-snap-type: none; }
-/* Plassen er stoppestedet og flytter seg aldri (arket inni gjør det, se sideskiftet). */
-main .blad {
-  display: flex; flex-direction: column;
-  min-height: calc(100vh - var(--hode, 80px) - 2 * var(--luft));
-  min-height: calc(100svh - var(--hode, 80px) - 2 * var(--luft));
-  scroll-snap-align: start; scroll-snap-stop: always;
-}
-main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-.sitefoot { scroll-snap-align: end; }
-/* Bunnen av hvert ark er også et stoppested, så Page Down og mellomrom viser resten av en del som er
-   høyere enn skjermen, før neste del kommer. For en del som fyller skjermen, er det samme sted. */
-.arkbunn { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; pointer-events: none; scroll-snap-align: end; scroll-snap-stop: always; }
 /* Sideskiftet: når neste del kommer, blir arket liggende der det er, og det neste glir opp over det.
-   Animasjonen følger rullingen (scroll-drevet, uten skript), så den går like fort som man blar, og
-   baklengs når man blar tilbake. Bare arket flytter seg; plassen står i ro, så stoppestedene ligger
-   fast. Arket blir liggende til det neste ligger på plass over det (også luften mellom dem), og
-   forsvinner først da, så det ikke stikker fram over det neste. --flate er høyden under toppen, der
-   arkene legger seg. Nettlesere uten scroll-drevne animasjoner blar uten at arkene legger seg oppå
-   hverandre. */
+   Et ark som er høyere enn skjermen, rulles gjennom til bunnen er nådd, og blir liggende da.
+   Animasjonen følger rullingen (scroll-drevet, uten skript), så den går like fort som man ruller, og
+   baklengs når man ruller tilbake. Bare arket flytter seg; plassen står i ro, så lenkene til delene
+   treffer. Arket blir liggende til det neste ligger på plass over det (også luften mellom dem), og
+   forsvinner først da, så det ikke stikker fram over det neste. Kontaktskjemaet er det siste arket i
+   bunken og blir ikke liggende: det neste dekker aldri feltene eller «Send», heller ikke når
+   tastaturet på mobilen kommer opp. --flate er høyden under toppen, der arkene legger seg.
+   Nettlesere uten scroll-drevne animasjoner ruller arkene forbi som vanlig. */
 :root { --flate: calc(100vh - var(--hode, 80px) - 2 * var(--luft)); }
 @supports (height: 100dvh) { :root { --flate: calc(100dvh - var(--hode, 80px) - 2 * var(--luft)); } }
 @media (prefers-reduced-motion: no-preference) {
   .bunke > .blad { z-index: 0; }
   @supports (animation-timeline: view()) {
     .bunke > .blad { view-timeline: --blad block; view-timeline-inset: calc(var(--hode, 80px) + var(--luft)) var(--luft); }
-    .bunke > .blad > .ark { animation: under linear both; animation-timeline: --blad; animation-range: exit 0% exit calc(100% + var(--mellom)); }
-    /* Mens man fyller ut kontaktskjemaet, blir arket ikke liggende: feltet man skriver i, og «Send»
-       må kunne rulles fram (over tastaturet på mobilen) uten at det neste arket dekker dem. */
-    html.skriver #kontakt > .ark { animation: none; }
-    html:has(form.kontakt:focus-within) #kontakt > .ark { animation: none; }
+    .bunke > .blad:not(:last-child) > .ark { animation: under linear both; animation-timeline: --blad; animation-range: exit 0% exit calc(100% + var(--mellom)); }
   }
 }
 @keyframes under {
-  99.5% { opacity: 1; }
+  98.5% { opacity: 1; }
+  99.6% { opacity: 0; }
   to { transform: translateY(calc(min(100%, var(--flate)) + var(--mellom))); opacity: 0; }
 }
-/* Tittelfeltet fyller hele sitt ark, med innholdet midt i høyden. */
-.forside > .inn { flex: 1; display: flex; flex-direction: column; }
-.forside .tittel { flex: 1; border-bottom: 0; }
-.tittel-v { display: flex; flex-direction: column; justify-content: center; }
-.tittel-h { justify-content: center; }
+/* Tittelfeltet fyller sitt ark, og underskriften står alene på det siste. */
+.forside .tittel { border-bottom: 0; }
 .slutt .under { margin-top: 0; }
-@media print {
-  html { scroll-snap-type: none; }
-  main .blad { min-height: 0; display: block; }
-  main .blad > .ark { display: block; animation: none; transform: none; opacity: 1; }
-}
+@media print { main .blad > .ark { animation: none; transform: none; opacity: 1; } }
 
 /* Del 8: kontaktskjemaet, fylt ut med skrivemaskin som resten */
 .kontakt { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); border: 1.5px solid var(--ink); border-top: 0; }
@@ -357,7 +328,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 <div class="bunke">
 
 <div class="blad">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark forside">
 <div class="inn">
 <section class="tittel" aria-labelledby="tittel-h">
@@ -402,7 +372,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad" id="automatikk">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 2 av 10</span>
 <div class="inn">
@@ -433,7 +402,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad" id="sammenheng">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 3 av 10</span>
 <div class="inn">
@@ -500,7 +468,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad" id="moduler">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 4 av 10</span>
 <div class="inn">
@@ -588,7 +555,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad" id="laget-for">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 5 av 10</span>
 <div class="inn">
@@ -629,7 +595,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad" id="trygghet">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 6 av 10</span>
 <div class="inn">
@@ -656,7 +621,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad" id="status">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 7 av 10</span>
 <div class="inn">
@@ -679,7 +643,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad" id="sporsmal">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 8 av 10</span>
 <div class="inn">
@@ -721,7 +684,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad" id="kontakt">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 9 av 10</span>
 <div class="inn">
@@ -764,7 +726,6 @@ main .blad > .ark { flex: 1; display: flex; flex-direction: column; justify-cont
 </div>
 
 <div class="blad">
-<span class="arkbunn" aria-hidden="true"></span>
 <div class="ark slutt">
 <span class="sidetall" aria-hidden="true">AK-1 · Side 10 av 10</span>
 <div class="inn">

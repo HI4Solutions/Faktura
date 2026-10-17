@@ -1,8 +1,8 @@
 // Nettstedet (landingsside/). Måler høyden på toppen (--hode), så delene på forsiden og lenkene til
-// en del av siden legger seg rett under den, holder siden stille mens man fyller ut kontaktskjemaet,
-// og sender skjemaet uten at siden lastes på nytt. Å bla én del om gangen gjør nettleseren selv
-// (scroll-snap i index.html). Uten skriptet virker alt likevel: --hode har en standardverdi i
-// felles.css, og skjemaet sendes som et vanlig skjema.
+// en del av siden legger seg rett under den, og sender kontaktskjemaet uten at siden lastes på nytt.
+// Sideskiftet (arkene som glir over hverandre) gjør nettleseren selv (index.html). Uten skriptet
+// virker alt likevel: --hode har en standardverdi i felles.css, og skjemaet sendes som et vanlig
+// skjema.
 (() => {
   "use strict";
   const rot = document.documentElement;
@@ -15,30 +15,6 @@
   else window.addEventListener("resize", maal);
 
   const skjema = document.querySelector("form[data-kontakt]");
-
-  // Mens man fyller ut kontaktskjemaet, snapper ikke siden («skriver», index.html): nettleseren må få
-  // rulle feltet fram over tastaturet, og et trykk på «Send» må treffe knappen. Snappingen kommer
-  // tilbake når delen med skjemaet er rullet helt ut av skjermen og siden står stille. Da ligger
-  // nabodelen nesten på plass, så siden flytter seg knapt.
-  const kontakt = skjema ? skjema.closest(".blad") : null;
-  if (kontakt) {
-    let vent = 0;
-    const ute = () => {
-      const r = kontakt.getBoundingClientRect();
-      if (r.bottom > (hode ? hode.offsetHeight : 0) && r.top < window.innerHeight) return;
-      rot.classList.remove("skriver");
-      window.removeEventListener("scroll", ruller);
-    };
-    const ruller = () => {
-      clearTimeout(vent);
-      vent = setTimeout(ute, 200);
-    };
-    skjema.addEventListener("focusin", () => {
-      if (rot.classList.contains("skriver")) return;
-      rot.classList.add("skriver");
-      window.addEventListener("scroll", ruller, { passive: true });
-    });
-  }
 
   // Kontaktskjemaet (del 8): sendes som JSON, og svaret vises under skjemaet.
   if (skjema && window.fetch) {
