@@ -49,12 +49,15 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
    Variables), så testflaten beholder testklienten i Maskinporten når produksjon får sin egen:
    - `MASKINPORTEN_KLIENT_ID` og `MASKINPORTEN_NOKKEL_ID`;
    - `AMELDING_INNSENDING`, og `NAV_SYKEPENGER` og `KRAV_OG_FRISTER` om de er satt.
-3. **Infrastrukturen.** Actions → Infrastruktur → Run workflow. Første gang tar det en stund, mest
-   for databasen. I loggen for testjobben står DNS-oppføringene for test.adminkonsoll.no
-   (`dns_for_domener`).
-4. **DNS.** Legg inn oppføringene for `test` hos domeneleverandøren. Sertifikatet kommer av seg selv
-   når de er på plass.
-5. **Hemmelighetene.** Kopier dem fra produksjon i Cloud Shell, uten at verdiene vises:
+3. **Infrastrukturen.** Actions → Infrastruktur → Run workflow, fra grenen `main` (standardgrenen
+   i repoet er en annen, og fra den lager Infrastruktur bare en plan). Første gang tar det rundt et
+   kvarter, mest for databasen. DNS-oppføringen står i loggen for testjobben (`dns_for_domener`);
+   første gang er lista tom, og den kommer med i neste kjøring.
+4. **DNS.** Legg inn oppføringen hos domeneleverandøren: `test`, CNAME, `hi4-faktura-test.web.app`.
+   Sertifikatet kommer av seg selv når den er på plass, etter noen minutter til en time. Til da
+   virker testflaten på https://hi4-faktura-test.web.app.
+5. **Hemmelighetene.** Når Infrastruktur er ferdig (den legger inn en plassholder først), kopier
+   dem fra produksjon i Cloud Shell, uten at verdiene vises:
 
    ```sh
    for s in resend-api-key maskinporten-nokkel; do
