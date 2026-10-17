@@ -41,7 +41,9 @@ Innsendingen fra appen er av til GitHub-variabelen `AMELDING_INNSENDING` er satt
    sin `meldingsId` og `mottakstatus`, og `mottattPeriode` avvikene for perioden. Statusen er den for
    meldingen selv (en tidligere avvist melding samme måned gjør ikke den nye avvist), og avvikene for
    perioden står på meldingen svaret kom etter (`tilbakemeldingEtterMottakAvMeldingsId`). Står
-   meldingen ikke i svaret ennå, venter den. Meldinger som fikk status fra en annen melding før dette
+   meldingen ikke i svaret ennå, venter den. En melding med `mottakstatus` «erstattet» (av en ny
+   melding eller en nullstilling) ble mottatt før den ble erstattet, og får status mottatt; at den
+   ikke gjelder lenger, ser appen av meldingen som erstatter den. Meldinger som fikk status fra en annen melding før dette
    ble rettet, sjekkes på nytt (`0115_amelding_status_per_melding.sql`, og igjen i `0116` etter at
    den nye workeren var ute, siden migreringene går før workeren rulles ut). Hvert
    avvik viser alvorlighetsgraden, regelen og detaljene fra Skatteetaten (`navn` og `detaljer`) og

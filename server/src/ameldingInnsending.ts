@@ -350,8 +350,9 @@ export function tolkTilbakemelding(
     gjennom(egen.l);
     if (egen.m?.tilbakemeldingEtterMottakAvMeldingsId === valg.meldingsId) gjennom(egen.m?.mottattPeriode, "", false, false);
   } else gjennom(data);
-  // «ikkeMottatt», «underBehandling» og lignende er ikke et svar ennå.
-  const mottatt = (s: string) => /mottatt|godkjent|^ok$/.test(s) && !/ikke|under|venter/.test(s);
+  // «ikkeMottatt», «underBehandling» og lignende er ikke et svar ennå. En melding som er «erstattet»
+  // (av en ny melding eller en nullstilling), ble mottatt før den ble erstattet.
+  const mottatt = (s: string) => /mottatt|godkjent|erstattet|^ok$/.test(s) && !/ikke|under|venter/.test(s);
   const status = statuser.some((s) => s.includes("avvist")) ? "avvist" : statuser.some(mottatt) ? "mottatt" : null;
   if (status === "avvist" && !avvik.length) for (const g of grunner) leggTil({ kode: null, tekst: g, alvorlighet: "avvisning" });
   return { status, avvik: avvik.slice(0, 100) };

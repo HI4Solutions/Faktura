@@ -451,6 +451,24 @@ describe("a-meldingen (uten database)", () => {
     });
     // Meldingen står ikke i svaret ennå: ikke klart.
     expect(tolkTilbakemelding(maaneden, { meldingsId: "m-4" })).toEqual({ status: null, avvik: [] });
+    // En melding som er erstattet (her av en nullstilling), ble mottatt først. Formen er Skatteetatens
+    // svar i TT02 etter nullstillingen av oktober 2026.
+    const nullstilt = {
+      mottak: [
+        {
+          kalendermaaned: "2026-10",
+          mottattPeriode: { avvik: [], virksomhet: [], mottattAvgiftOgTrekkTotalt: { sumArbeidsgiveravgift: 10427 } },
+          mottattLeveranse: [
+            { avvik: [], meldingsId: "m-1", mottakstatus: "erstattet" },
+            { avvik: [], meldingsId: "m-2", mottakstatus: "mottatt", antallInntektsmottakere: 3 },
+            { avvik: [], meldingsId: "m-3", mottakstatus: "mottatt", erstatterMeldingsId: "m-1", antallInntektsmottakere: 0 },
+          ],
+          tilbakemeldingEtterMottakAvMeldingsId: "m-3",
+        },
+      ],
+    };
+    expect(tolkTilbakemelding(nullstilt, { meldingsId: "m-1" })).toEqual({ status: "mottatt", avvik: [] });
+    expect(tolkTilbakemelding(nullstilt, { meldingsId: "m-3" })).toEqual({ status: "mottatt", avvik: [] });
     // Andre former: avvik som tekst, ett avvik for seg, og en avvisning med bare årsaken.
     expect(tolkTilbakemelding({ status: "AVVIST", avvik: ["Meldingen gjelder en lukket måned."] }).avvik).toEqual([
       { kode: null, tekst: "Meldingen gjelder en lukket måned.", alvorlighet: null },
