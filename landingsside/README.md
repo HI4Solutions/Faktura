@@ -13,7 +13,7 @@ bygges ikke; filene publiseres som de er.
 | `underleverandorer.html` | Underdatabehandlere, integrasjoner og andre mottakere |
 | `informasjonskapsler.html` | Informasjonskapsler og lokal lagring |
 | `felles.css` | Felles stil, skriftene, toppen, bunnen og arkene |
-| `nettsted.js` | Måler høyden på toppen (`--hode`), holder skjemaarket unna sideskiftet mens man fyller ut kontaktskjemaet, og sender skjemaet. Sideskiftet gjør nettleseren selv. Uten skriptet virker alt |
+| `nettsted.js` | Måler høyden på toppen (`--hode`) og sender kontaktskjemaet. Sideskiftet gjør nettleseren selv. Uten skriptet virker alt |
 | `fonter/` | Inter, Schibsted Grotesk og IBM Plex Mono (SIL Open Font License, lisensene ligger ved) |
 | `robots.txt`, `sitemap.xml`, `og-bilde.png`, `favicon.svg` | SEO og deling |
 | `firebase.json` | Firebase Hosting: korte adresser (`/vilkar` → `/vilkar.html`), sikkerhetshoder, hurtigbuffer, og alt annet videre til API-et, som sender gamle lenker til appen |
@@ -71,6 +71,15 @@ direkte.
   databasen, og innholdet havner ikke i loggen.
 - Et skjult felt (`nettsted`) fanger roboter: de får et vanlig svar, men ingenting sendes. Høyst fem
   henvendelser i timen fra samme IP-adresse og 100 i timen i alt (per instans).
+
+## Innloggingen i appen
+
+Innloggingen i appen (logg inn, opprett konto, glemt passord og totrinnskoden) og skjermene før appen
+(bekreft e-post og venter på godkjenning) er blanketter som nettstedet: samme topp med logoen og
+skjemakoden «AK-2», ark med hullrader, delbånd, nummererte felt, knapper, stempler på svarene og samme
+bunn. Byggeklossene er kopiert fra `felles.css` til `web/src/blankett.css`, og skriftene ligger også i
+appen (`web/src/fonter/`). Endres fargene, skriftene eller byggeklossene her, må `blankett.css` følge
+med. Logoen i appen står også som her i lyst utseende (`docs/merkevare/README.md`).
 
 ## Fylt inn og bekreftet
 

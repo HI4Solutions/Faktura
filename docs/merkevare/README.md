@@ -23,7 +23,10 @@
 
 I appen: `web/src/Logo.tsx` (stiene ligger i `web/src/logoStier.ts`), `web/public/favicon.svg`
 og app-ikonene i `web/public/ikoner`. Fargene i appen settes med `--logo-farge` og `--logo-kile`
-i `web/src/styles.css`.
+i `web/src/styles.css`. Logoen står som på nettstedet: i lyst utseende på papir med dobbel strek i
+trykkfargen under (hele toppen på mobil, hodet øverst i sidemenyen på PC), i fargene for lys bunn.
+I mørkt utseende er den hvit på mørk bunn. Innloggingen og skjermene før appen (bekreft e-post,
+venter på godkjenning) er blanketter som nettstedet (`web/src/blankett.tsx` og `blankett.css`).
 
 På nettstedet (`landingsside/`): den samme logoen i toppen og bunnen av sidene, med de samme stiene,
 i fargene for lys bunn (`--type` og `--ink` i `felles.css`), og i delingsbildet `og-bilde.png`.

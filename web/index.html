@@ -4,13 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fcfcfd" />
     <script>
-      // Lyst eller mørkt før siden tegnes: valget på denne enheten, ellers systemets (se tema.ts).
+      // Lyst eller mørkt før siden tegnes: valget på denne enheten, ellers systemets, og fargen
+      // nettleseren bruker rundt siden (se tema.ts).
       try {
         var t = localStorage.getItem("faktura.tema");
         var mork = t === "mork" || (t !== "lys" && matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.setAttribute("data-tema", mork ? "mork" : "lys");
         document.querySelector('meta[name="color-scheme"]').setAttribute("content", mork ? "dark" : "light");
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", mork ? "#0d1530" : "#fcfcfd");
       } catch (e) {}
     </script>
     <title>Admin Konsoll</title>
@@ -25,7 +28,6 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Admin Konsoll" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#0d1530" />
   </head>
   <body>
     <div id="statuslinje" aria-hidden="true"></div>

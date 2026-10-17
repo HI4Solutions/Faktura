@@ -7,6 +7,7 @@ import { applyActionCode } from "firebase/auth";
 import { hentAuth } from "../firebase";
 import { Feil, Laster } from "../felles";
 import { sendBekreftelse, useSending } from "../epostbekreftelse";
+import { EnkelBlankett } from "../blankett";
 
 // Er adressen bekreftet (kanskje på en annen enhet)? Da hentes et nytt token, og appen lastes på
 // nytt med det.
@@ -60,41 +61,38 @@ export function BekreftEpost({ epost, loggUt }: { epost: string; loggUt: () => v
   }
 
   return (
-    <div className="sentrert">
-      <div className="kort bekreft-epost">
-        <h1>Bekreft e-postadressen</h1>
-        {sending?.status === "sender" ? (
-          <p role="status">
-            Sender en lenke til <strong>{epost}</strong> …
-          </p>
-        ) : sending?.status === "sendt" ? (
-          <p role="status">
-            Vi har sendt en lenke til <strong>{sending.til || epost}</strong>. Klikk på den for å bekrefte adressen, så går du videre her av deg selv.
-          </p>
-        ) : (
-          <p>
-            Klikk på lenken vi sendte til <strong>{epost}</strong> for å bekrefte adressen. Finner du den ikke, kan du få en ny.
-          </p>
-        )}
-        {sending?.status === "feil" && <Feil melding={sending.melding} />}
-        {melding && <div className="melding info">{melding}</div>}
-        <p className="liten dempet">
-          Finner du ikke e-posten? Se i søppelpost eller uønsket e-post; den kommer fra Admin Konsoll. Er adressen feil, logger du ut og lager kontoen på nytt
-          med riktig adresse.
+    <EnkelBlankett navn="Ny konto" nr="DEL 2" tittel="Bekreft e-postadressen" tekst="Lenke på e-post">
+      {sending?.status === "sender" ? (
+        <p role="status">
+          Sender en lenke til <strong>{epost}</strong> …
         </p>
-        <div className="knapper">
-          <button className="primar" onClick={sjekk}>
-            Jeg har bekreftet
-          </button>
-          <button onClick={sendNy} disabled={opptatt || sending?.status === "sender"}>
-            Send ny lenke
-          </button>
-          <button className="lenke" onClick={loggUt}>
-            Logg ut
-          </button>
-        </div>
+      ) : sending?.status === "sendt" ? (
+        <p role="status">
+          Vi har sendt en lenke til <strong>{sending.til || epost}</strong>. Klikk på den for å bekrefte adressen, så går du videre her av deg selv.
+        </p>
+      ) : (
+        <p>
+          Klikk på lenken vi sendte til <strong>{epost}</strong> for å bekrefte adressen. Finner du den ikke, kan du få en ny.
+        </p>
+      )}
+      {sending?.status === "feil" && <Feil melding={sending.melding} />}
+      {melding && <div className="melding info">{melding}</div>}
+      <p className="liten dempet">
+        Finner du ikke e-posten? Se i søppelpost eller uønsket e-post; den kommer fra Admin Konsoll. Er adressen feil, logger du ut og lager kontoen på nytt
+        med riktig adresse.
+      </p>
+      <div className="knapper">
+        <button className="primar" onClick={sjekk}>
+          Jeg har bekreftet
+        </button>
+        <button onClick={sendNy} disabled={opptatt || sending?.status === "sender"}>
+          Send ny lenke
+        </button>
+        <button className="lenke" onClick={loggUt}>
+          Logg ut
+        </button>
       </div>
-    </div>
+    </EnkelBlankett>
   );
 }
 
@@ -156,50 +154,44 @@ export function BekreftLenke() {
   }, [tilstand, innlogget]);
 
   const videre = () => window.location.replace("/");
+  const tittel =
+    tilstand === "bekrefter" ? "Bekrefter e-postadressen" : tilstand === "bekreftet" ? "E-postadressen er bekreftet" : tilstand === "brukt" ? "Lenken virker ikke lenger" : "Noe gikk galt";
   return (
-    <div className="sentrert">
-      <div className="kort bekreft-epost">
-        {tilstand === "bekrefter" ? (
-          <>
-            <h1>Bekrefter e-postadressen</h1>
-            <Laster />
-          </>
-        ) : tilstand === "bekreftet" ? (
-          <>
-            <h1>E-postadressen er bekreftet</h1>
-            <p role="status">{innlogget ? "Takk! Du sendes videre nå." : "Takk! Logg inn for å fortsette."}</p>
-            <div className="knapper">
-              <button className="primar" onClick={videre}>
-                {innlogget ? "Fortsett" : "Logg inn"}
-              </button>
-            </div>
-          </>
-        ) : tilstand === "brukt" ? (
-          <>
-            <h1>Lenken virker ikke lenger</h1>
-            <p>
-              Den er brukt før eller har gått ut.{" "}
-              {innlogget ? "Be om en ny lenke på neste side." : "Logg inn, så kan du be om en ny lenke hvis adressen ikke er bekreftet."}
-            </p>
-            <div className="knapper">
-              <button className="primar" onClick={videre}>
-                {innlogget ? "Fortsett" : "Logg inn"}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <h1>Noe gikk galt</h1>
-            <Feil melding={feil} />
-            <div className="knapper">
-              <button className="primar" onClick={() => window.location.reload()}>
-                Prøv igjen
-              </button>
-              <button onClick={videre}>Tilbake</button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+    <EnkelBlankett navn="Ny konto" nr="DEL 2" tittel={tittel} tekst="Lenke på e-post">
+      {tilstand === "bekrefter" ? (
+        <Laster />
+      ) : tilstand === "bekreftet" ? (
+        <>
+          <p role="status">{innlogget ? "Takk! Du sendes videre nå." : "Takk! Logg inn for å fortsette."}</p>
+          <div className="knapper">
+            <button className="primar" onClick={videre}>
+              {innlogget ? "Fortsett" : "Logg inn"}
+            </button>
+          </div>
+        </>
+      ) : tilstand === "brukt" ? (
+        <>
+          <p>
+            Den er brukt før eller har gått ut.{" "}
+            {innlogget ? "Be om en ny lenke på neste side." : "Logg inn, så kan du be om en ny lenke hvis adressen ikke er bekreftet."}
+          </p>
+          <div className="knapper">
+            <button className="primar" onClick={videre}>
+              {innlogget ? "Fortsett" : "Logg inn"}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <Feil melding={feil} />
+          <div className="knapper">
+            <button className="primar" onClick={() => window.location.reload()}>
+              Prøv igjen
+            </button>
+            <button onClick={videre}>Tilbake</button>
+          </div>
+        </>
+      )}
+    </EnkelBlankett>
   );
 }

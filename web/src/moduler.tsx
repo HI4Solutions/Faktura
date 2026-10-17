@@ -3,7 +3,7 @@
 // godkjenner kontoen med dem og slår dem av og på for organisasjonene. Lista kommer fra serveren,
 // så en ny modul kommer med her av seg selv. krever: modulen den bygger på (Lønn på Personal);
 // kjerne: funksjonen modulen slås av og på med.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export type Modul = { kode: string; navn: string; beskrivelse: string; krever?: string | null; kjerne?: string };
 
@@ -53,7 +53,7 @@ export function ModulValg({
   moduler: Modul[] | null;
   valgt: string[];
   endre: (moduler: string[]) => void;
-  tittel?: string;
+  tittel?: ReactNode;
   kompakt?: boolean;
   navn?: string;
 }) {

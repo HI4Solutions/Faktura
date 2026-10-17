@@ -21,6 +21,15 @@ export function brukTema(t: Tema = lesTema()) {
   const mork = t === "mork" || (t === "system" && systemet().matches);
   document.documentElement.setAttribute("data-tema", mork ? "mork" : "lys");
   document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", mork ? "dark" : "light");
+  oppdaterTemafarge();
+}
+
+// Fargen nettleseren bruker rundt siden (statuslinjen i Safari og på Android): som toppen av
+// siden, papir i lyst utseende og i blanketten (blankett.tsx), ellers nattblå.
+export function oppdaterTemafarge() {
+  const rot = document.documentElement;
+  const lys = rot.classList.contains("blankett-side") || rot.getAttribute("data-tema") !== "mork";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", lys ? "#fcfcfd" : "#0d1530");
 }
 
 export function settTema(t: Tema) {

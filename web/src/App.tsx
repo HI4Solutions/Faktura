@@ -35,6 +35,7 @@ import { Sjekklister } from "./sider/Sjekklister";
 import { Lonn } from "./sider/Lonn";
 import { Regnskap } from "./sider/Regnskap";
 import { Logo, LogoIkon } from "./Logo";
+import { EnkelBlankett } from "./blankett";
 import { PwaBannere, usePwa, useVarselNavigering } from "./Pwa";
 import { AppLaas } from "./Applaas";
 import { TemaBryter } from "./TemaBryter";
@@ -164,12 +165,13 @@ function OppgiNavn() {
     }
   }
   return (
-    <div className="sentrert">
-      <form className="kort" onSubmit={lagre}>
-        <h1>Hva heter du?</h1>
-        <p className="dempet">Navnet vises for andre i organisasjonen og i revisjonsloggen.</p>
-        <label>
-          Fullt navn
+    <EnkelBlankett navn="Ny konto" tittel="Hva heter du?" tekst="Vises for andre i organisasjonen">
+      <form onSubmit={lagre}>
+        <p>Navnet vises for andre i organisasjonen og i revisjonsloggen.</p>
+        <label className="felt">
+          <span className="lbl">
+            <span className="nr" aria-hidden="true">1.1</span>Fullt navn
+          </span>
           <input autoComplete="name" required minLength={2} autoFocus value={navn} onChange={(e) => settNavn(e.target.value)} />
         </label>
         <Feil melding={feil} />
@@ -180,7 +182,7 @@ function OppgiNavn() {
           </button>
         </div>
       </form>
-    </div>
+    </EnkelBlankett>
   );
 }
 
