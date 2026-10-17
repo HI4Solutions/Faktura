@@ -918,8 +918,8 @@ function MinKonto({ del }: { del: string }) {
       <Totrinn />
       {!meg?.mfa && (
         <p className="liten dempet" style={{ marginTop: 8 }}>
-          For å sende fakturaer må du være logget inn med passkey eller med kode fra autentiseringsappen. Har du nettopp
-          lagt til en av dem, logger du ut og inn igjen.
+          For å sende fakturaer{meg?.plattformadmin ? " og bruke plattformen" : ""} må du være logget inn med passkey eller med kode
+          fra autentiseringsappen. Har du nettopp lagt til en av dem, logger du ut og inn igjen.
         </p>
       )}
     </div>

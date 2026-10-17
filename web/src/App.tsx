@@ -791,9 +791,12 @@ function Ramme() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         )}
+        {/* Uten organisasjon: plattformen, og innstillingene for kontoen (passkeyen som plattformen
+            krever, legges til der). */}
         {!org && meg?.plattformadmin && (
           <Routes>
             <Route path="/admin" element={<Admin />} />
+            <Route path="/innstillinger" element={<Innstillinger />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         )}

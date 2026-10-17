@@ -4,7 +4,7 @@
 // de har, søk, detaljer med funksjonene, eksport, og standarden for nye) og Drift. På smale skjermer
 // vises listene som kort.
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, hent } from "../api";
 import { Dialog, Feil, Laster, useData, useHandling, useSmal } from "../felles";
 import { dato, orgnr } from "../format";
@@ -154,6 +154,23 @@ export function Admin() {
   const [valgt, settValgt] = useState<string | null>(null);
   const velgFane = (f: Fane) => settSok(f === "oversikt" ? {} : { fane: f }, { replace: true });
 
+  // Plattformen krever innlogging med passkey eller kode fra autentiseringsappen (verifisering.ts).
+  // En ny administrator har ingen ennå; de legges til under Min konto.
+  if (orgs.feil && /totrinnsbekreftelse/i.test(orgs.feil))
+    return (
+      <div className="kort">
+        <h2 style={{ marginTop: 0 }}>Plattformen krever passkey</h2>
+        <p>
+          Plattformen kan bare brukes når du er logget inn med passkey eller med kode fra autentiseringsappen. Legg til en
+          passkey under Min konto, logg ut, og logg inn igjen med den.
+        </p>
+        <div className="knapper">
+          <Link className="knapp primar" to="/innstillinger?fane=konto&del=innlogging">
+            Legg til passkey
+          </Link>
+        </div>
+      </div>
+    );
   if (orgs.feil) return <Feil melding={orgs.feil} />;
   const venter = (orgs.data ?? []).filter((o) => o.venter_manuell).length + (kontoer.data?.length ?? 0);
   const faner: [Fane, string][] = [
