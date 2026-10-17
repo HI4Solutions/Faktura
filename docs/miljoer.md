@@ -118,9 +118,12 @@ før appen tar den i bruk (punktet «Produksjon» i [skattekort.md](skattekort.m
      gcloud secrets delete maskinporten-nokkel-ny --project=hi4-faktura-prod
      ```
 
+   - Sjekk at miljøet «test» har sine egne `MASKINPORTEN_KLIENT_ID` og `MASKINPORTEN_NOKKEL_ID`
+     (testklienten, punkt 2 under «Sette opp testflaten»). Mangler de, tar testflaten verdiene fra
+     repoet, altså produksjonsklienten, og da virker ikke testmiljøene der.
    - Variablene i repoet: `MASKINPORTEN_KLIENT_ID` (klient-ID-en), `MASKINPORTEN_NOKKEL_ID`
      (`medinnova-prod-1`) og `SKATTEETATEN_MILJO` = `prod`. Testflaten er ikke berørt, siden den
-     har sine egne.
+     har sine egne (og `test.tfvars` holder den på testmiljøene).
    - Kjør Infrastruktur fra main, og godkjenn produksjon. Trykk så Plattform → Drift → «Registrer
      systemet i Altinn» på adminkonsoll.no.
    - Gi NAV beskjed første gang sykepenger brukes i produksjon ([nav.md](nav.md), punkt 6).
