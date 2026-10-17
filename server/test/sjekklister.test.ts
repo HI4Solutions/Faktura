@@ -96,7 +96,7 @@ describe.skipIf(!process.env.DATABASE_URL)("sjekklistene i appen", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async (o) => void ko.push(o));
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Sjekkliste Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Sjekkliste Test AS", orgnr: "811000817" })).data.id;
     eierId = (await kall("GET", "/api/meg")).data.bruker.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     lager = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Lager" })).data.id;

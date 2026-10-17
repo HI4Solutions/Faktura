@@ -43,7 +43,7 @@ describe.skipIf(!process.env.DATABASE_URL)("fridagen ved vaktbytte", () => {
     settLokalOppgavekjorer(async (o) => {
       ko.push(o);
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Fridag Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Fridag Test AS", orgnr: "811000922" })).data.id;
     bruker.eier = (await kall("GET", "/api/meg")).data.bruker.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true, timebank: true });
     for (const [navn, lonn] of [

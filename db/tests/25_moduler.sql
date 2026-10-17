@@ -69,7 +69,7 @@ select set_config('app.bruker_id', :'u', false);
 select test.feiler($$select faktura.velg_moduler(array['faktura'])$$, 'FA403');
 
 -- En organisasjon fra brukeren med Personal og Lønn får bare funksjonene i dem (ikke fakturaene).
-select id as org from faktura.opprett_organisasjon('Bare Personal AS') \gset
+select id as org from faktura.opprett_organisasjon('Bare Personal AS', '923609016') \gset
 select test.er((select array_agg(kode order by kode) from faktura.org_funksjoner where org_id = :'org' and aktiv), array['ansatte', 'lonn', 'sjekklister', 'vaktplan'], 'bare Personal og Lønn');
 select test.er(faktura.har_funksjon(:'org', 'ehf'), false, 'uten EHF');
 select test.er(faktura.har_modul(:'org', 'faktura'), false, 'uten Faktura');
@@ -81,7 +81,7 @@ select test.er((select personal from faktura.mine_organisasjoner where id = :'or
 update faktura.funksjoner set standard = false where kode = 'ehf';
 \c :api
 select set_config('app.bruker_id', :'u2', false);
-select id as org2 from faktura.opprett_organisasjon('Begge Moduler AS') \gset
+select id as org2 from faktura.opprett_organisasjon('Begge Moduler AS', '923609016') \gset
 select test.er(faktura.har_funksjon(:'org2', 'vaktplan'), true, 'Personal er med');
 select test.er(faktura.har_funksjon(:'org2', 'lonn'), false, 'men ikke Lønn');
 select test.er(faktura.har_funksjon(:'org2', 'bank'), true, 'Faktura er med');

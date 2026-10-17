@@ -1,5 +1,6 @@
-// Fødselsnummer og kontonummer i skjemaene, med de samme reglene som serveren
-// (server/src/fnr.ts og server/src/regler.ts): feil vises mens man skriver, men serveren avgjør.
+// Fødselsnummer, kontonummer og organisasjonsnummer i skjemaene, med de samme reglene som
+// serveren (server/src/fnr.ts og server/src/regler.ts): feil vises mens man skriver, men
+// serveren avgjør.
 const K1 = [3, 7, 6, 1, 8, 9, 4, 5, 2];
 const K2 = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
 
@@ -44,3 +45,12 @@ export function kontonrGyldig(n: string): boolean {
 
 // «1234 56 78903»
 export const visKontonr = (n: string | null | undefined) => (n ? n.replace(/^(\d{4})(\d{2})(\d{5})$/, "$1 $2 $3") : "");
+
+export function orgnrGyldig(n: string): boolean {
+  if (!/^\d{9}$/.test(n)) return false;
+  const v = [3, 2, 7, 6, 5, 4, 3, 2];
+  const sum = v.reduce((s, x, i) => s + x * Number(n[i]), 0);
+  const rest = 11 - (sum % 11);
+  const k = rest === 11 ? 0 : rest;
+  return k !== 10 && k === Number(n[8]);
+}

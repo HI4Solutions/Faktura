@@ -41,6 +41,18 @@ export function Verifisering() {
     );
   }
   if (!erAdmin(org)) return <p>Bare eiere og administratorer kan verifisere organisasjonen.</p>;
+  // Verifiseringen gjøres mot Enhetsregisteret (0119_uten_orgnr.sql).
+  if (!org?.orgnr) {
+    return (
+      <>
+        <h1>Verifisering</h1>
+        <div className="melding info">
+          Verifiseringen gjøres mot Enhetsregisteret og krever organisasjonsnummer. Uten det kan dere sende opptil 20 fakturaer og
+          50 000 kr per måned. <Link to="/innstillinger?fane=organisasjon">Legg inn organisasjonsnummer</Link>
+        </div>
+      </>
+    );
+  }
 
   const venterManuell = data.forsok?.some((f: any) => f.metode === "manuell" && f.status === "venter");
 

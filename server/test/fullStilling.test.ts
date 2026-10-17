@@ -17,7 +17,7 @@ describe.skipIf(!process.env.DATABASE_URL)("arbeidstid i full stilling", () => {
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
     settKryptering(async (t) => Buffer.from(`kryptert:${t}`), async (b) => b.toString().replace("kryptert:", ""));
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Turnus AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Turnus AS", orgnr: "811000302" })).data.id;
   });
 
   it("standarden er 37,5 og kan endres av organisasjonen", async () => {

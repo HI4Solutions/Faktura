@@ -55,7 +55,7 @@ describe.skipIf(!process.env.DATABASE_URL)("flere virksomheter og soner", () => 
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => undefined);
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Virksomheter Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Virksomheter Test AS", orgnr: "811000965" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true, otp_prosent: 0, aga_sone: "1", virksomhet_orgnr: "915000185" })).status).toBe(200);
   });
 

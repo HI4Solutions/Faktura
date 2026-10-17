@@ -40,7 +40,7 @@ describe.skipIf(!process.env.DATABASE_URL)("årsoversikten", () => {
       ko.push(o);
     });
     if (!config.adminEposter.includes("aar-admin@server.test")) config.adminEposter.push("aar-admin@server.test");
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Årsoversikt Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Årsoversikt Test AS", orgnr: "811000027" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     const ny = async (k: Record<string, unknown>) => {
       const r = await kall("POST", `/api/org/${org}/ansatte`, { ansatt_fra: "2025-01-01", ...k });

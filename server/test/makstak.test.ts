@@ -35,7 +35,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Makstak", () => {
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
     valider = lagValidator();
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Makstak Legesenter AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Makstak Legesenter AS", orgnr: "811000612" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
     brukerId = (await kall("GET", "/api/meg")).data.bruker.id;
     lege = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Dr. Lege", epost: "lege@test.no", makstak: 7000 })).data.id;

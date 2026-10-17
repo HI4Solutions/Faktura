@@ -101,7 +101,7 @@ describe.skipIf(!process.env.DATABASE_URL)("ansatte og timer i appen", () => {
       sendt.push({ endpoint: a.endpoint, innhold: JSON.parse(innhold) });
       return {};
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Bemanning Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Bemanning Test AS", orgnr: "811000086" })).data.id;
     eierBruker = (await kall("GET", "/api/meg")).data.bruker.id;
   });
 

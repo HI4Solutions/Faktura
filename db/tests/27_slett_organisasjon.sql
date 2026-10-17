@@ -34,7 +34,7 @@ select set_config('app.bruker_id', :'eier', false);
 
 -- A: uten utstedte fakturaer, men med kunder, produkter, utkast med vedlegg, gjentakelse,
 -- påminnelse og ansatte.
-select id as a from faktura.opprett_organisasjon('Slett Meg AS') \gset
+select id as a from faktura.opprett_organisasjon('Slett Meg AS', '923609016') \gset
 insert into faktura.kunder (org_id, navn) values (:'a', 'Kari Kunde') returning id as ka \gset
 insert into faktura.produkter (org_id, navn, enhetspris, mva_sats) values (:'a', 'Vask', 500, 25) returning id as pa \gset
 insert into faktura.fakturaer (org_id, kunde_id) values (:'a', :'ka') returning id as fa \gset
@@ -50,7 +50,7 @@ select faktura.aksepter_invitasjon(:'token');
 
 -- B: med en utstedt faktura, et utkast og en gjentakelse.
 select set_config('app.bruker_id', :'eier', false);
-select id as b from faktura.opprett_organisasjon('Steng Meg AS') \gset
+select id as b from faktura.opprett_organisasjon('Steng Meg AS', '923609016') \gset
 update faktura.organisasjoner set kontonr = '86011117947', purring_auto = true where id = :'b';
 insert into faktura.kunder (org_id, navn) values (:'b', 'Berit Kunde') returning id as kb \gset
 insert into faktura.fakturaer (org_id, kunde_id) values (:'b', :'kb') returning id as fb \gset

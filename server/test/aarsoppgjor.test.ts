@@ -58,7 +58,7 @@ describe.skipIf(!process.env.DATABASE_URL)("årsoppgjøret i appen", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await ok("POST", "/api/organisasjoner", { navn: "Årsoppgjøret AS" })).id;
+    org = (await ok("POST", "/api/organisasjoner", { navn: "Årsoppgjøret AS", orgnr: "811000019" })).id;
     await ok("PATCH", o(""), { kontonr: "86011117947" });
     const inv = await ok("POST", o("/invitasjoner"), { epost: "aars-fakt@server.test", rolle: "fakturerer" });
     expect((await kall("POST", "/api/invitasjoner/aksepter", { token: inv.lenke.split("/").pop() }, fakturerer)).status).toBe(200);

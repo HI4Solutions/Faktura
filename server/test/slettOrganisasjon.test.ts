@@ -27,12 +27,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Sletting av organisasjoner", () => {
       ko.push(o);
     });
     config.adminEposter.push("slettorg-admin@server.test");
-    a = (await kall("POST", "/api/organisasjoner", { navn: "Prøve AS" })).data.id;
+    a = (await kall("POST", "/api/organisasjoner", { navn: "Prøve AS", orgnr: "811000833" })).data.id;
     await kall("POST", `/api/org/${a}/kunder`, { navn: "Kari Kunde", type: "person" });
     const inv = await kall("POST", `/api/org/${a}/invitasjoner`, { epost: "slettorg-fakt@server.test", rolle: "fakturerer" });
     expect((await kall("POST", "/api/invitasjoner/aksepter", { token: inv.data.lenke.split("/").pop() }, fakt)).status).toBe(200);
     // B har en utstedt faktura.
-    b = (await kall("POST", "/api/organisasjoner", { navn: "Ferdig Drift AS" })).data.id;
+    b = (await kall("POST", "/api/organisasjoner", { navn: "Ferdig Drift AS", orgnr: "811000841" })).data.id;
     await kall("PATCH", `/api/org/${b}`, { kontonr: "86011117947" });
     const kunde = (await kall("POST", `/api/org/${b}/kunder`, { navn: "Berit Kunde", type: "person", epost: "berit@kunde.no" })).data.id;
     const f = await kall("POST", `/api/org/${b}/fakturaer`, { kunde_id: kunde, linjer: [{ beskrivelse: "Husleie", antall: 1, enhetspris: 1000, mva_sats: 0 }] });

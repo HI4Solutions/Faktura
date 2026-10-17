@@ -40,7 +40,7 @@ describe.skipIf(!process.env.DATABASE_URL)("yrkesskader i appen", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => undefined);
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Yrkesskade Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Yrkesskade Test AS", orgnr: "811000973" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     ola = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Ola", etternavn: "Skadet", ansatt_fra: "2024-01-01" })).data.id;
     const inv = await kall("POST", `/api/org/${org}/invitasjoner`, { epost: "ysk-regn@server.test", rolle: "regnskap" });

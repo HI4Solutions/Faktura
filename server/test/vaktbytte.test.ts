@@ -43,7 +43,7 @@ describe.skipIf(!process.env.DATABASE_URL)("vaktbytte", () => {
     settLokalOppgavekjorer(async (o) => {
       ko.push(o);
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Vaktbytte Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Vaktbytte Test AS", orgnr: "811000914" })).data.id;
     bruker.eier = (await kall("GET", "/api/meg")).data.bruker.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     for (const [navn, rolle] of [

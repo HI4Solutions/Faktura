@@ -15,7 +15,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Avsender og kontonumre", () => {
   beforeAll(() => settLokalOppgavekjorer(async () => {}));
 
   it("ENK sender som innehaver med egen konto", async () => {
-    const org = (await kall("POST", "/api/organisasjoner", { navn: "Nordmann Snekkerservice" })).data.id;
+    const org = (await kall("POST", "/api/organisasjoner", { navn: "Nordmann Snekkerservice", orgnr: "811000124" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { standard_avsender: "innehaver" })).status).toBe(400); // mangler innehaver
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", innehaver: "Ola Nordmann" })).status).toBe(200);
 

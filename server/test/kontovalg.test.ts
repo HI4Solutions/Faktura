@@ -25,7 +25,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Kontoen fra gjentakelser og påminne
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Kontogjenta AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Kontogjenta AS", orgnr: "811000515" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", innehaver: "Kari Nordmann" })).status).toBe(200);
     konto = (await kall("POST", `/api/org/${org}/kontoer`, { navn: "Husleiekonto", kontonr: KONTONR })).data.id;
     kunde = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Leietaker AS", epost: "leie@test.no" })).data.id;
@@ -89,7 +89,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Kontoen fra gjentakelser og påminne
     expect((await kall("PATCH", `/api/org/${org}/paaminnelser/${p.data.id}`, { konto_id: null, avsender: null })).data).toMatchObject({ konto_id: null, avsender: null });
 
     // Bare organisasjonens egne kontoer.
-    const annen = (await kall("POST", "/api/organisasjoner", { navn: "Annen kontogjenta AS" })).data.id;
+    const annen = (await kall("POST", "/api/organisasjoner", { navn: "Annen kontogjenta AS", orgnr: "811000523" })).data.id;
     const fremmed = (await kall("POST", `/api/org/${annen}/kontoer`, { navn: "Fremmed", kontonr: KONTONR })).data.id;
     expect((await kall("PATCH", `/api/org/${org}/paaminnelser/${p.data.id}`, { konto_id: fremmed })).status).toBe(409);
     expect((await kall("PATCH", `/api/org/${org}/paaminnelser/${p.data.id}`, { avsender: "kari" })).status).toBe(400);

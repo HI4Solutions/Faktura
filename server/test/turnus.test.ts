@@ -32,7 +32,7 @@ describe.skipIf(!process.env.DATABASE_URL)("turnus i appen", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => undefined);
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Turnus Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Turnus Test AS", orgnr: "811000892" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     spl = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Sykepleier" })).data.id;
     ass = (await kall("POST", `/api/org/${org}/ansattgrupper`, { navn: "Assistent" })).data.id;

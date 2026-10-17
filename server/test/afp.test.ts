@@ -36,7 +36,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AFP og OU", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => undefined);
-    org = (await kall("POST", "/api/organisasjoner", { navn: "AFP Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "AFP Test AS", orgnr: "811000035" })).data.id;
     const o = await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true, otp_prosent: 2, afp: true, afp_sats: 2.7, ou_premie: 46 });
     expect(o.data).toMatchObject({ afp: true, afp_sats: 2.7, ou_premie: 46 });
     expect((await kall("PUT", `/api/org/${org}/lonn/bokforing`, { afp: true })).data.afp).toBe(true);

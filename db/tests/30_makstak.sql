@@ -45,7 +45,7 @@ select test.er((select array_agg(mva_sats) from faktura.makstak_fordel(1000, arr
 \c :api
 select id as eier from faktura.registrer_bruker('uid-makstak', 'eier-makstak@test.no', 'Mia Makstak') \gset
 select set_config('app.bruker_id', :'eier', false);
-select id as org from faktura.opprett_organisasjon('Legesenteret AS') \gset
+select id as org from faktura.opprett_organisasjon('Legesenteret AS', '923609016') \gset
 update faktura.organisasjoner set kontonr = '86011117947', mva_registrert = true where id = :'org';
 \c :migrator
 update faktura.organisasjoner set maks_fakturaer_mnd = null, maks_belop_mnd = null where id = :'org';

@@ -90,7 +90,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Push – abonnementer og sending", (
   });
 
   it("sender til medlemmene som vil ha varselet, og rydder bort døde abonnementer", async () => {
-    const org = (await kall("POST", "/api/organisasjoner", ola, { navn: "Push AS" })).data.id;
+    const org = (await kall("POST", "/api/organisasjoner", ola, { navn: "Push AS", orgnr: "811000728" })).data.id;
     await kall("PATCH", `/api/org/${org}`, ola, { kontonr: "86011117947" });
     const inv = await kall("POST", `/api/org/${org}/invitasjoner`, ola, { epost: "push2@server.test", rolle: "fakturerer" });
     expect((await kall("POST", "/api/invitasjoner/aksepter", kari, { token: inv.data.lenke.split("/").pop() })).status).toBe(200);
@@ -120,7 +120,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Push – abonnementer og sending", (
   });
 
   it("varsler om fakturaer som forfalt i går, én gang per dag", async () => {
-    const org = (await kall("POST", "/api/organisasjoner", ola, { navn: "Forfall AS" })).data.id;
+    const org = (await kall("POST", "/api/organisasjoner", ola, { navn: "Forfall AS", orgnr: "811000736" })).data.id;
     await kall("PATCH", `/api/org/${org}`, ola, { kontonr: "86011117947" });
     const kunde = (await kall("POST", `/api/org/${org}/kunder`, ola, { navn: "Treg Betaler" })).data.id;
     // Kalenderdager tilbake fra i dag i Oslo, som faktura.i_dag() - 1 (ikke n × 24 timer, som bommer
@@ -151,7 +151,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Push – abonnementer og sending", (
   });
 
   it("varsler om betaling fra utboksen, men ikke den som registrerte den, og bare én gang", async () => {
-    const org = (await kall("POST", "/api/organisasjoner", ola, { navn: "Betaling AS" })).data.id;
+    const org = (await kall("POST", "/api/organisasjoner", ola, { navn: "Betaling AS", orgnr: "811000744" })).data.id;
     await kall("PATCH", `/api/org/${org}`, ola, { kontonr: "86011117947" });
     const inv = await kall("POST", `/api/org/${org}/invitasjoner`, ola, { epost: "push2@server.test", rolle: "fakturerer" });
     await kall("POST", "/api/invitasjoner/aksepter", kari, { token: inv.data.lenke.split("/").pop() });

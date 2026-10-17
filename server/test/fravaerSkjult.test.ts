@@ -23,7 +23,7 @@ describe.skipIf(!process.env.DATABASE_URL)("skjult fraværstype", () => {
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
     settKryptering(async (t) => Buffer.from(`kryptert:${t}`), async (b) => b.toString().replace("kryptert:", ""));
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Skjult Fravær AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Skjult Fravær AS", orgnr: "811000280" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     kariId = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Kari", etternavn: "Kake", epost: "kari.fsk@server.test" })).data.id;
     const olaId = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Ola", etternavn: "Olsen" })).data.id;

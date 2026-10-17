@@ -41,7 +41,7 @@ describe.skipIf(!process.env.DATABASE_URL)("helligdagene i databasen og i arbeid
   };
 
   beforeAll(async () => {
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Helligdag AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Helligdag AS", orgnr: "811000418" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     mari = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Mari", etternavn: "Mai", ansatt_fra: "2026-01-01" })).data.id;
     // Hele dager mandag til fredag.

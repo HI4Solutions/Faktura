@@ -25,7 +25,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Rabatt, variabel pris, fast avsender
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Rabatt AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Rabatt AS", orgnr: "811000752" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true, innehaver: "Ola Nordmann" })).status).toBe(200);
     kunde = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Leietaker AS", epost: "leie@test.no" })).data.id;
   });

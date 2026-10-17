@@ -49,7 +49,7 @@ describe.skipIf(!process.env.DATABASE_URL)("dødsfall og lønnsgaranti", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => undefined);
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Dødsfall Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Dødsfall Test AS", orgnr: "811000205" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true, otp_prosent: 0 })).status).toBe(200);
     const ny = async (k: Record<string, unknown>) => {
       const r = await kall("POST", `/api/org/${org}/ansatte`, {

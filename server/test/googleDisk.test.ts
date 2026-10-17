@@ -50,9 +50,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Google Disk – kobling per bruker",
   });
 
   it("kobler brukerens egen Disk og velger organisasjoner", async () => {
-    const org1 = (await kall("POST", "/api/organisasjoner", token, { navn: "Disk AS" })).data.id;
-    const org2 = (await kall("POST", "/api/organisasjoner", token, { navn: "Annen AS" })).data.id;
-    const fremmed = (await kall("POST", "/api/organisasjoner", annen, { navn: "Fremmed AS" })).data.id;
+    const org1 = (await kall("POST", "/api/organisasjoner", token, { navn: "Disk AS", orgnr: "811000345" })).data.id;
+    const org2 = (await kall("POST", "/api/organisasjoner", token, { navn: "Annen AS", orgnr: "811000353" })).data.id;
+    const fremmed = (await kall("POST", "/api/organisasjoner", annen, { navn: "Fremmed AS", orgnr: "811000361" })).data.id;
 
     expect((await kall("PUT", `/api/disk/organisasjoner/${org1}`, token, { aktiv: true })).status).toBe(409); // ikke koblet ennå
 
@@ -117,7 +117,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Google Disk – kobling per bruker",
       return new Response("{}", { status: 404 });
     }) as typeof fetch);
 
-    const org = (await kall("POST", "/api/organisasjoner", t, { navn: "Flat AS" })).data.id;
+    const org = (await kall("POST", "/api/organisasjoner", t, { navn: "Flat AS", orgnr: "811000388" })).data.id;
     await kall("PATCH", `/api/org/${org}`, t, { kontonr: "86011117947", epost: "post@flat.no" });
     const kunde = (await kall("POST", `/api/org/${org}/kunder`, t, { navn: "Kunde", epost: "k@kunde.no" })).data.id;
     const f = await kall("POST", `/api/org/${org}/fakturaer`, t, {

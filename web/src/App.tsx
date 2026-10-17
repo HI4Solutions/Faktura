@@ -509,7 +509,8 @@ function Ramme() {
   // Kontoen nederst i menyarket, som i sidemenyen på PC.
   const konto: MenyPunkt[] = [
     ...(org ? [{ til: "/innstillinger", Ikon: IkonInnstillinger, tekst: "Innstillinger", aktiv: sted.pathname === "/innstillinger" }] : []),
-    ...(org?.verifisering === "ny" && org.direkte_medlem && erAdmin(org)
+    // Verifiseringen krever organisasjonsnummer (Enhetsregisteret).
+    ...(org?.verifisering === "ny" && org.orgnr && org.direkte_medlem && erAdmin(org)
       ? [{ til: "/verifisering", Ikon: IkonSkjold, tekst: "Verifiser organisasjon", aktiv: sted.pathname === "/verifisering" }]
       : []),
   ];
@@ -524,7 +525,7 @@ function Ramme() {
             {/* Uten Faktura blant modulene (bare Bemanning) er det ikke fakturering det handler om. */}
             {meg?.bruker.moduler?.length && !meg.bruker.moduler.includes("faktura")
               ? "Start med å legge inn foretaket ditt."
-              : "Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt."}
+              : "Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt. Fakturerer du som privatperson, trenger du ikke organisasjonsnummer."}
           </p>
         )}
         <NyOrganisasjon
@@ -713,8 +714,8 @@ function Ramme() {
                 <span className="modul-navn">Innstillinger</span>
               </NavLink>
             )}
-            {/* Bare eier og administrator verifiserer (Verifisering.tsx). */}
-            {org?.verifisering === "ny" && org.direkte_medlem && erAdmin(org) && (
+            {/* Bare eier og administrator verifiserer (Verifisering.tsx), og det krever organisasjonsnummer. */}
+            {org?.verifisering === "ny" && org.orgnr && org.direkte_medlem && erAdmin(org) && (
               <NavLink to="/verifisering" className="modul" title="Verifiser organisasjon">
                 <IkonSkjold />
                 <span className="modul-navn lang">Verifiser organisasjon</span>

@@ -22,7 +22,7 @@ describe.skipIf(!process.env.DATABASE_URL)("OTP-medlemskapet", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => undefined);
-    org = (await kall("POST", "/api/organisasjoner", { navn: "OTP Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "OTP Test AS", orgnr: "811000647" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true, otp_prosent: 2 })).data).toMatchObject({ otp_prosent: 2, otp_unntak_75: false });
     const ny = async (k: Record<string, unknown>) => {
       const r = await kall("POST", `/api/org/${org}/ansatte`, { lonnstype: "maaned", skattekort: "prosent", skatt_prosent: 20, skattekort_aar: 2026, yrkeskode: "5223101", ...k });

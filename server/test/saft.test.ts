@@ -291,6 +291,7 @@ describe.skipIf(!process.env.DATABASE_URL)("SAF-T-filen", () => {
     expect((await kall("GET", o("/regnskap/saft?aar=2019"))).data.error).toBe("Ingen bilag i regnskapet for 2019");
     expect((await kall("GET", o("/regnskap/saft?aar=2025"), undefined, fakturerer)).status).toBe(403);
     const uten = (await ok("POST", "/api/organisasjoner", { navn: "Uten orgnr AS" })).id;
-    expect((await kall("GET", `/api/org/${uten}/regnskap/saft?aar=2025`)).data.error).toBe("SAF-T krever organisasjonsnummer (Innstillinger → Organisasjon)");
+    // Uten organisasjonsnummer er regnskapet ikke med (0119_uten_orgnr.sql).
+    expect((await kall("GET", `/api/org/${uten}/regnskap/saft?aar=2025`)).data.error).toBe("Regnskap krever organisasjonsnummer. Legg det inn under Innstillinger → Organisasjon.");
   });
 });

@@ -68,7 +68,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten", () => {
         );
       },
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Assistent Utleie AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Assistent Utleie AS", orgnr: "811000108" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
     kari = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Kari Hansen", type: "person", epost: "kari@hansen.no" })).data.id;
     fjord = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Fjordline Logistikk AS", epost: "faktura@fjordline.no" })).data.id;

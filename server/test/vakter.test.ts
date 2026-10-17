@@ -98,7 +98,7 @@ describe.skipIf(!process.env.DATABASE_URL)("vaktplan i appen", () => {
     settLokalOppgavekjorer(async (o) => {
       ko.push(o);
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Vaktplan Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Vaktplan Test AS", orgnr: "811000949" })).data.id;
     eierBruker = (await kall("GET", "/api/meg")).data.bruker.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     const ansatt = async (fornavn: string, epost: string, hvem: string) => {

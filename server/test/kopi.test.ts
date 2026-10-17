@@ -47,7 +47,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Kopi av fakturaer", () => {
     settLokalOppgavekjorer(async (o) => {
       ko.push(o);
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Kopi AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Kopi AS", orgnr: "811000531" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", epost: "post@kopi.no" })).status).toBe(200);
     kunde = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Kunde AS", epost: "kunde@kunde.no" })).data.id;
   });

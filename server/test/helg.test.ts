@@ -49,7 +49,7 @@ describe.skipIf(!process.env.DATABASE_URL)("åpent i helgene", () => {
         );
       },
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Helg Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Helg Test AS", orgnr: "811000396" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     const a = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Ola", etternavn: "Helg", epost: "ola.helg@server.test", ansatt_fra: pluss(iDag(), -30) })).data;
     const inv = await kall("POST", `/api/org/${org}/ansatte/${a.id}/inviter`);

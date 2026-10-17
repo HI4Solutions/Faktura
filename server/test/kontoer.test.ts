@@ -53,7 +53,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     const meg = (await kall("GET", "/api/meg", nina)).data;
     expect(meg.bruker).toMatchObject({ epost: "nina.konto@server.test", status: "venter", moduler: [] });
     expect(meg.organisasjoner).toEqual([]);
-    const r = await kall("POST", "/api/organisasjoner", nina, { navn: "Ninas firma AS" });
+    const r = await kall("POST", "/api/organisasjoner", nina, { navn: "Ninas firma AS", orgnr: "811000469" });
     expect(r.status).toBe(403);
     expect(r.data.error).toBe("Kontoen venter på godkjenning fra Admin Konsoll");
     expect((await kall("GET", "/api/kpi", nina)).status).toBe(403);
@@ -84,7 +84,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
   });
 
   it("modulene lagres rett fra registreringen, og forespørselen går når e-postadressen er bekreftet", async () => {
-    expect((await kall("POST", "/api/organisasjoner", unni, { navn: "Unnis firma AS" })).data.error).toBe("Bekreft e-postadressen din først");
+    expect((await kall("POST", "/api/organisasjoner", unni, { navn: "Unnis firma AS", orgnr: "811000477" })).data.error).toBe("Bekreft e-postadressen din først");
     expect((await kall("PATCH", "/api/meg", unni, { navn: "Unni Ung", moduler: ["faktura"] })).data).toMatchObject({ moduler: ["faktura"] });
     expect(tilAdmin("unni.konto@server.test")).toHaveLength(0);
     await kall("GET", "/api/meg", unniBekreftet);
@@ -113,7 +113,7 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     expect(meg.bruker).toMatchObject({ status: "godkjent", moduler: ["faktura"] });
     // Modulene endres ikke av brukeren etter godkjenningen.
     expect((await kall("PATCH", "/api/meg", nina, { moduler: ["personal"] })).data.error).toBe("Kontoen er alt behandlet");
-    const org = (await kall("POST", "/api/organisasjoner", nina, { navn: "Ninas firma AS" })).data;
+    const org = (await kall("POST", "/api/organisasjoner", nina, { navn: "Ninas firma AS", orgnr: "811000485" })).data;
     expect(org.id).toBeTruthy();
     const funksjoner = (await kall("GET", "/api/meg", nina)).data.organisasjoner.find((o: any) => o.id === org.id).funksjoner;
     expect(funksjoner).toContain("bank");
@@ -130,11 +130,11 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     });
     expect(eposter("per.konto@server.test").at(-1)!.tekst).toContain("Begrunnelse: Ukjent foretak");
     expect((await kall("GET", "/api/meg", per)).data.bruker).toMatchObject({ status: "avvist", avvist_grunn: "Ukjent foretak" });
-    expect((await kall("POST", "/api/organisasjoner", per, { navn: "Pers firma AS" })).data.error).toBe("Kontoen er ikke godkjent");
+    expect((await kall("POST", "/api/organisasjoner", per, { navn: "Pers firma AS", orgnr: "811000493" })).data.error).toBe("Kontoen er ikke godkjent");
   });
 
   it("en invitasjon fra en organisasjon godkjenner kontoen", async () => {
-    const org = (await kall("POST", "/api/organisasjoner", eier, { navn: "Invitasjon Konto AS" })).data.id;
+    const org = (await kall("POST", "/api/organisasjoner", eier, { navn: "Invitasjon Konto AS", orgnr: "811000507" })).data.id;
     const inv = (await kall("POST", `/api/org/${org}/invitasjoner`, eier, { epost: "ivar.konto@server.test", rolle: "fakturerer" })).data;
     const token = String(inv.lenke ?? inv.token ?? "").split("/").pop();
     expect((await kall("GET", "/api/meg", ivar)).data.bruker.status).toBe("venter");

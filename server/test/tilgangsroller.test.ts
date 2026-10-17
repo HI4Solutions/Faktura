@@ -34,7 +34,7 @@ describe.skipIf(!process.env.DATABASE_URL)("egne roller med modultilgang", () =>
       ko.push(o);
     });
     config.adminEposter.push("troller-admin@server.test");
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Rolleklinikken AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Rolleklinikken AS", orgnr: "811000876" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     expect((await kall("POST", `/api/org/${org}/kunder`, { navn: "Pasient AS" })).status).toBe(201);
     const k = await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Kari", etternavn: "Hansen", ansatt_fra: "2025-01-01", lonnstype: "maaned", maanedslonn: 50000 });

@@ -62,17 +62,28 @@ const medKrav = (koder: string[]) => [...new Set(koder.flatMap((k) => (KREVER[k]
 // Funksjonene en organisasjon har, husket en liten stund (en endring i administrasjonen tømmer
 // minnet her; andre instanser ser den innen et halvt minutt).
 const MINNE_MS = 30_000;
-const minne = new Map<string, { tid: number; koder: Set<string> | null }>();
+// kreverOrgnr: funksjonene organisasjonen mangler fordi den ikke har organisasjonsnummer
+// (0119_uten_orgnr.sql), så feilmeldingen kan si det.
+type Husket = { tid: number; koder: Set<string> | null; kreverOrgnr: Set<string> };
+const minne = new Map<string, Husket>();
 export const glemFunksjoner = (org?: string) => (org ? minne.delete(org) : minne.clear());
 
-// null: organisasjonen finnes ikke (er slettet).
-async function funksjonerTil(brukerId: string, org: string) {
+// koder er null når organisasjonen ikke finnes (er slettet).
+async function funksjonerTil(brukerId: string, org: string): Promise<Husket> {
   const husket = minne.get(org);
-  if (husket && Date.now() - husket.tid < MINNE_MS) return husket.koder;
-  const liste = (await somBruker(brukerId, (db) => en<{ k: string[] | null }>(db, "select faktura.org_funksjonsliste($1) as k", [org])))!.k;
-  const koder = liste ? new Set(liste) : null;
-  minne.set(org, { tid: Date.now(), koder });
-  return koder;
+  if (husket && Date.now() - husket.tid < MINNE_MS) return husket;
+  const r = (await somBruker(brukerId, (db) =>
+    en<{ k: string[] | null; o: string[] | null }>(
+      db,
+      `select faktura.org_funksjonsliste($1) as k,
+              case when exists (select 1 from faktura.organisasjoner x where x.id = $1 and x.orgnr is null)
+                   then array(select f.kode from faktura.funksjoner f where not f.uten_orgnr) end as o`,
+      [org],
+    ),
+  ))!;
+  const ny = { tid: Date.now(), koder: r.k ? new Set(r.k) : null, kreverOrgnr: new Set(r.o ?? []) };
+  minne.set(org, ny);
+  return ny;
 }
 
 const NAVN: Record<string, string> = {
@@ -93,6 +104,8 @@ const NAVN: Record<string, string> = {
   regnskap: "Regnskap",
 };
 export const ikkePaa = (kode: string) => new ApiFeil(403, `${NAVN[kode] ?? kode} er ikke slått på for organisasjonen`);
+export const kreverOrgnr = (kode: string) =>
+  new ApiFeil(403, `${NAVN[kode] ?? kode} krever organisasjonsnummer. Legg det inn under Innstillinger → Organisasjon.`);
 
 // Modulen en rute gjelder, for tilgangen med de egne rollene (faktura.kan): lønnen (og reisene,
 // skattekortene, a-meldingen og NAV) og regnskapet, med rapportene deres. Ellers ingen: da er
@@ -113,8 +126,8 @@ export function krevFunksjoner() {
     if (krever.length && org && z.string().uuid().safeParse(org).success) {
       // Finnes ikke organisasjonen, avgjør tilgangen at det ikke er noe å se (som før).
       const har = await funksjonerTil(c.get("bruker").id, org);
-      const mangler = har && krever.find((k) => !har.has(k));
-      if (mangler) throw ikkePaa(mangler);
+      const mangler = har.koder && krever.find((k) => !har.koder!.has(k));
+      if (mangler) throw har.kreverOrgnr.has(mangler) ? kreverOrgnr(mangler) : ikkePaa(mangler);
     }
     const modul = modulFor(sti);
     if (modul) await modulKontekst.run(modul, next);

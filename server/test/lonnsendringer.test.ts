@@ -192,7 +192,7 @@ describe.skipIf(!process.env.DATABASE_URL)("lønnsendringer i appen", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Lønnsendring Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Lønnsendring Test AS", orgnr: "811000574" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     const ny = async (b: Record<string, unknown>) => {
       const r = await kall("POST", `/api/org/${org}/ansatte`, { ansatt_fra: "2025-01-01", yrkeskode: "2221104", skattekort: "prosent", skattekort_aar: 2026, ...b });

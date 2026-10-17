@@ -9,8 +9,7 @@ import { erPng, normaliserLogo } from "./logo.js";
 import { config } from "./config.js";
 import { lagring, leggIKo } from "./tjenester.js";
 import { passkeyInnlogging, passkeyRuter } from "./passkey.js";
-import { adminRuter, erPlattformadmin, verifiseringRuter } from "./verifisering.js";
-import { hentEnhet } from "./brreg.js";
+import { adminRuter, erPlattformadmin, slaOppEnhet, verifiseringRuter } from "./verifisering.js";
 import { rapportRuter } from "./rapporter.js";
 import { resendWebhook } from "./resendWebhook.js";
 import { diskRuter, googleCallback } from "./googleDisk.js";
@@ -63,7 +62,7 @@ import { saftRuter } from "./saft.js";
 import { mvaJusteringRuter } from "./mvaJustering.js";
 import { skattekortRuter } from "./skattekortRuter.js";
 import { rapportmodulRuter } from "./rapportmodul.js";
-import { krevFunksjoner } from "./funksjoner.js";
+import { glemFunksjoner, krevFunksjoner } from "./funksjoner.js";
 import { hentModuler, krevGodkjentKonto, meldNyKonto, modulKoder } from "./kontoer.js";
 import { sendBekreftelse } from "./epostbekreftelse.js";
 import { aiPaa } from "./ai.js";
@@ -274,8 +273,8 @@ export function lagApi() {
   app.get("/helse", (c) => c.json({ ok: true }));
   app.get("/api/helse", (c) => c.json({ ok: true }));
 
-  // Oppslag i Enhetsregisteret (åpent API) for skjemaer.
-  app.get("/api/brreg/:orgnr", async (c) => c.json(await hentEnhet(c.req.param("orgnr"))));
+  // Oppslag i Enhetsregisteret (åpent API) for skjemaer, med testbedriftene fra testmiljøet.
+  app.get("/api/brreg/:orgnr", async (c) => c.json(await slaOppEnhet(c.req.param("orgnr"))));
 
   // Åpne ruter (uten innlogging) ligger under /api/offentlig.
   app.route("/api/offentlig/passkey", passkeyInnlogging());
@@ -419,6 +418,35 @@ export function lagApi() {
       if (!o) throw new ApiFeil(403, "Ingen tilgang");
       return o;
     });
+    // Uten organisasjonsnummer har organisasjonen bare fakturaene (0119_uten_orgnr.sql).
+    if (b.orgnr !== undefined) glemFunksjoner(orgId(c));
+    return c.json(o);
+  });
+
+  // Organisasjonsnummeret legges inn senere (0119_uten_orgnr.sql): en privatperson blir foretak,
+  // og EHF, Personal, Lønn og Regnskap kan brukes. Navnet, adressen og mva-registreringen hentes
+  // fra Enhetsregisteret, og et enkeltpersonforetak kan fortsatt sende fakturaene i innehaverens
+  // navn (personens navn fra før).
+  org.post("/orgnr", async (c) => {
+    const { orgnr } = await kropp(c, z.object({ orgnr: z.string().regex(/^\d{9}$/, "Organisasjonsnummeret har ni siffer") }));
+    const e = await slaOppEnhet(orgnr);
+    if (e.konkurs || e.slettet || e.under_avvikling) {
+      throw new ApiFeil(400, "Foretaket er konkurs, under avvikling eller slettet i Enhetsregisteret");
+    }
+    const o = await bruk(c, async (db) => {
+      const for_ = await en<{ type: string; navn: string }>(db, "select type, navn from faktura.organisasjoner where id = $1", [orgId(c)]);
+      await db.query("select faktura.legg_inn_orgnr($1, $2)", [orgId(c), orgnr]);
+      const innehaver = for_?.type === "privatperson" && e.organisasjonsform === "ENK" ? for_.navn : null;
+      return en(
+        db,
+        `update faktura.organisasjoner
+            set navn = $2, adresse = coalesce($3, adresse), postnr = coalesce($4, postnr), poststed = coalesce($5, poststed),
+                mva_registrert = $6, foretaksregisteret = $7, innehaver = coalesce(innehaver, $8)
+          where id = $1 returning *`,
+        [orgId(c), e.navn, e.adresse, e.postnr, e.poststed, e.mva_registrert, e.foretaksregisteret, innehaver],
+      );
+    });
+    glemFunksjoner(orgId(c));
     return c.json(o);
   });
 

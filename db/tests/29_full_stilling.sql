@@ -28,7 +28,7 @@ grant execute on all functions in schema test to public;
 select id as eier from faktura.registrer_bruker('uid-fullst-eier', 'eier-fullst@test.no') \gset
 select id as les from faktura.registrer_bruker('uid-fullst-les', 'les-fullst@test.no') \gset
 select set_config('app.bruker_id', :'eier', false);
-select id as org from faktura.opprett_organisasjon('Full Stilling AS') \gset
+select id as org from faktura.opprett_organisasjon('Full Stilling AS', '923609016') \gset
 insert into faktura.lonn_oppsett (org_id, aktiv) values (:'org', true);
 select test.er((select full_stilling from faktura.lonn_oppsett where org_id = :'org'), 37.5::numeric, '37,5 som standard');
 select test.feiler(format($$update faktura.lonn_oppsett set full_stilling = 61 where org_id = %L$$, :'org'), '23514');

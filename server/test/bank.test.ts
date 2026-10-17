@@ -280,7 +280,7 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     // Saldoen (bare når brukeren er til stede og regnskapet er slått på).
     svar["GET /accounts/:uid/balances"] = () =>
       json(200, { balances: [{ balance_type: "CLBD", balance_amount: { amount: "12500.00", currency: "NOK" }, reference_date: dagerSiden(1) }] });
-    org = (await api("POST", "/api/organisasjoner", { navn: "Bank Test AS" })).data.id;
+    org = (await api("POST", "/api/organisasjoner", { navn: "Bank Test AS", orgnr: "811000132" })).data.id;
     expect((await api("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
     // Organisasjonen er opprettet i dag; testene henter de siste 60 dagene (se «startdato» under).
     expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: "2026-01-01" })).status).toBe(200);

@@ -80,7 +80,7 @@ describe.skipIf(!process.env.DATABASE_URL)("bekreftelse av e-postadressen", () =
     expect(igjen.data.error).toBe("Vi sendte en lenke for under ett minutt siden. Vent litt før du ber om en ny.");
     expect(lenker()).toHaveLength(1);
     // Ellers er alt annet stengt til adressen er bekreftet.
-    expect((await kall("POST", "/api/organisasjoner", unni, { navn: "Unnis firma AS" })).data.error).toBe("Bekreft e-postadressen din først");
+    expect((await kall("POST", "/api/organisasjoner", unni, { navn: "Unnis firma AS", orgnr: "811000248" })).data.error).toBe("Bekreft e-postadressen din først");
   });
 
   it("workeren sender lenken fra Admin Konsoll, én gang", async () => {

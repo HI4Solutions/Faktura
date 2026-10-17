@@ -54,7 +54,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
       sendt.push({ endpoint: a.endpoint, innhold: JSON.parse(innhold) });
       return {};
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Påminnelse Utleie AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Påminnelse Utleie AS", orgnr: "811000655" })).data.id;
     kari = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Kari Hansen", type: "person", epost: "kari@hansen.no" })).data.id;
     strom = (await kall("POST", `/api/org/${org}/produkter`, { navn: "Strøm", enhet: "kWh", enhetspris: null, mva_sats: 25 })).data.id;
     leie = (await kall("POST", `/api/org/${org}/produkter`, { navn: "Husleie", enhet: "mnd", enhetspris: 8000, mva_sats: 0 })).data.id;
@@ -121,7 +121,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Påminnelser", () => {
     expect((await ny({ neste_dato: undefined })).data.error).toBe("Velg en dato");
     expect((await ny({ klokkeslett: "25:00" })).data.error).toBe("Ugyldig klokkeslett");
     expect((await ny({ intervall: "daglig" })).data.error).toBe("Velg hvor ofte");
-    const annen = (await kall("POST", "/api/organisasjoner", { navn: "Annen Påminnelse AS" })).data.id;
+    const annen = (await kall("POST", "/api/organisasjoner", { navn: "Annen Påminnelse AS", orgnr: "811000663" })).data.id;
     const fremmed = (await kall("POST", `/api/org/${annen}/produkter`, { navn: "Annet", enhetspris: 1, mva_sats: 25 })).data.id;
     expect((await ny({ produkter: [fremmed] })).data.error).toBe("Fant ikke produktet");
   });

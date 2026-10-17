@@ -83,7 +83,7 @@ describe.skipIf(!process.env.DATABASE_URL)("betalingsfila fra lønnskjøringen",
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => undefined);
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Betalingsfil Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Betalingsfil Test AS", orgnr: "811000183" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     const ny = async (b: Record<string, unknown>) => (await kall("POST", `/api/org/${org}/ansatte`, { ansatt_fra: "2025-01-01", ...b })).data.id as string;
     kari = await ny({ fornavn: "Kari", etternavn: "Betal", lonnstype: "maaned", maanedslonn: 40000, kontonr: "12345678903", skattekort: "prosent", skatt_prosent: 30, epost: "kari.betfil@server.test" });

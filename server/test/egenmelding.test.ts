@@ -32,7 +32,7 @@ describe.skipIf(!process.env.DATABASE_URL)("egenmelding", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async (o) => void ko.push(o));
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Egenmelding Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Egenmelding Test AS", orgnr: "811000213" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     olaId = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Ola", etternavn: "Syk", ansatt_fra: "2025-01-01", epost: "ola.egm@server.test" })).data.id;
     kariId = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Kari", etternavn: "Ny", ansatt_fra: dag(-20) })).data.id;

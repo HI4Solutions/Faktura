@@ -84,7 +84,7 @@ describe.skipIf(!process.env.DATABASE_URL)("funksjoner per organisasjon", () => 
 
   beforeAll(async () => {
     config.adminEposter.push("funk-api-admin@server.test");
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Funksjoner Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Funksjoner Test AS", orgnr: "811000310" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
   });
   afterAll(async () => {
@@ -139,7 +139,7 @@ describe.skipIf(!process.env.DATABASE_URL)("funksjoner per organisasjon", () => 
 
   it("standarden for nye organisasjoner", async () => {
     expect((await kall("PUT", "/api/admin/funksjoner/ai", { standard: false }, admin)).status).toBe(204);
-    const ny = (await kall("POST", "/api/organisasjoner", { navn: "Uten AI AS" })).data.id;
+    const ny = (await kall("POST", "/api/organisasjoner", { navn: "Uten AI AS", orgnr: "811000329" })).data.id;
     glemFunksjoner();
     expect((await kall("POST", `/api/org/${ny}/ai/faktura`, { tekst: "Faktura til Ola på 1000 kr" })).data.error).toBe("AI er ikke slått på for organisasjonen");
     expect((await kall("GET", "/api/meg")).data.organisasjoner.find((o: any) => o.id === ny).funksjoner).not.toContain("ai");

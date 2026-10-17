@@ -41,7 +41,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Faste tillegg og import av ansatte",
       },
       async (b) => b.toString().replace("kryptert:", ""),
     );
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Tillegg og Import AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Tillegg og Import AS", orgnr: "811000051" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true, full_stilling: 37.5 })).status).toBe(200);
     await inviter("aimp-regn@server.test", "regnskap", regnskap);
     await inviter("aimp-fakt@server.test", "fakturerer", fakturerer);

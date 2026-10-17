@@ -50,7 +50,7 @@ describe.skipIf(!process.env.DATABASE_URL)("den ansatte fyller ut selv", () => {
   beforeAll(async () => {
     settLokalOppgavekjorer(async (o) => void ko.push(o));
     settKryptering(async (t) => Buffer.from(`kryptert:${t}`), async (b) => b.toString().replace("kryptert:", ""));
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Utfylling Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Utfylling Test AS", orgnr: "811000078" })).data.id;
     eierBruker = (await kall("GET", "/api/meg")).data.bruker.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     const a = await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Kari", etternavn: "Utfyll", epost: "kari.utfyll@server.test", ansatt_fra: "2026-01-01" });

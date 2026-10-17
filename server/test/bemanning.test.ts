@@ -21,8 +21,8 @@ describe.skipIf(!process.env.DATABASE_URL)("bemanningskalender", () => {
   };
 
   beforeAll(async () => {
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Bemanning Test AS" })).data.id;
-    annenOrg = (await kall("POST", "/api/organisasjoner", { navn: "Annen Bemanning AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Bemanning Test AS", orgnr: "811000159" })).data.id;
+    annenOrg = (await kall("POST", "/api/organisasjoner", { navn: "Annen Bemanning AS", orgnr: "811000167" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     for (const [navn, stilling, epost] of [
       ["Aase", "Sekretær", "aase.bem@server.test"],

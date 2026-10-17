@@ -83,7 +83,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Indeksregulering", () => {
   });
 
   it("planlegger regulering og varsler leietakeren", async () => {
-    const org = (await kall("POST", "/api/organisasjoner", { navn: "Gårdeier AS" })).data.id;
+    const org = (await kall("POST", "/api/organisasjoner", { navn: "Gårdeier AS", orgnr: "811000442" })).data.id;
     await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", epost: "post@gardeier.no" });
     const kunde = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Leietaker", epost: "leie@test.no" })).data.id;
 

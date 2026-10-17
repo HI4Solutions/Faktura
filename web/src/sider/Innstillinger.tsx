@@ -4,6 +4,7 @@ import { api, hent, lastOppLogo } from "../api";
 import { Dialog, EpostlisteFelt, Feil, Laster, tall, tilEpostliste, ugyldigeEposter, useData, useHandling } from "../felles";
 import { erAdmin, harFunksjon, harModul, MODULNAVN, useKonto, type MinOrg, type ModulKode } from "../konto";
 import { dato, orgnr } from "../format";
+import { orgnrGyldig } from "../personnummer";
 import { Totrinn } from "./Totrinn";
 import { AppOgVarsler } from "./Varsler";
 import { EhfSending } from "./Ehf";
@@ -167,7 +168,12 @@ export function Innstillinger() {
       )}
       {fane === "organisasjon" && (
         <>
-          {del === "opplysninger" && <OrgSkjemaDel del="organisasjon" skjema={skjema} />}
+          {del === "opplysninger" && (
+            <>
+              <OrgnrMangler skjema={skjema} />
+              <OrgSkjemaDel del="organisasjon" skjema={skjema} />
+            </>
+          )}
           {del === "brukere" && <Medlemmer />}
           {del === "roller" && <Tilgangsroller />}
           {del === "regnskapsforer" && <Regnskapsforer />}
@@ -876,14 +882,22 @@ function OrgSkjemaDel({ del, skjema }: { del: OrgDel; skjema: OrgSkjema }) {
         <>
           <h2 style={{ marginTop: 0 }}>Organisasjon</h2>
           <p className="dempet liten">
-            Status: {o.verifisering === "verifisert" ? "Verifisert" : o.verifisering === "sperret" ? "Sperret" : "Ikke verifisert"}
+            Status:{" "}
+            {o.verifisering === "verifisert"
+              ? "Verifisert"
+              : o.verifisering === "sperret"
+                ? "Sperret"
+                : data.orgnr
+                  ? "Ikke verifisert"
+                  : "Ikke verifisert (det krever organisasjonsnummer)"}
           </p>
           <div className="rad">
             <label className="hel">
               Navn
               <input required {...felt("navn")} />
             </label>
-            {o.type !== "privatperson" && (
+            {/* Uten organisasjonsnummer legges det inn i kortet over (med opplysningene fra Enhetsregisteret). */}
+            {o.type !== "privatperson" && data.orgnr && (
               <label>
                 Org.nr.
                 <input disabled={o.verifisering !== "ny"} {...felt("orgnr")} />
@@ -1034,6 +1048,100 @@ function OrgSkjemaDel({ del, skjema }: { del: OrgDel; skjema: OrgSkjema }) {
         Lagre
       </button>
     </form>
+  );
+}
+
+// Over opplysningene når organisasjonsnummeret mangler. Når det er lagt inn, kan typen ha blitt
+// foretak, og modulene endres (oppdater).
+function OrgnrMangler({ skjema }: { skjema: OrgSkjema }) {
+  const { oppdater } = useKonto();
+  const { data, settO, lagret } = skjema;
+  if (!data || data.orgnr) return null;
+  return (
+    <LeggInnOrgnr
+      privat={data.type === "privatperson"}
+      navn={data.navn}
+      ferdig={(ny) => {
+        lagret(ny, "organisasjon");
+        settO((x: any) => ({ ...x, type: ny.type }));
+        oppdater();
+      }}
+    />
+  );
+}
+
+// Organisasjonsnummeret legges inn senere (0119_uten_orgnr.sql): uten det har organisasjonen bare
+// Faktura. Navnet, adressen og mva-registreringen hentes fra Enhetsregisteret, og en privatperson
+// blir foretak (et enkeltpersonforetak kan fortsatt sende fakturaene i personens navn).
+function LeggInnOrgnr({ privat, navn, ferdig }: { privat: boolean; navn: string; ferdig: (o: any) => void }) {
+  const { org } = useKonto();
+  const [nr, settNr] = useState("");
+  const [oppslag, settOppslag] = useState<any>(null);
+  const h = useHandling();
+  const rent = nr.replace(/\s/g, "");
+  const gyldig = orgnrGyldig(rent);
+  const stengt = oppslag && (oppslag.konkurs || oppslag.slettet || oppslag.under_avvikling);
+
+  // Slås opp så snart nummeret er gyldig.
+  useEffect(() => {
+    settOppslag(null);
+    h.settFeil(null);
+    if (!gyldig) return;
+    let aktiv = true;
+    void h.kjor(() => hent(`/brreg/${rent}`)).then((e) => aktiv && e && settOppslag(e));
+    return () => {
+      aktiv = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rent]);
+
+  async function leggInn() {
+    if (!oppslag) return;
+    const tekst = privat
+      ? `Gjøre ${navn} om til foretaket ${oppslag.navn} (org.nr. ${orgnr(rent)})? Navnet, adressen og mva-registreringen hentes fra Enhetsregisteret, og det kan ikke gjøres om til privatperson igjen.`
+      : `Legge inn org.nr. ${orgnr(rent)} for ${oppslag.navn}? Navnet, adressen og mva-registreringen hentes fra Enhetsregisteret.`;
+    if (!confirm(tekst)) return;
+    const o = await h.kjor(() => api("POST", `/org/${org!.id}/orgnr`, { orgnr: rent }));
+    if (o) ferdig(o);
+  }
+
+  return (
+    <div className="kort legg-inn-orgnr">
+      <h2 style={{ marginTop: 0 }}>{privat ? "Fått organisasjonsnummer?" : "Organisasjonsnummer mangler"}</h2>
+      <p className="dempet liten">
+        {privat ? "Som privatperson har du bare Faktura." : "Uten organisasjonsnummer har organisasjonen bare Faktura."} Legg inn
+        organisasjonsnummeret, så kan dere bruke Personal, Lønn, Regnskap og EHF. Navnet, adressen og mva-registreringen hentes fra
+        Enhetsregisteret{privat ? ", og du blir foretak" : ""}. Etterpå kan organisasjonen verifiseres, så grensen på 20 fakturaer og
+        50 000 kr per måned forsvinner.
+      </p>
+      <label>
+        Organisasjonsnummer
+        <input inputMode="numeric" autoComplete="off" value={nr} onChange={(e) => settNr(e.target.value)} placeholder="9 siffer" />
+      </label>
+      {rent.length === 9 && !gyldig && <p className="felt-feil">Ugyldig organisasjonsnummer (kontrollsifferet stemmer ikke)</p>}
+      {oppslag && (
+        <div className={`melding ${stengt ? "feil" : "info"}`}>
+          {oppslag.navn}, org.nr. {orgnr(oppslag.orgnr)}
+          {(oppslag.adresse || oppslag.poststed) && (
+            <>
+              <br />
+              {[oppslag.adresse, [oppslag.postnr, oppslag.poststed].filter(Boolean).join(" ")].filter(Boolean).join(", ")}
+            </>
+          )}
+          {oppslag.mva_registrert ? " · MVA-registrert" : ""}
+          {stengt && (
+            <>
+              <br />
+              Foretaket er konkurs, under avvikling eller slettet i Enhetsregisteret.
+            </>
+          )}
+        </div>
+      )}
+      <Feil melding={h.feil} />
+      <button type="button" className="primar" disabled={h.opptatt || !oppslag || stengt} onClick={() => void leggInn()}>
+        {privat ? "Bli foretak med dette nummeret" : "Legg inn organisasjonsnummeret"}
+      </button>
+    </div>
   );
 }
 

@@ -43,7 +43,7 @@ describe.skipIf(!process.env.DATABASE_URL)("vaktbytte for lederen", () => {
     settLokalOppgavekjorer(async (o) => {
       ko.push(o);
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Lederbytte Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Lederbytte Test AS", orgnr: "811000930" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     // Ola og Kari logger inn (sekretær og lege); Per har ikke innlogging.
     for (const [navn, rolle] of [

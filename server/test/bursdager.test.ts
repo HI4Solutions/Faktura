@@ -55,7 +55,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Bursdager", () => {
       sendt.push({ endpoint: a.endpoint, innhold: JSON.parse(innhold) });
       return {};
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Bursdag Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Bursdag Test AS", orgnr: "811000191" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     const kariId = await ansatt({ fornavn: "Kari", etternavn: "Kake", epost: "kari.burs@server.test", fodselsdato: aarSiden(28) });
     const olaId = await ansatt({ fornavn: "Ola", etternavn: "Olsen", epost: "ola.burs@server.test", fodselsdato: ikkeIDag() });

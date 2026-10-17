@@ -113,7 +113,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rapportmodulen", () => {
       },
     });
     config.adminEposter.push("rapp-admin@server.test");
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Rapport Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Rapport Test AS", orgnr: "811000760" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", epost: "post@rapport-test.no", mva_registrert: true })).status).toBe(200);
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     for (const [epost, rolle, hvem] of [

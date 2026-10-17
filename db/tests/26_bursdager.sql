@@ -36,7 +36,7 @@ select id as eier from faktura.registrer_bruker('uid-bursdag-eier', 'eier-bursda
 select id as kari_b from faktura.registrer_bruker('uid-bursdag-kari', 'kari-bursdag@test.no', 'Kari Kake') \gset
 select id as ola_b from faktura.registrer_bruker('uid-bursdag-ola', 'ola-bursdag@test.no', 'Ola Olsen') \gset
 select set_config('app.bruker_id', :'eier', false);
-select id as org from faktura.opprett_organisasjon('Bursdag AS') \gset
+select id as org from faktura.opprett_organisasjon('Bursdag AS', '923609016') \gset
 insert into faktura.lonn_oppsett (org_id, aktiv, bursdag_varsel) values (:'org', true, 'push');
 -- Fødselsdatoen et antall år tilbake som går opp i fire (så 29. februar også stemmer).
 insert into faktura.ansatte (org_id, fornavn, etternavn, epost, fodselsdato)

@@ -30,7 +30,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Sletting av fakturaer", () => {
     settLokalOppgavekjorer(async (o) => {
       ko.push(o);
     });
-    org = (await kall("POST", "/api/organisasjoner", eier, { navn: "Slett AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", eier, { navn: "Slett AS", orgnr: "811000825" })).data.id;
     await kall("PATCH", `/api/org/${org}`, eier, { kontonr: "86011117947", epost: "post@slett.no" });
     kunde = (await kall("POST", `/api/org/${org}/kunder`, eier, { navn: "Kunde", epost: "k@kunde.no" })).data.id;
   });

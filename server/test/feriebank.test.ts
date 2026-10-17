@@ -28,7 +28,7 @@ describe.skipIf(!process.env.DATABASE_URL)("feriebank", () => {
       ko.push(o);
     });
     settKryptering(async (t) => Buffer.from(`kryptert:${t}`), async (b) => b.toString().replace("kryptert:", ""));
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Feriebank AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Feriebank AS", orgnr: "811000256" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     kariId = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Kari", etternavn: "Kake", epost: "kari.fb@server.test", ansatt_fra: "2020-01-01" })).data.id;
     perId = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: "Per", etternavn: "Pedersen", ansatt_fra: "2020-01-01" })).data.id;

@@ -69,7 +69,7 @@ describe.skipIf(!process.env.DATABASE_URL)("månedsavslutningen i appen", () => 
     expect(r.status, `${metode} ${sti}: ${JSON.stringify(r.data)}`).toBeLessThan(300);
     return r.data;
   };
-  const nyOrg = async (navn: string) => (await ok("POST", "/api/organisasjoner", { navn })).id as string;
+  const nyOrg = async (navn: string) => (await ok("POST", "/api/organisasjoner", { navn, orgnr: "811000604" })).id as string;
   const anlegg = (o: string, anskaffet: string) => ok("POST", `/api/org/${o}/regnskap/anleggsmidler`, { navn: "PC-er", kategori: "kontormaskiner", anskaffet, kostpris: 36000, levetid_mnd: 36 });
 
   beforeAll(async () => {

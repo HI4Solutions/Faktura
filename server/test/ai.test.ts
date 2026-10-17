@@ -354,7 +354,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI i appen", () => {
   const bruk = () => somSystem((db) => alle(db, "select funksjon, antall from faktura.ai_bruk where org_id = $1 order by funksjon", [org]));
 
   beforeAll(async () => {
-    org = (await kall("POST", "/api/organisasjoner", { navn: "AI Utleie AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "AI Utleie AS", orgnr: "811000043" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
     kari = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Kari Hansen", type: "person", epost: "kari@hansen.no" })).data.id;
     fjord = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Fjordline Logistikk AS", epost: "faktura@fjordline.no" })).data.id;

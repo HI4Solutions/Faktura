@@ -651,6 +651,26 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   halvt minutt), bakgrunnsjobbene hopper over organisasjonen (bankhenting, gjentakende
   fakturaer, EHF-sending, som da går på e-post, påminnelser og Google Disk), og appen
   skjuler det som ikke er slått på (`mine_organisasjoner.funksjoner`)
+- Uten organisasjonsnummer (`0119_uten_orgnr.sql`): en privatperson (type `privatperson`), og
+  et foretak som ikke har lagt inn nummeret, har bare fakturaene: funksjonene i Faktura uten
+  EHF (`funksjoner.uten_orgnr`; Peppol krever organisasjonsnummer). Personal, Lønn, Regnskap og
+  EHF krever organisasjonsnummer. Regelen ligger i `har_funksjon`, så appen, API-et
+  (`funksjoner.ts` svarer «… krever organisasjonsnummer. Legg det inn under Innstillinger →
+  Organisasjon.»), modulene og bakgrunnsjobbene følger den, og det som er slått på, virker
+  straks nummeret er lagt inn. I appen velger man mellom Foretak, Privatperson og Regnskapsbyrå
+  når organisasjonen lages; foretak og regnskapsbyrå må ha et gyldig organisasjonsnummer (slås
+  opp i Enhetsregisteret), privatpersonen ikke. Får en privatperson organisasjonsnummer senere
+  (f.eks. et enkeltpersonforetak), legges det inn under Innstillinger → Organisasjon
+  (`POST /api/org/:org/orgnr`, `faktura.legg_inn_orgnr`, bare eier og administrator, én gang):
+  navnet, adressen og mva-registreringen hentes fra Enhetsregisteret, privatpersonen blir
+  foretak (typen kan ellers ikke endres), og for et enkeltpersonforetak blir personens navn
+  innehaver, så fakturaene fortsatt kan sendes i det navnet. Uten organisasjonsnummer kan
+  ingen være verifisert (`sett_verifisering`), så grensen på 20 fakturaer og 50 000 kr per
+  måned gjelder; menypunktet «Verifiser organisasjon» vises først når nummeret er lagt inn.
+  Plattformadministratoren ser «krever org.nr.» ved det som ikke virker for organisasjonen.
+  Oppslaget i Enhetsregisteret for skjemaene (`/api/brreg/:orgnr`) bruker testmiljøet for
+  testbedriftene (nummer som begynner på 2 eller 3); verifiseringen bruker alltid det ekte
+  registeret
 - Menyen i appen har ett punkt for fakturaene: Fakturaer har fanene Alle, Utkast, Ubetalt,
   Betalt, Kreditert, Gjentakende og Innbetalinger (`web/src/fakturameny.tsx`). Gjentakende og
   Innbetalinger har de samme adressene som før (`/gjentakende`, `/innbetalinger`), og
@@ -1546,7 +1566,8 @@ og som EHF (`0042_admin_uten_belop.sql`).
 
 Et organisasjonsnummer kan bare være verifisert hos én organisasjon. Andre grenser:
 maks fem uverifiserte organisasjoner per bruker, reCAPTCHA Enterprise ved registrering,
-og hastighetsgrenser i API-et.
+og hastighetsgrenser i API-et. Verifiseringen krever organisasjonsnummer, så en privatperson
+blir værende på grensene for nye organisasjoner (og har bare Faktura, `0119_uten_orgnr.sql`).
 
 ## Forbedringer fra MedSide-modulen
 

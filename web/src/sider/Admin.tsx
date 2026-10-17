@@ -89,7 +89,8 @@ type OrgBruker = Bruker & { rolle: string };
 const ROLLEREKKE = ["eier", "admin", "fakturerer", "tilpasset", "regnskap", "les", "ansatt"];
 const rolleRekke = (r: string) => (ROLLEREKKE.includes(r) ? ROLLEREKKE.indexOf(r) : ROLLEREKKE.length);
 // Funksjonene organisasjonene kan ha tilgang til (0041_funksjoner.sql).
-type Funksjon = { kode: string; navn: string; beskrivelse: string; krever: string | null; standard: boolean; modul?: string };
+// uten_orgnr: virker uten organisasjonsnummer (fakturaene uten EHF, 0119_uten_orgnr.sql).
+type Funksjon = { kode: string; navn: string; beskrivelse: string; krever: string | null; standard: boolean; modul?: string; uten_orgnr?: boolean };
 type Funksjonsoversikt = {
   // Modulene (Faktura, Bemanning, ...) som funksjonene hører til, i rekkefølge.
   moduler?: Modul[];
@@ -508,7 +509,7 @@ function OrgListe({ rader, apne, enkel, brukere }: { rader: Org[]; apne: (id: st
             )}
             <span className="linje">
               <span className="under">
-                {[orgnr(o.orgnr) || "uten org.nr.", o.antall_fakturaer ? `${o.antall_epost} e-post · ${o.antall_ehf} EHF` : "", `aktiv ${siden(o.sist_aktiv)}`].filter(Boolean).join(" · ")}
+                {[orgnr(o.orgnr) || (o.type === "privatperson" ? "privatperson" : "uten org.nr."), o.antall_fakturaer ? `${o.antall_epost} e-post · ${o.antall_ehf} EHF` : "", `aktiv ${siden(o.sist_aktiv)}`].filter(Boolean).join(" · ")}
               </span>
               <span className="merker">
                 <OrgStatus o={o} />
@@ -542,7 +543,7 @@ function OrgListe({ rader, apne, enkel, brukere }: { rader: Org[]; apne: (id: st
               {o.type === "regnskapsbyraa" && <span className="dempet liten"> (byrå)</span>}
               {brukere && <BrukerLinje liste={brukere.get(o.id)} />}
             </td>
-            <td className="hel-linje">{orgnr(o.orgnr)}</td>
+            <td className="hel-linje">{orgnr(o.orgnr) || (o.type === "privatperson" ? <span className="dempet">Privatperson</span> : null)}</td>
             {!brukere && <td className="liten">{o.eier_epost}</td>}
             <td className="hel-linje">{dato(o.opprettet)}</td>
             <td className="liten hel-linje">{siden(o.sist_aktiv)}</td>
@@ -638,13 +639,13 @@ function OrgDetaljer({ id, brukere, apne, endret }: { id: string; brukere?: Bruk
         <Behandle org={o} venter={o.verifiseringer.some((v: any) => v.metode === "manuell" && v.status === "venter")} ferdig={endret} />
       </section>
 
-      <OrgFunksjoner key={o.id} id={o.id} funksjoner={o.funksjoner ?? []} />
+      <OrgFunksjoner key={o.id} id={o.id} funksjoner={o.funksjoner ?? []} utenOrgnr={!o.orgnr} />
 
       <section>
         <h3>Organisasjonen</h3>
         <Fakta
           rader={[
-            ["Org.nr.", orgnr(o.orgnr) || "mangler"],
+            ["Org.nr.", orgnr(o.orgnr) || (o.type === "privatperson" ? "ingen (privatperson, bare Faktura)" : "mangler (bare Faktura)")],
             ["E-post", o.epost ? <a href={`mailto:${o.epost}`}>{o.epost}</a> : null],
             ["Telefon", o.telefon ? <a href={`tel:${o.telefon}`}>{o.telefon}</a> : null],
             ["Adresse", o.adresse],
@@ -874,7 +875,7 @@ function SlettedeOrganisasjoner() {
 // på med kjernen sin (fakturaene, ansatte og timer, lønnen og regnskapet), og funksjonene i modulen
 // står under den når den er på. Lagres med en gang.
 type OrgFunksjon = Omit<Funksjon, "standard"> & { aktiv: boolean };
-function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: OrgFunksjon[] }) {
+function OrgFunksjoner({ id, funksjoner, utenOrgnr = false }: { id: string; funksjoner: OrgFunksjon[]; utenOrgnr?: boolean }) {
   const moduler = useModuler();
   const [aktive, settAktive] = useState(() => new Set(funksjoner.filter((f) => f.aktiv).map((f) => f.kode)));
   const h = useHandling();
@@ -886,6 +887,8 @@ function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: OrgFunksjon
     const r = await h.kjor(() => api<{ aktive: string[] }>("PUT", `/admin/organisasjoner/${id}/funksjoner`, { [kode]: aktiv }));
     settAktive(r ? new Set(r.aktive) : for_);
   };
+  // Uten organisasjonsnummer virker bare fakturaene (uten EHF), selv om resten er slått på.
+  const kreverOrgnr = (kode: string) => utenOrgnr && funksjoner.find((x) => x.kode === kode)?.uten_orgnr === false;
   const rad = (f: OrgFunksjon) => {
     const mangler = f.krever && !aktive.has(f.krever) ? funksjoner.find((x) => x.kode === f.krever)?.navn : null;
     return (
@@ -896,6 +899,7 @@ function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: OrgFunksjon
             <strong>{f.navn}</strong>
             <span className="dempet liten"> · {f.beskrivelse}</span>
             {mangler && <span className="liten advarsel-tekst"> · virker bare med {mangler}</span>}
+            {kreverOrgnr(f.kode) && <span className="liten advarsel-tekst"> · krever org.nr.</span>}
           </span>
         </label>
       </li>
@@ -919,6 +923,12 @@ function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: OrgFunksjon
       <p className="liten dempet" style={{ marginTop: 0 }}>
         Modulene organisasjonen har tilgang til, og funksjonene i hver. Bedriften gir modulene videre til rollene sine. Endringen gjelder med en gang.
       </p>
+      {utenOrgnr && (
+        <div className="melding info">
+          Organisasjonen har ikke organisasjonsnummer, så bare fakturaene virker (uten EHF). Det andre som er slått på, virker når nummeret er
+          lagt inn.
+        </div>
+      )}
       <div className="modul-blokker">
         {medKjerne.map((m) => {
           const pa = aktive.has(m.kjerne!);
@@ -934,6 +944,7 @@ function OrgFunksjoner({ id, funksjoner }: { id: string; funksjoner: OrgFunksjon
                   <strong>{m.navn}</strong>
                   <span className="dempet liten"> · {m.beskrivelse}</span>
                   {mangler && <span className="liten advarsel-tekst"> · virker bare med {mangler}</span>}
+                  {kreverOrgnr(m.kjerne!) && <span className="liten advarsel-tekst"> · krever org.nr.</span>}
                 </span>
               </label>
               {andre.length > 0 && <ul className="admin-rader funksjon-liste">{andre.map(rad)}</ul>}

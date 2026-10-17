@@ -26,12 +26,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Flere fakturaer på én gang", () =>
     settLokalOppgavekjorer(async (o) => {
       ko.push(o);
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Flere AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Flere AS", orgnr: "811000264" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
     for (const [navn, epost] of [["Leietaker 1", "en@test.no"], ["Leietaker 2", "to@test.no"], ["Uten e-post", null]] as const) {
       k.push((await kall("POST", `/api/org/${org}/kunder`, { navn, epost })).data.id);
     }
-    annenOrg = (await kall("POST", "/api/organisasjoner", { navn: "Fremmed AS" }, fremmed)).data.id;
+    annenOrg = (await kall("POST", "/api/organisasjoner", { navn: "Fremmed AS", orgnr: "811000272" }, fremmed)).data.id;
   });
 
   it("lager utkast til flere kunder med hver sine linjer", async () => {

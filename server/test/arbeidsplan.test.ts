@@ -31,7 +31,7 @@ describe.skipIf(!process.env.DATABASE_URL)("fast arbeidsplan og ekstratimer", ()
     (await kall("POST", `/api/org/${org}/vakter`, { ansatt_id: id[navn], dato: d(dag), fra, til, pause_min })).data.id as string;
 
   beforeAll(async () => {
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Arbeidsplan Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Arbeidsplan Test AS", orgnr: "811000094" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     for (const [navn, ekstra] of [
       ["Linda", { stillingsprosent: 60, epost: "linda.plan@server.test" }],

@@ -225,7 +225,7 @@ describe.skipIf(!process.env.DATABASE_URL)("utgiftene i appen", () => {
         );
       },
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Fjordvik Legesenter AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Fjordvik Legesenter AS", orgnr: "811000906" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
     const inv = await kall("POST", `/api/org/${org}/invitasjoner`, { epost: "utg-fakt@server.test", rolle: "fakturerer" });
     expect((await kall("POST", "/api/invitasjoner/aksepter", { token: inv.data.lenke.split("/").pop() }, fakturerer)).status).toBe(200);

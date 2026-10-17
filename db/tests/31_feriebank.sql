@@ -39,7 +39,7 @@ select id as eier from faktura.registrer_bruker('uid-ferie-eier', 'eier-ferie@te
 select id as regn from faktura.registrer_bruker('uid-ferie-regn', 'regn-ferie@test.no', 'Rolf Regnskap') \gset
 select id as kari_b from faktura.registrer_bruker('uid-ferie-kari', 'kari-ferie@test.no', 'Kari Kake') \gset
 select set_config('app.bruker_id', :'eier', false);
-select id as org from faktura.opprett_organisasjon('Ferie AS') \gset
+select id as org from faktura.opprett_organisasjon('Ferie AS', '923609016') \gset
 insert into faktura.lonn_oppsett (org_id, aktiv) values (:'org', true);
 select test.er((select ferie_dager from faktura.lonn_oppsett where org_id = :'org'), 25.0, 'fem uker som standard');
 insert into faktura.ansatte (org_id, fornavn, etternavn, ansatt_fra, fodselsdato) values (:'org', 'Kari', 'Kake', '2020-01-01', '1990-03-01') returning id as kari \gset

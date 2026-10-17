@@ -217,7 +217,7 @@ describe.skipIf(!process.env.DATABASE_URL)("rullering i API-et", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Rullering AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Rullering AS", orgnr: "811000795" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     for (const navn of ["Ola", "Kari", "Per"]) {
       const a = (await kall("POST", `/api/org/${org}/ansatte`, { fornavn: navn, etternavn: "Rull", epost: `${navn.toLowerCase()}.rull@server.test`, ansatt_fra: pluss(iDag(), -30) })).data;

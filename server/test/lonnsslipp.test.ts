@@ -46,7 +46,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Lønnsslipper lest med AI", () => {
         );
       },
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Lønnsslipp AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Lønnsslipp AS", orgnr: "811000582" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     const inv = await kall("POST", `/api/org/${org}/invitasjoner`, { epost: "slipp-regn@server.test", rolle: "regnskap" });
     expect((await kall("POST", "/api/invitasjoner/aksepter", { token: inv.data.lenke.split("/").pop() }, regnskap)).status).toBe(200);

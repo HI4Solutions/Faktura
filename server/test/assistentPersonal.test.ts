@@ -56,7 +56,7 @@ describe.skipIf(!process.env.DATABASE_URL)("AI-assistenten for personal", () => 
         );
       },
     });
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Personal Assistent AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Personal Assistent AS", orgnr: "811000116" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
     for (const [k, fornavn, etternavn, epost] of [
       ["ola", "Ola", "Nordmann", "ola.pa@server.test"],

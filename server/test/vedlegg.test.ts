@@ -116,7 +116,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Vedlegg på fakturaer", () => {
       },
     });
     settLokalOppgavekjorer(async (o) => void ko.push(o));
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Vedlegg AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Vedlegg AS", orgnr: "811000957" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", epost: "post@vedlegg.no", mva_registrert: true })).status).toBe(200);
     kunde = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Kunde AS", epost: "kunde@kunde.no" })).data.id;
   });

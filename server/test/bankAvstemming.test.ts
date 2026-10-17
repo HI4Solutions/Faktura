@@ -123,7 +123,7 @@ describe.skipIf(!process.env.DATABASE_URL)("avstemmingen av banken i appen", () 
       throw new Error(`Uventet kall til Enable Banking: ${u.pathname}`);
     });
 
-    org = (await api("POST", "/api/organisasjoner", { navn: "Bankavstemming AS" })).data.id;
+    org = (await api("POST", "/api/organisasjoner", { navn: "Bankavstemming AS", orgnr: "811000140" })).data.id;
     expect((await api("PATCH", o(""), { kontonr: "86011117947", mva_registrert: true })).status).toBe(200);
     expect((await api("POST", o("/kontoer"), { navn: "Sparekonto", kontonr: "15035656267" })).status).toBe(201);
     // Innbetalingene fra 1. september; bankpostene føres fra samme dag, sparekontoen på 1921.

@@ -23,7 +23,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Gjenta fakturaen", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Gjenta AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Gjenta AS", orgnr: "811000337" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true, innehaver: "Ola Nordmann" })).status).toBe(200);
     kunde = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Leietaker AS", epost: "leie@test.no", deres_referanse: "Standard ref" })).data.id;
   });

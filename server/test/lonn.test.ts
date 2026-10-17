@@ -41,7 +41,7 @@ describe.skipIf(!process.env.DATABASE_URL)("lønnskjøring", () => {
       ko.push(o);
     });
     config.adminEposter.push("lonn-admin@server.test");
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Lønn Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Lønn Test AS", orgnr: "811000558" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
   });
 

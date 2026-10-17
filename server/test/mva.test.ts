@@ -136,7 +136,7 @@ describe.skipIf(!process.env.DATABASE_URL)("mva-meldingen i appen", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await ok("POST", "/api/organisasjoner", { navn: "Mva i regnskapet AS" })).id;
+    org = (await ok("POST", "/api/organisasjoner", { navn: "Mva i regnskapet AS", orgnr: "811000620" })).id;
     await ok("PATCH", o(""), { kontonr: "86011117947", mva_registrert: true });
     const inv = await ok("POST", o("/invitasjoner"), { epost: "mva-fakt@server.test", rolle: "fakturerer" });
     expect((await kall("POST", "/api/invitasjoner/aksepter", { token: inv.lenke.split("/").pop() }, fakturerer)).status).toBe(200);

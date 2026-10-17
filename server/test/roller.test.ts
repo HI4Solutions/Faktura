@@ -31,7 +31,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Roller", () => {
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => undefined);
     while (helligdag(dag)) dag = pluss(dag, 7);
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Legesenteret AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Legesenteret AS", orgnr: "811000787" })).data.id;
     expect((await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true })).status).toBe(200);
   });
 

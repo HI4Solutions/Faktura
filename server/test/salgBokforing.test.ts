@@ -147,7 +147,7 @@ describe.skipIf(!process.env.DATABASE_URL)("fakturaene og innbetalingene i regns
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Salg i regnskapet AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Salg i regnskapet AS", orgnr: "811000809" })).data.id;
     expect((await kall("PATCH", `/api/org/${org}`, { kontonr: "86011117947", mva_registrert: true, purregebyr: 35 })).status).toBe(200);
     kunde = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Pasient Hansen", epost: "hansen@test.no" })).data.id;
   });

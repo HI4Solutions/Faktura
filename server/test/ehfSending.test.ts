@@ -86,7 +86,8 @@ describe.skipIf(!process.env.DATABASE_URL)("EHF-sending via Recommand", () => {
 
   it("kobler til med nøkkelen fra Recommand, og sjekker den først", async () => {
     const nokkel = { nokkel_id: "key_abc123", hemmelighet: "hemmelig-verdi-123" };
-    expect((await api("PUT", `/api/org/${org}/ehf`, nokkel)).data.error).toBe("Legg inn organisasjonsnummeret under Innstillinger først. EHF sendes fra det.");
+    // Uten organisasjonsnummer er EHF ikke med (0119_uten_orgnr.sql); med det virker det med en gang.
+    expect((await api("PUT", `/api/org/${org}/ehf`, nokkel)).data.error).toBe("EHF krever organisasjonsnummer. Legg det inn under Innstillinger → Organisasjon.");
     expect((await api("PATCH", `/api/org/${org}`, { orgnr })).status).toBe(200);
 
     svar.selskaper = () => json(401, { success: false, errors: { root: ["Unauthorized"] } });

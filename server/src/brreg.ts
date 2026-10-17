@@ -15,11 +15,15 @@ export interface Enhet {
   slettet: boolean;
   hjemmeside: string | null;
   epost: string | null;
+  organisasjonsform?: string | null; // ENK, AS …
 }
 
-export async function hentEnhet(nr: string): Promise<Enhet> {
+// testmiljo: testbedriftene (erTestbedrift) slås opp i Brønnøysundregistrenes testmiljø. Bare for
+// å fylle ut skjemaer; verifiseringen bruker alltid det ekte registeret.
+export async function hentEnhet(nr: string, testmiljo = false): Promise<Enhet> {
   if (!orgnrGyldig(nr)) throw new ApiFeil(400, "Ugyldig organisasjonsnummer");
-  const r = await fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${nr}`, { headers: { accept: "application/json" } });
+  const vert = testmiljo && erTestbedrift(nr) ? "data.ppe.brreg.no" : "data.brreg.no";
+  const r = await fetch(`https://${vert}/enhetsregisteret/api/enheter/${nr}`, { headers: { accept: "application/json" } });
   if (r.status === 404 || r.status === 410) throw new ApiFeil(404, "Fant ikke organisasjonsnummeret i Enhetsregisteret");
   if (!r.ok) throw new ApiFeil(502, "Enhetsregisteret svarer ikke");
   const e: any = await r.json();
@@ -37,6 +41,7 @@ export async function hentEnhet(nr: string): Promise<Enhet> {
     slettet: Boolean(e.slettedato),
     hjemmeside: e.hjemmeside ?? null,
     epost: e.epostadresse ?? e.epost ?? null,
+    organisasjonsform: e.organisasjonsform?.kode ?? null,
   };
 }
 

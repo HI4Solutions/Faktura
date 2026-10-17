@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { hent } from "../api";
 import { Feil, Laster, Tom, useData } from "../felles";
-import { harFunksjon, kanBokfore, kanPersonal, kanSeLonn, kanSePersonal, kanSeRegnskap, kanSkrive, useKonto, visFakturadelen } from "../konto";
+import { erAdmin, harFunksjon, kanBokfore, kanPersonal, kanSeLonn, kanSePersonal, kanSeRegnskap, kanSkrive, useKonto, visFakturadelen } from "../konto";
 import { dato, iDag, kr, leggTilDager } from "../format";
 import { visDag } from "../uke";
 import { maaned } from "../lonn";
@@ -49,7 +49,14 @@ export function Oversikt() {
         <h1>Klienter</h1>
         {org.verifisering === "ny" && (
           <div className="melding info">
-            Byrået må være verifisert før klienter kan gi tilgang. <Link to="/verifisering">Verifiser nå</Link>
+            Byrået må være verifisert før klienter kan gi tilgang.{" "}
+            {org.orgnr ? (
+              <Link to="/verifisering">Verifiser nå</Link>
+            ) : (
+              <>
+                Det krever organisasjonsnummer: <Link to="/innstillinger?fane=organisasjon">legg det inn</Link>.
+              </>
+            )}
           </div>
         )}
         <p className="dempet">Klienter som har gitt {org.navn} tilgang. Velg en klient for å se fakturaene.</p>
@@ -154,10 +161,18 @@ export function Oversikt() {
           </div>
         )}
       </div>
-      {faktura && org?.verifisering === "ny" && (
+      {faktura && org?.verifisering === "ny" && org.orgnr && (
         <div className="melding info">
           Organisasjonen er ikke verifisert ennå. Til den er det, kan dere sende opptil 20 fakturaer og 50 000 kr per måned.{" "}
           <Link to="/verifisering">Verifiser nå</Link>
+        </div>
+      )}
+      {/* Uten organisasjonsnummer (privatperson): bare Faktura, og ingen verifisering (0119_uten_orgnr.sql). */}
+      {faktura && org?.verifisering === "ny" && !org.orgnr && (
+        <div className="melding info">
+          {org.type === "privatperson" ? "Du fakturerer som privatperson" : "Organisasjonen har ikke organisasjonsnummer"}: opptil 20
+          fakturaer og 50 000 kr per måned, og bare Faktura. Personal, Lønn og Regnskap krever organisasjonsnummer.{" "}
+          {erAdmin(org) && <Link to="/innstillinger?fane=organisasjon">Legg inn organisasjonsnummer</Link>}
         </div>
       )}
       {faktura && org?.verifisering === "sperret" && <div className="melding feil">Organisasjonen er sperret og kan ikke sende fakturaer.</div>}

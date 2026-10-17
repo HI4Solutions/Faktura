@@ -32,7 +32,7 @@ describe.skipIf(!process.env.DATABASE_URL)("de ansatte ser planen", () => {
 
   beforeAll(async () => {
     settLokalOppgavekjorer(async () => {});
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Planen Test AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Planen Test AS", orgnr: "811000701" })).data.id;
     await kall("PUT", `/api/org/${org}/lonn-oppsett`, { aktiv: true });
     for (const [navn, hvem, ekstra] of [
       ["Ola", ola, { stilling: "Helsesekretær", stillingsprosent: 80 }],

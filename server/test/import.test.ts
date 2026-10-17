@@ -16,7 +16,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Import av kunder og produkter", () =
   const kunder = async () => (await kall("GET", `/api/org/${org}/kunder`)).data as any[];
 
   beforeAll(async () => {
-    org = (await kall("POST", "/api/organisasjoner", { navn: "Import AS" })).data.id;
+    org = (await kall("POST", "/api/organisasjoner", { navn: "Import AS", orgnr: "811000426" })).data.id;
     a = (await kall("POST", `/api/org/${org}/kunder`, { navn: "Fjordline AS", orgnr: "923609016", epost: "a@fjordline.no", telefon: "22 22 22 22" })).data;
     await kall("POST", `/api/org/${org}/kunder`, { navn: "Bakeriet", epost: "post@bakeriet.no" });
     await kall("POST", `/api/org/${org}/kunder`, { type: "person", navn: "Kari Hansen" });
@@ -102,7 +102,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Import av kunder og produkter", () =
   });
 
   it("krever skrivetilgang og setter en grense på antall rader", async () => {
-    const fremmedOrg = (await kall("POST", "/api/organisasjoner", { navn: "Fremmed AS" }, fremmed)).data.id;
+    const fremmedOrg = (await kall("POST", "/api/organisasjoner", { navn: "Fremmed AS", orgnr: "811000434" }, fremmed)).data.id;
     expect((await kall("POST", `/api/org/${fremmedOrg}/kunder/importer`, { rader: [{ navn: "X" }] })).status).toBe(403);
     expect((await kall("POST", `/api/org/${org}/kunder/importer`, { rader: [] })).status).toBe(400);
     expect((await kall("POST", `/api/org/${org}/kunder/importer`, { rader: Array.from({ length: 5001 }, (_, i) => ({ navn: `K${i}` })) })).status).toBe(400);

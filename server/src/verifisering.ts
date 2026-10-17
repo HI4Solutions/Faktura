@@ -36,6 +36,9 @@ export function settBrreg(fn: typeof ekteHentEnhet, roller?: typeof ekteHentRoll
   hentEnhet = fn;
   if (roller) hentRoller = roller;
 }
+// Oppslaget når organisasjonsnummeret legges inn senere (api.ts), med testbedriftene fra
+// testmiljøet.
+export const slaOppEnhet = (nr: string) => hentEnhet(nr, true);
 
 // Rollene i Brreg, men uten å stoppe verifiseringen om oppslaget feiler.
 const rollerEllerIngen = (orgnr: string) => hentRoller(orgnr).catch((): Rolle[] => []);
@@ -340,7 +343,15 @@ export function adminRuter() {
 
   // Alt om én organisasjon: medlemmer, bruk, integrasjoner, kontonummerendringer og aktivitet.
   r.get("/organisasjoner/:id", async (c) => {
-    const d = (await somBetrodd(c.get("bruker").id, (db) => en(db, "select faktura.admin_organisasjon($1) as d", [id(c)])))?.d;
+    const d = await somBetrodd(c.get("bruker").id, async (db) => {
+      const d = (await en<{ d: any }>(db, "select faktura.admin_organisasjon($1) as d", [id(c)]))?.d;
+      // Med hvilke funksjoner som virker uten organisasjonsnummer (0119_uten_orgnr.sql).
+      if (Array.isArray(d?.funksjoner)) {
+        const uten = new Set((await alle<{ kode: string }>(db, "select kode from faktura.funksjoner where uten_orgnr")).map((f) => f.kode));
+        d.funksjoner = d.funksjoner.map((f: { kode: string }) => ({ ...f, uten_orgnr: uten.has(f.kode) }));
+      }
+      return d;
+    });
     if (!d) throw new ApiFeil(404, "Fant ikke organisasjonen");
     return c.json(d);
   });

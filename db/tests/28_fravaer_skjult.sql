@@ -20,7 +20,7 @@ select id as eier from faktura.registrer_bruker('uid-fskjult-eier', 'eier-fskjul
 select id as regn from faktura.registrer_bruker('uid-fskjult-regn', 'regn-fskjult@test.no', 'Rolf Regnskap') \gset
 select id as kari_b from faktura.registrer_bruker('uid-fskjult-kari', 'kari-fskjult@test.no', 'Kari Kake') \gset
 select set_config('app.bruker_id', :'eier', false);
-select id as org from faktura.opprett_organisasjon('Fravær AS') \gset
+select id as org from faktura.opprett_organisasjon('Fravær AS', '923609016') \gset
 insert into faktura.lonn_oppsett (org_id, aktiv) values (:'org', true);
 insert into faktura.ansatte (org_id, fornavn, etternavn) values (:'org', 'Kari', 'Kake') returning id as kari \gset
 insert into faktura.ansatte (org_id, fornavn, etternavn) values (:'org', 'Ola', 'Olsen') returning id as ola \gset

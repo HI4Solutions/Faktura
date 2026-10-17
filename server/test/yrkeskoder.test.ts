@@ -62,7 +62,7 @@ describe.skipIf(!process.env.DATABASE_URL)("yrkeskodene i appen", () => {
     let feiler = false;
     settKlassFetch(async () => (feiler ? new Response("", { status: 500 }) : new Response(JSON.stringify({ codes: KODER }), { status: 200 })));
     feiler = true;
-    const org = (await app.request("/api/organisasjoner", { method: "POST", headers: { authorization: eier, "content-type": "application/json" }, body: JSON.stringify({ navn: "Yrke AS" }) }).then((r) => r.json()) as any).id;
+    const org = (await app.request("/api/organisasjoner", { method: "POST", headers: { authorization: eier, "content-type": "application/json" }, body: JSON.stringify({ navn: "Yrke AS", orgnr: "811000981" }) }).then((r) => r.json()) as any).id;
     const nede = await kall(`/api/org/${org}/ansatte/yrkeskoder?sok=syk`);
     expect(nede.status).toBe(503);
     expect(nede.data.error).toBe("Fikk ikke hentet yrkeskatalogen fra SSB. Skriv yrkeskoden (7 siffer) selv, eller prøv igjen senere.");
