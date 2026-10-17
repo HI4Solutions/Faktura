@@ -104,6 +104,20 @@ describe("sjekken av Maskinporten-klienten (scripts/maskinporten.mjs)", () => {
     expect(tekst).not.toContain("av 9 scopes virker");
   });
 
+  it("like feil med hver sin trace_id (slik Maskinporten svarer) gir én forklaring", async () => {
+    let n = 0;
+    const hent = (async () =>
+      new Response(
+        JSON.stringify({ error: "invalid_grant", error_description: `Invalid assertion. Client authentication failed. Invalid JWT signature. (trace_id: ${++n}abc)` }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+    const r = await sjekk({ miljo: "prod", klientId: "klient-1", kid: "medinnova-prod-1", nokkel, url: URL_PROD, hent });
+    const tekst = r.linjer.join("\n");
+    expect(tekst).toContain("✗ Alle scopene feilet: invalid_grant: Invalid assertion. Client authentication failed. Invalid JWT signature. (trace_id: 1abc)");
+    expect(tekst).toContain("stemmer ikke med klienten i Samarbeidsportalen for produksjon");
+    expect(tekst).not.toContain("(trace_id: 2abc)");
+  });
+
   it("uten svar fra Maskinporten", async () => {
     const hent = (async () => {
       throw new Error("getaddrinfo ENOTFOUND maskinporten.no");

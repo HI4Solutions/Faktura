@@ -92,7 +92,9 @@ export async function sjekk({ miljo, klientId, kid, nokkel, url = MASKINPORTEN[m
   const feilet = svar.filter((s) => s.feil);
   const linjer = [`Maskinporten ${navn} (${url}), klient ${klientId}, nøkkel-ID ${kid}`, ""];
   const f = feilet[0]?.feil;
-  if (feilet.length === svar.length && feilet.every((s) => s.feil.kode === f.kode && s.feil.tekst === f.tekst)) {
+  // Maskinporten legger en ny trace_id i hver feilmelding; den teller ikke når feilene sammenlignes.
+  const uten = (t) => t.replace(/\s*\(trace_id:[^)]*\)/g, "");
+  if (feilet.length === svar.length && feilet.every((s) => s.feil.kode === f.kode && uten(s.feil.tekst) === uten(f.tekst))) {
     linjer.push(`✗ Alle scopene feilet: ${f.kode}${f.tekst ? `: ${f.tekst}` : ""}`);
     if (KLIENTFEIL.has(f.kode))
       linjer.push(
@@ -107,6 +109,8 @@ export async function sjekk({ miljo, klientId, kid, nokkel, url = MASKINPORTEN[m
     }
     linjer.push("", `${svar.length - feilet.length} av ${svar.length} scopes virker.`);
     if (feilet.some((s) => s.feil.kode === "invalid_scope")) linjer.push(MANGLER_SCOPE);
+    if (feilet.some((s) => KLIENTFEIL.has(s.feil.kode)))
+      linjer.push(`${feilet.find((s) => KLIENTFEIL.has(s.feil.kode)).feil.kode}: klient-ID-en, nøkkelen eller nøkkel-ID-en (kid) stemmer ikke med klienten i Samarbeidsportalen.`);
   }
   return { ok: feilet.length === 0, linjer };
 }
