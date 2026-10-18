@@ -22,9 +22,15 @@ bygges ikke; filene publiseres som de er.
 ## Arkene
 
 Toppen, hver del av forsiden, dokumentet på de juridiske sidene og bunnen er egne ark på bordet,
-med luft mellom. Toppen står fast øverst, og lenkene står til høyre ved «Logg inn» og «Opprett
-konto» når skjermen er minst 1100 px bred. Da viker skjemakoden «AK-1 · utg. 10.2026», som bare
-står på mellomstore skjermer; hvert ark har uansett «AK-1 · Side n av 10» øverst til høyre.
+med luft mellom. Toppen står fast øverst, med knappene «Logg inn» og «Opprett konto» til høyre på
+alle skjermer. Lenkene til delene står ved knappene når skjermen er minst 1140 px bred. Da viker
+skjemakoden «AK-1 · utg. 10.2026», som bare står på mellomstore skjermer; hvert ark har uansett
+«AK-1 · Side n av 10» øverst til høyre. På telefon blir logoen og teksten i knappene mindre, så alt
+står på én linje (knappene er like høye), og under 343 px står symbolet alene.
+
+Ingen side skal være bredere enn skjermen, heller ikke på en telefon som er 320 px bred. Tittelen på
+forsiden krymper på de smaleste telefonene, så «administrasjonen.» får plass, og lange ord i
+overskriftene har myke bindestreker (`personopplysnings&shy;sikkerheten`), så de deles pent.
 
 På forsiden har hvert ark sin plass (`.blad`) og sin egen høyde, med god luft mellom arkene og over
 det første (`--mellom`, 40–96 px etter skjermbredden). Siden ruller fritt. En periode snappet den til
