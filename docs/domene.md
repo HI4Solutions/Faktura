@@ -15,15 +15,15 @@ Domenene står i Terraform (`infra/terraform/variables.tf`):
 |---|---|---|---|
 | `app_domain` | Hoveddomenet. Lenkene i e-post og varsler peker hit, og Altinn-forespørslene (som lages i bakgrunnen) sender brukeren hit. | `APP_URL` | `adminkonsoll.no` (steg 2: `app.adminkonsoll.no`) |
 | `app_domains` | Andre domener den samme appen svarer på fullt ut (brukes under en flytting). | `ANDRE_APP_URLER` | `app.adminkonsoll.no` (steg 2: –) |
-| `nettsted_domene` | Nettstedet (`landingsside/`). Passkeys hører til dette domenet når appen ligger på et underdomene av det. | `NETTSTED_URL` | `adminkonsoll.no` |
+| `nettsted_domene` | Nettstedet (`landingsside/`), med appen under `/app` ved siden av (steg 2). Passkeys hører til dette domenet når appen ligger på et underdomene av det. | `NETTSTED_URL` | `adminkonsoll.no` |
 | `gamle_domener` | Domener appen er flyttet fra. De virker fortsatt, men appen viser «Admin Konsoll har ny adresse». | `GAMLE_APP_URLER` | – |
 | `domene_omdirigeringer` | Domener som bare sender videre (301, samme sti). | – | `www.adminkonsoll.no` → `adminkonsoll.no` |
 
 Firebase Hosting har to sider i prosjektet: standardsiden (`hi4-faktura-prod`) med nettstedet og
 appens egen side (`hi4-faktura-prod-app`). `nettsted_domene` ligger på standardsiden og appens domener
 på appens side (`infra/terraform/auth_hosting.tf`); et domene flyttes aldri mellom sidene. Alle
-domenene er autoriserte domener i Identity Platform og godkjente henvisere for nøkkelen til Google
-Picker. Output `dns_for_domener` i loggen fra Infrastruktur-jobben viser DNS-oppføringene Firebase
+domenene, også nettstedets (der appen ligger under `/app`), er autoriserte domener i Identity Platform
+og godkjente henvisere for nøkkelen til Google Picker. Output `dns_for_domener` i loggen fra Infrastruktur-jobben viser DNS-oppføringene Firebase
 vil ha, `domenestatus` om domenet peker riktig (`HOST_ACTIVE`), er bekreftet (`OWNERSHIP_ACTIVE`) og
 har sertifikat (`CERT_ACTIVE`), og `hosting_sider` hvilken side hvert domene ligger på.
 
@@ -64,8 +64,11 @@ e-postleverandøren, ellers havner den i søppelposten når regelen skjerpes. Re
 
 ## Tilbakeadressene hos tjenestene
 
-Tilbakeadressene følger domenet brukeren er på i appen. Mens appen svarer på både `adminkonsoll.no` og
-`app.adminkonsoll.no` (steg 1), må begge stå der det står en liste.
+Tilbakeadressene følger domenet brukeren er på i appen. Appen svarer på både `adminkonsoll.no` og
+`app.adminkonsoll.no`, i steg 1 som appen alene og i steg 2 under `/app` ved siden av nettstedet, så
+begge må stå der det står en liste. Stien er den samme på begge (nettstedet åpner appen for adresser
+det ikke har selv, så `/bank/tilbake` blir `/app/bank/tilbake`). På testflaten gjelder det samme for
+`test.adminkonsoll.no` og `app.test.adminkonsoll.no`.
 
 - **Google OAuth-klienten** (Google Disk, `GOOGLE_OAUTH_CLIENT_ID`), i Google Cloud Console under
   APIs & Services → Credentials: `https://adminkonsoll.no` og `https://app.adminkonsoll.no` under
@@ -89,28 +92,31 @@ Tilbakeadressene følger domenet brukeren er på i appen. Mens appen svarer på 
 
 Nettstedet i `landingsside/` (landingssiden, personvernerklæringen, bruksvilkårene,
 databehandleravtalen, underleverandørene og informasjonskapslene) skal ligge på `adminkonsoll.no`,
-og appen på `app.adminkonsoll.no`. Rull ut publiserer begge (`scripts/publiser-hosting.sh`):
+med appen under `adminkonsoll.no/app` ved siden av, og appen får også sitt eget domene,
+`app.adminkonsoll.no`. Rull ut publiserer begge (`scripts/publiser-hosting.sh`):
 
 | | Standardsiden (`<prosjekt>`) | Appens side (`<prosjekt>-app`) |
 |---|---|---|
 | Steg 1: appen på begge domenene | Appen, med de juridiske sidene ved siden av (`/vilkar.html` osv.). Nettstedet ligger i forhåndsvisningskanalen «nettsted»; adressen står i loggen fra Rull ut. | Appen |
-| Steg 2: appen bare på `app.` | Nettstedet | Appen |
+| Steg 2: nettstedet på `adminkonsoll.no` | Nettstedet, med appen under `/app` | Appen |
 
-Nettstedet sender alt det ikke har selv, videre til API-et, og API-et sender GET-forespørsler som
-ikke er `/api/...` til appens hoveddomene med samme sti og spørring (301). Gamle bokmerker, lenker i
-e-post som er sendt før flyttingen og tilbakeadresser som fortsatt står på `adminkonsoll.no` (banken,
-Google og Altinn), havner dermed i appen. API-kallene (`/api/...`) svarer på begge domenene, så en
-appversjon som ikke er oppdatert ennå, virker til den er det. `www.adminkonsoll.no` sender fortsatt
-til `adminkonsoll.no`.
+I steg 2 åpner «Logg inn» og «Opprett konto» appen under `/app` på samme domene som nettstedet. Den som
+har lagt nettstedet på Hjem-skjermen, logger dermed inn og bruker appen inne i snarveien (et annet
+domene åpner iPhone som en ny side oppå snarveien), og er man logget inn, går snarveien rett til
+appen ([landingsside/README.md](../landingsside/README.md), «Hjem-skjermen»). Alt nettstedet ikke har
+selv, åpner appen der: gamle bokmerker, lenker i e-post fra før flyttingen og tilbakeadressene fra
+banken, Google og Altinn (`/bank/tilbake` blir `/app/bank/tilbake`, `web/src/appsti.ts`). API-kallene
+(`/api/...`) svarer på begge domenene. Forhåndsvisningen av nettstedet i steg 1 har ikke appen; der
+sender API-et GET-forespørsler nettstedet ikke har, til appens hoveddomene med samme sti og spørring
+(301). `www.adminkonsoll.no` sender fortsatt til `adminkonsoll.no`.
 
 Passkeys hører til `adminkonsoll.no` også når appen ligger på `app.adminkonsoll.no`
-(`passkeyDomene` i `server/src/passkey.ts`), så de som er laget før flyttingen, virker etterpå. Det
-gjør ikke innloggingen i nettleseren: på `app.adminkonsoll.no` logger brukeren inn på nytt, installerer
-appen på nytt fra den adressen og slår på varsler og applås igjen. Nettstedet har en `sw.js` som
-fjerner den gamle appens service worker og hurtigbuffer hos dem som hadde appen på `adminkonsoll.no`.
-Den som åpner appen fra Hjem-skjermen etter steg 2, får nettstedet, som viser en side om at appen
-ligger på `app.adminkonsoll.no`, med knappen «Åpne appen» og stegene for å legge den på Hjem-skjermen
-([landingsside/README.md](../landingsside/README.md), «Hjem-skjermen»).
+(`passkeyDomene` i `server/src/passkey.ts`), så de virker på begge domenene. Innloggingen i
+nettleseren gjelder ett domene om gangen: på `app.adminkonsoll.no` logger brukeren inn for seg, og
+installerer appen, varslene og applåsen der for seg. På `adminkonsoll.no` beholder brukeren alt etter
+steg 2, for appen under `/app` er på samme domene: innloggingen, service workeren (`sw.js`, med
+`/app/index.html` som skall) og varslene, og snarveien fra steg 1 åpner forsiden, eller appen når man
+er logget inn.
 
 **Steg 1** (`app_domains = ["app.adminkonsoll.no"]` i `infra/terraform/miljo/produksjon.tfvars`):
 
@@ -122,13 +128,14 @@ ligger på `app.adminkonsoll.no`, med knappen «Åpne appen» og stegene for å 
    der, og prøv appen på `https://app.adminkonsoll.no`.
 
 **Steg 2**, når steg 1 virker: sett `app_domain = "app.adminkonsoll.no"` og `app_domains = []` i
-`produksjon.tfvars`, og kjør Infrastruktur og Rull ut. Nå får standardsiden nettstedet, lenkene i e-post
-og varsler peker til `app.adminkonsoll.no`, og den som åpner `adminkonsoll.no/<noe>`, sendes til
-appen. Trykk «Oppdater i Altinn» under Plattform → Drift, så Altinn har den nye tilbakeadressen.
-Adressene på `adminkonsoll.no` hos Google og bankene kan fjernes når ingen bruker dem lenger.
+`produksjon.tfvars`, og kjør Infrastruktur og Rull ut. Nå får standardsiden nettstedet med appen under
+`/app`, lenkene i e-post og varsler peker til `app.adminkonsoll.no`, og den som åpner
+`adminkonsoll.no/<noe>`, får appen der (`/app/<noe>`). Trykk «Oppdater i Altinn» under Plattform →
+Drift, så Altinn har tilbakeadressene på begge domenene. Adressene på `adminkonsoll.no` hos Google og
+bankene skal stå: appen under `/app` bruker dem.
 
-Testflaten har tatt begge stegene (`miljo/test.tfvars`): nettstedet ligger på `test.adminkonsoll.no`
-og appen på `app.test.adminkonsoll.no`. Nettstedet på testflaten har `X-Robots-Tag: noindex`, så det
+Testflaten har tatt begge stegene (`miljo/test.tfvars`): nettstedet ligger på `test.adminkonsoll.no`,
+med appen under `test.adminkonsoll.no/app`, og appen på `app.test.adminkonsoll.no`. Nettstedet på testflaten har `X-Robots-Tag: noindex`, så det
 ikke havner i søkemotorene. Produksjon står på steg 1 til lanseringen, så `adminkonsoll.no` har
 appen, og nettstedet ligger bare i forhåndsvisningskanalen.
 

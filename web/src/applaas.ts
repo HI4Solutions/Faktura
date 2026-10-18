@@ -22,6 +22,8 @@ export interface Laas {
 
 const NOKKEL = "faktura.applaas";
 const SIST_AKTIV = "faktura.sist-aktiv";
+// Hvem som er logget inn. Nettstedet leser den også (landingsside/nettsted.js): åpnet fra Hjem-skjermen
+// går det rett til appen på samme domene når noen er logget inn.
 const INNLOGGET = "faktura.innlogget";
 const ENDRET = "faktura-applaas";
 

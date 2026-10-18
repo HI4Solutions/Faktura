@@ -17,6 +17,7 @@ import { api } from "../api";
 import { ModulValg, modulnavn, opplisting, useModuler } from "../moduler";
 import { KONTO_SLETTET, SlettKontoDialog } from "../slettKonto";
 import { forberedPasskey, loggInnMedPasskey, passkeyFeil, stotterPasskey, venterAllerede } from "../passkey";
+import { appAdresse } from "../appsti";
 
 const feiltekst: Record<string, string> = {
   "auth/invalid-credential": "Feil e-post eller passord.",
@@ -122,7 +123,7 @@ export function Innlogging() {
         // viser hvordan det gikk.
         fullforRegistrering(user, navn.trim(), valgte);
       } else {
-        await sendPasswordResetEmail(auth, epost, { url: window.location.origin });
+        await sendPasswordResetEmail(auth, epost, { url: appAdresse() });
         settInfo("Hvis adressen har en konto, har vi sendt en lenke for å lage nytt passord.");
       }
     } catch (err) {

@@ -21,13 +21,16 @@ resource "google_identity_platform_config" "auth" {
   project  = var.project_id
 
   autodelete_anonymous_users = true
-  authorized_domains = distinct(concat([
+  # Også nettstedets domene: der ligger appen under /app (scripts/publiser-hosting.sh), og e-postene
+  # fra Identity Platform (glemt passord, bekreftelsen) sender brukeren tilbake dit.
+  authorized_domains = distinct(compact(concat([
     "localhost",
     "${var.project_id}.firebaseapp.com",
     "${var.project_id}.web.app",
     "${google_firebase_hosting_site.appen.site_id}.firebaseapp.com",
     "${google_firebase_hosting_site.appen.site_id}.web.app",
-  ], local.app_domener))
+    var.nettsted_domene,
+  ], local.app_domener)))
 
   sign_in {
     allow_duplicate_emails = false
@@ -271,9 +274,10 @@ resource "google_apikeys_key" "picker" {
     api_targets {
       service = "picker.googleapis.com"
     }
+    # Appens domener og nettstedets, der appen ligger under /app.
     browser_key_restrictions {
       allowed_referrers = concat(
-        [for d in local.app_domener : "https://${d}/*"],
+        [for d in distinct(compact(concat(local.app_domener, [var.nettsted_domene]))) : "https://${d}/*"],
         [
           "https://${google_firebase_hosting_site.standard.site_id}.web.app/*",
           "https://${google_firebase_hosting_site.appen.site_id}.web.app/*",

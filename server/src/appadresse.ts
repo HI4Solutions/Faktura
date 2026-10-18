@@ -1,13 +1,24 @@
 // Appens adresser: hoveddomenet (APP_URL) og de andre domenene den samme appen svarer på
 // (ANDRE_APP_URLER), f.eks. det nye domenet før det blir hoveddomenet, eller det gamle etter
-// flyttingen. Innloggingen i nettleseren gjelder ett domene om gangen, så det brukeren gjør der
-// (passkeys, tilbakeadressene fra banken, Altinn og Google) følger adressen brukeren er på.
-// Lenkene i e-post og varsler peker alltid til hoveddomenet.
+// flyttingen, og nettstedets domene (NETTSTED_URL), der appen ligger under /app ved siden av
+// nettstedet (scripts/publiser-hosting.sh), så «Logg inn» på nettstedet åpner appen på samme domene.
+// Innloggingen i nettleseren gjelder ett domene om gangen, så det brukeren gjør der (passkeys,
+// tilbakeadressene fra banken, Altinn og Google) følger adressen brukeren er på. Lenkene i e-post og
+// varsler peker alltid til hoveddomenet.
 import type { Context } from "hono";
 import { config } from "./config.js";
 
-// Hoveddomenet først, så de andre.
-export const appUrler = (): string[] => [...new Set([config.appUrl, ...config.andreAppUrler, ...config.gamleAppUrler])];
+const nettstedet = (): string[] => {
+  if (!config.nettstedUrl) return [];
+  try {
+    return [new URL(config.nettstedUrl).origin];
+  } catch {
+    return [];
+  }
+};
+
+// Hoveddomenet først, så de andre, de gamle og nettstedets.
+export const appUrler = (): string[] => [...new Set([config.appUrl, ...config.andreAppUrler, ...config.gamleAppUrler, ...nettstedet()])];
 
 const opprinnelse = (url: string | undefined): string | null => {
   if (!url) return null;

@@ -8,6 +8,7 @@ import {
   KontoProvider, erAdmin, erAnsatt, harFunksjon, kanLonn, kanPersonal, kanSeLonn, kanSePersonal, kanSeRegnskap, kanSkrive, timerOgFerie, useKonto, visFakturadelen, type Funksjon,
 } from "./konto";
 import { Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
+import { APP_STI } from "./appsti";
 import { BekreftEpost, BekreftLenke } from "./sider/Bekreftelse";
 import { NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { GodtaAvtaler } from "./avtaler";
@@ -903,7 +904,7 @@ function Innhold() {
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={APP_STI || undefined}>
       <KontoProvider>
         <Innhold />
         <PwaBannere />

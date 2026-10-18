@@ -1,20 +1,26 @@
 /* Admin Konsoll – service worker.
  *
- * Bygges av vite.config.ts, som setter inn VERSJON og FILER (app-skallet i dette bygget).
+ * Bygges av vite.config.ts, som setter inn VERSJON og FILER (filene i dette bygget).
  * - App-skallet lagres ved installasjon, så appen starter også uten nett. Skriftene er en del av
  *   skallet (de ligger i appen; ingenting hentes fra andre domener).
+ * - På nettstedets domene ligger appen under /app, ved siden av nettstedet, og siden appen starter
+ *   fra er /app/index.html: scripts/publiser-hosting.sh setter SKALL_SIDE der (docs/domene.md).
  * - API-et (/api/…) går alltid rett til nettet og lagres aldri: det er personopplysninger.
  * - Push-varsler vises som systemvarsler; et trykk åpner riktig side i appen.
  */
 const VERSJON = "__VERSJON__";
 const FILER = __FILER__;
+// Siden appen starter fra (app-skallet). Linjen skrives om av scripts/publiser-hosting.sh.
+const SKALL_SIDE = "/";
+// Stien appen ligger under: "" på appens eget domene, "/app" på nettstedets.
+const APP_STI = SKALL_SIDE === "/" ? "" : SKALL_SIDE.replace(/\/index\.html$/, "");
 const SKALL = `skall-${VERSJON}`;
 const KONFIG = "konfig-v1";
 // Skriftene fra Google Fonts som eldre versjoner lagret; de slettes.
 const GAMLE = ["fonter-v1"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(SKALL).then((c) => c.addAll(FILER)));
+  e.waitUntil(caches.open(SKALL).then((c) => c.addAll([SKALL_SIDE, ...FILER])));
   // En ny versjon venter til brukeren trykker «Oppdater» (se OPPDATER under), så ingen
   // mister noe de holder på med. Første gang er det ingen å vente på.
 });
@@ -48,12 +54,13 @@ self.addEventListener("fetch", (e) => {
   }
 });
 
-// Sider: nettet først (alltid nyeste versjon), app-skallet når man er frakoblet.
+// Sider: nettet først (alltid nyeste versjon), app-skallet når man er frakoblet (også for nettstedets
+// sider på nettstedets domene: uten nett er det appen som virker).
 async function side(req) {
   try {
     return await fetch(req);
   } catch {
-    return (await caches.match("/", { cacheName: SKALL })) || (await caches.match("/")) || Response.error();
+    return (await caches.match(SKALL_SIDE, { cacheName: SKALL })) || (await caches.match(SKALL_SIDE)) || Response.error();
   }
 }
 
@@ -105,20 +112,28 @@ self.addEventListener("push", (e) => {
   e.waitUntil(self.registration.showNotification(d.tittel || "Admin Konsoll", valg));
 });
 
+// Et vindu med appen: på nettstedets domene kan et vindu vise nettstedet i stedet.
+const iAppen = (adresse) => {
+  const u = new URL(adresse);
+  return u.origin === self.location.origin && (!APP_STI || u.pathname === APP_STI || u.pathname.startsWith(`${APP_STI}/`));
+};
+
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
+  // Varselet har stien i appen (f.eks. /fakturaer/<id>), uten /app foran.
   const url = new URL((e.notification.data && e.notification.data.url) || "/", self.location.origin);
   if (url.origin !== self.location.origin) return; // bare egne sider
   e.waitUntil(
     (async () => {
       const vinduer = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      const vindu = vinduer.find((v) => new URL(v.url).origin === self.location.origin);
+      const vindu = vinduer.find((v) => iAppen(v.url));
       if (vindu) {
         await vindu.focus();
         vindu.postMessage({ type: "NAVIGER", url: url.pathname + url.search });
         return;
       }
-      await self.clients.openWindow(url.href);
+      const sti = APP_STI && url.pathname === "/" ? APP_STI : `${APP_STI}${url.pathname}`;
+      await self.clients.openWindow(`${self.location.origin}${sti}${url.search}`);
     })(),
   );
 });

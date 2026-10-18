@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 import { sendEmailVerification, updateProfile, type User } from "firebase/auth";
 import { api, ApiFeil } from "./api";
 import { hentAuth } from "./firebase";
+import { appAdresse } from "./appsti";
 
 export type Sending = { status: "sender" } | { status: "sendt"; til: string } | { status: "bekreftet" } | { status: "feil"; melding: string };
 
@@ -44,7 +45,7 @@ export async function sendBekreftelse(): Promise<Sending> {
       console.warn("Serveren sendte ikke lenken; Identity Platform sender den", e);
       try {
         if (!a.currentUser) throw e;
-        await sendEmailVerification(a.currentUser, { url: window.location.origin });
+        await sendEmailVerification(a.currentUser, { url: appAdresse() });
         svar = { status: "sendt", til };
       } catch (f) {
         svar = { status: "feil", melding: firebaseFeil[(f as { code?: string }).code ?? ""] ?? "Vi fikk ikke sendt lenken. Prøv igjen om litt." };

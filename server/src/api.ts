@@ -1410,10 +1410,11 @@ export function lagApi() {
 
   api.route("/org/:org", org);
   app.route("/api", api);
-  // Nettstedet sender adresser det ikke har selv hit (landingsside/firebase.json): gamle lenker til
-  // appen fra før den fikk sitt eget domene (e-post, bokmerker, banken, Altinn og varsler) sendes
-  // videre til appen med samme sti og spørring. API-adressene svarer som før, og forespørsler fra
-  // appens egne domener sendes ikke i ring.
+  // Adresser nettstedet ikke har selv, når det ligger alene (forhåndsvisningen, landingsside/firebase.json):
+  // gamle lenker til appen (e-post, bokmerker, banken, Altinn og varsler) sendes videre til appen med
+  // samme sti og spørring. På nettstedets domene ligger appen under /app, og der åpner slike adresser
+  // appen selv (scripts/publiser-hosting.sh). API-adressene svarer som før, og forespørsler fra
+  // appens egne domener (også nettstedets, appadresse.ts) sendes ikke i ring.
   app.notFound((c) => {
     const sti = c.req.path;
     const vert = c.req.header("x-forwarded-host")?.split(",")[0]?.trim().replace(/:\d+$/, "");

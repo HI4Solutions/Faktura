@@ -4,6 +4,7 @@ import { hentAuth } from "./firebase";
 import { hent } from "./api";
 import { slaAvVarsler, synkAbonnement } from "./pwa";
 import { huskInnlogget } from "./applaas";
+import { APP_STI } from "./appsti";
 
 export interface MinOrg {
   id: string;
@@ -127,11 +128,14 @@ export function KontoProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Varsler inneholder kundenavn og beløp: en enhet man logger ut av, skal ikke få flere.
+  // Varsler inneholder kundenavn og beløp: en enhet man logger ut av, skal ikke få flere. Ligger appen
+  // under /app på nettstedets domene (appsti.ts), kommer man tilbake til nettstedet.
   const loggUt = async () => {
     await slaAvVarsler().catch(() => {});
     await signOut(await hentAuth());
     settMeg(null);
+    huskInnlogget(null); // før nettstedet åpnes, så det ikke sender tilbake til appen
+    if (APP_STI) window.location.assign("/");
   };
 
   // Varsler på enheten først når kontoen er godkjent.

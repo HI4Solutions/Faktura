@@ -14,7 +14,7 @@ function filerI(mappe: string, prefiks = ""): string[] {
   });
 }
 
-// Lager /sw.js fra malen sw.js: versjonen (hash av bygget) og app-skallet settes inn,
+// Lager /sw.js fra malen sw.js: versjonen (hash av bygget) og filene i bygget settes inn,
 // så en ny utrulling gir en ny service worker som rydder bort det gamle.
 function serviceWorker(): Plugin {
   return {
@@ -29,7 +29,9 @@ function serviceWorker(): Plugin {
         hash.update(navn).update(del.type === "chunk" ? del.code : del.source);
       }
       for (const f of offentlige.sort()) hash.update(f).update(readFileSync(join(her, "public", f)));
-      const filer = ["/", ...offentlige.map((f) => `/${f}`), ...bygget.map((f) => `/${f}`)];
+      // Siden appen starter fra (SKALL_SIDE) står i malen, så den kan settes til /app/index.html der
+      // appen ligger på nettstedets domene (scripts/publiser-hosting.sh).
+      const filer = [...offentlige.map((f) => `/${f}`), ...bygget.map((f) => `/${f}`)];
       const kilde = readFileSync(join(her, "sw.js"), "utf8")
         .replace("__VERSJON__", hash.digest("hex").slice(0, 12))
         .replace("__FILER__", JSON.stringify(filer));

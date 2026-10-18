@@ -5,7 +5,7 @@ Admin Konsoll kjører i to installasjoner, hver i sitt prosjekt i Google Cloud:
 | | Produksjon | Testflaten |
 |---|---|---|
 | Prosjekt | `hi4-faktura-prod` | `hi4-faktura-test` |
-| Adresse | adminkonsoll.no (appen; nettstedet kommer hit ved lanseringen) | app.test.adminkonsoll.no (appen) og test.adminkonsoll.no (nettstedet) |
+| Adresse | adminkonsoll.no (appen; nettstedet kommer hit ved lanseringen) | app.test.adminkonsoll.no (appen) og test.adminkonsoll.no (nettstedet, med appen under /app) |
 | Data | Ekte bedrifter, brukere og fakturaer | Testbedrifter fra Tenor og oppdiktede personer |
 | Skatteetaten, Altinn og NAV | Produksjon når det er satt opp (`SKATTEETATEN_MILJO`) | Alltid testmiljøene (Maskinporten-test og TT02) |
 | Variablene i GitHub | Repoet | Miljøet «test» (går foran repoet) |

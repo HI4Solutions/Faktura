@@ -3,14 +3,17 @@
 // logoen, arket med hullrader og bunnen med de juridiske sidene. Stilene ligger i blankett.css.
 import { useEffect, type ReactNode } from "react";
 import { Logo } from "./Logo";
+import { APP_STI } from "./appsti";
 import { oppdaterTemafarge } from "./tema";
 import "./blankett.css";
 
-// Nettstedet: på app.<domene> ligger det på <domene>, og testprosjektets sider i Firebase Hosting
-// har det på standardsiden. Ellers ligger appen på nettstedets domene (før appen har flyttet,
+// Nettstedet: ligger appen under /app på nettstedets domene (appsti.ts), er det rett ved siden av, på
+// app.<domene> ligger det på <domene>, og testprosjektets sider i Firebase Hosting har det på
+// standardsiden. Ellers ligger appen alene på nettstedets domene (før appen har flyttet,
 // docs/domene.md), med de juridiske sidene ved siden av; da er det ingen egen side å lenke til.
-export function nettsted(sted: Pick<Location, "hostname" | "protocol" | "origin"> = window.location): { url: string; eget: boolean } {
+export function nettsted(sted: Pick<Location, "hostname" | "protocol" | "origin"> = window.location, appSti = APP_STI): { url: string; eget: boolean } {
   const { hostname, protocol, origin } = sted;
+  if (appSti) return { url: origin, eget: true };
   if (hostname.startsWith("app.")) return { url: `${protocol}//${hostname.slice(4)}`, eget: true };
   if (hostname.endsWith("-app.web.app")) return { url: `${protocol}//${hostname.replace(/-app\.web\.app$/, ".web.app")}`, eget: true };
   return { url: origin, eget: false };

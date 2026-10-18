@@ -18,14 +18,30 @@ const ANDRE = "https://faktura.gammel.test";
 const fra = (hoder: Record<string, string>) => ({ req: { header: (n: string) => hoder[n.toLowerCase()] } }) as unknown as Context;
 
 describe("appens adresser", () => {
-  const for_ = { appUrl: c.appUrl, andreAppUrler: c.andreAppUrler, gamleAppUrler: c.gamleAppUrler, googleClientSecret: c.googleClientSecret };
-  beforeEach(() => Object.assign(c, { appUrl: HOVED, andreAppUrler: [ANDRE], gamleAppUrler: [], googleClientSecret: "hemmelig" }));
+  const for_ = { appUrl: c.appUrl, andreAppUrler: c.andreAppUrler, gamleAppUrler: c.gamleAppUrler, nettstedUrl: c.nettstedUrl, googleClientSecret: c.googleClientSecret };
+  beforeEach(() => Object.assign(c, { appUrl: HOVED, andreAppUrler: [ANDRE], gamleAppUrler: [], nettstedUrl: undefined, googleClientSecret: "hemmelig" }));
   afterEach(() => Object.assign(c, for_));
 
   it("hoveddomenet først, så de andre og de gamle, uten dubletter", () => {
     expect(appUrler()).toEqual([HOVED, ANDRE]);
     c.gamleAppUrler = ["https://eldst.test", ANDRE];
     expect(appUrler()).toEqual([HOVED, ANDRE, "https://eldst.test"]);
+  });
+
+  it("nettstedets domene er med, for der ligger appen under /app", () => {
+    const NETTSTED = "https://nettsted.test";
+    c.nettstedUrl = NETTSTED;
+    expect(appUrler()).toEqual([HOVED, ANDRE, NETTSTED]);
+    expect(appUrlFra(fra({ origin: NETTSTED }))).toBe(NETTSTED);
+    expect(appUrlFra(fra({ referer: `${NETTSTED}/app/innstillinger?fane=bank` }))).toBe(NETTSTED);
+    expect(tilbakeUrl(appUrlFra(fra({ origin: NETTSTED })))).toBe(`${NETTSTED}/bank/tilbake`);
+    expect(systemdefinisjon().allowedRedirectUrls).toContain(`${NETTSTED}/skattekort/godkjent`);
+    // Før appen har flyttet er nettstedets domene hoveddomenet: ingen dublett. En ugyldig adresse
+    // tas ikke med.
+    c.nettstedUrl = `${HOVED}/`;
+    expect(appUrler()).toEqual([HOVED, ANDRE]);
+    c.nettstedUrl = "ikke en adresse";
+    expect(appUrler()).toEqual([HOVED, ANDRE]);
   });
 
   it("adressen brukeren er på: Origin, ellers Referer, ellers hoveddomenet", () => {

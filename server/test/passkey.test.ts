@@ -223,4 +223,27 @@ describe.skipIf(!harDb)("passkeys", () => {
       (config as any).andreAppUrler = for_;
     }
   });
+
+  // Appen ligger også under /app på nettstedets domene (docs/domene.md): en passkey laget på
+  // app.<domene> hører til <domene> og virker der, inne i snarveien på Hjem-skjermen.
+  it("passkeyen fra app.<domene> virker i appen på nettstedets domene", async () => {
+    const APP = "https://app.nettsted.test";
+    const NETTSTED = "https://nettsted.test";
+    const for_ = { andre: config.andreAppUrler, nettsted: config.nettstedUrl };
+    Object.assign(config as any, { andreAppUrler: [APP], nettstedUrl: NETTSTED });
+    try {
+      const a = new Autentikator();
+      const start = await kall("POST", "/api/passkeys/registrering/start", bruker, undefined, { origin: APP });
+      expect(start.data.valg.rp.id).toBe("nettsted.test");
+      const ferdig = await kall("POST", "/api/passkeys/registrering/fullfor", bruker, { utfordring_id: start.data.utfordring_id, svar: a.registrer(start.data.valg, APP) }, { origin: APP });
+      expect([ferdig.status, ferdig.data.rp_id]).toEqual([201, "nettsted.test"]);
+
+      const inn = await kall("POST", "/api/offentlig/passkey/start", null, undefined, { origin: NETTSTED });
+      expect(inn.data.valg.rpId).toBe("nettsted.test");
+      const ok = await kall("POST", "/api/offentlig/passkey/fullfor", null, { utfordring_id: inn.data.utfordring_id, svar: a.loggInn(inn.data.valg, NETTSTED, "nettsted.test") }, { origin: NETTSTED });
+      expect(ok).toEqual({ status: 200, data: { token: "custom-token-for-uid-pk" } });
+    } finally {
+      Object.assign(config as any, { andreAppUrler: for_.andre, nettstedUrl: for_.nettsted });
+    }
+  });
 });

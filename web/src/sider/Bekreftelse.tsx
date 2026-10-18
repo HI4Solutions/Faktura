@@ -8,6 +8,7 @@ import { hentAuth } from "../firebase";
 import { Feil, Laster } from "../felles";
 import { sendBekreftelse, useSending } from "../epostbekreftelse";
 import { EnkelBlankett } from "../blankett";
+import { APP_FORSIDE } from "../appsti";
 
 // Er adressen bekreftet (kanskje på en annen enhet)? Da hentes et nytt token, og appen lastes på
 // nytt med det.
@@ -149,11 +150,11 @@ export function BekreftLenke() {
   // Innlogget her: videre inn i appen av seg selv.
   useEffect(() => {
     if (tilstand !== "bekreftet" || !innlogget) return;
-    const t = window.setTimeout(() => window.location.replace("/"), 1500);
+    const t = window.setTimeout(() => window.location.replace(APP_FORSIDE), 1500);
     return () => window.clearTimeout(t);
   }, [tilstand, innlogget]);
 
-  const videre = () => window.location.replace("/");
+  const videre = () => window.location.replace(APP_FORSIDE);
   const tittel =
     tilstand === "bekrefter" ? "Bekrefter e-postadressen" : tilstand === "bekreftet" ? "E-postadressen er bekreftet" : tilstand === "brukt" ? "Lenken virker ikke lenger" : "Noe gikk galt";
   return (

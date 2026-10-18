@@ -65,6 +65,16 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run build
+      # Firebase Hosting satt sammen som i Rull ut, uten å publisere (scripts/publiser-hosting.sh):
+      # nettstedet med appen under /app (steg 2, som testflaten) og appen med de juridiske sidene
+      # (steg 1, som produksjon), så en feil i sammensettingen stopper her og ikke i utrullingen.
+      - name: Sett sammen Firebase Hosting (prøvekjøring)
+        working-directory: .
+        run: |
+          UT="$RUNNER_TEMP/steg2" MILJO=test APP_URL=https://app.test.adminkonsoll.no NETTSTED_URL=https://test.adminkonsoll.no bash scripts/publiser-hosting.sh
+          test -f "$RUNNER_TEMP/steg2/nettsted/app/index.html" && test -f "$RUNNER_TEMP/steg2/nettsted/index.html"
+          UT="$RUNNER_TEMP/steg1" APP_URL=https://adminkonsoll.no NETTSTED_URL=https://adminkonsoll.no bash scripts/publiser-hosting.sh
+          test -f "$RUNNER_TEMP/steg1/standard/dist/vilkar.html" && test -f "$RUNNER_TEMP/steg1/nettsted/index.html"
 
   terraform:
     name: Terraform fmt og validate

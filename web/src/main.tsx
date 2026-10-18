@@ -4,7 +4,10 @@ import { App } from "./App";
 import "./styles.css";
 import { startPwa } from "./pwa";
 import { startTema } from "./tema";
+import { leggTilAppSti } from "./appsti";
 
+// På nettstedets domene ligger appen under /app (appsti.ts): adressen får stien før ruteren leser den.
+leggTilAppSti();
 startTema();
 startPwa();
 
