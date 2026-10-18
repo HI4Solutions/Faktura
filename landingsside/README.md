@@ -52,6 +52,14 @@ plass over det, og forsvinner først da, så det ikke stikker fram over det nest
 Safari 26 har scroll-drevne animasjoner; i andre nettlesere (Firefox, eldre Safari) ruller arkene
 forbi som vanlig.
 
+Arkene som blir liggende, har hvit luft nederst: 30 % av høyden under toppen. Arket stopper når
+bunnen når bunnen av skjermen, og det neste dekker luften før teksten, så den siste teksten står et
+godt stykke over kanten (og over verktøylinjen nederst på telefonen) og kan leses før det neste arket
+kommer over den. Luften måles mot den minste skjermhøyden (`svh`), som står i ro når verktøylinjene i
+nettleseren kommer og går; med `dvh` ville arkene over endret høyde, og siden hoppet. Luften er bare
+med der arkene faktisk blir liggende: ikke på kontaktskjemaet, ikke i nettlesere uten scroll-drevne
+animasjoner, ikke med redusert bevegelse og ikke på utskrift.
+
 Kontaktskjemaet er det siste arket i bunken (`.bunke`) og blir ikke liggende: det neste dekker aldri
 feltene eller «Send», heller ikke når tastaturet på mobilen kommer opp og nettleseren ruller feltet
 fram. Underskriften («Ett skjema til») står utenfor bunken og ruller som vanlig.

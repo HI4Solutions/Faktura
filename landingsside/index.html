@@ -243,6 +243,13 @@ h1.stor .blaa { color: var(--ink); }
   @supports (animation-timeline: view()) {
     .bunke > .blad { view-timeline: --blad block; view-timeline-inset: var(--hode, 80px) 0; }
     .bunke > .blad:not(:last-child) > .ark { animation: under linear both; animation-timeline: --blad; animation-range: exit 0% exit calc(100% + var(--mellom)); }
+    /* Hvit luft nederst på arkene som blir liggende (30 % av flaten under toppen): arket stopper når
+       bunnen når bunnen av skjermen, og det neste dekker luften før teksten. Da står den siste teksten
+       et godt stykke over kanten (og over verktøylinjen nederst på telefonen), og kan leses før det
+       neste arket kommer over den. Målt mot den minste skjermhøyden (svh), som står i ro når
+       verktøylinjene i nettleseren kommer og går (med dvh ville arkene over endret høyde, og siden
+       hoppet). Bare på skjermen; på papir blir ingenting liggende. */
+    @media screen { .bunke > .blad:not(:last-child) > .ark { padding-bottom: max(clamp(28px, 4vw, 52px), calc((100svh - var(--hode, 80px)) * .3)); } }
   }
 }
 @keyframes under {
