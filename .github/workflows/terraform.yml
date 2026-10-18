@@ -53,6 +53,11 @@ jobs:
       TF_VAR_krav_og_frister: ${{ vars.KRAV_OG_FRISTER || 'false' }}
       # Årsregnskapet til Altinn (docs/aarsregnskap.md): av til scopene altinn:instances.* er på klienten.
       TF_VAR_aarsregnskap_innsending: ${{ vars.AARSREGNSKAP_INNSENDING || 'false' }}
+      # Mva-meldingen til Skatteetaten (docs/mva-innsending.md): på i testmiljøet (miljo/test.tfvars),
+      # av i produksjon til MVA_INNSENDING settes; vises når ID-porten-klienten er satt opp.
+      TF_VAR_mva_innsending: ${{ vars.MVA_INNSENDING || 'false' }}
+      TF_VAR_idporten_klient_id: ${{ vars.IDPORTEN_KLIENT_ID }}
+      TF_VAR_idporten_nokkel_id: ${{ vars.IDPORTEN_NOKKEL_ID }}
     steps:
       - name: Riktig miljø
         working-directory: .

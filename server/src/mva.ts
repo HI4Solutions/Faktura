@@ -14,14 +14,17 @@
 // på balansekontoen). Avgiften er posteringene på avgiftskontoene (koden på posteringen, ellers
 // kontoens kode). Oppgjøret føres i et bilag i
 // serie V: avgiftskontoene mot oppgjørskontoen (2740) med øredifferansen på 7740, og føres på nytt
-// når terminen endres. Den som fører regnskapet merker terminen som levert når meldingen er levert i
-// Altinn; endres den etterpå, sier appen fra.
+// når terminen endres. Meldingen sendes til Skatteetaten fra appen (mvaInnsending.ts), og terminen
+// merkes da som levert; ellers merker den som fører regnskapet terminen som levert når meldingen er
+// levert i Altinn. Endres terminen etterpå, sier appen fra.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { hentRegnskapsoppsett, mnd, plussMnd, regnskapskontoer, sisteDag, type Regnskapsoppsett, type Regnskapsrolle } from "./anlegg.js";
 import { alle, en, somBruker, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
+import { mvaInnsendingPaa } from "./idporten.js";
 import { pluss, virkedag } from "./lonnsberegning.js";
+import { merknadsvalg, type Avvik, type Betalingsinformasjon, type Merknad } from "./mvaMeldingXml.js";
 import type { Rapportdef } from "./rapportmodul.js";
 import { dato as visDato, kr } from "./regler.js";
 import { bokforSalgNaa } from "./salgBokforing.js";
@@ -31,7 +34,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const rund = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 // Hele kroner (halve kroner bort fra null).
 const krone = (n: number) => Math.sign(n) * Math.round(Math.abs(rund(n)));
-const osloIDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
+export const osloIDag = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo" }).format(new Date());
 
 // --- Terminene -------------------------------------------------------------------------------------
 
@@ -355,6 +358,58 @@ export async function mvaStatus(db: Db, org: string, t: Termin, iDag = osloIDag(
   };
 }
 
+// Den siste innsendingen av meldingen for terminen fra appen (mvaInnsending.ts), uten innloggingen og
+// Altinn-tokenet. linjer: linjene som ble sendt, med merknadene; startet_av: navnet; egen: brukeren
+// startet den selv.
+export type Mvainnsending = {
+  id: string;
+  linjer: (Mvalinje & { merknad: Merknad | null })[];
+  status: "innlogging" | "sender" | "sendt" | "mottatt" | "feil" | "avbrutt";
+  steg: string | null;
+  feil: string | null;
+  avvik: Avvik[] | null;
+  betaling: Betalingsinformasjon | null;
+  tilbakemelding: { status?: string | null; beskrivelse?: string | null; resultat?: string | null; melding?: string } | null;
+  har_kvittering: boolean;
+  sum: number;
+  opprettet: string;
+  sendt_at: string | null;
+  mottatt_at: string | null;
+  startet_av: string | null;
+  egen: boolean;
+};
+export async function sisteInnsending(db: Db, org: string, t: Pick<Termin, "aar" | "type" | "termin">): Promise<Mvainnsending | null> {
+  const rad = await en<Mvainnsending>(
+    db,
+    `select i.id, i.linjer, i.status, i.steg, i.feil, i.avvik, i.betaling, i.tilbakemelding, i.kvittering is not null as har_kvittering, i.sum::float8 as sum,
+            i.opprettet, i.sendt_at, i.mottatt_at, (select coalesce(u.navn, u.epost) from faktura.brukere u where u.id = i.startet_av) as startet_av,
+            i.startet_av is not distinct from faktura.bruker_id() as egen
+       from faktura.mva_innsendinger i
+      where i.org_id = $1 and i.aar = $2 and i.type = $3 and i.termin = $4
+      order by i.opprettet desc limit 1`,
+    [org, t.aar, t.type, t.termin],
+  );
+  return rad ?? null;
+}
+
+// Sendingen til Skatteetaten i én setning (rapporten): sendt eller mottatt, med betalingen, eller
+// feilen fra det siste forsøket.
+function innsendingTekst(i: Mvainnsending | null): string {
+  if (!i) return "";
+  const dag = (d: string | Date | null) => (d ? visDato(new Date(d).toLocaleDateString("sv-SE", { timeZone: "Europe/Oslo" })) : "");
+  if (i.status === "sendt" || i.status === "mottatt") {
+    const b = i.betaling;
+    const betal =
+      b?.belop && b.belop > 0
+        ? ` Betal ${kr(b.belop)} kr${b.konto ? ` til konto ${b.konto}` : ""}${b.kid ? ` med KID ${b.kid}` : ""}${b.frist ? ` innen ${visDato(b.frist)}` : ""}.`
+        : b?.belop && b.belop < 0
+          ? ` ${kr(-b.belop)} kr kommer tilbake fra Skatteetaten.`
+          : "";
+    return `Sendt til Skatteetaten ${dag(i.sendt_at)}${i.startet_av ? ` av ${i.startet_av}` : ""}${i.status === "mottatt" ? `, mottatt ${dag(i.mottatt_at)}` : ""}.${betal}`;
+  }
+  return i.status === "feil" && i.feil ? `Siste sending til Skatteetaten feilet: ${i.feil}` : "";
+}
+
 // Fører oppgjøret for terminen (eller på nytt når terminen er endret, eller angrer det når det ikke
 // er noe å gjøre opp). Gir bilaget som ble ført, eller null når oppgjøret stemte.
 export async function bokforOppgjor(db: Db, org: string, t: Termin, iDag = osloIDag()) {
@@ -416,7 +471,8 @@ const krev = (db: Db, org: string) => db.query("select faktura.krev($1, 'regnska
 const aarS = z.coerce.number({ error: "Ugyldig år" }).int("Ugyldig år").min(2000, "Ugyldig år").max(2100, "Ugyldig år");
 const terminS = z.coerce.number({ error: "Ugyldig termin" }).int("Ugyldig termin").min(1, "Ugyldig termin").max(12, "Ugyldig termin");
 
-async function terminFraSti(db: Db, c: Context) {
+// Terminen fra stien (:org/:aar/:termin), med årets terminlengde.
+export async function terminFraSti(db: Db, c: Context) {
   const o = await hentRegnskapsoppsett(db, orgId(c));
   const aar = aarS.parse(c.req.param("aar"));
   const termin = terminS.parse(c.req.param("termin"));
@@ -465,8 +521,13 @@ export function mvaRuter() {
         return {
           type: t.type,
           ...status,
+          // Merknadene en linje med motsatt fortegn kan forklares med (i meldingen fra appen og i Altinn).
+          linjer: status.linjer.map((l) => ({ ...l, merknad_valg: merknadsvalg(l) })),
           terminer: terminer.map((x) => (x.termin === t.termin ? { ...x, sum: status.sum, levert: status.levert !== null } : x)),
           laast_til: o.laast_til,
+          // Meldingen kan sendes til Skatteetaten fra appen (mvaInnsending.ts), og den siste sendingen.
+          innsending_paa: mvaInnsendingPaa(),
+          innsending: await sisteInnsending(db, orgId(c), t),
         };
       }),
     );
@@ -547,7 +608,7 @@ export const mvaRapporter: Rapportdef[] = [
     modul: "regnskap",
     navn: "Mva-melding",
     beskrivelse:
-      "Linjene i mva-meldingen for terminen, regnet fra bilagene: mva-koden, grunnlaget og satsen for utgående avgift, fradraget for inngående avgift, og summen å betale eller til gode, med fristen, oppgjøret og kontrollene.",
+      "Linjene i mva-meldingen for terminen, regnet fra bilagene: mva-koden, grunnlaget og satsen for utgående avgift, fradraget for inngående avgift, og summen å betale eller til gode, med fristen, oppgjøret, kontrollene og sendingen til Skatteetaten.",
     funksjon: "regnskap",
     tilgang: "regnskap",
     parameter: "termin",
@@ -558,9 +619,11 @@ export const mvaRapporter: Rapportdef[] = [
       const type = await terminType(db, org, v.aar, o.mva_termin);
       const t = type === "tomaaneder" ? lagTermin(v.aar, "tomaaneder", v.termin) : terminFor(`${v.aar}-${pad(v.termin * 2)}-01`, type);
       const s = await mvaStatus(db, org, t);
+      const inn = await sisteInnsending(db, org, t);
       const merknad = [
         `${t.navn}: ${s.sum >= 0 ? `${kr(s.sum)} kr å betale` : `${kr(-s.sum)} kr til gode`}, fristen er ${visDato(t.frist)}.`,
         s.levert ? `Levert ${visDato(s.levert.dato)}${s.endret ? ` med ${kr(s.levert.belop)} kr; endret etterpå, lever en korrigert melding.` : "."}` : s.over ? "Ikke levert." : "Terminen er ikke over.",
+        innsendingTekst(inn),
         s.oppgjor.bilag ? `Oppgjøret er bokført (${s.oppgjor.bilag.bilagsnummer})${s.oppgjor.stemmer ? "" : ", men terminen er endret etterpå"}.` : s.oppgjor.trengs && s.over ? "Oppgjøret er ikke bokført." : "",
         ...s.kontroller,
       ]

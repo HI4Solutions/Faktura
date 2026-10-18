@@ -25,6 +25,7 @@ import { Gjentakende } from "./sider/Gjentakende";
 import { SendFraPaaminnelse } from "./sider/Paaminnelser";
 import { Rapporter } from "./sider/Rapporter";
 import { BankTilbake, Innbetalinger } from "./sider/Bank";
+import { MvaIdporten } from "./sider/RegnskapMva";
 import { Ansatte } from "./sider/Ansatte";
 import { Timer } from "./sider/Timer";
 import { Vakter } from "./sider/Vakter";
@@ -809,6 +810,7 @@ function Ramme() {
             <Route path="/beskjeder" element={<Krever kode="ansatte" navn="Beskjeder"><Beskjeder /></Krever>} />
             <Route path="/sjekklister" element={<Krever kode="sjekklister" navn="Sjekklister"><Sjekklister /></Krever>} />
             <Route path="/lonn" element={<Krever kode="lonn" navn="Lønn og reiser"><Lonn /></Krever>} />
+            <Route path="/mva/idporten" element={<MvaIdporten />} />
             <Route path="/innstillinger" element={<Innstillinger />} />
             {meg?.plattformadmin && <Route path="/admin" element={<Admin />} />}
             <Route path="/invitasjon/:token" element={<Invitasjon />} />
@@ -833,6 +835,7 @@ function Ramme() {
             <Route path="/kunder/importer" element={<Krever kode="import" navn="Importer kunder"><Importer key="kunder" type="kunder" /></Krever>} />
             <Route path="/rapporter" element={<Krever kode={["rapporter", "ansatte", "lonn", "regnskap"]} navn="Rapporter"><Rapporter /></Krever>} />
             <Route path="/regnskap" element={<Krever kode="regnskap" navn="Regnskap"><Regnskap /></Krever>} />
+            <Route path="/mva/idporten" element={<Krever kode="regnskap" navn="Regnskap"><MvaIdporten /></Krever>} />
             <Route path="/produkter" element={<Produkter />} />
             <Route path="/produkter/importer" element={<Krever kode="import" navn="Importer produkter"><Importer key="produkter" type="produkter" /></Krever>} />
             <Route path="/ansatte" element={<Ansatte />} />

@@ -5,6 +5,12 @@ function valgfri(navn: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
+// Hemmeligheter fra Secret Manager: Terraform legger inn «ikke-satt» til den er lagt inn.
+function hemmelighet(navn: string): string | undefined {
+  const v = valgfri(navn);
+  return v && v !== "ikke-satt" ? v : undefined;
+}
+
 // Kommaseparerte adresser, uten skråstrek til slutt.
 function adresser(v: string | undefined): string[] {
   return (v ?? "")
@@ -118,6 +124,23 @@ export const config = {
   // til signering i Altinn. Adressen til Brønnøysunds app følger miljøet; den kan overstyres (tester).
   aarsregnskapInnsending: ["1", "true", "ja"].includes((valgfri("AARSREGNSKAP_INNSENDING") ?? "").toLowerCase()),
   brregAppUrl: valgfri("BRREG_APP_URL"),
+  // Mva-meldingen til Skatteetaten fra appen (docs/mva-innsending.md): den som sender, logger inn i
+  // ID-porten (Skatteetaten tar ikke imot mva-meldingen med systembruker ennå). På når
+  // ID-porten-klienten (leverandørens integrasjon i Digdirs selvbetjening) har fått scopene
+  // skatteetaten:mvameldingvalidering, altinn:instances.read og altinn:instances.write. Klienten
+  // logger inn med en privat RSA-nøkkel (PEM, med nøkkel-ID-en fra integrasjonen) eller med
+  // klienthemmeligheten; dem har bare workeren. Adressene (ID-porten, valideringen hos Skatteetaten og
+  // Skatteetatens app i Altinn) følger miljøet; de kan overstyres (tester).
+  mvaInnsending: ["1", "true", "ja"].includes((valgfri("MVA_INNSENDING") ?? "").toLowerCase()),
+  idportenKlientId: valgfri("IDPORTEN_KLIENT_ID"),
+  idportenNokkelId: valgfri("IDPORTEN_NOKKEL_ID"),
+  idportenNokkel: hemmelighet("IDPORTEN_NOKKEL"),
+  idportenHemmelighet: hemmelighet("IDPORTEN_KLIENTHEMMELIGHET"),
+  idportenUrl: valgfri("IDPORTEN_URL"),
+  mvaValideringUrl: valgfri("MVA_VALIDERING_URL"),
+  mvaAppUrl: valgfri("MVA_APP_URL"),
+  // Versjonen meldingen sendes med (revisjonen Cloud Run kjører).
+  versjon: valgfri("K_REVISION"),
 
   // AI: Gemini på Vertex AI i prosjektet (uten prosjekt er AI-funksjonene skjult), i EU.
   // Regionen kan også være multiregionen «eu» eller «global».

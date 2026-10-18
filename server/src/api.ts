@@ -61,6 +61,7 @@ import { regnskapBilagRuter } from "./regnskapBilagRuter.js";
 import { utgiftRuter } from "./utgifter.js";
 import { bankRegnskapRuter } from "./regnskapBank.js";
 import { mvaRuter } from "./mva.js";
+import { mvaInnsendingRuter } from "./mvaInnsending.js";
 import { aarsoppgjorRuter } from "./aarsoppgjor.js";
 import { aarsregnskapRuter } from "./aarsregnskap.js";
 import { saftRuter } from "./saft.js";
@@ -536,6 +537,7 @@ export function lagApi() {
   org.route("/", utgiftRuter());
   org.route("/", bankRegnskapRuter());
   org.route("/", mvaRuter());
+  org.route("/", mvaInnsendingRuter());
   org.route("/", aarsoppgjorRuter());
   org.route("/", aarsregnskapRuter());
   org.route("/", saftRuter());

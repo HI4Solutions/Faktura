@@ -49,7 +49,10 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
    Variables), så testflaten beholder testklienten i Maskinporten når produksjon får sin egen:
    - `MASKINPORTEN_KLIENT_ID` og `MASKINPORTEN_NOKKEL_ID`;
    - `AMELDING_INNSENDING`, og `NAV_SYKEPENGER`, `KRAV_OG_FRISTER` og `AARSREGNSKAP_INNSENDING` om de
-     er satt.
+     er satt;
+   - `IDPORTEN_KLIENT_ID` og `IDPORTEN_NOKKEL_ID` (ID-porten-klienten i testmiljøet, mva-meldingen fra
+     appen; se [mva-innsending.md](mva-innsending.md)). Innsendingen er på i testmiljøet
+     (`test.tfvars`) og av i produksjon til `MVA_INNSENDING` settes der.
 3. **Infrastrukturen.** Actions → Infrastruktur → Run workflow, fra grenen `main` (standardgrenen
    i repoet er en annen, og fra den lager Infrastruktur bare en plan). Første gang tar det rundt et
    kvarter, mest for databasen. DNS-oppføringene står i loggen for testjobben (`dns_for_domener`);
@@ -71,7 +74,8 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
    ```
 
    `maskinporten-nokkel` er nøkkelen til testklienten, som produksjon bruker i dag. Google Disk er
-   ikke satt opp på testflaten.
+   ikke satt opp på testflaten. Nøkkelen til ID-porten-klienten (`idporten-nokkel`) lages med
+   `bash scripts/idporten.sh nokkel` ([mva-innsending.md](mva-innsending.md)).
 6. **Utrullingen.** Actions → Utrulling → Run workflow. Den ruller ut til testflaten og så til
    produksjon.
 7. **I appen på app.test.adminkonsoll.no.** Registrer deg (adressene i `ADMIN_EPOSTER` blir
@@ -131,6 +135,10 @@ før appen tar den i bruk (punktet «Produksjon» i [skattekort.md](skattekort.m
    - Kjør Infrastruktur fra main, og godkjenn produksjon. Trykk så Plattform → Drift → «Registrer
      systemet i Altinn» på adminkonsoll.no.
    - Gi NAV beskjed første gang sykepenger brukes i produksjon ([nav.md](nav.md), punkt 6).
+   - Mva-meldingen fra appen: en egen ID-porten-integrasjon i produksjon, med nøkkelen
+     (`MILJO=prod bash scripts/idporten.sh nokkel`), `IDPORTEN_KLIENT_ID` og `IDPORTEN_NOKKEL_ID` i
+     miljøet `produksjon`, og `MVA_INNSENDING` = `true` når den skal på
+     ([mva-innsending.md](mva-innsending.md)).
 
 ## Flytte prosjektene til medinnova.no
 

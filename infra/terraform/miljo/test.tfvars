@@ -13,6 +13,10 @@ app_domains = []
 # Testflaten bruker alltid testmiljøene, uansett hva produksjon er satt til.
 skatteetaten_miljo = "test"
 
+# Mva-meldingen sendes fra appen (docs/mva-innsending.md), med ID-porten og Altinn i testmiljøene.
+# Den vises når ID-porten-klienten er satt opp (IDPORTEN_KLIENT_ID i miljøet «test» i GitHub).
+mva_innsending = true
+
 # Minste database som holder (50 tilkoblinger), og PDF-ene kan slettes etter en dag.
 db_tier                = "db-g1-small"
 faktura_retention_days = 1

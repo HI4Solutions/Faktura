@@ -221,13 +221,19 @@ Mva-meldingen for hver termin regnes fra bilagene (Regnskap → Mva; `server/src
   (reverserer og fører) når terminen endres etterpå; det kan også føres og angres under Mva.
 - **Banken**: betalingen til Skatteetaten føres mot 2740 når beløpet er det som står på kontoen
   eller oppgjøret for en termin, og det som kommer tilbake (til gode), likeså (bankAvstemming.ts).
-- **Levert**: den som fører regnskapet merker terminen som levert når meldingen er levert i Altinn
-  (datoen og beløpet appen regnet). Endres terminen etterpå, sier appen fra (lever en korrigert
-  melding), også i sjekklisten i månedsavslutningen for den siste måneden i terminen.
+- **Sendt til Skatteetaten**: meldingen sendes fra appen (Send til Skatteetaten). Den som sender,
+  logger inn med ID-porten og må ha tilgangspakken «Merverdiavgift» for organisasjonen i Altinn;
+  meldingen valideres hos Skatteetaten og sendes gjennom Skatteetatens app i Altinn, linjer med
+  motsatt fortegn får merknaden brukeren velger, og terminen merkes som levert med beløpet som ble
+  sendt. Betalingsinformasjonen og kvitteringen vises. Se `docs/mva-innsending.md`.
+- **Levert**: leveres meldingen i Altinn i stedet, merker den som fører regnskapet terminen som
+  levert (datoen og beløpet appen regnet). Endres terminen etterpå, sier appen fra (send eller lever
+  en korrigert melding), også i sjekklisten i månedsavslutningen for den siste måneden i terminen.
 - Rapporten «Mva-melding» (Rapporter → Regnskap) har linjene for terminen, med fristen, oppgjøret og
   kontrollene, og kan sendes til regnskapsføreren når terminen er slutt.
-- Når terminen er levert, kan den låses (lenken under «Levert i Altinn»): det som føres senere med en
-  dato i terminen, havner da i neste termin, og meldingen som er levert, endres ikke.
+- Når terminen er levert, kan den låses (lenken under «Levert til Skatteetaten» eller «Levert i
+  Altinn»): det som føres senere med en dato i terminen, havner da i neste termin, og meldingen som
+  er levert, endres ikke.
 
 ## Krav, betalinger og frister fra Skatteetaten
 
@@ -563,8 +569,8 @@ nyttår) og Næringsspesifikasjon (grunnlag).
 - SAF-T: kunden og leverandøren står bare på reskontrolinjer fra fakturaene, innbetalingene og
   utgiftene (ikke fra manuelle bilag), dimensjoner (Analysis) og kildedokumenter er ikke med, og
   filen sendes ikke fra appen (Skatteetaten ber om den).
-- Mva-meldingen leveres i Altinn av brukeren (linjene står under Regnskap → Mva); innsending
-  direkte fra appen er ikke med. Uttak, tap på krav og tilbakeføring av inngående avgift
+- Mva-meldingen sendes fra appen med innlogging i ID-porten (systembruker tar ikke Skatteetaten imot
+  for mva-meldingen ennå), eller leveres i Altinn av brukeren. Uttak, tap på krav og tilbakeføring av inngående avgift
   (spesifikasjonslinjene) regnes ikke ut (justeringen for kapitalvarer gjør det, se over), og
   innførsel av varer (14, 15, 81–85) kommer bare med fra
   manuelle bilag med kodene. Kompensasjonsmelding og omvendt avgiftsplikt-melding er ikke med.

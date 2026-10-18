@@ -183,6 +183,11 @@ locals {
     # Skattekort fra Skatteetaten: den private nøkkelen (PEM) til Maskinporten-klienten. Bare
     # workeren bruker den. Legges inn fra Cloud Shell, se docs/skattekort.md.
     "maskinporten-nokkel" = [google_service_account.worker.email]
+    # Mva-meldingen til Skatteetaten: ID-porten-klientens private nøkkel (PEM) eller
+    # klienthemmeligheten, etter hvordan klienten logger inn hos ID-porten. Bare workeren bruker dem.
+    # Legges inn fra Cloud Shell, se docs/mva-innsending.md.
+    "idporten-nokkel"            = [google_service_account.worker.email]
+    "idporten-klienthemmelighet" = [google_service_account.worker.email]
   }
 }
 

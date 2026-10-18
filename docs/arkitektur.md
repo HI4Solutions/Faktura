@@ -952,6 +952,23 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   med `angre_mva_oppgjor`; `mva_terminer` har også når meldingen ble levert og beløpet. Workeren
   fører oppgjøret i månedsavslutningen (`bokforOppgjorTil`), og bankreglene matcher betalingen og
   tilbakebetalingen mot 2740 (saldoen eller oppgjøret for en termin, `mvaOppgjor`).
+  Mva-meldingen til Skatteetaten (`0125_mva_innsending.sql`, `server/src/mvaInnsending.ts`,
+  `server/src/idporten.ts`, `server/src/mvaMeldingXml.ts`, `server/src/mvaMerknader.ts`,
+  `docs/mva-innsending.md`): den som sender, logger inn i ID-porten (autorisasjonskode med PKCE og
+  nonce, `prompt=login`, nivå betydelig; Skatteetaten tar ikke imot mva-meldingen med systembruker).
+  API-et fryser meldingen (XML etter Skatteetatens XSD, validert i testene; merknadene for linjer med
+  motsatt fortegn fra kodelisten) i `mva_innsendinger` og gir adressen til ID-porten; tilbake på
+  `/mva/idporten` gir appen koden til API-et, som sjekker state mot raden og brukeren og legger
+  `mva-send` i kø. Workeren tar raden én gang (`steg is null`), bytter koden (private_key_jwt eller
+  klienthemmeligheten, bare workeren har dem), sjekker ID-tokenet mot ID-portens nøkler, validerer hos
+  Skatteetaten (ugyldig stopper), bytter tokenet til et Altinn-token og sender gjennom
+  Skatteetatens app (`skd/mva-melding-innsending-*`: instansen, konvolutten, meldingen og
+  `process/next` to ganger), og merker terminen som levert (`mva_terminer`). Etterpå henter
+  `mva-tilbakemelding` betalingsinformasjonen og tilbakemeldingen (kvitteringen som PDF) med
+  Altinn-tokenet (KMS-kryptert, bare workeren dekrypterer) så lenge det varer; hjerteslaget rydder
+  (`ryddMvaInnsendinger`). Ingen nye forsøk av seg selv (koden brukes én gang); uvisst om meldingen
+  kom fram, sjekkes instansen. Av til `MVA_INNSENDING` og `IDPORTEN_KLIENT_ID` er satt (på i
+  testmiljøet).
   Årsoppgjøret og periodelåsen (`0094_aarsoppgjor.sql`, `server/src/aarsoppgjor.ts`,
   `web/src/sider/RegnskapAarsoppgjor.tsx`): `regnskap_oppsett.laast_til` håndheves av triggeren
   `bilag_periodelas` (før innsetting i `bilag`): et bilag med dato til og med låsen får den første åpne

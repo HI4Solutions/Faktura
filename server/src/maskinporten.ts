@@ -44,6 +44,9 @@ const ADRESSER = {
     krav: "https://kravogbetalinger.api.skatteetaten-test.no/v1/regnskapssystem",
     frister: "https://frister.api.skatteetaten-test.no/v1/regnskapssystem",
     brreg: "https://brg.apps.tt02.altinn.no",
+    idporten: "https://test.idporten.no",
+    mvaValidering: "https://idporten-api-test.sits.no/api/mva/grensesnittstoette/mva-melding/valider",
+    mvaApp: "https://skd.apps.tt02.altinn.no/skd/mva-melding-innsending-test",
   },
   prod: {
     maskinporten: "https://maskinporten.no",
@@ -55,6 +58,9 @@ const ADRESSER = {
     krav: "https://kravogbetalinger.api.skatteetaten.no/v1/regnskapssystem",
     frister: "https://frister.api.skatteetaten.no/v1/regnskapssystem",
     brreg: "https://brg.apps.altinn.no",
+    idporten: "https://idporten.no",
+    mvaValidering: "https://idporten.api.skatteetaten.no/api/mva/grensesnittstoette/mva-melding/valider",
+    mvaApp: "https://skd.apps.altinn.no/skd/mva-melding-innsending-v1",
   },
 };
 
@@ -71,6 +77,11 @@ export function adresser() {
     frister: config.fristerUrl ?? a.frister,
     // Brønnøysundregistrenes apper i Altinn 3 (årsregnskapet).
     brreg: config.brregAppUrl ?? a.brreg,
+    // Mva-meldingen (mvaInnsending.ts): utstederen i ID-porten, valideringen hos Skatteetaten og
+    // Skatteetatens app for innsendingen i Altinn 3 (api-dokumentasjonen, sist endret sep. 2025).
+    idporten: config.idportenUrl ?? a.idporten,
+    mvaValidering: config.mvaValideringUrl ?? a.mvaValidering,
+    mvaApp: config.mvaAppUrl ?? a.mvaApp,
   };
 }
 

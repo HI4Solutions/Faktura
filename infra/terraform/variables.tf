@@ -171,6 +171,24 @@ variable "aarsregnskap_innsending" {
   default     = false
 }
 
+variable "mva_innsending" {
+  description = "Mva-meldingen sendes til Skatteetaten fra appen: den som sender, logger inn i ID-porten, og meldingen valideres hos Skatteetaten og sendes gjennom Skatteetatens app i Altinn. Vises når ID-porten-klienten er satt opp (idporten_klient_id, med scopene skatteetaten:mvameldingvalidering, altinn:instances.read og altinn:instances.write). På i testmiljøet (miljo/test.tfvars); i produksjon med GitHub-variabelen MVA_INNSENDING (true)."
+  type        = bool
+  default     = false
+}
+
+variable "idporten_klient_id" {
+  description = "Klient-ID-en til ID-porten-integrasjonen (API-klient i Digdirs selvbetjening) som den som sender mva-meldingen, logger inn med. Settes med GitHub-variabelen IDPORTEN_KLIENT_ID."
+  type        = string
+  default     = ""
+}
+
+variable "idporten_nokkel_id" {
+  description = "Nøkkel-ID-en (kid) til nøkkelen på ID-porten-klienten (private_key_jwt). Tom når klienten logger inn med klienthemmeligheten. Settes med GitHub-variabelen IDPORTEN_NOKKEL_ID."
+  type        = string
+  default     = ""
+}
+
 variable "maskinporten_nokkel_id" {
   description = "Nøkkel-ID-en (kid) til nøkkelen på Maskinporten-klienten. Settes med GitHub-variabelen MASKINPORTEN_NOKKEL_ID."
   type        = string

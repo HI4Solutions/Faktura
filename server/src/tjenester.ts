@@ -124,6 +124,10 @@ export type Oppgave =
   | { type: "aarsregnskap-send"; org_id: string; aarsregnskap_id: string }
   | { type: "aarsregnskap-status"; org_id: string; aarsregnskap_id: string }
   | { type: "aarsregnskap-tilbake"; org_id: string; aarsregnskap_id: string }
+  // Mva-meldingen til Skatteetaten (mvaInnsending.ts): sendingen etter innloggingen i ID-porten
+  // (kode: autorisasjonskoden, som bare kan brukes én gang), og tilbakemeldingen.
+  | { type: "mva-send"; org_id: string; innsending_id: string; kode: string }
+  | { type: "mva-tilbakemelding"; org_id: string; innsending_id: string; forsok: number }
   // Ansatte fra a-ordningen (aordning.ts): avstemmingsrapporten bestilles og hentes (bestilling:
   // den som er bestilt og ikke var klar; forsok: hvor mange ganger den er hentet).
   | { type: "aordning-hent"; org_id: string; bestilling?: string; forsok?: number; maaned?: string }
@@ -167,6 +171,8 @@ export const OPPGAVETYPER = [
   "aarsregnskap-send",
   "aarsregnskap-status",
   "aarsregnskap-tilbake",
+  "mva-send",
+  "mva-tilbakemelding",
   "aordning-hent",
   "rapport-send",
 ] as const satisfies readonly Oppgave["type"][];

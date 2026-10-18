@@ -2888,6 +2888,19 @@ table.mva-linjer td:first-child { min-width: 180px; }
 .mva-handlinger p { margin: 4px 0 6px; }
 .mva-levert { align-items: flex-end; gap: 10px; }
 .mva-levert > label { margin-bottom: 0; }
+/* Sendingen til Skatteetaten: merknadene, steget som pågår, betalingen og leveringen i Altinn. */
+.mva-send { margin-top: 6px; }
+.mva-merknad { display: grid; gap: 6px; margin: 8px 0 10px; }
+.mva-merknad label { margin: 0; }
+.mva-merknad select, .mva-merknad input { width: 100%; max-width: 420px; }
+.mva-motsatt { color: var(--advarsel); }
+.melding.mva-sender { display: flex; align-items: center; gap: 10px; }
+.melding.mva-sender .spinner { flex: none; width: 16px; height: 16px; }
+.mva-handlinger .melding { margin: 8px 0; }
+.mva-betaling { margin: 6px 0; font-variant-numeric: tabular-nums; }
+details.mva-annen-levering { margin-top: 10px; }
+details.mva-annen-levering > summary { cursor: pointer; font-size: 0.9rem; color: var(--tekst-2); }
+details.mva-annen-levering[open] > summary { margin-bottom: 4px; }
 table.mva-linjer tfoot td { font-weight: 650; border-bottom: 0; }
 .mva-sats-under, .mva-kort { display: none; }
 /* Mva-justeringen for kapitalvarer (RegnskapMvaJustering.tsx). */

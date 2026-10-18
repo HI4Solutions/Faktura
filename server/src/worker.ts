@@ -20,6 +20,7 @@ import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepe
 import { hentKravOgFrister, planleggKravOgFrister } from "./skatteetatenKrav.js";
 import { planleggAarsregnskapssjekk, sendAarsregnskap, sjekkAarsregnskap, trekkTilbakeAarsregnskap } from "./aarsregnskapInnsending.js";
 import { hentFraAordningen } from "./aordning.js";
+import { hentMvaTilbakemelding, ryddMvaInnsendinger, sendMvaMelding } from "./mvaInnsending.js";
 import { aktiverLonnsendringer } from "./lonnsendringer.js";
 import { lonnHverMorgen, oppdaterLonnsutkast } from "./lonnAutomatikk.js";
 import { bokforSalgForAlle } from "./salgBokforing.js";
@@ -184,6 +185,8 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "aarsregnskap-send") return sendAarsregnskap(o.org_id, o.aarsregnskap_id);
   if (o.type === "aarsregnskap-status") return sjekkAarsregnskap(o.org_id, o.aarsregnskap_id);
   if (o.type === "aarsregnskap-tilbake") return trekkTilbakeAarsregnskap(o.org_id, o.aarsregnskap_id);
+  if (o.type === "mva-send") return sendMvaMelding(o.org_id, o.innsending_id, o.kode);
+  if (o.type === "mva-tilbakemelding") return hentMvaTilbakemelding(o.org_id, o.innsending_id, o.forsok);
   if (o.type === "aordning-hent") return void (await hentFraAordningen(o.org_id, o.bestilling, o.forsok, o.maaned));
   if (o.type === "rapport-send") return sendRapporter(o);
   if (o.type === "epostbekreftelse") return sendEpostbekreftelse(o);
@@ -679,6 +682,21 @@ export function lagWorker() {
     return c.json({ ok: true });
   });
 
+  // Mva-meldingen til Skatteetaten: sendingen etter innloggingen i ID-porten, og tilbakemeldingen
+  // (mvaInnsending.ts). Sendingen prøves ikke på nytt (koden kan bare brukes én gang); den tas av
+  // én worker, så en ny levering av oppgaven gjør ingenting.
+  const mvaOppgave = skattOppgave.extend({ innsending_id: z.string().uuid() });
+  app.post("/oppgaver/mva-send", async (c) => {
+    const o = mvaOppgave.extend({ kode: z.string().min(1).max(2000) }).parse(await c.req.json());
+    await sendMvaMelding(o.org_id, o.innsending_id, o.kode);
+    return c.json({ ok: true });
+  });
+  app.post("/oppgaver/mva-tilbakemelding", async (c) => {
+    const o = mvaOppgave.extend({ forsok: z.number().int().min(0).max(100) }).parse(await c.req.json());
+    await hentMvaTilbakemelding(o.org_id, o.innsending_id, o.forsok);
+    return c.json({ ok: true });
+  });
+
   // Ansatte fra a-ordningen: avstemmingsrapporten bestilles og hentes (aordning.ts).
   app.post("/oppgaver/aordning-hent", async (c) => {
     const o = skattOppgave
@@ -722,7 +740,8 @@ export function lagWorker() {
   // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
   // a-meldingene som venter på tilbakemelding. Krav og frister fra Skatteetaten hentes når tilgangen
   // er godkjent og hver morgen fra kl. 06 (skatteetatenKrav.ts), og årsregnskapene som venter på
-  // signering i Altinn, sjekkes (aarsregnskapInnsending.ts). Lønnsutkastene der noe er endret, regnes ut på nytt,
+  // signering i Altinn, sjekkes (aarsregnskapInnsending.ts). Mva-innsendinger der innloggingen i
+  // ID-porten ikke ble fullført, avbrytes (mvaInnsending.ts). Lønnsutkastene der noe er endret, regnes ut på nytt,
   // fakturaene og innbetalingene som ikke er bokført, bokføres (salgBokforing.ts), og bankpostene
   // avstemmes (bankAvstemming.ts). Fra kl. 08 den 1. går månedsavslutningen (maanedsavslutning.ts), og
   // når den er ferdig for alle, månedsrapportene til regnskapsførerne som har bedt om dem.
@@ -737,6 +756,7 @@ export function lagWorker() {
     await planleggNavHenting().catch((e) => logg("ERROR", "Planlegging av hentingen fra NAV feilet", { feil: (e as Error).message }));
     await planleggKravOgFrister().catch((e) => logg("ERROR", "Planlegging av krav og frister fra Skatteetaten feilet", { feil: (e as Error).message }));
     await planleggAarsregnskapssjekk().catch((e) => logg("ERROR", "Sjekk av årsregnskapene i Altinn feilet", { feil: (e as Error).message }));
+    await ryddMvaInnsendinger().catch((e) => logg("ERROR", "Oppryddingen i mva-innsendingene feilet", { feil: (e as Error).message }));
     await oppdaterLonnsutkast().catch((e) => logg("ERROR", "Omregningen av lønnsutkastene feilet", { feil: (e as Error).message }));
     await bokforSalgForAlle().catch((e) => logg("ERROR", "Bokføringen av fakturaene og innbetalingene feilet", { feil: (e as Error).message }));
     await avstemBankForAlle().catch((e) => logg("ERROR", "Avstemmingen av banken feilet", { feil: (e as Error).message }));

@@ -174,7 +174,17 @@ describe.skipIf(!process.env.DATABASE_URL)("mva-justeringen i appen", () => {
     expect(b[0].posteringer[1].navn).toBe("Justering av inngående merverdiavgift (kapitalvarer)");
     const m = await ok("GET", o("/regnskap/mva?aar=2025&termin=6"));
     expect(m.linjer).toEqual([
-      { kode: "1", beskrivelse: "Justering av merverdiavgift for kapitalvarer", grunnlag: null, sats: null, merverdiavgift: 6000, fradrag: true, spesifikasjon: "justering" },
+      {
+        kode: "1",
+        beskrivelse: "Justering av merverdiavgift for kapitalvarer",
+        grunnlag: null,
+        sats: null,
+        merverdiavgift: 6000,
+        fradrag: true,
+        spesifikasjon: "justering",
+        // Tilbakebetalingen (positiv) er det vanlige fortegnet for justeringen: ingen merknad.
+        merknad_valg: null,
+      },
     ]);
     expect(m).toMatchObject({ sum: 6000, kontroller: [], oppgjor: { stemmer: true } });
     expect(await ok("GET", o("/regnskap/mva-justering?aar=2025"))).toMatchObject({ bilag: { bilagsnummer: "V-2025-1" }, stemmer: true, kapitalvarer: [{ bokfort: -6000 }] });

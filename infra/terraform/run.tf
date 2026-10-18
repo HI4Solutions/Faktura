@@ -56,6 +56,12 @@ locals {
     NAV_SYKEPENGER          = var.nav_sykepenger ? "1" : ""
     KRAV_OG_FRISTER         = var.krav_og_frister ? "1" : ""
     AARSREGNSKAP_INNSENDING = var.aarsregnskap_innsending ? "1" : ""
+    # Mva-meldingen til Skatteetaten (docs/mva-innsending.md): ID-porten-klienten, som den som sender,
+    # logger inn med. Nøkkelen eller klienthemmeligheten har bare workeren (idporten-nokkel og
+    # idporten-klienthemmelighet).
+    MVA_INNSENDING     = var.mva_innsending ? "1" : ""
+    IDPORTEN_KLIENT_ID = var.idporten_klient_id
+    IDPORTEN_NOKKEL_ID = var.idporten_nokkel_id
   } : k => v if v != "" }
 }
 
@@ -205,6 +211,27 @@ resource "google_cloud_run_v2_service" "worker" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.manuell["maskinporten-nokkel"].secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      # Mva-meldingen: ID-porten-klientens private nøkkel (PEM) eller klienthemmelighet.
+      env {
+        name = "IDPORTEN_NOKKEL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.manuell["idporten-nokkel"].secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "IDPORTEN_KLIENTHEMMELIGHET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.manuell["idporten-klienthemmelighet"].secret_id
             version = "latest"
           }
         }
