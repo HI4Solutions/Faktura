@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <!-- Admin Konsoll (Modul-K), samme merke som Logo.tsx med bredere mellomrom for små størrelser. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 1 46 46">
+  <!-- Admin Konsoll (Modul-K), samme merke som Logo.tsx med bredere mellomrom for små størrelser, og
+       uten kant rundt: symbolet fyller hele flaten. -->
   <style>.b{fill:#0d1530}.k{fill:#2f56d8}@media (prefers-color-scheme:dark){.b{fill:#ffffff}.k{fill:#5a7eff}}</style>
   <path class="b" d="M14.41 1H10.5A9.5 9.5 0 0 0 1 10.5V37.5A9.5 9.5 0 0 0 10.5 47H14.41ZM18.41 1L18.41 19.99L42.1 2.19A9.5 9.5 0 0 0 37.5 1ZM18.41 47L18.41 28.01L42.1 45.81A9.5 9.5 0 0 1 37.5 47Z"/>
   <path class="k" d="M19.74 24L45.16 4.88A9.5 9.5 0 0 1 47 10.5V37.5A9.5 9.5 0 0 1 45.16 43.12Z"/>

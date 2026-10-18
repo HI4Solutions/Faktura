@@ -16,7 +16,7 @@ bygges ikke; filene publiseres som de er.
 | `nettsted.js` | Måler hvor toppen slutter (`--hode`), sender kontaktskjemaet og viser siden om appen når nettstedet åpnes fra Hjem-skjermen ([Hjem-skjermen](#hjem-skjermen)). Sideskiftet gjør nettleseren selv. Uten skriptet virker alt |
 | `fonter/` | Inter, Schibsted Grotesk og IBM Plex Mono (SIL Open Font License, lisensene ligger ved) |
 | `robots.txt`, `sitemap.xml`, `og-bilde.png`, `favicon.svg` | SEO og deling |
-| `ikoner/` | Appens ikon for Hjem-skjermen (kopi av `web/public/ikoner`) |
+| `ikoner/` | Appens ikon for Hjem-skjermen: symbolet alene (laget med `scripts/lag-ikoner.mjs`, som i `web/public/ikoner`) |
 | `firebase.json` | Firebase Hosting: korte adresser (`/vilkar` → `/vilkar.html`), sikkerhetshoder, hurtigbuffer, og alt annet videre til API-et, som sender gamle lenker til appen |
 | `sw.js` | Fjerner den gamle appens service worker og hurtigbuffer hos dem som hadde appen på `adminkonsoll.no` |
 

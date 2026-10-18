@@ -92,7 +92,7 @@ self.addEventListener("push", (e) => {
   }
   const valg = {
     body: d.tekst || "",
-    icon: "/ikoner/ikon-192.png",
+    icon: "/ikoner/ikon-192.png?v=2",
     badge: "/ikoner/merke-96.png",
     lang: "nb",
     timestamp: d.tid || Date.now(),

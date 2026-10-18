@@ -19,11 +19,14 @@
 | `admin-konsoll-logo.svg` / `.png` | Logoen på lys bunn |
 | `admin-konsoll-logo-negativ.svg` / `.png` | Logoen på mørk bunn |
 | `admin-konsoll-symbol.svg` | Symbolet alene |
-| `admin-konsoll-app-ikon.svg` / `.png` | App-ikonet (symbolet på nattblå flate) |
+| `admin-konsoll-app-ikon.svg` / `.png` | App-ikonet: symbolet alene, som fyller hele ikonet |
 
 I appen: `web/src/Logo.tsx` (stiene ligger i `web/src/logoStier.ts`), `web/public/favicon.svg`
-og app-ikonene i `web/public/ikoner`. Fargene i appen settes med `--logo-farge` og `--logo-kile`
-i `web/src/styles.css`. Logoen står som på nettstedet: i lyst utseende på papir med dobbel strek i
+og app-ikonene i `web/public/ikoner`. App-ikonet er symbolet alene, uten flate eller kant rundt:
+kvadratet fyller hele ikonet, med nattblå moduler, blå kile og hvite mellomrom. iPhone og Android
+runder av hjørnene selv. Favikonet fyller også hele flaten. Ikonene lages med
+`scripts/lag-ikoner.mjs` (kjøres fra `server/`), også nettstedets kopi i `landingsside/ikoner/`.
+Fargene i appen settes med `--logo-farge` og `--logo-kile` i `web/src/styles.css`. Logoen står som på nettstedet: i lyst utseende på papir med dobbel strek i
 trykkfargen under (hele toppen på mobil, hodet øverst i sidemenyen på PC), i fargene for lys bunn.
 I mørkt utseende er den hvit på mørk bunn. Innloggingen og skjermene før appen (bekreft e-post,
 venter på godkjenning) er blanketter som nettstedet (`web/src/blankett.tsx` og `blankett.css`).

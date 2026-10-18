@@ -138,7 +138,9 @@ main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
 .x { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--ink); font: 500 13px/1 var(--font-type); color: var(--type); flex: none; background: var(--paper); }
 .x::before { content: "X"; }
 .x.tom::before { content: ""; }
-.stempel { display: inline-block; font: 700 13px/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--stamp); border: 2.5px solid var(--stamp); outline: 1px solid var(--stamp); outline-offset: 2px; padding: 6px 10px 5px; transform: rotate(-6deg); opacity: .88; mix-blend-mode: multiply; white-space: nowrap; }
+/* Stemplene blandes ikke med papiret (mix-blend-mode): i Safari blinket et ark med stempler mens det
+   lå under det neste i sideskiftet. */
+.stempel { display: inline-block; font: 700 13px/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; color: var(--stamp); border: 2.5px solid var(--stamp); outline: 1px solid var(--stamp); outline-offset: 2px; padding: 6px 10px 5px; transform: rotate(-6deg); opacity: .88; white-space: nowrap; }
 .stempel small { display: block; font: 500 10px var(--font-type); letter-spacing: .04em; margin-top: 3px; }
 .stempel.blaa { color: var(--ink-deep); border-color: var(--ink-deep); outline-color: var(--ink-deep); }
 .stempel.gronn { color: var(--ok); border-color: var(--ok); outline-color: var(--ok); }
