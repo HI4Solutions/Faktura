@@ -33,11 +33,13 @@ Ingen side skal være bredere enn skjermen, heller ikke på en telefon som er 32
 forsiden krymper på de smaleste telefonene, så «administrasjonen.» får plass, og lange ord i
 overskriftene har myke bindestreker (`personopplysnings&shy;sikkerheten`), så de deles pent.
 
-På forsiden har hvert ark sin plass (`.blad`) og sin egen høyde, med god luft mellom arkene og over
-det første (`--mellom`, 40–96 px etter skjermbredden). Siden ruller fritt. En periode snappet den til
-én del om gangen, med ark som fylte hele skjermen, men det gjorde rullingen stiv og delene tette, og
-er tatt bort. Lenkene til delene legger delen rett under toppen (`scroll-padding-top` med høyden på
-toppen, `--hode`, som `nettsted.js` måler).
+På forsiden har hvert ark sin plass (`.blad`) og sin egen høyde, med god luft mellom arkene
+(`--mellom`, 40–96 px etter skjermbredden). Det første arket begynner rett under toppen, uten luft
+over, og det gjør også dokumentet på de juridiske sidene. Siden ruller fritt. En periode snappet den
+til én del om gangen, med ark som fylte hele skjermen, men det gjorde rullingen stiv og delene tette,
+og er tatt bort. Lenkene til delene legger delen rett under toppen (`scroll-padding-top` med høyden
+på toppen, `--hode`, som `nettsted.js` måler), og i sideskiftet legger arkene seg også rett under
+toppen.
 
 Sideskiftet: når neste del kommer, blir arket liggende der det er, og det neste glir opp over det, med
 en skygge langs kanten øverst. Et ark som er høyere enn skjermen (på mobil gjelder det de fleste),

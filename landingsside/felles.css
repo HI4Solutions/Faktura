@@ -26,12 +26,11 @@
   --font-display: "Schibsted Grotesk", "Inter", system-ui, sans-serif;
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-type: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --luft: 16px;                         /* mellom toppen og arket som ligger øverst */
   --mellom: clamp(40px, 7vw, 96px);    /* mellom arkene */
 }
 * { box-sizing: border-box; }
-/* Lenker til en del av siden havner under toppen, som står fast. nettsted.js setter --hode. */
-html { scroll-padding-top: calc(var(--hode, 80px) + var(--luft)); }
+/* Lenker til en del av siden havner rett under toppen, som står fast. nettsted.js setter --hode. */
+html { scroll-padding-top: var(--hode, 80px); }
 body { margin: 0; background: var(--desk); color: var(--type); font-family: var(--font-body); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
 a { color: inherit; }
 img { max-width: 100%; }
@@ -54,19 +53,18 @@ img { max-width: 100%; }
   .inn { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 }
 
-/* Toppen, hver del av forsiden, dokumentet og bunnen er egne ark. Toppen står fast øverst. På
-   forsiden har hvert ark sin plass (.blad), og neste del glir opp over den forrige, som blir liggende
-   (sideskiftet i index.html). */
+/* Toppen, hver del av forsiden, dokumentet og bunnen er egne ark. Toppen står fast øverst, og det første
+   arket begynner rett under den. På forsiden har hvert ark sin plass (.blad), og neste del glir opp over
+   den forrige, som blir liggende (sideskiftet i index.html). */
 .top.ark { position: sticky; top: 0; z-index: 30; margin-block: 0; }
-.bunke { display: flow-root; padding-top: var(--mellom); }
+.bunke { display: flow-root; }
 main .blad { position: relative; max-width: 1240px; margin: 0 auto var(--mellom); }
 main .blad > .ark { margin: 0; }
 main .blad > .ark, .ark.dok { padding-block: clamp(28px, 4vw, 52px);
   box-shadow: 0 1px 0 #d3daee, 0 30px 60px -40px rgba(13, 21, 48, .35); }
 /* Skygge over kanten øverst, så arket som kommer, ser ut til å ligge oppå det forrige. */
 .bunke > .blad > .ark, main > .blad > .slutt { box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee, 0 -14px 28px -18px rgba(13, 21, 48, .26), 0 30px 60px -40px rgba(13, 21, 48, .35); }
-.bunke .forside { padding-block: 0; }
-.ark.dok { margin: var(--mellom) auto; padding-top: 0; }
+.ark.dok { margin: 0 auto var(--mellom); padding-top: 0; }
 main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
 .bunke .delband { margin-top: 0; }
 .sidetall { position: absolute; top: clamp(8px, 1.4vw, 18px); right: calc(56px + clamp(12px, 3vw, 36px)); font: 500 11px var(--font-type); letter-spacing: .04em; color: var(--muted); }
@@ -74,7 +72,7 @@ main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
   main .blad { margin: 0 0 var(--mellom); }
   main .blad > .ark, .ark.dok { box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee; }
   .bunke > .blad > .ark, main > .blad > .slutt { box-shadow: 0 -1px 0 #d3daee, 0 1px 0 #d3daee, 0 -12px 24px -20px rgba(13, 21, 48, .3); }
-  .ark.dok { margin: var(--mellom) 0; }
+  .ark.dok { margin: 0 0 var(--mellom); }
   .top.ark { box-shadow: 0 1px 0 var(--ink-line), 0 10px 20px -16px rgba(13, 21, 48, .45); }
   .sidetall { right: 16px; top: 8px; }
 }

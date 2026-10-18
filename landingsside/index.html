@@ -50,6 +50,9 @@ h1.stor .blaa { color: var(--ink); }
 .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; align-items: center; }
 .cta .liten { font: 500 12px var(--font-type); color: var(--muted); }
 @media (max-width: 980px) { .tittel { grid-template-columns: minmax(0, 1fr); } .tittel-v { border-right: 0; padding-right: 0; } .tittel-h { padding-left: 0; background: none; border-top: 1.5px solid var(--ink); } }
+/* I én kolonne har tittelfeltet egen luft over seg, så arket trenger ikke mer: tittelen begynner like
+   under toppen. (På PC står lønnsslippen på et tonet felt som skal ha arkets kant rundt seg.) */
+@media (max-width: 980px) { main .blad > .ark.forside { padding-top: 0; } }
 @media (max-width: 560px) { .felter { grid-template-columns: minmax(0, 1fr); } }
 /* Det lengste ordet i tittelen («administrasjonen.») skal få plass også på de smaleste telefonene. */
 @media (max-width: 400px) { h1.stor { font-size: calc((100vw - 32px) / 8.6); } }
@@ -233,8 +236,8 @@ h1.stor .blaa { color: var(--ink); }
 @media (max-width: 860px) { .under { grid-template-columns: minmax(0, 1fr); } .under-v { border-right: 0; border-bottom: 1.5px solid var(--ink); } }
 
 /* Arkene på forsiden: hvert ark har sin plass (.blad) og sin egen høyde, med god luft mellom, og siden
-   ruller fritt. (Snapping til én del om gangen gjorde rullingen stiv, og ark som fylte hele skjermen,
-   gjorde at delene virket tette; begge deler er tatt bort.) */
+   ruller fritt. Det første begynner rett under toppen. (Snapping til én del om gangen gjorde rullingen
+   stiv, og ark som fylte hele skjermen, gjorde at delene virket tette; begge deler er tatt bort.) */
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 /* Sideskiftet: når neste del kommer, blir arket liggende der det er, og det neste glir opp over det.
    Et ark som er høyere enn skjermen, rulles gjennom til bunnen er nådd, og blir liggende da.
@@ -243,14 +246,14 @@ h1.stor .blaa { color: var(--ink); }
    treffer. Arket blir liggende til det neste ligger på plass over det (også luften mellom dem), og
    forsvinner først da, så det ikke stikker fram over det neste. Kontaktskjemaet er det siste arket i
    bunken og blir ikke liggende: det neste dekker aldri feltene eller «Send», heller ikke når
-   tastaturet på mobilen kommer opp. --flate er høyden under toppen, der arkene legger seg.
+   tastaturet på mobilen kommer opp. Arkene legger seg rett under toppen; --flate er høyden under den.
    Nettlesere uten scroll-drevne animasjoner ruller arkene forbi som vanlig. */
-:root { --flate: calc(100vh - var(--hode, 80px) - 2 * var(--luft)); }
-@supports (height: 100dvh) { :root { --flate: calc(100dvh - var(--hode, 80px) - 2 * var(--luft)); } }
+:root { --flate: calc(100vh - var(--hode, 80px)); }
+@supports (height: 100dvh) { :root { --flate: calc(100dvh - var(--hode, 80px)); } }
 @media (prefers-reduced-motion: no-preference) {
   .bunke > .blad { z-index: 0; }
   @supports (animation-timeline: view()) {
-    .bunke > .blad { view-timeline: --blad block; view-timeline-inset: calc(var(--hode, 80px) + var(--luft)) var(--luft); }
+    .bunke > .blad { view-timeline: --blad block; view-timeline-inset: var(--hode, 80px) 0; }
     .bunke > .blad:not(:last-child) > .ark { animation: under linear both; animation-timeline: --blad; animation-range: exit 0% exit calc(100% + var(--mellom)); }
   }
 }
