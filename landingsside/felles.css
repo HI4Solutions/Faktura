@@ -79,6 +79,16 @@ main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
   .sidetall { right: 16px; top: 8px; }
 }
 @media print { .top.ark { position: relative; } }
+/* Åpnet fra Hjem-skjermen som app (iPhone): siden tegnes helt opp under statuslinjen. En mørk stripe
+   ligger bak statuslinjen, som i appen (web/index.html, #statuslinje), siden begynner under den, og
+   toppen står fast rett under den. nettsted.js måler --hode fra toppen av skjermen, så lenkene til
+   delene havner under toppen også her. */
+@media (display-mode: standalone) {
+  body { padding-top: env(safe-area-inset-top); }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--type); z-index: 60; }
+  .top.ark { top: env(safe-area-inset-top); }
+  .hopp { top: calc(8px + env(safe-area-inset-top)); }
+}
 
 /* Skjemahodet */
 .top > .inn { border-bottom: 3px double var(--ink); }
@@ -97,7 +107,7 @@ main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
 .btn.pri:hover { background: var(--ink-deep); border-color: var(--ink-deep); }
 .btn.sec { background: var(--paper); color: var(--ink-deep); }
 .btn.sec:hover { background: var(--ink-wash); }
-.btn.txt { border-color: transparent; color: var(--ink-deep); padding: 0 10px; }
+.btn.txt { border-color: transparent; background: transparent; color: var(--ink-deep); padding: 0 10px; cursor: pointer; }
 .btn.txt:hover { text-decoration: underline; text-underline-offset: 4px; }
 /* Lenkene står til høyre, ved knappene, når det er plass til dem på én linje. Skjemakoden viker
    da (den står også på hvert ark). */
@@ -136,9 +146,9 @@ main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
 .stempel.gronn { color: var(--ok); border-color: var(--ok); outline-color: var(--ok); }
 .delband { display: flex; align-items: stretch; background: var(--ink); color: #fff; margin-top: clamp(40px, 6vw, 72px); }
 .delband .nr { display: grid; place-items: center; background: var(--paper); color: var(--ink); font: 600 13px var(--font-type); padding: 0 14px; border: 2px solid var(--ink); letter-spacing: .04em; white-space: nowrap; }
-.delband h2 { margin: 0; padding: 10px 16px; font: 600 clamp(17px, 2vw, 20px)/1.25 var(--font-display); letter-spacing: -0.005em; text-wrap: balance; min-width: 0; overflow-wrap: break-word; }
+.delband h2, .delband h1 { margin: 0; padding: 10px 16px; font: 600 clamp(17px, 2vw, 20px)/1.25 var(--font-display); letter-spacing: -0.005em; text-wrap: balance; min-width: 0; overflow-wrap: break-word; }
 /* Lange ord («personopplysningssikkerheten») deles med bindestrek på de smaleste telefonene. */
-@media (max-width: 400px) { .delband h2 { hyphens: auto; } }
+@media (max-width: 400px) { .delband h2, .delband h1 { hyphens: auto; } }
 .delband .h { margin-left: auto; padding: 10px 16px; font: 500 12px var(--font-type); opacity: .85; align-self: center; white-space: nowrap; }
 @media (max-width: 640px) { .delband .h { display: none; } }
 
@@ -211,3 +221,16 @@ main [tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }
 .dt-sign .hand { font: italic 600 24px var(--font-display); color: var(--type); letter-spacing: -0.02em; border-bottom: 1.5px solid var(--ink); padding-bottom: 2px; transform: rotate(-2deg); justify-self: start; }
 @media (max-width: 760px) { .dt-sign { grid-template-columns: minmax(0, 1fr); } .dt-sign > div { border-right: 0; border-bottom: 1px solid var(--ink-line); } .dt-sign > div:last-child { border-bottom: 0; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Snarveien på Hjem-skjermen åpner nettstedet, mens appen ligger på en annen adresse (nettsted.js):
+   en egen side viser hvor appen ligger og hvordan den legges på Hjem-skjermen. Resten av nettstedet
+   vises etter «Vis nettstedet». */
+.app-andre-sted main:not(.app-flyttet), .app-andre-sted .sitefoot, .app-andre-sted .top nav, .app-andre-sted .top .act { display: none; }
+.app-andre-sted .top > .inn { min-height: 79px; } /* like høy som med knappene */
+.ark.dok.app-flyttet { padding-top: clamp(36px, 5vw, 60px); }
+.app-flyttet .delband { margin-top: 0; }
+.app-flyttet .ingress { margin: 22px 0 0; font-size: 17px; color: var(--type-2); max-width: 54ch; }
+.app-flyttet .steg { list-style: none; margin: 22px 0 0; padding: 0; max-width: 640px; border-top: 1px solid var(--ink-line); counter-reset: steg; }
+.app-flyttet .steg li { counter-increment: steg; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--ink-line); }
+.app-flyttet .steg li::before { content: counter(steg) "."; font: 500 13px/1.75 var(--font-type); color: var(--ink); }
+.app-flyttet .knapper { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }

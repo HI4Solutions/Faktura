@@ -13,9 +13,10 @@ bygges ikke; filene publiseres som de er.
 | `underleverandorer.html` | Underdatabehandlere, integrasjoner og andre mottakere |
 | `informasjonskapsler.html` | Informasjonskapsler og lokal lagring |
 | `felles.css` | Felles stil, skriftene, toppen, bunnen og arkene |
-| `nettsted.js` | Måler høyden på toppen (`--hode`) og sender kontaktskjemaet. Sideskiftet gjør nettleseren selv. Uten skriptet virker alt |
+| `nettsted.js` | Måler hvor toppen slutter (`--hode`), sender kontaktskjemaet og viser siden om appen når nettstedet åpnes fra Hjem-skjermen ([Hjem-skjermen](#hjem-skjermen)). Sideskiftet gjør nettleseren selv. Uten skriptet virker alt |
 | `fonter/` | Inter, Schibsted Grotesk og IBM Plex Mono (SIL Open Font License, lisensene ligger ved) |
 | `robots.txt`, `sitemap.xml`, `og-bilde.png`, `favicon.svg` | SEO og deling |
+| `ikoner/` | Appens ikon for Hjem-skjermen (kopi av `web/public/ikoner`) |
 | `firebase.json` | Firebase Hosting: korte adresser (`/vilkar` → `/vilkar.html`), sikkerhetshoder, hurtigbuffer, og alt annet videre til API-et, som sender gamle lenker til appen |
 | `sw.js` | Fjerner den gamle appens service worker og hurtigbuffer hos dem som hadde appen på `adminkonsoll.no` |
 
@@ -61,6 +62,22 @@ også i tittelfeltet) rettes.
 Bunnen er kort: logoen, de juridiske sidene og knappen «Kontakt oss» (til skjemaet på forsiden) på
 én rad, og selskapsopplysningene (navn, org.nr., adresse og e-post, som e-handelsloven krever) på
 linjen under.
+
+## Hjem-skjermen
+
+Nettstedet har appens ikon (`ikoner/apple-touch-icon.png`) og navnet «Admin Konsoll» når det legges på
+Hjem-skjermen. På iPhone åpnes en slik snarvei som en app, uten adresselinje, og siden tegnes helt opp
+under statuslinjen. Da ligger en mørk stripe bak statuslinjen, som i appen, og toppen står under den
+(`felles.css`, `display-mode: standalone`).
+
+Appen ligger på et annet domene (`app.<domene>`) og kan ikke åpnes inne i en snarvei til nettstedet;
+iPhone åpner den som en ny side. Åpnes nettstedet fra Hjem-skjermen mens appen ligger et annet sted,
+viser `nettsted.js` derfor en egen side: hvor appen ligger, knappen «Åpne appen», som åpner appen i
+nettleseren, og stegene for å legge appen på Hjem-skjermen og slette snarveien (for iPhone og for
+Android). «Vis nettstedet» viser nettstedet resten av økten, og lenkene til appen åpnes da i
+nettleseren. Siden kommer også hos dem som la appen på Hjem-skjermen mens den lå på nettstedets domene
+(testflaten før `app.test.adminkonsoll.no`, produksjon før steg 2 i [docs/domene.md](../docs/domene.md)).
+Ligger appen på samme domene (produksjon i steg 1), vises den ikke.
 
 ## Kontaktskjemaet
 

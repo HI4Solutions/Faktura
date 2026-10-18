@@ -108,6 +108,9 @@ Passkeys hører til `adminkonsoll.no` også når appen ligger på `app.adminkons
 gjør ikke innloggingen i nettleseren: på `app.adminkonsoll.no` logger brukeren inn på nytt, installerer
 appen på nytt fra den adressen og slår på varsler og applås igjen. Nettstedet har en `sw.js` som
 fjerner den gamle appens service worker og hurtigbuffer hos dem som hadde appen på `adminkonsoll.no`.
+Den som åpner appen fra Hjem-skjermen etter steg 2, får nettstedet, som viser en side om at appen
+ligger på `app.adminkonsoll.no`, med knappen «Åpne appen» og stegene for å legge den på Hjem-skjermen
+([landingsside/README.md](../landingsside/README.md), «Hjem-skjermen»).
 
 **Steg 1** (`app_domains = ["app.adminkonsoll.no"]` i `infra/terraform/miljo/produksjon.tfvars`):
 

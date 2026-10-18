@@ -30,6 +30,7 @@ venter på godkjenning) er blanketter som nettstedet (`web/src/blankett.tsx` og 
 
 På nettstedet (`landingsside/`): den samme logoen i toppen og bunnen av sidene, med de samme stiene,
 i fargene for lys bunn (`--type` og `--ink` i `felles.css`), og i delingsbildet `og-bilde.png`.
+App-ikonet er også nettstedets ikon på Hjem-skjermen (`landingsside/ikoner/`).
 
 ## Fargene
 
