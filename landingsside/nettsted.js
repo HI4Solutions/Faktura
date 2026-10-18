@@ -33,7 +33,7 @@
 
   const skjema = document.querySelector("form[data-kontakt]");
 
-  // Kontaktskjemaet (del 8): sendes som JSON, og svaret vises under skjemaet.
+  // Kontaktskjemaet (del 7): sendes som JSON, og svaret vises under skjemaet.
   if (skjema && window.fetch) {
     const sendt = document.getElementById("kontakt-sendt");
     const feil = document.getElementById("kontakt-feil");

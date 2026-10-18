@@ -9,8 +9,8 @@
 #   logger inn og bruker appen inne i snarveien. Alt nettstedet ikke har selv (gamle lenker og
 #   tilbakeadressene fra banken, Altinn og Google), åpner appen der.
 # - Så lenge appens hoveddomene (APP_URL) er nettstedets domene (før appen flytter til
-#   app.<domene>), har standardsiden bare appen, med de juridiske sidene ved siden av så lenkene til
-#   vilkårene virker, og nettstedet legges i forhåndsvisningskanalen «nettsted», med «Logg inn» og
+#   app.<domene>), har standardsiden bare appen, med de juridiske sidene og statussiden ved siden av
+#   så lenkene til vilkårene virker, og nettstedet legges i forhåndsvisningskanalen «nettsted», med «Logg inn» og
 #   «Opprett konto» til appens hoveddomene.
 #
 # Prøvekjøring: med UT=<katalog> (og APP_URL og NETTSTED_URL) settes sidene sammen i katalogen,
@@ -147,7 +147,7 @@ if [ -z "$NETTSTED_URL" ] || [ "$APP_URL" = "$NETTSTED_URL" ]; then
   echo "==> Standardsiden: appen (hoveddomenet ligger der ennå), med de juridiske sidene"
   lag_nettsted "$UT/nettsted" "$APP_URL"
   lag_app "$UT/standard"
-  for f in personvern vilkar databehandleravtale underleverandorer informasjonskapsler; do
+  for f in personvern vilkar databehandleravtale underleverandorer informasjonskapsler status; do
     cp "$UT/nettsted/$f.html" "$UT/standard/dist/"
   done
   cp "$UT/nettsted/felles.css" "$UT/nettsted/nettsted.js" "$UT/nettsted/og-bilde.png" "$UT/standard/dist/"

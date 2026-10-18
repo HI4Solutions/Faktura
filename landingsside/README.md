@@ -12,6 +12,7 @@ bygges ikke; filene publiseres som de er.
 | `databehandleravtale.html` | Databehandleravtale etter GDPR art. 28, med vedlegg (behandlingen, sikkerhetstiltak, underdatabehandlere) |
 | `underleverandorer.html` | Underdatabehandlere, integrasjoner og andre mottakere |
 | `informasjonskapsler.html` | Informasjonskapsler og lokal lagring |
+| `status.html` | Hva som er i drift. Bruksvilkårene (§ 4) lenker hit; siden står ikke i nettstedskartet og har `noindex` |
 | `felles.css` | Felles stil, skriftene, toppen, bunnen og arkene |
 | `nettsted.js` | Måler hvor toppen slutter (`--hode`), sender kontaktskjemaet og går rett til appen når nettstedet åpnes fra Hjem-skjermen av en som er logget inn ([Hjem-skjermen](#hjem-skjermen)). Sideskiftet gjør nettleseren selv. Uten skriptet virker alt |
 | `fonter/` | Inter, Schibsted Grotesk og IBM Plex Mono (SIL Open Font License, lisensene ligger ved) |
@@ -22,10 +23,12 @@ bygges ikke; filene publiseres som de er.
 ## Arkene
 
 Toppen, hver del av forsiden, dokumentet på de juridiske sidene og bunnen er egne ark på bordet,
-med luft mellom. Toppen står fast øverst, med knappene «Logg inn» og «Opprett konto» til høyre på
+med luft mellom. Forsiden har ni ark: tittelfeltet, modulene (del 1), hvem gjør hva (del 2), eksempelet
+med timen (del 3), hvem den er laget for (del 4), sikkerheten (del 5), veiledningen (del 6),
+kontaktskjemaet (del 7) og underskriften. Toppen står fast øverst, med knappene «Logg inn» og «Opprett konto» til høyre på
 alle skjermer. Lenkene til delene står ved knappene når skjermen er minst 1140 px bred. Da viker
 skjemakoden «AK-1 · utg. 10.2026», som bare står på mellomstore skjermer; hvert ark har uansett
-«AK-1 · Side n av 10» øverst til høyre. På telefon blir logoen og teksten i knappene mindre, så alt
+«AK-1 · Side n av 9» øverst til høyre. På telefon blir logoen og teksten i knappene mindre, så alt
 står på én linje (knappene er like høye), og under 343 px står symbolet alene.
 
 Ingen side skal være bredere enn skjermen, heller ikke på en telefon som er 320 px bred. Tittelen på
@@ -57,7 +60,7 @@ Med redusert bevegelse (innstillingen i operativsystemet) og på utskrift ruller
 lenkene hopper rett til delen.
 
 En ny del legges inn som en plass med et ark: `<div class="blad" id="…">` med `<div class="ark">`,
-og i arket `<span class="sidetall">` og `<div class="inn">` rundt delen. Sidetallene («Side n av 10»,
+og i arket `<span class="sidetall">` og `<div class="inn">` rundt delen. Sidetallene («Side n av 9»,
 også i tittelfeltet) rettes.
 
 Bunnen er kort: logoen, de juridiske sidene og knappen «Kontakt oss» (til skjemaet på forsiden) på
@@ -81,7 +84,7 @@ etter `faktura.innlogget`, som appen setter i nettleseren). I nettleseren vises 
 
 ## Kontaktskjemaet
 
-Del 8 på forsiden («Skriv til oss») sender en henvendelse rett til oss: navn, e-post, foretak
+Del 7 på forsiden («Skriv til oss») sender en henvendelse rett til oss: navn, e-post, foretak
 (valgfritt) og henvendelsen. Adressen står ikke der, bare e-postadressen for den som vil skrive
 direkte.
 
@@ -134,6 +137,11 @@ slik:
   «ferdig regnskap» eller at noe «går av seg selv» uten at kunden har satt det opp og godkjent det.
 - Bruksvilkårene har egen paragraf om dette («Programvare, ikke regnskapsføring»), og forsiden sier det
   under Spørsmål og svar og i del 5 («Dere eier regnskapet»).
+
+Forsiden nevner ikke leverandørene våre ved navn (som Recommand, Enable Banking og Google), og
+eksemplene bruker oppdiktede virksomheter. Leverandørene står i underleverandørene, personvern-
+erklæringen og databehandleravtalen, der de skal stå. Offentlige tjenester og standarder (Altinn,
+Skatteetaten, NAV, EHF og Peppol) kan nevnes.
 
 ## Publisering
 

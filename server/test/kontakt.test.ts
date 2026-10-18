@@ -1,4 +1,4 @@
-// Kontaktskjemaet på nettstedet (kontakt.ts, landingsside/index.html del 8): henvendelsen legges i
+// Kontaktskjemaet på nettstedet (kontakt.ts, landingsside/index.html del 7): henvendelsen legges i
 // køen som e-post til post@adminkonsoll.no, med avsenderen som svaradresse. Fra nettsted.js (JSON)
 // kommer svaret som JSON; uten skript (vanlig skjema) sendes nettleseren tilbake til forsiden med
 // svaret. Roboter som fyller ut det skjulte feltet, får et vanlig svar, men ingenting sendes.

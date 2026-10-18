@@ -10,6 +10,7 @@
       { "source": "/databehandleravtale", "destination": "/databehandleravtale.html", "type": 301 },
       { "source": "/underleverandorer", "destination": "/underleverandorer.html", "type": 301 },
       { "source": "/informasjonskapsler", "destination": "/informasjonskapsler.html", "type": 301 },
+      { "source": "/status", "destination": "/status.html", "type": 301 },
       { "source": "/favicon.ico", "destination": "/favicon.svg", "type": 301 }
     ],
     "rewrites": [
