@@ -33,8 +33,11 @@ jobs:
       TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
       TF_VAR_admin_eposter: ${{ vars.ADMIN_EPOSTER }}
       TF_VAR_google_oauth_client_id: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+      # Bryterne (true eller false) sammenlignes uten å skille store og små bokstaver, så «True» (som
+      # mobilen gjerne skriver) virker også; Terraform godtar bare «true» og «false». Andre verdier
+      # stopper kjøringen i steget «Bryterne».
       # AI (Gemini på Vertex AI): standardverdiene når variablene ikke er satt.
-      TF_VAR_ai_aktiv: ${{ vars.AI_AKTIV || 'true' }}
+      TF_VAR_ai_aktiv: ${{ vars.AI_AKTIV == '' || vars.AI_AKTIV == 'true' }}
       TF_VAR_ai_region: ${{ vars.AI_REGION || 'europe-west3' }}
       TF_VAR_ai_modell: ${{ vars.AI_MODELL || 'gemini-3.5-flash' }}
       TF_VAR_ai_grense: ${{ vars.AI_GRENSE || '1000' }}
@@ -46,16 +49,16 @@ jobs:
       TF_VAR_altinn_systemnavn: ${{ vars.ALTINN_SYSTEMNAVN || 'Admin Konsoll' }}
       TF_VAR_altinn_system_id: ${{ vars.ALTINN_SYSTEM_ID }}
       # A-meldingen til Skatteetatens API (docs/amelding.md): av til scopet er godkjent.
-      TF_VAR_amelding_innsending: ${{ vars.AMELDING_INNSENDING || 'false' }}
+      TF_VAR_amelding_innsending: ${{ vars.AMELDING_INNSENDING == 'true' }}
       # Sykepenger fra NAV (docs/nav.md): av til scopet nav:helseytelser/sykepenger er på klienten.
-      TF_VAR_nav_sykepenger: ${{ vars.NAV_SYKEPENGER || 'false' }}
+      TF_VAR_nav_sykepenger: ${{ vars.NAV_SYKEPENGER == 'true' }}
       # Krav og frister fra Skatteetaten (docs/skatteetaten-krav.md): av til scopene er på klienten.
-      TF_VAR_krav_og_frister: ${{ vars.KRAV_OG_FRISTER || 'false' }}
+      TF_VAR_krav_og_frister: ${{ vars.KRAV_OG_FRISTER == 'true' }}
       # Årsregnskapet til Altinn (docs/aarsregnskap.md): av til scopene altinn:instances.* er på klienten.
-      TF_VAR_aarsregnskap_innsending: ${{ vars.AARSREGNSKAP_INNSENDING || 'false' }}
+      TF_VAR_aarsregnskap_innsending: ${{ vars.AARSREGNSKAP_INNSENDING == 'true' }}
       # Mva-meldingen til Skatteetaten (docs/mva-innsending.md): på i testmiljøet (miljo/test.tfvars),
       # av i produksjon til MVA_INNSENDING settes; vises når ID-porten-klienten er satt opp.
-      TF_VAR_mva_innsending: ${{ vars.MVA_INNSENDING || 'false' }}
+      TF_VAR_mva_innsending: ${{ vars.MVA_INNSENDING == 'true' }}
       TF_VAR_idporten_klient_id: ${{ vars.IDPORTEN_KLIENT_ID }}
       TF_VAR_idporten_nokkel_id: ${{ vars.IDPORTEN_NOKKEL_ID }}
     steps:
@@ -70,6 +73,28 @@ jobs:
           if [ "$ONSKET" != "test" ] && [ "$MILJO" = "test" ]; then echo "::error::Miljøet «$ONSKET» har MILJO=test."; exit 1; fi
           [ -n "$TF_VAR_project_id" ] || { echo "::error::GCP_PROJECT_ID mangler."; exit 1; }
           echo "Terraform for prosjektet $TF_VAR_project_id ($ONSKET)."
+
+      # En skrivefeil i en bryter (f.eks. «ja» eller « true» med mellomrom) skal stoppe kjøringen,
+      # ikke slå funksjonen av i stillhet.
+      - name: Bryterne
+        working-directory: .
+        env:
+          AI_AKTIV: ${{ vars.AI_AKTIV }}
+          AMELDING_INNSENDING: ${{ vars.AMELDING_INNSENDING }}
+          NAV_SYKEPENGER: ${{ vars.NAV_SYKEPENGER }}
+          KRAV_OG_FRISTER: ${{ vars.KRAV_OG_FRISTER }}
+          AARSREGNSKAP_INNSENDING: ${{ vars.AARSREGNSKAP_INNSENDING }}
+          MVA_INNSENDING: ${{ vars.MVA_INNSENDING }}
+        run: |
+          feil=0
+          for navn in AI_AKTIV AMELDING_INNSENDING NAV_SYKEPENGER KRAV_OG_FRISTER AARSREGNSKAP_INNSENDING MVA_INNSENDING; do
+            verdi="${!navn}"
+            case "${verdi,,}" in
+              "" | true | false) echo "$navn: ${verdi:-(ikke satt)}" ;;
+              *) echo "::error::$navn må være true eller false (uten mellomrom), men er «$verdi»."; feil=1 ;;
+            esac
+          done
+          exit "$feil"
 
       - uses: actions/checkout@v4
 
