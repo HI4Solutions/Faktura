@@ -93,6 +93,16 @@ variable "epost_avsender" {
   default     = "post@adminkonsoll.no"
 }
 
+variable "kommer_snart" {
+  description = "Modulene som ikke er klare ennå i denne installasjonen (kodene i faktura.moduler, f.eks. [\"regnskap\"]). De merkes «Kommer snart» i appen og på nettstedet, og nye kontoer kan ikke velge dem; plattformadministratoren kan gi dem. Settes i miljo/<miljø>.tfvars."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for k in var.kommer_snart : can(regex("^[a-z_]{2,30}$", k))])
+    error_message = "kommer_snart skal være modulkoder, f.eks. [\"regnskap\"]."
+  }
+}
+
 variable "admin_eposter" {
   description = "Plattformadministratorer, kommaseparerte e-postadresser. Settes med GitHub-variabelen ADMIN_EPOSTER. Tom = ingen."
   type        = string

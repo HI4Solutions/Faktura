@@ -15,3 +15,5 @@
   setter selv.
 - Bank (PSD2): bakgrunnsjobber sender aldri PSU-hoder til banken; de sendes bare når brukeren
   faktisk er til stede.
+- Testbedriften i TT02 er EKSTRA NESTE TIGER AS (org.nr. 313 516 504). Daglig leder og styreleder
+  er den syntetiske testpersonen 18838398177 (TestID i ID-porten). Se `docs/miljoer.md`, «Testbedriften».

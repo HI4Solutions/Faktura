@@ -153,13 +153,13 @@ Skatteetaten, NAV, EHF og Peppol) kan nevnes.
 
 ## Publisering
 
-Nettstedet skal ligge på `adminkonsoll.no`, med appen under `adminkonsoll.no/app`, og appen får også
-`app.adminkonsoll.no`. Det skjer i to steg ([docs/domene.md](../docs/domene.md), «Nettstedet og
-appen»): så lenge appen ligger på `adminkonsoll.no`, publiseres nettstedet til en
-forhåndsvisningskanal (adressen står i loggen fra Rull ut), og de juridiske sidene ligger ved siden av
-appen, så lenkene til vilkårene virker. Testflaten har tatt begge stegene: nettstedet ligger på
-`test.adminkonsoll.no`, med testappen under `/app` der og på `app.test.adminkonsoll.no`. Produksjon
-venter med steg 2 til lanseringen, så landingssiden er ikke synlig der ennå.
+Nettstedet ligger på `adminkonsoll.no`, med appen under `adminkonsoll.no/app`, og appen har også
+`app.adminkonsoll.no`. Flyttingen skjedde i to steg ([docs/domene.md](../docs/domene.md), «Nettstedet
+og appen»): så lenge appen lå på `adminkonsoll.no` (steg 1), ble nettstedet publisert til en
+forhåndsvisningskanal (adressen står i loggen fra Rull ut), og de juridiske sidene lå ved siden av
+appen, så lenkene til vilkårene virket. Produksjon og testflaten har tatt begge stegene: på
+testflaten ligger nettstedet på `test.adminkonsoll.no`, med testappen under `/app` der og på
+`app.test.adminkonsoll.no`.
 
 - Med appen ved siden av peker «Logg inn» og «Opprett konto» til `/app` og `/app?konto=ny` (som åpner
   registreringen). `scripts/publiser-hosting.sh` legger appen inn: siden den starter fra er
@@ -167,6 +167,10 @@ venter med steg 2 til lanseringen, så landingssiden er ikke synlig der ennå.
   worker er `sw.js`, og alt nettstedet ikke har selv, åpner appen. I forhåndsvisningen peker de til
   appens hoveddomene. På testflaten får sidene `X-Robots-Tag: noindex`.
 - `canonical`, `sitemap.xml` og `og:url` bruker `https://adminkonsoll.no` som rot.
+- En modul som ikke er klar ennå, får merket «Kommer snart» (`data-kommer-snart="<modul>"`, skjult
+  som standard). Publiseringen viser det for modulene i `KOMMER_SNART` på API-et (`kommer_snart` i
+  `infra/terraform/miljo/<miljø>.tfvars`, i produksjon nå Regnskap); se
+  [docs/miljoer.md](../docs/miljoer.md), «Moduler som ikke er klare».
 - `felles.css` og `nettsted.js` får en kontrollsum av innholdet i adressen (`felles.css?v=…`) når de
   publiseres. Sidene hentes alltid på nytt, men stilarket lagres en time, og en ny side med et gammelt
   stilark mangler blant annet den faste toppen.

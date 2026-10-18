@@ -35,6 +35,11 @@ locals {
     NETTSTED_URL    = var.nettsted_domene == "" ? "" : "https://${var.nettsted_domene}"
   } : k => v if v != "" }
 
+  # Modulene som ikke er klare ennå i denne installasjonen (f.eks. regnskap i produksjon): de merkes
+  # «Kommer snart» i appen, og scripts/publiser-hosting.sh leser KOMMER_SNART fra API-et og merker
+  # dem på nettstedet.
+  modul_env = { for k, v in { KOMMER_SNART = join(",", var.kommer_snart) } : k => v if v != "" }
+
   # AI: Gemini på Vertex AI i EU (fakturautkast i API-et, forslag på innbetalinger i
   # workeren). Uten AI_PROSJEKT (ai_aktiv = false) er AI-funksjonene skjult.
   ai_env = merge({ for k, v in { AI_PROSJEKT = var.project_id } : k => v if var.ai_aktiv }, {
@@ -91,7 +96,7 @@ resource "google_cloud_run_v2_service" "api" {
       image = var.placeholder_image
 
       dynamic "env" {
-        for_each = merge(local.db_env, local.domene_env, local.ai_env, local.skattekort_env, {
+        for_each = merge(local.db_env, local.domene_env, local.modul_env, local.ai_env, local.skattekort_env, {
           ROLLE         = "api"
           ADMIN_EPOSTER = var.admin_eposter
           DB_USER       = google_sql_user.api.name

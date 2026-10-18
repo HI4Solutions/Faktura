@@ -13,8 +13,11 @@
 #   så lenkene til vilkårene virker, og nettstedet legges i forhåndsvisningskanalen «nettsted», med «Logg inn» og
 #   «Opprett konto» til appens hoveddomene.
 #
-# Prøvekjøring: med UT=<katalog> (og APP_URL og NETTSTED_URL) settes sidene sammen i katalogen,
-# uten gcloud og uten å publisere, f.eks. for å prøve dem i Firebase-emulatoren.
+# Modulene som ikke er klare ennå (KOMMER_SNART på API-et, f.eks. regnskap i produksjon), får merket
+# «Kommer snart» på nettstedet; ellers er merket skjult.
+#
+# Prøvekjøring: med UT=<katalog> (og APP_URL, NETTSTED_URL og eventuelt KOMMER_SNART) settes sidene
+# sammen i katalogen, uten gcloud og uten å publisere, f.eks. for å prøve dem i Firebase-emulatoren.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 MILJO="${MILJO:-}"
@@ -25,6 +28,7 @@ if [ -n "${UT:-}" ]; then
   PROSJEKT="${PROSJEKT:-provekjoring}"
   : "${APP_URL:?APP_URL mangler}"
   NETTSTED_URL="${NETTSTED_URL:-}"
+  KOMMER_SNART="${KOMMER_SNART:-}"
   rm -rf "$UT"
   mkdir -p "$UT"
 else
@@ -37,11 +41,14 @@ else
   }
   APP_URL="$(api_env APP_URL)"
   NETTSTED_URL="$(api_env NETTSTED_URL)"
+  KOMMER_SNART="$(api_env KOMMER_SNART)"
   UT="$(mktemp -d)"
   trap 'rm -rf "$UT"' EXIT
 fi
 [ -n "$APP_URL" ] || { echo "::error::APP_URL mangler på faktura-api."; exit 1; }
 echo "Appen: $APP_URL. Nettstedet: ${NETTSTED_URL:-ikke satt opp ennå (kjør Infrastruktur)}."
+[[ "$KOMMER_SNART" =~ ^[a-z_,]*$ ]] || { echo "::error::KOMMER_SNART skal være modulkoder med komma mellom: «$KOMMER_SNART»."; exit 1; }
+echo "Kommer snart: ${KOMMER_SNART:-ingen}."
 
 # <katalog> <side> [kanal]: publiserer katalogen (med sin firebase.json) til siden, eller til en
 # forhåndsvisningskanal på den.
@@ -94,6 +101,11 @@ lag_nettsted() {
   if grep -L "felles\.css?v=${css}" "$dir"/*.html | grep -q .; then
     echo "::error::Fant ikke stilarket i alle sidene:"; grep -L "felles\.css?v=${css}" "$dir"/*.html; exit 1
   fi
+  local kode
+  for kode in ${KOMMER_SNART//,/ }; do
+    find "$dir" -name '*.html' -exec sed -i "s#data-kommer-snart=\"${kode}\" hidden>#data-kommer-snart=\"${kode}\">#g" {} +
+    grep -q "data-kommer-snart=\"${kode}\">" "$dir/index.html" || echo "::warning::Fant ikke merket «Kommer snart» for ${kode} på nettstedet."
+  done
   if [ "$MILJO" = "test" ]; then
     jq '.hosting.headers += [{"source": "**", "headers": [{"key": "X-Robots-Tag", "value": "noindex"}]}]' \
       "$dir/firebase.json" >"$dir/firebase.json.ny"

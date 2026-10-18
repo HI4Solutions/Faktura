@@ -144,6 +144,10 @@ html.blankett-side, html.blankett-side body { background: #e6eaf4; }
 .blankett fieldset.modul-valg input[type="checkbox"]:checked::before { content: "X"; }
 .blankett fieldset.modul-valg input[type="checkbox"]:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .blankett fieldset.modul-valg label > span { display: grid; gap: 1px; }
+/* «Kommer snart» som et lite stempel; modulen kan ikke velges. */
+.blankett .kommer-snart { display: inline-block; margin-left: 6px; padding: 2px 5px; border: 1.5px solid var(--stamp); border-radius: 0; background: none; font: 700 9.5px/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--stamp); transform: rotate(-4deg); vertical-align: 2px; white-space: nowrap; }
+.blankett fieldset.modul-valg label.snart { cursor: not-allowed; color: var(--type-2); }
+.blankett fieldset.modul-valg label.snart input[type="checkbox"] { border-style: dashed; background: transparent; cursor: not-allowed; }
 .blankett fieldset.modul-valg strong { font-weight: 600; }
 .blankett fieldset.modul-valg .dempet { color: var(--muted); font-size: 13.5px; }
 

@@ -16,21 +16,33 @@ import { orgnr as visOrgnr } from "./regler.js";
 import { leggIKo } from "./tjenester.js";
 
 // Modulene (Faktura, Personal, Lønn, Regnskap og de som kommer), for registreringen: åpent, og
-// husket fem minutter. Med modulen hver bygger på (Lønn på Personal) og kjernen (funksjonen modulen
-// slås av og på med).
-export type Modul = { kode: string; navn: string; beskrivelse: string; krever: string | null; kjerne: string };
-let modulMinne: { tid: number; liste: Promise<Modul[]> } | undefined;
-export function hentModuler(): Promise<Modul[]> {
+// husket fem minutter. Med modulen hver bygger på (Lønn på Personal), kjernen (funksjonen modulen
+// slås av og på med), og om den kommer snart (ikke klar ennå i denne installasjonen,
+// config.kommerSnart).
+type ModulRad = { kode: string; navn: string; beskrivelse: string; krever: string | null; kjerne: string };
+export type Modul = ModulRad & { kommer_snart: boolean };
+let modulMinne: { tid: number; liste: Promise<ModulRad[]> } | undefined;
+export async function hentModuler(): Promise<Modul[]> {
   if (!modulMinne || Date.now() - modulMinne.tid > 5 * 60_000) {
-    const liste = somSystem((db) => alle<Modul>(db, "select kode, navn, beskrivelse, krever, kjerne from faktura.moduler order by rekkefolge"));
+    const liste = somSystem((db) => alle<ModulRad>(db, "select kode, navn, beskrivelse, krever, kjerne from faktura.moduler order by rekkefolge"));
     modulMinne = { tid: Date.now(), liste };
     liste.catch(() => (modulMinne = undefined));
   }
-  return modulMinne.liste;
+  return (await modulMinne.liste).map((m) => ({ ...m, kommer_snart: config.kommerSnart.includes(m.kode) }));
 }
 export const modulKoder = z.array(z.string().regex(/^[a-z_]{2,30}$/, "Ukjent modul")).min(1, "Velg minst én modul").max(20);
 // «Faktura og Bemanning»
 export const opplisting = (navn: string[]) => (navn.length < 2 ? (navn[0] ?? "") : `${navn.slice(0, -1).join(", ")} og ${navn.at(-1)}`);
+
+// En ny bruker kan ikke velge moduler som kommer snart (de vises med «Kommer snart» i appen).
+// Plattformadministratoren kan likevel gi dem når kontoen godkjennes eller senere.
+export async function avvisKommerSnart(koder: string[]) {
+  const snart = koder.filter((k) => config.kommerSnart.includes(k));
+  if (!snart.length) return;
+  const moduler = await hentModuler().catch(() => [] as Modul[]);
+  const navn = snart.map((k) => moduler.find((m) => m.kode === k)?.navn ?? k);
+  throw new ApiFeil(400, `${opplisting(navn)} kommer snart og kan ikke velges ennå.`);
+}
 // Navnene på modulene til en bruker, i modulenes rekkefølge (RLS: egne, eller betrodd).
 const modulnavn = async (db: Db, bruker: string) =>
   (

@@ -1284,6 +1284,11 @@ fieldset.modul-valg label > span { display: grid; gap: 2px; }
 fieldset.modul-valg.kompakt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 0; margin: 0; border: 0; background: none; }
 fieldset.modul-valg.kompakt legend { float: left; padding: 0; margin-right: 4px; font-size: 0.8rem; font-weight: 500; color: var(--dempet); }
 fieldset.modul-valg.kompakt label { padding: 0; border: 0; background: none; box-shadow: none; align-items: center; gap: 0; font-size: 0.85rem; }
+/* «Kommer snart» på moduler som ikke er klare ennå (KOMMER_SNART, moduler.tsx). En ny bruker kan ikke
+   velge dem. */
+.kommer-snart { display: inline-block; margin-left: 2px; padding: 1px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; line-height: 1.5; vertical-align: 1px; white-space: nowrap; background: var(--advarsel-lys); color: var(--advarsel); }
+fieldset.modul-valg label.snart { cursor: not-allowed; }
+fieldset.modul-valg label.snart > span > strong { color: var(--tekst-2); }
 fieldset.modul-valg.kompakt label input { margin: 0 6px 0 0; }
 .admin-rader { list-style: none; padding: 0; margin: 0; }
 .admin-rader li { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--kant); }

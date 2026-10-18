@@ -14,7 +14,7 @@ import { Feil, Laster } from "../felles";
 import { Blankett, Delband, EnkelBlankett, Kvittering } from "../blankett";
 import { useKonto } from "../konto";
 import { api } from "../api";
-import { ModulValg, modulnavn, opplisting, useModuler } from "../moduler";
+import { ModulValg, modulnavn, opplisting, useModuler, utenKommerSnart } from "../moduler";
 import { KONTO_SLETTET, SlettKontoDialog } from "../slettKonto";
 import { forberedPasskey, loggInnMedPasskey, passkeyFeil, stotterPasskey, venterAllerede } from "../passkey";
 import { appAdresse } from "../appsti";
@@ -415,7 +415,8 @@ export function VenterPaaGodkjenning() {
     if (!som) return settFeil("Velg om du registrerer deg som person eller organisasjon.");
     const nrFeil = som === "organisasjon" ? oppslagFeil(oppslag) : null;
     if (nrFeil) return settFeil(nrFeil);
-    const nye = som === "person" ? PERSON_MODULER : valgte;
+    // Moduler som kommer snart, kan ikke velges (de kan ligge i et valg fra før).
+    const nye = som === "person" ? PERSON_MODULER : utenKommerSnart(moduler, valgte);
     if (!nye.length) return settFeil("Velg minst én modul.");
     settOpptatt(true);
     try {

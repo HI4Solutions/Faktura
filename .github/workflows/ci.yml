@@ -66,15 +66,25 @@ jobs:
       - run: npm ci
       - run: npm run build
       # Firebase Hosting satt sammen som i Rull ut, uten å publisere (scripts/publiser-hosting.sh):
-      # nettstedet med appen under /app (steg 2, som testflaten) og appen med de juridiske sidene
-      # (steg 1, som produksjon), så en feil i sammensettingen stopper her og ikke i utrullingen.
+      # nettstedet med appen under /app (steg 2) som på testflaten og som i produksjon, der Regnskap
+      # er merket «Kommer snart», og appen med de juridiske sidene (steg 1), så en feil i
+      # sammensettingen stopper her og ikke i utrullingen.
       - name: Sett sammen Firebase Hosting (prøvekjøring)
         working-directory: .
         run: |
           UT="$RUNNER_TEMP/steg2" MILJO=test APP_URL=https://app.test.adminkonsoll.no NETTSTED_URL=https://test.adminkonsoll.no bash scripts/publiser-hosting.sh
-          test -f "$RUNNER_TEMP/steg2/nettsted/app/index.html" && test -f "$RUNNER_TEMP/steg2/nettsted/index.html"
+          test -f "$RUNNER_TEMP/steg2/nettsted/app/index.html"
+          test -f "$RUNNER_TEMP/steg2/nettsted/index.html"
+          if grep -q 'data-kommer-snart="[a-z_]*">' "$RUNNER_TEMP/steg2/nettsted/index.html"; then
+            echo "::error::Merket «Kommer snart» vises på nettstedet uten KOMMER_SNART."
+            exit 1
+          fi
+          UT="$RUNNER_TEMP/prod" APP_URL=https://app.adminkonsoll.no NETTSTED_URL=https://adminkonsoll.no KOMMER_SNART=regnskap bash scripts/publiser-hosting.sh
+          test -f "$RUNNER_TEMP/prod/nettsted/app/index.html"
+          grep -q 'data-kommer-snart="regnskap">' "$RUNNER_TEMP/prod/nettsted/index.html"
           UT="$RUNNER_TEMP/steg1" APP_URL=https://adminkonsoll.no NETTSTED_URL=https://adminkonsoll.no bash scripts/publiser-hosting.sh
-          test -f "$RUNNER_TEMP/steg1/standard/dist/vilkar.html" && test -f "$RUNNER_TEMP/steg1/nettsted/index.html"
+          test -f "$RUNNER_TEMP/steg1/standard/dist/vilkar.html"
+          test -f "$RUNNER_TEMP/steg1/nettsted/index.html"
 
   terraform:
     name: Terraform fmt og validate

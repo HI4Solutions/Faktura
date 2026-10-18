@@ -69,7 +69,7 @@ import { mvaJusteringRuter } from "./mvaJustering.js";
 import { skattekortRuter } from "./skattekortRuter.js";
 import { rapportmodulRuter } from "./rapportmodul.js";
 import { glemFunksjoner, krevFunksjoner } from "./funksjoner.js";
-import { hentModuler, krevGodkjentKonto, meldNyKonto, modulKoder } from "./kontoer.js";
+import { avvisKommerSnart, hentModuler, krevGodkjentKonto, meldNyKonto, modulKoder } from "./kontoer.js";
 import { sendBekreftelse } from "./epostbekreftelse.js";
 import { aiPaa } from "./ai.js";
 import { grunnSkjema, meldSlettingTilAdmin, slettOrganisasjon } from "./slettOrg.js";
@@ -295,7 +295,8 @@ export function lagApi() {
     c.header("cache-control", "public, max-age=300");
     return c.json({ hovedadresse: config.appUrl, gamle: config.gamleAppUrler });
   });
-  // Modulene man kan velge når man lager en konto (Faktura, Bemanning og de som kommer).
+  // Modulene man kan velge når man lager en konto (Faktura, Bemanning og de som kommer), med
+  // kommer_snart for dem som ikke er klare ennå her (KOMMER_SNART).
   app.get("/api/offentlig/moduler", async (c) => {
     c.header("cache-control", "public, max-age=300");
     return c.json(await hentModuler());
@@ -373,6 +374,8 @@ export function lagApi() {
     // registeret (eller finnes ikke nummeret der), lagres nummeret uten navn; appen har allerede
     // slått det opp, og plattformadministratoren ser det før kontoen godkjennes.
     const orgnr = b.registrert_som === "organisasjon" ? b.orgnr! : null;
+    // Moduler som kommer snart, kan ikke velges ennå (bare plattformadministratoren gir dem).
+    if (b.moduler) await avvisKommerSnart(b.moduler);
     const orgnavn = orgnr ? await slaOppEnhet(orgnr).then((e) => e.navn ?? null, () => null) : null;
     const svar = await bruk(c, async (db) => {
       if (b.navn !== undefined) await db.query("update faktura.brukere set navn = $1 where id = faktura.bruker_id()", [b.navn]);

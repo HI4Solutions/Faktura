@@ -3,9 +3,9 @@
 Admin Konsoll (tidligere HI4 Faktura) ligger på `adminkonsoll.no`. Det gamle domenet
 `faktura.hi4.no` er fjernet fra løsningen og kan brukes til noe annet.
 
-Nettstedet (landingssiden og de juridiske sidene i `landingsside/`) tar over `adminkonsoll.no`, og
-appen flytter til `app.adminkonsoll.no`. Det skjer i to steg, se [Nettstedet og
-appen](#nettstedet-og-appen).
+Nettstedet (landingssiden og de juridiske sidene i `landingsside/`) ligger på `adminkonsoll.no`, med
+appen under `adminkonsoll.no/app`, og appen har sitt eget domene, `app.adminkonsoll.no`. Flyttingen
+skjedde i to steg, se [Nettstedet og appen](#nettstedet-og-appen).
 
 ## Slik henger det sammen
 
@@ -13,8 +13,8 @@ Domenene står i Terraform (`infra/terraform/variables.tf`):
 
 | Variabel | Hva | I Cloud Run | Nå |
 |---|---|---|---|
-| `app_domain` | Hoveddomenet. Lenkene i e-post og varsler peker hit, og Altinn-forespørslene (som lages i bakgrunnen) sender brukeren hit. | `APP_URL` | `adminkonsoll.no` (steg 2: `app.adminkonsoll.no`) |
-| `app_domains` | Andre domener den samme appen svarer på fullt ut (brukes under en flytting). | `ANDRE_APP_URLER` | `app.adminkonsoll.no` (steg 2: –) |
+| `app_domain` | Hoveddomenet. Lenkene i e-post og varsler peker hit, og Altinn-forespørslene (som lages i bakgrunnen) sender brukeren hit. | `APP_URL` | `app.adminkonsoll.no` (steg 1: `adminkonsoll.no`) |
+| `app_domains` | Andre domener den samme appen svarer på fullt ut (brukes under en flytting). | `ANDRE_APP_URLER` | – (steg 1: `app.adminkonsoll.no`) |
 | `nettsted_domene` | Nettstedet (`landingsside/`), med appen under `/app` ved siden av (steg 2). Passkeys hører til dette domenet når appen ligger på et underdomene av det. | `NETTSTED_URL` | `adminkonsoll.no` |
 | `gamle_domener` | Domener appen er flyttet fra. De virker fortsatt, men appen viser «Admin Konsoll har ny adresse». | `GAMLE_APP_URLER` | – |
 | `domene_omdirigeringer` | Domener som bare sender videre (301, samme sti). | – | `www.adminkonsoll.no` → `adminkonsoll.no` |
@@ -91,8 +91,8 @@ det ikke har selv, så `/bank/tilbake` blir `/app/bank/tilbake`). På testflaten
 ## Nettstedet og appen
 
 Nettstedet i `landingsside/` (landingssiden, personvernerklæringen, bruksvilkårene,
-databehandleravtalen, underleverandørene og informasjonskapslene) skal ligge på `adminkonsoll.no`,
-med appen under `adminkonsoll.no/app` ved siden av, og appen får også sitt eget domene,
+databehandleravtalen, underleverandørene og informasjonskapslene) ligger på `adminkonsoll.no`,
+med appen under `adminkonsoll.no/app` ved siden av, og appen har også sitt eget domene,
 `app.adminkonsoll.no`. Rull ut publiserer begge (`scripts/publiser-hosting.sh`):
 
 | | Standardsiden (`<prosjekt>`) | Appens side (`<prosjekt>-app`) |
@@ -134,10 +134,19 @@ er logget inn.
 Drift, så Altinn har tilbakeadressene på begge domenene. Adressene på `adminkonsoll.no` hos Google og
 bankene skal stå: appen under `/app` bruker dem.
 
-Testflaten har tatt begge stegene (`miljo/test.tfvars`): nettstedet ligger på `test.adminkonsoll.no`,
-med appen under `test.adminkonsoll.no/app`, og appen på `app.test.adminkonsoll.no`. Nettstedet på testflaten har `X-Robots-Tag: noindex`, så det
-ikke havner i søkemotorene. Produksjon står på steg 1 til lanseringen, så `adminkonsoll.no` har
-appen, og nettstedet ligger bare i forhåndsvisningskanalen.
+Produksjon og testflaten har tatt begge stegene (`miljo/produksjon.tfvars` og `miljo/test.tfvars`).
+I produksjon ligger nettstedet på `adminkonsoll.no`, med appen under `adminkonsoll.no/app`, og appen på
+`app.adminkonsoll.no`; på testflaten er det `test.adminkonsoll.no` og `app.test.adminkonsoll.no`.
+Nettstedet på testflaten har `X-Robots-Tag: noindex`, så det ikke havner i søkemotorene.
+
+Etter steg 2 i produksjon (din del, når Infrastruktur og Rull ut har gått gjennom):
+
+- Trykk «Oppdater i Altinn» under Plattform → Drift på `app.adminkonsoll.no`.
+- Sjekk at adressene for `app.adminkonsoll.no` står hos Google og i bankappen til hver organisasjon
+  ([Tilbakeadressene hos tjenestene](#tilbakeadressene-hos-tjenestene)); de skulle vært lagt inn i
+  steg 1.
+- Lenkene i e-post og varsler går nå til `app.adminkonsoll.no`, der brukerne logger inn for seg. På
+  `adminkonsoll.no` beholder de innloggingen, for appen ligger under `/app` der.
 
 ## Et nytt domene senere
 

@@ -5,7 +5,7 @@ Admin Konsoll kjører i to installasjoner, hver i sitt prosjekt i Google Cloud:
 | | Produksjon | Testflaten |
 |---|---|---|
 | Prosjekt | `hi4-faktura-prod` | `hi4-faktura-test` |
-| Adresse | adminkonsoll.no (appen; nettstedet kommer hit ved lanseringen) | app.test.adminkonsoll.no (appen) og test.adminkonsoll.no (nettstedet, med appen under /app) |
+| Adresse | app.adminkonsoll.no (appen) og adminkonsoll.no (nettstedet, med appen under /app) | app.test.adminkonsoll.no (appen) og test.adminkonsoll.no (nettstedet, med appen under /app) |
 | Data | Ekte bedrifter, brukere og fakturaer | Testbedrifter fra Tenor og oppdiktede personer |
 | Skatteetaten, Altinn og NAV | Produksjon når det er satt opp (`SKATTEETATEN_MILJO`) | Alltid testmiljøene (Maskinporten-test og TT02) |
 | Variablene i GitHub | Repoet | Miljøet «test» (går foran repoet) |
@@ -27,9 +27,25 @@ Produksjonens variabler ligger i repoet, og utrullingen ser etter `GCP_PROJECT_I
 Variablene i et miljø i GitHub går foran dem i repoet. Testflaten må derfor ha sine egne verdier
 for prosjektet, innloggingen og tilstandsbøtta; mangler de, eller er de like produksjonens, stopper
 utrullingen før noe skjer (`miljoer.yml`). Det som ellers skiller miljøene, står i
-`infra/terraform/miljo/`: domenet, databasestørrelsen, hvor lenge PDF-ene oppbevares, og at
-testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett hva
-`SKATTEETATEN_MILJO` er satt til.
+`infra/terraform/miljo/`: domenet, databasestørrelsen, hvor lenge PDF-ene oppbevares, modulene som
+ikke er klare ennå (under), og at testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og
+NAV, uansett hva `SKATTEETATEN_MILJO` er satt til.
+
+## Moduler som ikke er klare
+
+En modul som ikke er klar for kundene i en installasjon, står i `kommer_snart` i
+`infra/terraform/miljo/<miljø>.tfvars`. I produksjon er det nå Regnskap (`kommer_snart =
+["regnskap"]`); testflaten har alle modulene. Terraform gir lista til API-et som `KOMMER_SNART`, og da:
+
+- har modulen merket «Kommer snart» når kontoen lages, og nye kontoer kan ikke velge den (API-et sier
+  nei også utenom skjemaet);
+- er den merket der plattformadministratoren godkjenner kontoer og gir moduler til organisasjonene
+  (Plattform → Organisasjoner), og der kan den fortsatt gis, f.eks. til en testkunde;
+- har den merket på nettstedet (Rull ut leser `KOMMER_SNART` fra API-et når nettstedet publiseres).
+
+Organisasjoner som alt har modulen, beholder den. Når modulen er klar: fjern den fra lista, kjør
+Infrastruktur fra main (og godkjenn produksjon), og så Utrulling (Actions → Utrulling → Run
+workflow), så nettstedet publiseres uten merket.
 
 ## Sette opp testflaten (din del)
 
@@ -84,6 +100,14 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
 8. **Godkjenning før produksjon.** Settings → Environments → `produksjon` (finnes etter den første
    utrullingen) → Required reviewers → deg selv. Fra da av venter produksjon på at du godkjenner.
 
+### Testbedriften
+
+Testbedriften på testflaten er **EKSTRA NESTE TIGER AS** (org.nr. 313 516 504), et aksjeselskap fra
+Tenor. Daglig leder og styreleder er samme syntetiske testperson, med fødselsnummer **18838398177**.
+Logg inn med TestID i ID-porten (TT02) som den personen for å godkjenne tilgangen i Altinn og
+signere (årsregnskapet). Bedriften er brukt til skattekortene, a-meldingen, krav og frister og
+årsregnskapet. Testpersonene og -bedriftene er syntetiske og kan stå her.
+
 ## Før Skatteetaten, Altinn og NAV går i produksjon
 
 TT02-testene gjøres på testflaten. Produksjon får sin egen klient i Maskinporten, og den prøves
@@ -134,7 +158,7 @@ tilgangene, og hva som er gitt i test og produksjon, står i [tilganger.md](tilg
      (`medinnova-prod-1`) og `SKATTEETATEN_MILJO` = `prod`. Testflaten er ikke berørt, siden den
      har sine egne (og `test.tfvars` holder den på testmiljøene).
    - Kjør Infrastruktur fra main, og godkjenn produksjon. Trykk så Plattform → Drift → «Registrer
-     systemet i Altinn» på adminkonsoll.no.
+     systemet i Altinn» på app.adminkonsoll.no.
    - Gi NAV beskjed første gang sykepenger brukes i produksjon ([nav.md](nav.md), punkt 6).
    - Mva-meldingen fra appen: en egen ID-porten-integrasjon i produksjon, med nøkkelen
      (`MILJO=prod bash scripts/idporten.sh nokkel`), `IDPORTEN_KLIENT_ID` og `IDPORTEN_NOKKEL_ID` i

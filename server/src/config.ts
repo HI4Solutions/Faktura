@@ -58,6 +58,14 @@ export const config = {
   // appen ligger på et underdomene av det (passkey.ts), og gamle lenker til appen derfra sendes
   // videre til appen (docs/domene.md).
   nettstedUrl: valgfri("NETTSTED_URL"),
+  // Modulene som ikke er klare ennå i denne installasjonen (kommaseparerte koder; «regnskap» i
+  // produksjon, infra/terraform/miljo/produksjon.tfvars). De merkes «Kommer snart» i appen og på
+  // nettstedet, og en ny bruker kan ikke velge dem selv; plattformadministratoren kan gi dem
+  // (kontoer.ts).
+  kommerSnart: (valgfri("KOMMER_SNART") ?? "")
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean),
   epostAvsender: valgfri("EPOST_AVSENDER") ?? "post@adminkonsoll.no",
   // Henvendelsene fra kontaktskjemaet på nettstedet sendes hit (kontakt.ts).
   kontaktEpost: valgfri("KONTAKT_EPOST") ?? "post@adminkonsoll.no",

@@ -27,6 +27,8 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
   const olga = "Bearer test:uid-konto-olga:olga.konto@server.test:mfa:Olga%20Org:venter";
   const pia = "Bearer test:uid-konto-pia:pia.konto@server.test:mfa:Pia%20Person:venter";
   const rune = "Bearer test:uid-konto-rune:rune.konto@server.test:mfa:Rune%20Register:venter";
+  // Ber om en modul som kommer snart (KOMMER_SNART).
+  const sven = "Bearer test:uid-konto-sven:sven.konto@server.test:mfa:Sven%20Snart:venter";
 
   const kall = async (m: string, sti: string, hvem: string | null, k?: unknown) => {
     const r = await app.request(sti, {
@@ -58,6 +60,30 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     expect(r.data[1]).toMatchObject({ navn: "Personal", beskrivelse: expect.stringContaining("vaktplan") });
     expect(r.data[2]).toMatchObject({ navn: "Lønn", krever: "personal" });
     expect(r.headers.get("cache-control")).toContain("max-age");
+    // Uten KOMMER_SNART kommer ingen snart.
+    expect(r.data.every((m: any) => m.kommer_snart === false)).toBe(true);
+  });
+
+  it("en modul som kommer snart, er merket, og en ny bruker kan ikke velge den; plattformadministratoren kan gi den", async () => {
+    const for_ = [...config.kommerSnart];
+    config.kommerSnart.splice(0, config.kommerSnart.length, "regnskap");
+    try {
+      const moduler = (await kall("GET", "/api/offentlig/moduler", null)).data;
+      expect(moduler.filter((m: any) => m.kommer_snart).map((m: any) => m.kode)).toEqual(["regnskap"]);
+      const r = await kall("PATCH", "/api/meg", sven, { moduler: ["faktura", "regnskap"] });
+      expect(r.status).toBe(400);
+      expect(r.data.error).toBe("Regnskap kommer snart og kan ikke velges ennå.");
+      expect((await kall("GET", "/api/meg", sven)).data.bruker.moduler).toEqual([]);
+      expect(tilAdmin("sven.konto@server.test")).toHaveLength(0);
+      expect((await kall("PATCH", "/api/meg", sven, { moduler: ["faktura"] })).data).toMatchObject({ moduler: ["faktura"] });
+      expect(tilAdmin("sven.konto@server.test").map((x) => x.tekst)).toEqual([expect.stringContaining("Moduler: Faktura")]);
+      // Plattformadministratoren kan likevel godkjenne kontoen med Regnskap.
+      const id = (await kall("GET", "/api/admin/kontoer", admin)).data.find((v: any) => v.epost === "sven.konto@server.test").id;
+      const g = await kall("POST", `/api/admin/brukere/${id}/godkjenning`, admin, { godkjent: true, moduler: ["faktura", "regnskap"] });
+      expect(g.data).toMatchObject({ status: "godkjent", moduler: ["Faktura", "Regnskap"] });
+    } finally {
+      config.kommerSnart.splice(0, config.kommerSnart.length, ...for_);
+    }
   });
 
   it("en ny konto venter, ser ingen organisasjoner og slipper ikke inn i resten", async () => {

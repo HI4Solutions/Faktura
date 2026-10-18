@@ -143,6 +143,10 @@ h1.stor .blaa { color: var(--ink); }
 .modul-h { display: flex; align-items: baseline; gap: 12px; padding: 16px 20px 6px; }
 .modul-h .bokst { font: 500 13px var(--font-type); color: #fff; background: var(--ink); padding: 2px 8px; }
 .modul-h h3 { margin: 0; font: 700 clamp(26px, 3vw, 34px)/1 var(--font-display); letter-spacing: -0.03em; }
+/* «Kommer snart» på moduler som ikke er klare ennå. Skjult her; publiseringen viser merket for
+   modulene i KOMMER_SNART på API-et (scripts/publiser-hosting.sh). */
+.modul-h .kommer-snart { align-self: center; margin-left: auto; }
+.kommer-snart[hidden] { display: none; }
 .modul > p { margin: 6px 20px 14px; color: var(--type-2); max-width: 52ch; }
 .liste { list-style: none; margin: 0 20px; padding: 0; display: grid; gap: 7px; font-size: 15px; }
 .liste li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start; }
@@ -438,7 +442,7 @@ h1.stor .blaa { color: var(--ink); }
       </div>
     </article>
     <article class="modul">
-      <div class="modul-h"><span class="bokst">1D</span><h3>Regnskap</h3></div>
+      <div class="modul-h"><span class="bokst">1D</span><h3>Regnskap</h3><span class="mini-st r kommer-snart" data-kommer-snart="regnskap" hidden>Kommer snart</span></div>
       <p>Fakturaer, lønn og bank blir forslag til posteringer i deres regnskap. Dere kontrollerer og godkjenner.</p>
       <ul class="liste">
         <li><i class="x" aria-hidden="true"></i>Bilag og hovedbok på kontoplanen etter NS 4102</li>

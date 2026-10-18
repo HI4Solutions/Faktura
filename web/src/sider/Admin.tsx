@@ -11,7 +11,7 @@ import { dato, orgnr } from "../format";
 import { IkonAnsatte, IkonFaktura, IkonKunder, IkonSkjold, IkonVarsel } from "../ikoner";
 import { useKonto } from "../konto";
 import { hilsen } from "./OversiktDeler";
-import { ModulValg, modulnavn, opplisting, useModuler, type Modul } from "../moduler";
+import { KommerSnart, ModulValg, modulnavn, opplisting, useModuler, type Modul } from "../moduler";
 import { SlettOrganisasjon } from "../slettOrg";
 import { aarFraFilnavn, lesTrekktabellFil } from "../trekktabeller";
 import { SkattekortOppsett } from "./Skattekort";
@@ -956,6 +956,12 @@ function OrgFunksjoner({ id, funksjoner, utenOrgnr = false }: { id: string; funk
                 <input type="checkbox" aria-label={`Modulen ${m.navn}`} checked={pa} onChange={(e) => void sett(m.kjerne!, e.target.checked)} />
                 <span>
                   <strong>{m.navn}</strong>
+                  {m.kommer_snart && (
+                    <>
+                      {" "}
+                      <KommerSnart />
+                    </>
+                  )}
                   <span className="dempet liten"> · {m.beskrivelse}</span>
                   {mangler && <span className="liten advarsel-tekst"> · virker bare med {mangler}</span>}
                   {kreverOrgnr(m.kjerne!) && <span className="liten advarsel-tekst"> · krever org.nr.</span>}
@@ -1225,6 +1231,7 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
                 {!k.epost_bekreftet && <EpostUbekreftet b={k.bekreftelse} />}
                 <ModulValg
                   kompakt
+                  tillatKommerSnart
                   moduler={moduler}
                   valgt={valgte(k)}
                   endre={(m) => settEndret((e) => ({ ...e, [k.id]: m }))}
