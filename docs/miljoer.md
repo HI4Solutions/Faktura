@@ -88,7 +88,8 @@ testflaten alltid bruker testmiljøene til Skatteetaten, Altinn og NAV, uansett 
 
 TT02-testene gjøres på testflaten. Produksjon får sin egen klient i Maskinporten, og den prøves
 før appen tar den i bruk (punktet «Produksjon» i [skattekort.md](skattekort.md),
-[amelding.md](amelding.md) og [nav.md](nav.md)). Før punkt 5 merker produksjonen ingenting.
+[amelding.md](amelding.md) og [nav.md](nav.md)). Før punkt 5 merker produksjonen ingenting. Alle
+tilgangene, og hva som er gitt i test og produksjon, står i [tilganger.md](tilganger.md).
 
 1. **Tilgangene.** Logg inn i Samarbeidsportalen for produksjon
    (<https://sjolvbetjening.samarbeid.digdir.no>); ber den om det, signerer du de samme
