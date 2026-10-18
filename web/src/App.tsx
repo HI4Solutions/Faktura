@@ -10,7 +10,7 @@ import {
 import { Innlogging, VenterPaaGodkjenning } from "./sider/Innlogging";
 import { APP_STI } from "./appsti";
 import { BekreftEpost, BekreftLenke } from "./sider/Bekreftelse";
-import { NyOrganisasjon } from "./sider/NyOrganisasjon";
+import { forslagFraRegistrering, NyOrganisasjon } from "./sider/NyOrganisasjon";
 import { GodtaAvtaler } from "./avtaler";
 import { Oversikt } from "./sider/Oversikt";
 import { AnsattOversikt } from "./sider/AnsattOversikt";
@@ -523,18 +523,26 @@ function Ramme() {
 
   // Plattformadministratoren kommer inn også uten organisasjon (til sin egen oversikt).
   if (ny || (orgs.length === 0 && !meg?.plattformadmin)) {
+    // Den første organisasjonen fylles ut fra det brukeren registrerte seg som (person eller
+    // organisasjon med organisasjonsnummeret).
+    const forslag = orgs.length === 0 ? forslagFraRegistrering(meg?.bruker) : undefined;
     return (
       <div className="innhold frittstaende" style={{ margin: "0 auto" }}>
         <h1>{orgs.length === 0 && !meg?.plattformadmin ? "Velkommen til Admin Konsoll" : "Ny organisasjon"}</h1>
         {orgs.length === 0 && !meg?.plattformadmin && (
           <p className="dempet">
-            {/* Uten Faktura blant modulene (bare Bemanning) er det ikke fakturering det handler om. */}
-            {meg?.bruker.moduler?.length && !meg.bruker.moduler.includes("faktura")
-              ? "Start med å legge inn foretaket ditt."
-              : "Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt. Fakturerer du som privatperson, trenger du ikke organisasjonsnummer."}
+            {/* Uten Faktura blant modulene (bare Personal) er det ikke fakturering det handler om. */}
+            {forslag?.type === "foretak"
+              ? "Du registrerte deg som organisasjon: organisasjonsnummeret er fylt inn, og navnet og adressen hentes fra Enhetsregisteret. Sjekk opplysningene, godta vilkårene og trykk «Opprett»."
+              : forslag?.type === "privatperson"
+                ? "Du registrerte deg som person: fakturaene sendes i ditt navn, uten organisasjonsnummer. Sjekk navnet, godta vilkårene og trykk «Opprett»."
+                : meg?.bruker.moduler?.length && !meg.bruker.moduler.includes("faktura")
+                  ? "Start med å legge inn foretaket ditt."
+                  : "Start med å legge inn foretaket du skal fakturere fra, eller regnskapsbyrået ditt. Fakturerer du som privatperson, trenger du ikke organisasjonsnummer."}
           </p>
         )}
         <NyOrganisasjon
+          forslag={forslag}
           avbryt={orgs.length || meg?.plattformadmin ? () => settNy(false) : undefined}
           opprettet={() => {
             // Den nye organisasjonen er valgt: lukk skjemaet og gå til oversikten for den.

@@ -20,21 +20,35 @@ const TYPER: { type: Type; navn: string; tekst: string }[] = [
   { type: "regnskapsbyraa", navn: "Regnskapsbyrå", tekst: "Fører regnskapet for klienter som gir byrået tilgang." },
 ];
 
+// Det brukeren registrerte seg som ved «Opprett konto» (0126_registrering.sql), til den første
+// organisasjonen: en person blir privatperson, en organisasjon foretak med organisasjonsnummeret
+// (navnet og adressen hentes fra Enhetsregisteret som ellers). En person uten Faktura blant
+// modulene (administratoren godkjente andre) får ikke noe forslag; en privatperson har bare Faktura.
+export type Forslag = { type: Type; orgnr?: string | null };
+export function forslagFraRegistrering(
+  b: { registrert_som?: "person" | "organisasjon" | null; oppgitt_orgnr?: string | null; moduler?: string[] } | undefined,
+): Forslag | undefined {
+  if (b?.registrert_som === "organisasjon" && b.oppgitt_orgnr) return { type: "foretak", orgnr: b.oppgitt_orgnr };
+  if (b?.registrert_som === "person" && (!b.moduler?.length || b.moduler.includes("faktura"))) return { type: "privatperson" };
+  return undefined;
+}
+
 // opprettet kalles når organisasjonen er laget og valgt, så den som viser skjemaet kan lukke det.
-export function NyOrganisasjon({ avbryt, opprettet }: { avbryt?: () => void; opprettet?: () => void }) {
+export function NyOrganisasjon({ avbryt, opprettet, forslag }: { avbryt?: () => void; opprettet?: () => void; forslag?: Forslag }) {
   const { oppdater, velgOrg, meg } = useKonto();
-  const [type, settType] = useState<Type>("foretak");
-  const [orgnr, settOrgnr] = useState("");
+  // Uten Faktura blant brukerens moduler er det ingenting en privatperson kan bruke.
+  const moduler = meg?.bruker?.moduler;
+  const typer = TYPER.filter((t) => t.type !== "privatperson" || !moduler?.length || moduler.includes("faktura"));
+  const start: Type = forslag && typer.some((t) => t.type === forslag.type) ? forslag.type : "foretak";
+  const [type, settType] = useState<Type>(start);
+  const [orgnr, settOrgnr] = useState(start === "foretak" ? (forslag?.orgnr ?? "") : "");
   const [oppslag, settOppslag] = useState<any>(null);
-  const [navn, settNavn] = useState("");
+  const [navn, settNavn] = useState(start === "privatperson" ? (meg?.bruker?.navn ?? "") : "");
   // Bruksvilkårene og databehandleravtalen godtas når organisasjonen opprettes (versjonene lagres).
   const { avtaler, feil: avtalefeil } = useAvtaler();
   const [godtatt, settGodtatt] = useState(false);
   const { opptatt, feil, kjor, settFeil } = useHandling();
 
-  // Uten Faktura blant brukerens moduler er det ingenting en privatperson kan bruke.
-  const moduler = meg?.bruker?.moduler;
-  const typer = TYPER.filter((t) => t.type !== "privatperson" || !moduler?.length || moduler.includes("faktura"));
   const privat = type === "privatperson";
   const nr = orgnr.replace(/\s/g, "");
   const nrFeil = !privat && nr.length === 9 && !orgnrGyldig(nr) ? "Ugyldig organisasjonsnummer (kontrollsifferet stemmer ikke)" : null;

@@ -1,6 +1,7 @@
 // Kontogodkjenning (0043_kontogodkjenning.sql): en ny konto kommer ikke inn før
 // plattformadministratoren har godkjent den. Når e-postadressen er bekreftet, navnet skrevet
-// inn og modulene valgt (0044_moduler.sql), får administratorene e-post om forespørselen; de
+// inn og modulene valgt (0044_moduler.sql), får administratorene e-post om forespørselen, med
+// det brukeren registrerte seg som (person eller organisasjon, 0126_registrering.sql); de
 // godkjenner (med modulene brukeren ba om, eller andre) eller avviser under Administrasjon →
 // Venter, og brukeren får e-post om utfallet. Til da slipper API-et bare gjennom /meg (status,
 // navn, moduler og lenken som bekrefter e-postadressen, epostbekreftelse.ts) og invitasjoner (en
@@ -11,6 +12,7 @@ import { config } from "./config.js";
 import { alle, en, somBetrodd, somBruker, somSystem, type Db } from "./db.js";
 import { ApiFeil } from "./feil.js";
 import { adminBekreftEpost, adminSendBekreftelse } from "./epostbekreftelse.js";
+import { orgnr as visOrgnr } from "./regler.js";
 import { leggIKo } from "./tjenester.js";
 
 // Modulene (Faktura, Personal, Lønn, Regnskap og de som kommer), for registreringen: åpent, og
@@ -55,24 +57,42 @@ export const krevGodkjentKonto: MiddlewareHandler = async (c, next) => {
   throw new ApiFeil(403, b.status === "avvist" ? "Kontoen er ikke godkjent" : "Kontoen venter på godkjenning fra Admin Konsoll");
 };
 
+// Det kontoen er registrert som (0126_registrering.sql), til plattformadministratorene: person, eller
+// organisasjon med navnet i Enhetsregisteret og organisasjonsnummeret. null: ikke valgt (eldre
+// kontoer og de inviterte).
+export type Registrering = { registrert_som: "person" | "organisasjon" | null; oppgitt_orgnr: string | null; oppgitt_orgnavn: string | null };
+export function registreringTekst(r: Registrering): string | null {
+  if (r.registrert_som === "person") return "Registrert som person (uten organisasjonsnummer)";
+  if (r.registrert_som !== "organisasjon" || !r.oppgitt_orgnr) return null;
+  return r.oppgitt_orgnavn
+    ? `Registrert som organisasjon: ${r.oppgitt_orgnavn}, org.nr. ${visOrgnr(r.oppgitt_orgnr)}`
+    : `Registrert som organisasjon: org.nr. ${visOrgnr(r.oppgitt_orgnr)} (navnet kunne ikke slås opp i Enhetsregisteret)`;
+}
+
 // Når kontoen venter, e-postadressen er bekreftet, navnet skrevet inn og modulene valgt: e-post
-// til plattformadministratorene (én gang), med modulene brukeren ber om.
+// til plattformadministratorene (én gang), med det kontoen er registrert som og modulene brukeren
+// ber om.
 export async function meldNyKonto(c: Context) {
   const b = c.get("bruker");
   if (b.status !== "venter" || !b.epostBekreftet || !config.adminEposter.length) return;
   const ny = await somBruker(b.id, async (db) => {
     if (!(await en<{ ny: boolean }>(db, "select faktura.meld_konto() as ny"))!.ny) return null;
-    const meg = (await en<{ navn: string; epost: string }>(db, "select navn, epost from faktura.brukere where id = faktura.bruker_id()"))!;
+    const meg = (await en<{ navn: string; epost: string } & Registrering>(
+      db,
+      "select navn, epost, registrert_som, oppgitt_orgnr, oppgitt_orgnavn from faktura.brukere where id = faktura.bruker_id()",
+    ))!;
     return { ...meg, moduler: await modulnavn(db, b.id) };
   });
   if (!ny) return;
+  const registrering = registreringTekst(ny);
   await leggIKo({
     type: "epost",
     til: config.adminEposter,
-    emne: `Ny konto venter på godkjenning: ${ny.navn}`,
+    emne: `Ny konto venter på godkjenning: ${ny.navn}${ny.registrert_som === "organisasjon" && ny.oppgitt_orgnavn ? ` (${ny.oppgitt_orgnavn})` : ""}`,
     tekst: [
       `${ny.navn} (${ny.epost}) har laget en konto i Admin Konsoll og bekreftet e-postadressen.`,
       ``,
+      ...(registrering ? [registrering] : []),
       `Moduler: ${opplisting(ny.moduler)}`,
       ``,
       `Kontoen kommer ikke inn før den er godkjent. Godkjenn eller avvis den på ${config.appUrl}/admin`,

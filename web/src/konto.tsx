@@ -52,8 +52,20 @@ export const harFunksjon = (org: Pick<MinOrg, "funksjoner"> | null | undefined, 
 
 interface Meg {
   // status: kontoen er godkjent av Admin Konsoll, venter på godkjenning eller er avvist.
-  // moduler: modulene brukeren har bedt om (eller fått godkjent), f.eks. ["faktura", "bemanning"].
-  bruker: { id: string; epost: string; navn: string | null; status?: "venter" | "godkjent" | "avvist"; avvist_grunn?: string | null; moduler?: string[] };
+  // moduler: modulene brukeren har bedt om (eller fått godkjent), f.eks. ["faktura", "personal"].
+  // registrert_som: person eller organisasjon fra «Opprett konto», med organisasjonsnummeret og
+  // navnet i Enhetsregisteret (0126_registrering.sql); null for eldre kontoer og de inviterte.
+  bruker: {
+    id: string;
+    epost: string;
+    navn: string | null;
+    status?: "venter" | "godkjent" | "avvist";
+    avvist_grunn?: string | null;
+    moduler?: string[];
+    registrert_som?: "person" | "organisasjon" | null;
+    oppgitt_orgnr?: string | null;
+    oppgitt_orgnavn?: string | null;
+  };
   mfa: boolean;
   plattformadmin: boolean;
   organisasjoner: MinOrg[];

@@ -8,6 +8,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { lagApi } from "../src/api.js";
 import { config } from "../src/config.js";
 import { settLokalOppgavekjorer, type Oppgave } from "../src/tjenester.js";
+import { settBrreg } from "../src/verifisering.js";
+import type { Enhet } from "../src/brreg.js";
 
 describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
   const app = lagApi();
@@ -21,6 +23,10 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
   const unni = "Bearer test:uid-konto-unni:unni.konto@server.test:mfa:Unni%20Ung:venter:ubekreftet";
   const unniBekreftet = "Bearer test:uid-konto-unni:unni.konto@server.test:mfa:Unni%20Ung:venter";
   const eier = "Bearer test:uid-konto-eier:eier.konto@server.test:mfa";
+  // Registrerer seg som organisasjon og som person (0126_registrering.sql).
+  const olga = "Bearer test:uid-konto-olga:olga.konto@server.test:mfa:Olga%20Org:venter";
+  const pia = "Bearer test:uid-konto-pia:pia.konto@server.test:mfa:Pia%20Person:venter";
+  const rune = "Bearer test:uid-konto-rune:rune.konto@server.test:mfa:Rune%20Register:venter";
 
   const kall = async (m: string, sti: string, hvem: string | null, k?: unknown) => {
     const r = await app.request(sti, {
@@ -38,6 +44,11 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
       ko.push(o);
     });
     config.adminEposter.push("konto-admin@server.test");
+    // Enhetsregisteret: ett foretak; de andre numrene finnes ikke.
+    settBrreg(async (nr) => {
+      if (nr !== "315000300") throw Object.assign(new Error("Fant ikke organisasjonsnummeret i Enhetsregisteret"), { status: 404 });
+      return { orgnr: nr, navn: "Registrering Test AS", adresse: "Testveien 1", postnr: "0150", poststed: "OSLO" } as Enhet;
+    });
   });
 
   it("modulene kan hentes uten innlogging", async () => {
@@ -89,6 +100,57 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
     expect(tilAdmin("unni.konto@server.test")).toHaveLength(0);
     await kall("GET", "/api/meg", unniBekreftet);
     expect(tilAdmin("unni.konto@server.test").map((x) => x.tekst)).toEqual([expect.stringContaining("Moduler: Faktura")]);
+  });
+
+  it("den nye brukeren registrerer seg som organisasjon med organisasjonsnummeret, eller som person", async () => {
+    // Organisasjon krever et gyldig organisasjonsnummer.
+    expect((await kall("PATCH", "/api/meg", olga, { registrert_som: "organisasjon" })).data.error).toBe("Skriv inn organisasjonsnummeret");
+    expect((await kall("PATCH", "/api/meg", olga, { registrert_som: "organisasjon", orgnr: "12345" })).data.error).toBe("Ugyldig organisasjonsnummer");
+    expect((await kall("PATCH", "/api/meg", olga, { registrert_som: "organisasjon", orgnr: "315000301" })).data.error).toBe("Ugyldig organisasjonsnummer");
+    expect((await kall("PATCH", "/api/meg", olga, { registrert_som: "firma", orgnr: "315000300" })).status).toBe(400);
+    // Rett fra registreringen: navnet, modulene og organisasjonen (med mellomrom i nummeret), og
+    // navnet i Enhetsregisteret slås opp.
+    const r = await kall("PATCH", "/api/meg", olga, { navn: "Olga Org", moduler: ["faktura", "personal"], registrert_som: "organisasjon", orgnr: "315 000 300" });
+    expect(r.data).toMatchObject({ navn: "Olga Org", registrert_som: "organisasjon", oppgitt_orgnr: "315000300", oppgitt_orgnavn: "Registrering Test AS" });
+    expect((await kall("GET", "/api/meg", olga)).data.bruker).toMatchObject({ registrert_som: "organisasjon", oppgitt_orgnr: "315000300" });
+    // Forespørselen til administratorene sier hvilken organisasjon det gjelder.
+    const e = tilAdmin("olga.konto@server.test");
+    expect(e).toHaveLength(1);
+    expect(e[0]!.emne).toBe("Ny konto venter på godkjenning: Olga Org (Registrering Test AS)");
+    expect(e[0]!.tekst).toContain("Registrert som organisasjon: Registrering Test AS, org.nr. 315 000 300\nModuler: Faktura og Personal");
+
+    // Som person: uten organisasjonsnummer, også om appen sender et.
+    expect(
+      (await kall("PATCH", "/api/meg", pia, { navn: "Pia Person", moduler: ["faktura"], registrert_som: "person", orgnr: "315000300" })).data,
+    ).toMatchObject({ registrert_som: "person", oppgitt_orgnr: null, oppgitt_orgnavn: null });
+    expect(tilAdmin("pia.konto@server.test").map((x) => x.tekst)).toEqual([expect.stringContaining("Registrert som person (uten organisasjonsnummer)")]);
+    expect(tilAdmin("pia.konto@server.test")[0]!.emne).toBe("Ny konto venter på godkjenning: Pia Person");
+
+    // Finnes ikke nummeret i Enhetsregisteret (eller svarer det ikke), lagres det uten navn, og
+    // administratorene får vite det. Valget kan endres mens kontoen venter.
+    expect((await kall("PATCH", "/api/meg", rune, { registrert_som: "person" })).data).toMatchObject({ registrert_som: "person" });
+    expect((await kall("PATCH", "/api/meg", rune, { moduler: ["faktura"], registrert_som: "organisasjon", orgnr: "315000319" })).data).toMatchObject({
+      registrert_som: "organisasjon",
+      oppgitt_orgnr: "315000319",
+      oppgitt_orgnavn: null,
+    });
+    expect(tilAdmin("rune.konto@server.test")[0]!.tekst).toContain("Registrert som organisasjon: org.nr. 315 000 319 (navnet kunne ikke slås opp i Enhetsregisteret)");
+
+    // Plattformadministratoren ser det blant kontoene som venter; en konto uten valg har null.
+    const venter = (await kall("GET", "/api/admin/kontoer", admin)).data;
+    expect(venter.find((v: any) => v.epost === "olga.konto@server.test")).toMatchObject({
+      registrert_som: "organisasjon",
+      oppgitt_orgnr: "315000300",
+      oppgitt_orgnavn: "Registrering Test AS",
+    });
+    expect(venter.find((v: any) => v.epost === "pia.konto@server.test")).toMatchObject({ registrert_som: "person", oppgitt_orgnr: null });
+    expect(venter.find((v: any) => v.epost === "nina.konto@server.test")).toMatchObject({ registrert_som: null });
+
+    // Etter godkjenningen endres det ikke; den første organisasjonen fylles ut fra det.
+    const id = venter.find((v: any) => v.epost === "olga.konto@server.test").id;
+    await kall("POST", `/api/admin/brukere/${id}/godkjenning`, admin, { godkjent: true });
+    expect((await kall("PATCH", "/api/meg", olga, { registrert_som: "person" })).data.error).toBe("Kontoen er alt behandlet");
+    expect((await kall("GET", "/api/meg", olga)).data.bruker).toMatchObject({ status: "godkjent", registrert_som: "organisasjon", oppgitt_orgnr: "315000300" });
   });
 
   it("bare plattformadministratoren ser og godkjenner kontoene, med modulene", async () => {

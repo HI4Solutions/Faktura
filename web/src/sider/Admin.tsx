@@ -61,7 +61,9 @@ type Bekreftelse = {
   av_admin: boolean;
   antall: number;
 };
-// En ny konto som venter på godkjenning, med modulene den ber om og om e-postadressen er bekreftet.
+// En ny konto som venter på godkjenning, med modulene den ber om, om e-postadressen er bekreftet og
+// om den registrerte seg som person eller organisasjon (med organisasjonsnummeret og navnet i
+// Enhetsregisteret, 0126_registrering.sql).
 type KontoVenter = {
   id: string;
   epost: string;
@@ -71,6 +73,9 @@ type KontoVenter = {
   moduler: string[];
   epost_bekreftet: boolean;
   bekreftelse: Bekreftelse | null;
+  registrert_som: "person" | "organisasjon" | null;
+  oppgitt_orgnr: string | null;
+  oppgitt_orgnavn: string | null;
 };
 const bekreftelseStatus: Record<Bekreftelse["status"], string> = {
   venter: "venter på å bli sendt",
@@ -1194,6 +1199,20 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
               <span>
                 <strong>{k.navn ?? <span className="dempet">Uten navn ennå</span>}</strong>
                 <span className="dempet liten"> · {k.epost} · registrert {siden(k.opprettet)}</span>
+                {k.registrert_som && (
+                  <span className="liten konto-registrering">
+                    {k.registrert_som === "organisasjon" ? (
+                      <>
+                        Organisasjon: <strong>{k.oppgitt_orgnavn ?? "navnet ble ikke funnet i Enhetsregisteret"}</strong>
+                        {k.oppgitt_orgnr && <span className="dempet"> · org.nr. {orgnr(k.oppgitt_orgnr)}</span>}
+                      </>
+                    ) : (
+                      <>
+                        <strong>Person</strong> <span className="dempet">(uten organisasjonsnummer, bare Faktura)</span>
+                      </>
+                    )}
+                  </span>
+                )}
                 <span className="liten konto-moduler">
                   {k.moduler.length ? (
                     <>

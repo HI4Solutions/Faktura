@@ -7,6 +7,7 @@ import { sendEmailVerification, updateProfile, type User } from "firebase/auth";
 import { api, ApiFeil } from "./api";
 import { hentAuth } from "./firebase";
 import { appAdresse } from "./appsti";
+import type { RegistrertSom } from "./registrering";
 
 export type Sending = { status: "sender" } | { status: "sendt"; til: string } | { status: "bekreftet" } | { status: "feil"; melding: string };
 
@@ -56,14 +57,22 @@ export async function sendBekreftelse(): Promise<Sending> {
   return svar;
 }
 
-// Resten av registreringen når kontoen er laget: navnet og modulene lagres (forespørselen om
-// godkjenning går når e-postadressen er bekreftet), og så sendes lenken. Det fortsetter selv om
-// skjermen byttes til den som venter på bekreftelsen.
-export function fullforRegistrering(bruker: User, navn: string, moduler: string[]) {
+// Resten av registreringen når kontoen er laget: navnet, modulene og om brukeren registrerer seg
+// som person eller organisasjon (med organisasjonsnummeret) lagres (forespørselen om godkjenning
+// går når e-postadressen er bekreftet), og så sendes lenken. Det fortsetter selv om skjermen
+// byttes til den som venter på bekreftelsen.
+export function fullforRegistrering(
+  bruker: User,
+  navn: string,
+  moduler: string[],
+  registrering?: { registrert_som: RegistrertSom; orgnr: string | null },
+) {
   sett({ status: "sender" });
   void (async () => {
     await updateProfile(bruker, { displayName: navn }).catch((e) => console.warn("Kunne ikke lagre navnet i Identity Platform", e));
-    await api("PATCH", "/meg", { navn, ...(moduler.length ? { moduler } : {}) }).catch((e) => console.warn("Kunne ikke lagre navnet og modulene", e));
+    await api("PATCH", "/meg", { navn, ...(moduler.length ? { moduler } : {}), ...(registrering ?? {}) }).catch((e) =>
+      console.warn("Kunne ikke lagre navnet, modulene og registreringen", e),
+    );
     await sendBekreftelse();
   })();
 }

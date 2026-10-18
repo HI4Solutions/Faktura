@@ -326,9 +326,12 @@ export function lagApi() {
 
   // Med status for kontoen (venter på godkjenning, godkjent eller avvist) og modulene brukeren
   // har bedt om (eller fått); en konto som ikke er godkjent, ser ingen organisasjoner.
+  // Med det brukeren registrerte seg som (person eller organisasjon, 0126_registrering.sql), som
+  // fyller ut den første organisasjonen.
   const megSql = `select b.id, b.epost, b.navn, b.status, b.avvist_grunn,
                          array(select m.modul from faktura.bruker_moduler m join faktura.moduler x on x.kode = m.modul
-                                where m.bruker_id = b.id order by x.rekkefolge) as moduler
+                                where m.bruker_id = b.id order by x.rekkefolge) as moduler,
+                         b.registrert_som, b.oppgitt_orgnr, b.oppgitt_orgnavn
                     from faktura.brukere b where b.id = faktura.bruker_id()`;
   api.get("/meg", async (c) => {
     await meldNyKonto(c);
@@ -343,21 +346,38 @@ export function lagApi() {
     );
   });
 
-  // Navnet, og modulene mens kontoen venter på godkjenning (også før e-postadressen er
-  // bekreftet, rett fra registreringen).
   // Brukeren sletter sin egen konto (slettKonto.ts).
   api.delete("/meg", slettMinKonto);
 
+  // Navnet, og mens kontoen venter på godkjenning modulene og om brukeren registrerer seg som
+  // person eller organisasjon (med organisasjonsnummeret), også før e-postadressen er bekreftet,
+  // rett fra registreringen.
   api.patch("/meg", async (c) => {
     const b = await kropp(
       c,
       z
-        .object({ navn: tekstS(120).min(2, "må ha minst to tegn").optional(), moduler: modulKoder.optional() })
-        .refine((b) => b.navn !== undefined || b.moduler !== undefined, "Ingenting å endre"),
+        .object({
+          navn: tekstS(120).min(2, "må ha minst to tegn").optional(),
+          moduler: modulKoder.optional(),
+          registrert_som: z.enum(["person", "organisasjon"]).optional(),
+          orgnr: z
+            .string()
+            .transform((s) => s.replace(/\s/g, ""))
+            .pipe(z.string().regex(/^\d{9}$/, "Ugyldig organisasjonsnummer"))
+            .nullish(),
+        })
+        .refine((b) => b.navn !== undefined || b.moduler !== undefined || b.registrert_som !== undefined, "Ingenting å endre")
+        .refine((b) => b.registrert_som !== "organisasjon" || !!b.orgnr, "Skriv inn organisasjonsnummeret"),
     );
+    // Navnet i Enhetsregisteret, til forespørselen og den første organisasjonen. Svarer ikke
+    // registeret (eller finnes ikke nummeret der), lagres nummeret uten navn; appen har allerede
+    // slått det opp, og plattformadministratoren ser det før kontoen godkjennes.
+    const orgnr = b.registrert_som === "organisasjon" ? b.orgnr! : null;
+    const orgnavn = orgnr ? await slaOppEnhet(orgnr).then((e) => e.navn ?? null, () => null) : null;
     const svar = await bruk(c, async (db) => {
       if (b.navn !== undefined) await db.query("update faktura.brukere set navn = $1 where id = faktura.bruker_id()", [b.navn]);
       if (b.moduler) await db.query("select faktura.velg_moduler($1)", [b.moduler]);
+      if (b.registrert_som) await db.query("select faktura.velg_registrering($1, $2, $3)", [b.registrert_som, orgnr, orgnavn]);
       return en(db, megSql);
     });
     // Med navnet og modulene på plass går forespørselen om godkjenning til administratorene.

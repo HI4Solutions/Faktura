@@ -18,6 +18,7 @@ import { ModulValg, modulnavn, opplisting, useModuler } from "../moduler";
 import { KONTO_SLETTET, SlettKontoDialog } from "../slettKonto";
 import { forberedPasskey, loggInnMedPasskey, passkeyFeil, stotterPasskey, venterAllerede } from "../passkey";
 import { appAdresse } from "../appsti";
+import { OrgnrFelt, oppslagFeil, PERSON_MODULER, RegistreringValg, registreringTekst, useEnhetsoppslag, type RegistrertSom } from "../registrering";
 
 const feiltekst: Record<string, string> = {
   "auth/invalid-credential": "Feil e-post eller passord.",
@@ -57,9 +58,14 @@ export function Innlogging() {
     return null;
   });
   const [opptatt, settOpptatt] = useState(false);
-  // Modulene den nye brukeren trenger (Faktura, Bemanning, ...); de kommer med i forespørselen.
+  // Modulene den nye brukeren trenger (Faktura, Personal, ...); de kommer med i forespørselen.
   const moduler = useModuler(modus === "ny");
   const [valgte, settValgte] = useState<string[]>([]);
+  // Person (uten organisasjonsnummer, bare Faktura) eller organisasjon (med nummeret, som slås opp
+  // i Enhetsregisteret). Navnet er alltid brukerens eget.
+  const [som, settSom] = useState<RegistrertSom | null>(null);
+  const [orgnr, settOrgnr] = useState("");
+  const oppslag = useEnhetsoppslag(orgnr, modus === "ny" && som === "organisasjon");
 
   // Passkey: utfordringen hentes på forhånd (og fornyes før den går ut), så trykket åpner
   // passkey-vinduet med en gang. Knappen kan trykkes igjen mens appen venter (kom det ikke
@@ -113,15 +119,21 @@ export function Innlogging() {
       } else if (modus === "inn") {
         await signInWithEmailAndPassword(auth, epost, passord);
       } else if (modus === "ny") {
-        if (passord.length < 8) throw Object.assign(new Error(), { code: "auth/weak-password" });
+        if (!som) throw new Error("Velg om du registrerer deg som person eller organisasjon.");
+        const nrFeil = som === "organisasjon" ? oppslagFeil(oppslag) : null;
+        if (nrFeil) throw new Error(nrFeil);
         if (navn.trim().length < 2) throw new Error("Skriv inn fullt navn.");
-        if (moduler?.length && !valgte.length) throw new Error("Velg hva du trenger (minst én modul).");
+        if (passord.length < 8) throw Object.assign(new Error(), { code: "auth/weak-password" });
+        if (som === "organisasjon" && moduler?.length && !valgte.length) throw new Error("Velg hva du trenger (minst én modul).");
         const { user } = await createUserWithEmailAndPassword(auth, epost, passord);
-        // Navnet og modulene lagres med en gang (forespørselen går når e-postadressen er
-        // bekreftet; feiler det, spør venteskjermen etter modulene i stedet), og lenken som
-        // bekrefter adressen sendes fra Admin Konsoll. Skjermen som kommer nå (BekreftEpost),
-        // viser hvordan det gikk.
-        fullforRegistrering(user, navn.trim(), valgte);
+        // Navnet, modulene og valget (med organisasjonsnummeret) lagres med en gang (forespørselen
+        // går når e-postadressen er bekreftet; feiler det, spør venteskjermen etter dem i stedet),
+        // og lenken som bekrefter adressen sendes fra Admin Konsoll. Skjermen som kommer nå
+        // (BekreftEpost), viser hvordan det gikk.
+        fullforRegistrering(user, navn.trim(), som === "person" ? PERSON_MODULER : valgte, {
+          registrert_som: som,
+          orgnr: som === "organisasjon" ? oppslag.nr : null,
+        });
       } else {
         await sendPasswordResetEmail(auth, epost, { url: appAdresse() });
         settInfo("Hvis adressen har en konto, har vi sendt en lenke for å lage nytt passord.");
@@ -150,7 +162,12 @@ export function Innlogging() {
   const tekster = resolver
     ? { tittel: "Bekreft innloggingen", band: "Totrinnsinnlogging", stor: "Én kode til.", intro: "Skriv inn koden fra autentiseringsappen din." }
     : modus === "ny"
-      ? { tittel: "Opprett konto", band: "Godkjennes før første innlogging", stor: "Kom i gang.", intro: "Fyll ut skjemaet og bekreft e-postadressen. Vi godkjenner nye kontoer før første innlogging." }
+      ? {
+          tittel: "Opprett konto",
+          band: "Godkjennes før første innlogging",
+          stor: "Kom i gang.",
+          intro: "Registrer deg som person eller organisasjon, og bekreft e-postadressen. Vi godkjenner nye kontoer før første innlogging.",
+        }
       : modus === "glemt"
         ? { tittel: "Glemt passord", band: "Lenke på e-post", stor: "Nytt passord.", intro: "Skriv inn e-postadressen din, så sender vi en lenke for å lage nytt passord." }
         : { tittel: "Logg inn", band: "Passord eller passkey", stor: "Velkommen tilbake.", intro: "Logg inn for å fortsette i Admin Konsoll." };
@@ -189,14 +206,39 @@ export function Innlogging() {
           ) : (
             <>
               {modus === "ny" && (
+                <RegistreringValg
+                  som={som}
+                  endre={(s) => {
+                    settSom(s);
+                    settFeil(null);
+                  }}
+                  tittel={
+                    <>
+                      <span className="nr" aria-hidden="true">{nr()}</span>Registrer deg som
+                    </>
+                  }
+                />
+              )}
+              {modus === "ny" && som === "organisasjon" && (
+                <OrgnrFelt
+                  orgnr={orgnr}
+                  endre={(v) => {
+                    settOrgnr(v);
+                    settFeil(null);
+                  }}
+                  oppslag={oppslag}
+                  nr={nr()}
+                />
+              )}
+              {modus === "ny" && (
                 <label className="felt">
                   <span className="lbl">
-                    <span className="nr" aria-hidden="true">{nr()}</span>Fullt navn
+                    <span className="nr" aria-hidden="true">{nr()}</span>Fullt navn{som === "organisasjon" && <span className="hint"> (ditt eget)</span>}
                   </span>
                   <input autoComplete="name" required minLength={2} value={navn} onChange={(e) => settNavn(e.target.value)} />
                 </label>
               )}
-              <label className={modus === "ny" ? "felt" : "felt hel"}>
+              <label className={modus === "ny" ? "felt hoyre" : "felt hel"}>
                 <span className="lbl">
                   <span className="nr" aria-hidden="true">{nr()}</span>E-post
                 </span>
@@ -217,7 +259,7 @@ export function Innlogging() {
                   />
                 </label>
               )}
-              {modus === "ny" && !!moduler?.length && (
+              {modus === "ny" && som === "organisasjon" && !!moduler?.length && (
                 <ModulValg
                   moduler={moduler}
                   valgt={valgte}
@@ -329,8 +371,9 @@ export function Innlogging() {
 }
 
 // En ny konto som venter på godkjenning fra Admin Konsoll (eller er avvist). Har brukeren ikke valgt
-// moduler ennå (f.eks. når kontoen ble laget på en annen enhet), velges de her, og først da går
-// forespørselen. Modulene kan endres til kontoen er godkjent.
+// moduler ennå (f.eks. når kontoen ble laget på en annen enhet), velges de her, sammen med om
+// brukeren registrerer seg som person eller organisasjon, og først da går forespørselen. Valget og
+// modulene kan endres til kontoen er godkjent.
 export function VenterPaaGodkjenning() {
   const { meg, oppdater, loggUt } = useKonto();
   const [melding, settMelding] = useState<string | null>(null);
@@ -341,8 +384,18 @@ export function VenterPaaGodkjenning() {
   const mine = meg?.bruker.moduler ?? [];
   const [endrer, settEndrer] = useState(false);
   const [valgte, settValgte] = useState<string[]>(mine);
+  const [som, settSom] = useState<RegistrertSom | null>(meg?.bruker.registrert_som ?? null);
+  const [orgnr, settOrgnr] = useState(meg?.bruker.oppgitt_orgnr ?? "");
   const [slett, settSlett] = useState(false);
   const velger = !avvist && !!moduler?.length && (!mine.length || endrer);
+  const oppslag = useEnhetsoppslag(orgnr, velger && som === "organisasjon");
+  // Skjemaet starter med det som er lagret.
+  const tilbakestill = () => {
+    settValgte(mine);
+    settSom(meg?.bruker.registrert_som ?? null);
+    settOrgnr(meg?.bruker.oppgitt_orgnr ?? "");
+    settFeil(null);
+  };
   async function sjekk() {
     settOpptatt(true);
     settMelding(null);
@@ -359,10 +412,14 @@ export function VenterPaaGodkjenning() {
     e.preventDefault();
     settFeil(null);
     settMelding(null);
-    if (!valgte.length) return settFeil("Velg minst én modul.");
+    if (!som) return settFeil("Velg om du registrerer deg som person eller organisasjon.");
+    const nrFeil = som === "organisasjon" ? oppslagFeil(oppslag) : null;
+    if (nrFeil) return settFeil(nrFeil);
+    const nye = som === "person" ? PERSON_MODULER : valgte;
+    if (!nye.length) return settFeil("Velg minst én modul.");
     settOpptatt(true);
     try {
-      await api("PATCH", "/meg", { moduler: valgte });
+      await api("PATCH", "/meg", { moduler: nye, registrert_som: som, orgnr: som === "organisasjon" ? oppslag.nr : null });
       await oppdater();
       if (endrer) settMelding("Endringen er lagret.");
       settEndrer(false);
@@ -373,6 +430,8 @@ export function VenterPaaGodkjenning() {
     }
   }
   const fornavn = meg?.bruker.navn?.split(" ")[0];
+  const registrert = meg ? registreringTekst(meg.bruker) : null;
+  const baOm = mine.length ? opplisting(modulnavn(moduler, mine)) : null;
   // Uten valgte moduler avhenger skjermen av modulene; vent på dem.
   if (!avvist && !mine.length && moduler === null)
     return (
@@ -384,7 +443,7 @@ export function VenterPaaGodkjenning() {
     <EnkelBlankett
       navn="Ny konto"
       nr="DEL 3"
-      tittel={avvist ? "Kontoen er ikke godkjent" : velger && !mine.length ? "Hva trenger du?" : "Kontoen venter på godkjenning"}
+      tittel={avvist ? "Kontoen er ikke godkjent" : velger && !mine.length ? "Fullfør registreringen" : "Kontoen venter på godkjenning"}
       tekst={avvist ? undefined : "Godkjennes av Admin Konsoll"}
     >
       {avvist ? (
@@ -397,10 +456,32 @@ export function VenterPaaGodkjenning() {
         <form onSubmit={lagre}>
           {!mine.length && (
             <p>
-              Takk, {fornavn}! E-postadressen er bekreftet. Kryss av for det du skal bruke Admin Konsoll til, så sendes kontoen til Admin Konsoll for godkjenning.
+              Takk, {fornavn}! E-postadressen er bekreftet. Velg om du registrerer deg som person eller organisasjon, så sendes kontoen til Admin Konsoll for
+              godkjenning.
             </p>
           )}
-          <ModulValg moduler={moduler} valgt={valgte} endre={settValgte} tittel={mine.length ? "Endre hva du trenger" : "Hva trenger du?"} />
+          <RegistreringValg
+            som={som}
+            endre={(s) => {
+              settSom(s);
+              settFeil(null);
+            }}
+            tittel="Registrer deg som"
+          />
+          {som === "organisasjon" && (
+            <OrgnrFelt
+              orgnr={orgnr}
+              endre={(v) => {
+                settOrgnr(v);
+                settFeil(null);
+              }}
+              oppslag={oppslag}
+              klasse="felt"
+            />
+          )}
+          {som === "organisasjon" && (
+            <ModulValg moduler={moduler} valgt={valgte} endre={settValgte} tittel={mine.length ? "Endre hva du trenger" : "Hva trenger du?"} />
+          )}
           <Feil melding={feil} />
           <div className="knapper">
             <button className="primar" disabled={opptatt}>
@@ -411,8 +492,7 @@ export function VenterPaaGodkjenning() {
                 type="button"
                 onClick={() => {
                   settEndrer(false);
-                  settValgte(mine);
-                  settFeil(null);
+                  tilbakestill();
                 }}
               >
                 Avbryt
@@ -429,15 +509,29 @@ export function VenterPaaGodkjenning() {
             Takk, {fornavn}! E-postadressen er bekreftet, og kontoen din er sendt til Admin Konsoll for godkjenning. Du får e-post til{" "}
             <strong>{meg?.bruker.epost}</strong> når den er godkjent.
           </p>
-          {!!mine.length && (
+          {(registrert || baOm) && (
             <p className="valgte-moduler">
-              Du har bedt om <strong>{opplisting(modulnavn(moduler, mine))}</strong>.{" "}
+              {registrert ? (
+                <>
+                  Du har registrert deg som <strong>{registrert}</strong>
+                  {baOm && (
+                    <>
+                      , og bedt om <strong>{baOm}</strong>
+                    </>
+                  )}
+                  .
+                </>
+              ) : (
+                <>
+                  Du har bedt om <strong>{baOm}</strong>.
+                </>
+              )}{" "}
               {!!moduler?.length && (
                 <button
                   type="button"
                   className="lenke"
                   onClick={() => {
-                    settValgte(mine);
+                    tilbakestill();
                     settEndrer(true);
                     settMelding(null);
                   }}

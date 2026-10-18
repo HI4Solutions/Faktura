@@ -118,7 +118,7 @@ html.blankett-side, html.blankett-side body { background: #e6eaf4; }
 .blankett form.skjema { grid-area: skjema; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; min-width: 0; margin: 0; }
 .blankett .felt { display: grid; align-content: start; gap: 6px; padding: 9px 14px 11px; margin: 0; border-bottom: 1px solid var(--ink-line); border-right: 1px solid var(--ink-line); min-width: 0; cursor: text; font: inherit; color: var(--type); }
 .blankett .felt.hel { grid-column: 1 / -1; border-right: 0; }
-.blankett .felt:nth-of-type(2n):not(.hel) { border-right: 0; }
+.blankett .felt.hoyre { border-right: 0; }
 .blankett .felt .valgfritt, .blankett .felt .hint { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--muted); }
 .blankett .felt input { width: 100%; min-width: 0; min-height: 0; margin: 0; padding: 2px 0; border: 0; border-bottom: 1px solid var(--ink-line); border-radius: 0; background: transparent; box-shadow: none; color: var(--type); font: 500 16px/1.5 var(--font-type); transition: none; }
 .blankett .felt input:hover { border-color: var(--ink-line); }
@@ -126,6 +126,12 @@ html.blankett-side, html.blankett-side body { background: #e6eaf4; }
 .blankett .felt:focus-within { outline: 2px solid var(--ink); outline-offset: -2px; background: #fff; }
 /* Nettleserens autoutfylling skal ikke gi feltene gul bunn. */
 .blankett .felt input:-webkit-autofill { -webkit-box-shadow: 0 0 0 40px #fff inset; -webkit-text-fill-color: var(--type); caret-color: var(--type); }
+/* Svaret fra Enhetsregisteret under organisasjonsnummeret (registrering.tsx) */
+.blankett .felt .oppslag { display: flex; gap: 8px; align-items: flex-start; font: 500 12.5px/1.45 var(--font-type); color: var(--muted); }
+.blankett .felt .oppslag:empty { display: none; }
+.blankett .felt .oppslag b { color: var(--type); font-weight: 600; }
+.blankett .felt .oppslag.feil { color: var(--stamp); }
+.blankett .felt .oppslag .x { width: 16px; height: 16px; font-size: 12px; margin-top: 1px; }
 
 /* Modulene i «Opprett konto»: avkrysningsbokser med X, som på nettstedet */
 .blankett fieldset.modul-valg { grid-column: 1 / -1; display: grid; gap: 8px; margin: 0; padding: 9px 14px 13px; border: 0; border-bottom: 1px solid var(--ink-line); border-radius: 0; background: none; min-width: 0; }
@@ -140,6 +146,20 @@ html.blankett-side, html.blankett-side body { background: #e6eaf4; }
 .blankett fieldset.modul-valg label > span { display: grid; gap: 1px; }
 .blankett fieldset.modul-valg strong { font-weight: 600; }
 .blankett fieldset.modul-valg .dempet { color: var(--muted); font-size: 13.5px; }
+
+/* «Registrer deg som» i «Opprett konto»: Person eller Organisasjon, med kryss som modulene, side
+   om side når det er plass */
+.blankett fieldset.reg-valg { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; margin: 0; padding: 9px 14px 13px; border: 0; border-bottom: 1px solid var(--ink-line); border-radius: 0; background: none; min-width: 0; }
+.blankett fieldset.reg-valg legend { float: left; grid-column: 1 / -1; width: 100%; padding: 0; margin: 0 0 4px; font: 600 10.5px/1.3 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--ink); }
+.blankett fieldset.reg-valg legend .nr { font: 500 11px var(--font-type); letter-spacing: 0; margin-right: 8px; }
+.blankett fieldset.reg-valg label { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 4px 0; border: 0; border-radius: 0; background: none; box-shadow: none; font: 500 15px/1.4 var(--font-body); color: var(--type); cursor: pointer; }
+.blankett fieldset.reg-valg input[type="radio"] { appearance: none; -webkit-appearance: none; display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; min-height: 0; margin: 1px 0 0; padding: 0; border: 1.5px solid var(--ink); border-radius: 0; background: var(--paper); box-shadow: none; cursor: pointer; }
+.blankett fieldset.reg-valg input[type="radio"]::before { content: ""; font: 500 13px/1 var(--font-type); color: var(--type); }
+.blankett fieldset.reg-valg input[type="radio"]:checked::before { content: "X"; }
+.blankett fieldset.reg-valg input[type="radio"]:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.blankett fieldset.reg-valg label > span { display: grid; gap: 1px; }
+.blankett fieldset.reg-valg strong { font-weight: 600; }
+.blankett fieldset.reg-valg .dempet { color: var(--muted); font-size: 13.5px; }
 
 /* Knappene under feltene, og det med liten skrift */
 .blankett .send { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 14px; }
@@ -184,7 +204,7 @@ html.blankett-side, html.blankett-side body { background: #e6eaf4; }
 .blankett .bl-enkel > .melding, .blankett .bl-enkel > form > .melding { margin: 0; border-radius: 0; border: 1.5px solid var(--ink-line); background: var(--ink-wash); color: var(--ink-deep); font-size: 15px; }
 .blankett .bl-enkel > .melding.feil, .blankett .bl-enkel > form > .melding.feil { border-color: var(--stamp); background: #fdf1f1; color: var(--stamp); }
 .blankett .bl-enkel > .melding.ok, .blankett .bl-enkel > form > .melding.ok { border-color: var(--ok); background: #eef8f2; color: var(--ok); }
-.blankett .bl-enkel fieldset.modul-valg { border: 1px solid var(--ink-line); padding: 9px 14px 13px; }
+.blankett .bl-enkel fieldset.modul-valg, .blankett .bl-enkel fieldset.reg-valg { border: 1px solid var(--ink-line); padding: 9px 14px 13px; }
 .blankett .bl-enkel .felt { border: 1px solid var(--ink-line); max-width: 520px; }
 .blankett .valgte-moduler .lenke { margin-left: 4px; }
 
@@ -210,6 +230,7 @@ html.blankett-side, html.blankett-side body { background: #e6eaf4; }
 @media (max-width: 640px) { .blankett .delband .h { display: none; } }
 @media (max-width: 560px) {
   .blankett form.skjema { grid-template-columns: minmax(0, 1fr); }
+  .blankett fieldset.reg-valg { grid-template-columns: minmax(0, 1fr); }
   .blankett .felt { border-right: 0; }
   .blankett .send .btn.pri { width: 100%; }
   .blankett .kvittering { flex-direction: column; align-items: flex-start; gap: 10px; }

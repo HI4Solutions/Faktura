@@ -78,6 +78,22 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   fordi fakturaer, bilag, lønn og revisjonsloggen viser til den. Ansattkortet blir stående uten
   innloggingen, og en ny innlogging med samme adresse blir en ny konto. Innloggingssiden sier fra
   at kontoen er slettet (`0123_slett_konto.sql`, `server/src/slettKonto.ts`, `web/src/slettKonto.tsx`)
+- `brukere.registrert_som`, `oppgitt_orgnr` og `oppgitt_orgnavn`: under «Opprett konto» velger den
+  nye brukeren om den registrerer seg som person (uten organisasjonsnummer, og da bare Faktura)
+  eller organisasjon (med organisasjonsnummeret), og skriver alltid inn sitt eget navn.
+  Organisasjonsnummeret kontrolleres (kontrollsifferet) og slås opp i Enhetsregisteret mens det
+  skrives (det åpne `/api/brreg/:orgnr`); et nummer som ikke finnes der, eller et foretak som er
+  konkurs, under avvikling eller slettet, stopper skjemaet, mens et register som ikke svarer, ikke
+  gjør det. Valget lagres rett fra registreringen med navnet og modulene (`PATCH /api/meg`,
+  `velg_registrering`, bare mens kontoen venter), med navnet API-et slår opp i Enhetsregisteret
+  (uten navn når registeret ikke svarer). En person får Faktura. Valget står i e-posten til
+  administratorene («Registrert som organisasjon: …, org.nr. …»), i lista over kontoer som venter
+  (`admin_kontoer_venter`) og på venteskjermen, der det kan endres til kontoen er godkjent.
+  Organisasjonen lages fortsatt av brukeren etter godkjenningen, men den første er fylt ut fra
+  valget: en person blir privatperson med sitt eget navn, en organisasjon foretak med
+  organisasjonsnummeret (navnet og adressen fra Enhetsregisteret); brukeren sjekker opplysningene,
+  godtar vilkårene og trykker «Opprett». Kontoer fra før og de inviterte har ikke noe valg (null).
+  Valget fjernes når kontoen slettes (`0126_registrering.sql`, `web/src/registrering.tsx`)
 - `moduler` og `bruker_moduler`: plattformens moduler, Faktura, Personal, Lønn og Regnskap
   (`0110_moduler.sql`; Bemanning ble delt i Personal og Lønn), og hvilke en bruker har bedt om
   eller fått. Hver funksjon (`funksjoner.modul`) hører til en modul, og hver modul har en kjerne
