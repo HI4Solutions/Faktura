@@ -106,8 +106,9 @@ er de samme som for skattekortene.
    skattekortene). I test er det gjort. Finnes ikke scopene i produksjon, må Altinn gi Medinnova AS
    tilgang til dem først (Altinn brukerstøtte, servicedesk@altinn.no); da dukker de opp i
    Samarbeidsportalen.
-2. **GitHub-variabelen** (Settings → Environments → `test`, og senere `production`):
-   `AARSREGNSKAP_INNSENDING` = `true`. Kjør så workflowen «Infrastruktur» (Actions → Infrastruktur →
+2. **GitHub-variabelen** `AARSREGNSKAP_INNSENDING` = `true` under Settings → Environments → `test`
+   → Environment variables, og senere i `produksjon`. Ikke legg den blant variablene i repoet: da
+   får produksjon den også. Kjør så workflowen «Infrastruktur» fra main (Actions → Infrastruktur →
    Run workflow).
 3. **Systemet i Altinn.** Plattform → Drift → «Skattekort (Skatteetaten)» → «Oppdater i Altinn».
    Systemet ber da også om tilgangspakken «Regnskap og økonomirapportering». (Trykker en kunde
