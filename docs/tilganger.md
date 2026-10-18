@@ -45,10 +45,10 @@ legges i Secret Manager med skriptene (`scripts/maskinporten.sh` og `scripts/idp
    - Scopet `skatteetaten:formueinntekt/skattemelding` bestilles fra Skatteetaten.
    - Det legges på ID-porten-klienten og Maskinporten-klienten.
    - Fristen for inntektsåret 2026 er 31.05.2027.
-6. [ ] **Slå på årsregnskapet i testmiljøet.**
-   - Scopene er på testklienten, men `AARSREGNSKAP_INNSENDING` er av i miljøet «test».
-   - Sett den til `true` der, og kjør Infrastruktur.
-   - Trykk så «Oppdater i Altinn» under Plattform → Drift på testflaten.
+6. [ ] **Test årsregnskapet i testmiljøet.**
+   - `AARSREGNSKAP_INNSENDING` er slått på i miljøet «test» (Infrastruktur #45, 18.10).
+   - Trykk «Oppdater i Altinn» under Plattform → Drift på testflaten.
+   - Send så et årsregnskap for en testbedrift, og signer det i Altinn TT02.
 7. [ ] **NAV.**
    - Gi beskjed første gang sykepenger brukes i produksjon.
    - Vent på svar fra Dolly (testdata).
@@ -121,7 +121,7 @@ særlig kategori, og Krav, betalinger og utlegg.
 | A-ordningen (`…:a-ordning`) | a-meldingen og avstemmingsrapporten | Ja (`AMELDING_INNSENDING`) |
 | Lønn med personopplysninger av særlig kategori (`…:lonn-personopplysninger-saerlig-kategori`) | sykmeldingene og inntektsmeldingene hos NAV | Ja (`NAV_SYKEPENGER`) |
 | Krav, betalinger og utlegg (`…:krav-og-utlegg`) | krav, betalinger og frister fra Skatteetaten | Ja (`KRAV_OG_FRISTER`) |
-| Regnskap og økonomirapportering (`…:regnskap-okonomi-rapport`) | årsregnskapet | Nei, først med `AARSREGNSKAP_INNSENDING` |
+| Regnskap og økonomirapportering (`…:regnskap-okonomi-rapport`) | årsregnskapet | I test etter «Oppdater i Altinn» (bryteren er på der). I produksjon først med `AARSREGNSKAP_INNSENDING`. |
 | Skattegrunnlag (`…:skattegrunnlag`) | aksjonærregisteroppgaven | Nei, når den bygges |
 | Enkeltrettigheten «Informasjon om trekkpålegg» (ressursen `ske-informasjon-om-trekkpaalegg`) | trekkpåleggene | Nei, når de bygges |
 | Skatt næring (`…:skatt-naering`) | skattemeldingen | Nei. Den som sender skattemeldingen, trenger pakken. Systembrukeren trenger den først når hele innsendingen kan gjøres med systembruker. |
@@ -258,7 +258,8 @@ tilgangspakken for inntektsmeldingene.
 
 ## Bryterne i miljøene
 
-Slik står variablene etter Infrastruktur 18.10.2026:
+Slik står variablene etter Infrastruktur 18.10.2026 (#43, og #45 for årsregnskapet i test).
+Bryterne godtar «true» i alle varianter («True», «TRUE»); andre verdier stopper kjøringen.
 
 | GitHub-variabel | Test | Produksjon |
 |---|---|---|
@@ -266,7 +267,7 @@ Slik står variablene etter Infrastruktur 18.10.2026:
 | `AMELDING_INNSENDING` | true | true |
 | `NAV_SYKEPENGER` | true | true |
 | `KRAV_OG_FRISTER` | true | true |
-| `AARSREGNSKAP_INNSENDING` | false | false |
+| `AARSREGNSKAP_INNSENDING` | true (fra Infrastruktur #45) | false |
 | `MVA_INNSENDING` | på i `test.tfvars`, men skjult til `IDPORTEN_KLIENT_ID` er satt | false |
 | `IDPORTEN_KLIENT_ID` | tom | tom |
 
