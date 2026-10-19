@@ -54,7 +54,7 @@ legges i Secret Manager med skriptene (`scripts/maskinporten.sh` og `scripts/idp
      innsendingen på når testen er godkjent og Regnskap ikke lenger er «Kommer snart».
 7. [ ] **NAV.**
    - Gi beskjed første gang sykepenger brukes i produksjon.
-   - Vent på svar fra Dolly (testdata).
+   - Test sykepengene med en testperson fra Dolly. Tilgangen er gitt (19.10); se [NAV](#nav).
    - Legg på scopene for de andre inntektsmeldingene når de bygges. Se [NAV](#nav).
 8. [ ] **Enable Banking: partneravtale** før bankkoblingen tilbys andre bedrifter.
 9. [ ] **Recommand: mottak av EHF** når du har bestemt deg.
@@ -218,7 +218,9 @@ tilgangspakken for inntektsmeldingene.
 - [ ] **Kontaktinformasjonen** som NAVs vilkår krever (kontaktperson, e-post og telefon) skal til
   nav.prosjekt.2.inntektsmelding@nav.no. Du skrev 15.10 at e-post til NAV var sendt. Sjekk at den
   gikk dit.
-- [ ] **Testdata i Dolly**: e-post til dolly@nav.no er sendt, men det var ikke kommet svar 17.10.
+- [x] **Testdata i Dolly**: gitt for Medinnova AS 19.10. Den som er Altinn-ansvarlig i Medinnova,
+  gir hver som skal bruke Dolly, tilgang til enkelttjenesten «NAVs Dolly for samarbeidspartnere» i
+  Altinn (tilgangsstyringen for Medinnova AS). Testen står i [nav.md](nav.md), punkt 5.
 - [ ] **Beskjed til nav.prosjekt.2.inntektsmelding@nav.no første gang sykepenger brukes i
   produksjon.** Dette gjøres bare første gang, ikke for hver kunde. Se [nav.md](nav.md).
 

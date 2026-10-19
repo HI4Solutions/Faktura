@@ -92,9 +92,12 @@ Maskinporten-klienten og systemet i Altinn er de samme som for skattekortene (se
    Altinn». Systemet ber da også om tilgangspakken «Lønn med personopplysninger av særlig
    kategori» (`urn:altinn:accesspackage:lonn-personopplysninger-saerlig-kategori`), som gir
    sykmeldinger, søknader, forespørsler og inntektsmeldinger hos NAV.
-5. **Test.** Be om tilgang til NAVs testdata (Dolly) ved å sende organisasjonsnummeret til
-   Medinnova AS til **dolly@nav.no**. Lag en sykmeldt testperson med arbeidsforhold og inntekt hos
-   en testarbeidsgiver i TT02, send sykmeldingen og søknaden fra
+5. **Test.** Medinnova AS har tilgang til NAVs testdata (Dolly) fra 19.10 (bestilt med
+   organisasjonsnummeret på e-post til **dolly@nav.no**). Den som er Altinn-ansvarlig i Medinnova,
+   gir hver som skal bruke Dolly, tilgang til enkelttjenesten «NAVs Dolly for samarbeidspartnere» i
+   Altinn; så logger man inn i Dolly med ID-porten. Lag en sykmeldt testperson med arbeidsforhold
+   og inntekt hos en testarbeidsgiver i TT02 (helst testbedriften EKSTRA NESTE TIGER AS, 313 516 504,
+   se `docs/miljoer.md`), send sykmeldingen og søknaden fra
    <https://www.ekstern.dev.nav.no/syk/sykefravaer> (over 16 dager, så NAV sender forespørsel).
    La testarbeidsgiveren utvide tilgangen i appen, legg inn personen som ansatt med
    fødselsnummeret, trykk «Hent nå» under Lønn → Sykepenger, og send inntektsmeldingen.
