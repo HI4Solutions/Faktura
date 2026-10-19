@@ -22,15 +22,11 @@ legges i Secret Manager med skriptene (`scripts/maskinporten.sh` og `scripts/idp
 
 ## Det som gjenstår, i rekkefølge
 
-1. [ ] **Legg de nye Altinn-scopene på klientene i Samarbeidsportalen, og kjør sjekken.** Altinn ga
-   dem 19.10, i test og produksjon (se [Altinn](#altinn)).
-   - Produksjonsklienten: `digdir:dialogporten`, `altinn:instances.read` og `altinn:instances.write`.
-     Da henter appen svaret på a-meldingen i produksjon, uten ny utrulling. Til da ligger svaret i
-     Altinn-innboksen.
-   - `altinn:correspondence.read` og `altinn:events.subscribe` kan legges på begge klientene nå.
-     Appen bruker dem ikke ennå.
-   - Kjør sjekken (under [Slik sjekker du selv](#slik-sjekker-du-selv)). Alle de ti scopene skal
-     vise ✓.
+1. [x] **De nye Altinn-scopene er lagt på klientene (19.10).** Altinn ga dem i test og produksjon,
+   og de ti scopene appen bruker, står nå på både test- og produksjonsklienten (se [Altinn](#altinn)).
+   - Appen henter svaret på a-meldingen i produksjon. A-meldinger sendt den siste uka som står som
+     «Sendt», får svaret innen en halvtime (workeren prøver dem igjen hver halvtime i sju dager).
+   - Bekreft med sjekken (under [Slik sjekker du selv](#slik-sjekker-du-selv)) at alle de ti viser ✓.
 2. [ ] **Skatteetaten: trekkpålegg (`skatteetaten:trekkpaalegg`).**
    - Søkt i oktober. Skatteetaten skrev 15.10 at avgjørelsen kommer i en egen oppdatering.
    - Kommer den ikke, send organisasjonsnummeret på e-post til fremtidensinnkreving@skatteetaten.no
@@ -90,8 +86,8 @@ gjennom Recommand. De øvrige er for offentlige virksomheter og leverandørene d
 | `altinn:authentication/systemregister.write` | registrere systemet `936564046_lonn` | Har | Har |
 | `altinn:authentication/systemuser.request.read` | se kundenes forespørsler om tilgang | Har | Har |
 | `altinn:authentication/systemuser.request.write` | be kundene om tilgang og utvidelser | Har | Har |
-| `digdir:dialogporten` | svaret på a-meldingen, varselet om trekkpålegg, og senere forespørsler fra NAV, brev og skatteoppgjør i appen | Har | Har (19.10). Legg det på klienten. |
-| `altinn:instances.read` og `altinn:instances.write` | årsregnskapet til Brønnøysund, og senere skattemeldingen | Har | Har (19.10). Legg dem på klienten. |
+| `digdir:dialogporten` | svaret på a-meldingen, varselet om trekkpålegg, og senere forespørsler fra NAV, brev og skatteoppgjør i appen | Har | Har (19.10, på klienten) |
+| `altinn:instances.read` og `altinn:instances.write` | årsregnskapet til Brønnøysund, og senere skattemeldingen | Har | Har (19.10, på klienten) |
 | `altinn:correspondence.read` | brev og meldinger fra etatene i appen (ikke bygget) | Har (19.10) | Har (19.10) |
 | `altinn:events.subscribe` | varsel fra Altinn når noe nytt kommer, i stedet for å spørre jevnlig (ikke bygget) | Har (19.10) | Har (19.10) |
 | `altinn:delegationrequests.read` og `.write` | be kundene om tilganger fra appen (ikke bygget) | Har (19.10) | Har (19.10) |
@@ -99,10 +95,11 @@ gjennom Recommand. De øvrige er for offentlige virksomheter og leverandørene d
 
 Altinn ga scopene 19.10, i test og produksjon, etter registreringsskjemaet for
 sluttbrukersystemleverandører. Et scope virker først når det er lagt på klienten i
-Samarbeidsportalen (Klienter → klienten → scopene). Kjør så sjekken. Det trengs ingen ny utrulling
-for Dialogporten. Årsregnskapet slås på i produksjon med `AARSREGNSKAP_INNSENDING` = `true` i
-miljøet `produksjon` ([aarsregnskap.md](aarsregnskap.md)), men først etter testen i TT02 (punkt 6
-over).
+Samarbeidsportalen (Klienter → klienten → scopene), og det er gjort for dem appen bruker.
+`altinn:correspondence.read` og `altinn:events.subscribe` trengs på klientene først når appen tar
+dem i bruk, og `altinn:clientdelegations.*` skal på ID-porten-klienten når den lages. Årsregnskapet
+slås på i produksjon med `AARSREGNSKAP_INNSENDING` = `true` i miljøet `produksjon`
+([aarsregnskap.md](aarsregnskap.md)), men først etter testen i TT02 (punkt 6 over).
 
 I stedet for `altinn:accessmanagement/enduser:requests.read` og `.write`, som vi ba om, ga Altinn
 `altinn:delegationrequests.read` og `.write`. Disse fikk vi ikke:
