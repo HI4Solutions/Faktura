@@ -103,9 +103,8 @@ er de samme som for skattekortene.
 
 1. **Scopene på Maskinporten-klienten.** Legg til `altinn:instances.read` og
    `altinn:instances.write` på integrasjonen i Samarbeidsportalen (samme klient og nøkkel som for
-   skattekortene). I test er det gjort. Finnes ikke scopene i produksjon, må Altinn gi Medinnova AS
-   tilgang til dem først (Altinn brukerstøtte, servicedesk@altinn.no); da dukker de opp i
-   Samarbeidsportalen.
+   skattekortene). Altinn ga Medinnova AS scopene i test og produksjon 19.10. På testklienten er
+   de lagt på; på produksjonsklienten legges de på før innsendingen slås på der.
 2. **GitHub-variabelen** `AARSREGNSKAP_INNSENDING` = `true` under Settings → Environments → `test`
    → Environment variables, og senere i `produksjon`. Ikke legg den blant variablene i repoet: da
    får produksjon den også. Kjør så workflowen «Infrastruktur» fra main (Actions → Infrastruktur →

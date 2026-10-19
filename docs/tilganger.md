@@ -5,11 +5,13 @@ Brønnøysundregistrene og leverandørene for å dekke lønn, a-melding, mva, kr
 utleggstrekk, årsregnskap, skattemelding og aksjonærregisteroppgave. Den viser også hva som alt er
 gitt. Medinnova AS (org.nr. 936 564 046) er leverandøren, og alle tilgangene står på Medinnova.
 
-Lista viser status 18.10.2026. Den bygger på:
+Lista viser status 19.10.2026. Den bygger på:
 
 - sjekken av produksjonsklienten i Cloud Shell 17.10 (`scripts/maskinporten.sh sjekk`, der 8 av 9
   scopes virket);
 - svarene fra Digdir, Altinn og Skatteetaten 13.–15.10;
+- svaret fra Altinn 19.10 på registreringsskjemaet for sluttbrukersystemleverandører (scopene for
+  innsending, innboks, forespørsler og klientdelegering, i test og produksjon);
 - variablene i siste Infrastruktur-kjøring 18.10;
 - Skatteetatens API-dokumentasjon fra oktober 2026.
 
@@ -20,13 +22,15 @@ legges i Secret Manager med skriptene (`scripts/maskinporten.sh` og `scripts/idp
 
 ## Det som gjenstår, i rekkefølge
 
-1. [ ] **Altinn: `digdir:dialogporten`, `altinn:instances.read` og `altinn:instances.write` i
-   produksjon.**
-   - Uten Dialogporten henter ikke appen svaret på a-meldingen i produksjon. Svaret ligger da i
+1. [ ] **Legg de nye Altinn-scopene på klientene i Samarbeidsportalen, og kjør sjekken.** Altinn ga
+   dem 19.10, i test og produksjon (se [Altinn](#altinn)).
+   - Produksjonsklienten: `digdir:dialogporten`, `altinn:instances.read` og `altinn:instances.write`.
+     Da henter appen svaret på a-meldingen i produksjon, uten ny utrulling. Til da ligger svaret i
      Altinn-innboksen.
-   - Skatteetaten sender også varselet om nye trekkpålegg gjennom Dialogporten.
-   - Uten instances-scopene kan ikke årsregnskapet sendes.
-   - Du trenger bare én e-post til Altinn. Teksten står under [Altinn](#altinn).
+   - `altinn:correspondence.read` og `altinn:events.subscribe` kan legges på begge klientene nå.
+     Appen bruker dem ikke ennå.
+   - Kjør sjekken (under [Slik sjekker du selv](#slik-sjekker-du-selv)). Alle de ti scopene skal
+     vise ✓.
 2. [ ] **Skatteetaten: trekkpålegg (`skatteetaten:trekkpaalegg`).**
    - Søkt i oktober. Skatteetaten skrev 15.10 at avgjørelsen kommer i en egen oppdatering.
    - Kommer den ikke, send organisasjonsnummeret på e-post til fremtidensinnkreving@skatteetaten.no
@@ -48,7 +52,10 @@ legges i Secret Manager med skriptene (`scripts/maskinporten.sh` og `scripts/idp
 6. [ ] **Test årsregnskapet i testmiljøet.**
    - `AARSREGNSKAP_INNSENDING` er slått på i miljøet «test» (Infrastruktur #45, 18.10).
    - Trykk «Oppdater i Altinn» under Plattform → Drift på testflaten.
-   - Send så et årsregnskap for en testbedrift, og signer det i Altinn TT02.
+   - Send så et årsregnskap for testbedriften EKSTRA NESTE TIGER AS, og signer det i Altinn TT02 som
+     daglig leder (18838398177, TestID). Se [miljoer.md](miljoer.md), «Testbedriften».
+   - Brønnøysund vil ha en skriftlig oppsummering av testen før produksjon. I produksjon slås
+     innsendingen på når testen er godkjent og Regnskap ikke lenger er «Kommer snart».
 7. [ ] **NAV.**
    - Gi beskjed første gang sykepenger brukes i produksjon.
    - Vent på svar fra Dolly (testdata).
@@ -83,32 +90,25 @@ gjennom Recommand. De øvrige er for offentlige virksomheter og leverandørene d
 | `altinn:authentication/systemregister.write` | registrere systemet `936564046_lonn` | Har | Har |
 | `altinn:authentication/systemuser.request.read` | se kundenes forespørsler om tilgang | Har | Har |
 | `altinn:authentication/systemuser.request.write` | be kundene om tilgang og utvidelser | Har | Har |
-| `digdir:dialogporten` | svaret på a-meldingen, varselet om trekkpålegg, og senere brev fra etatene i appen | Har | **Mangler** |
-| `altinn:instances.read` og `altinn:instances.write` | årsregnskapet til Brønnøysund, og senere skattemeldingen | Har | **Mangler** (fantes ikke i portalen 17.10) |
+| `digdir:dialogporten` | svaret på a-meldingen, varselet om trekkpålegg, og senere forespørsler fra NAV, brev og skatteoppgjør i appen | Har | Har (19.10). Legg det på klienten. |
+| `altinn:instances.read` og `altinn:instances.write` | årsregnskapet til Brønnøysund, og senere skattemeldingen | Har | Har (19.10). Legg dem på klienten. |
+| `altinn:correspondence.read` | brev og meldinger fra etatene i appen (ikke bygget) | Har (19.10) | Har (19.10) |
+| `altinn:events.subscribe` | varsel fra Altinn når noe nytt kommer, i stedet for å spørre jevnlig (ikke bygget) | Har (19.10) | Har (19.10) |
+| `altinn:delegationrequests.read` og `.write` | be kundene om tilganger fra appen (ikke bygget) | Har (19.10) | Har (19.10) |
+| `altinn:clientdelegations.read` og `.write` | regnskapsbyråer som legger til og fjerner klienter fra appen (ikke bygget). Brukes med ID-porten, så de legges på ID-porten-klienten. | Har (19.10) | Har (19.10) |
 
-Send denne e-posten til servicedesk@altinn.no fra en @medinnova.no-adresse:
+Altinn ga scopene 19.10, i test og produksjon, etter registreringsskjemaet for
+sluttbrukersystemleverandører. Et scope virker først når det er lagt på klienten i
+Samarbeidsportalen (Klienter → klienten → scopene). Kjør så sjekken. Det trengs ingen ny utrulling
+for Dialogporten. Årsregnskapet slås på i produksjon med `AARSREGNSKAP_INNSENDING` = `true` i
+miljøet `produksjon` ([aarsregnskap.md](aarsregnskap.md)), men først etter testen i TT02 (punkt 6
+over).
 
-> **Emne:** Tilgang til scopes i produksjon – Medinnova AS (936564046)
->
-> Hei!
->
-> Medinnova AS (org.nr. 936564046) leverer sluttbrukersystemet Admin Konsoll (systemet
-> 936564046_lonn i systemregisteret), som bruker systembruker i Altinn. Vi har disse scopene i
-> testmiljøet og trenger dem også i produksjon:
->
-> - digdir:dialogporten, for å hente tilbakemeldingen på a-meldingen og varsler fra Skatteetaten;
-> - altinn:instances.read og altinn:instances.write, for å sende årsregnskapet gjennom
->   Brønnøysundregistrenes app i Altinn (brg/aarsregnskap-vanlig-202406).
->
-> Altinn-scopene for systembruker og Skatteetatens scopes er allerede gitt i produksjon. Kan dere
-> gi oss tilgang til disse også?
->
-> Med vennlig hilsen
-> Medinnova AS
-
-Når Altinn har svart: legg scopene på produksjonsklienten i Samarbeidsportalen, og kjør sjekken. Det
-trengs ingen ny utrulling for Dialogporten. For årsregnskapet settes `AARSREGNSKAP_INNSENDING` til
-`true` i miljøet `produksjon` ([aarsregnskap.md](aarsregnskap.md)).
+I stedet for `altinn:accessmanagement/enduser:requests.read` og `.write`, som vi ba om, ga Altinn
+`altinn:delegationrequests.read` og `.write`. Disse fikk vi ikke:
+`altinn:accessmanagement/authorizedparties`, `altinn:accessmanagement/enduser:connections:…` og
+`altinn:clientdelegations/myclients.read`. Det som er bygget, trenger dem ikke. Spør Altinn igjen
+når en klientoversikt for regnskapsbyråer bygges.
 
 ### Tilgangspakkene kundene godkjenner
 
@@ -139,8 +139,8 @@ klientforhold (agent):
   signeringsrettighet og lønn.
 - Byrået godkjenner, og delegerer klientene i Altinn.
 - Forespørslene går med de samme Altinn-scopene.
-- Skal klientene kunne delegeres fra appen, trengs `altinn:clientdelegations.read` og `.write`
-  gjennom ID-porten.
+- Skal klientene kunne delegeres fra appen, brukes `altinn:clientdelegations.read` og `.write`
+  (gitt 19.10) gjennom ID-porten. De legges på ID-porten-klienten.
 - Skatteetaten fraråder å blande pakker fra ulike fullmaktsområder i et klientsystem, fordi det kan
   stoppe klientdelegeringen. Byråene bør derfor få et eget system i systemregisteret.
 

@@ -171,7 +171,7 @@ skattekortene (se `docs/skattekort.md`); de må være satt opp først.
    - `skatteetaten:innrapporteringamelding` (innsending og tilbakemelding);
    - `digdir:dialogporten` (tilbakemeldingen ligger i Dialogporten). Det bestilles hos Digdir i
      registreringsskjemaet for sluttbrukersystemleverandører (lenken står i `docs/skattekort.md`,
-     punkt 2).
+     punkt 2). Medinnova AS fikk det i test og produksjon 19.10.
 3. **GitHub-variabelen** (Settings → Secrets and variables → Actions → Variables):
    `AMELDING_INNSENDING` = `true`. Kjør så workflowen «Infrastruktur» (Actions → Infrastruktur →
    Run workflow). Adressen til API-et følger `SKATTEETATEN_MILJO`; den kan overstyres med
