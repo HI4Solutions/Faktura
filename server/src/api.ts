@@ -54,6 +54,7 @@ import { virksomhetRuter } from "./virksomheter.js";
 import { yrkesskadeRuter } from "./yrkesskader.js";
 import { regnskapRuter } from "./regnskapRuter.js";
 import { skatteetatenRuter } from "./skatteetatenRuter.js";
+import { trekkpaaleggRuter } from "./trekkpaaleggRuter.js";
 import { aordningRuter } from "./aordning.js";
 import { utfyllingRuter } from "./ansattUtfylling.js";
 import { yrkeskodeRuter } from "./yrkeskoder.js";
@@ -549,6 +550,7 @@ export function lagApi() {
   org.route("/", lonnBokforingRuter());
   org.route("/", navRuter());
   org.route("/", lonnstrekkRuter());
+  org.route("/", trekkpaaleggRuter());
   org.route("/", naturalytelserRuter());
   org.route("/", reiseRuter());
   org.route("/", navRefusjonRuter());

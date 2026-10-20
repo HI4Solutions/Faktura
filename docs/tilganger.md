@@ -5,13 +5,14 @@ Brønnøysundregistrene og leverandørene for å dekke lønn, a-melding, mva, kr
 utleggstrekk, årsregnskap, skattemelding og aksjonærregisteroppgave. Den viser også hva som alt er
 gitt. Medinnova AS (org.nr. 936 564 046) er leverandøren, og alle tilgangene står på Medinnova.
 
-Lista viser status 19.10.2026. Den bygger på:
+Lista viser status 20.10.2026. Den bygger på:
 
 - sjekken av produksjonsklienten i Cloud Shell 17.10 (`scripts/maskinporten.sh sjekk`, der 8 av 9
   scopes virket);
 - svarene fra Digdir, Altinn og Skatteetaten 13.–15.10;
 - svaret fra Altinn 19.10 på registreringsskjemaet for sluttbrukersystemleverandører (scopene for
   innsending, innboks, forespørsler og klientdelegering, i test og produksjon);
+- svaret fra Skatteetaten 20.10 (scopet for trekkpålegg i testmiljøet);
 - variablene i siste Infrastruktur-kjøring 18.10;
 - Skatteetatens API-dokumentasjon fra oktober 2026.
 
@@ -26,11 +27,15 @@ legges i Secret Manager med skriptene (`scripts/maskinporten.sh` og `scripts/idp
    og de ti scopene appen bruker, står nå på både test- og produksjonsklienten (se [Altinn](#altinn)).
    - Appen henter svaret på a-meldingen i produksjon. A-meldinger sendt den siste uka som står som
      «Sendt», får svaret innen en halvtime (workeren prøver dem igjen hver halvtime i sju dager).
-   - Bekreft med sjekken (under [Slik sjekker du selv](#slik-sjekker-du-selv)) at alle de ti viser ✓.
+   - Bekreft med sjekken (under [Slik sjekker du selv](#slik-sjekker-du-selv)) at de ti viser ✓.
+     Sjekken prøver nå også trekkpålegg, som viser ✗ til scopet er lagt på klienten (punkt 2).
 2. [ ] **Skatteetaten: trekkpålegg (`skatteetaten:trekkpaalegg`).**
-   - Søkt i oktober. Skatteetaten skrev 15.10 at avgjørelsen kommer i en egen oppdatering.
-   - Kommer den ikke, send organisasjonsnummeret på e-post til fremtidensinnkreving@skatteetaten.no
-     og be om test og produksjon.
+   - Test-scopet er gitt (20.10), og integrasjonen er bygget. Se [trekkpaalegg.md](trekkpaalegg.md).
+   - Legg scopet på testklienten i Samarbeidsportalen.
+   - Trykk «Oppdater i Altinn» på testflaten, og utvid tilgangen hos EKSTRA NESTE TIGER AS.
+   - «Hent nå» under Lønn → Trekkpålegg skal gi 0 pålegg. Be så om testdata på e-post til
+     fremtidensinnkreving@skatteetaten.no, med org.nr. 313516504.
+   - Produksjon gis når testen er oppsummert for Skatteetaten.
 3. [ ] **Skatteetaten: aksjonærregisteroppgaven
    (`skatteetaten:innrapporteringaksjonaerregisteroppgave`).**
    - Etter juni 2026 må alle aksjeselskap levere den gjennom et sluttbrukersystem.
@@ -120,7 +125,7 @@ særlig kategori, og Krav, betalinger og utlegg.
 | Krav, betalinger og utlegg (`…:krav-og-utlegg`) | krav, betalinger og frister fra Skatteetaten | Ja (`KRAV_OG_FRISTER`) |
 | Regnskap og økonomirapportering (`…:regnskap-okonomi-rapport`) | årsregnskapet | I test etter «Oppdater i Altinn» (bryteren er på der). I produksjon først med `AARSREGNSKAP_INNSENDING`. |
 | Skattegrunnlag (`…:skattegrunnlag`) | aksjonærregisteroppgaven | Nei, når den bygges |
-| Enkeltrettigheten «Informasjon om trekkpålegg» (ressursen `ske-informasjon-om-trekkpaalegg`) | trekkpåleggene | Nei, når de bygges |
+| Enkeltrettigheten «Informasjon om trekkpålegg» (ressursen `ske-informasjon-om-trekkpaalegg`) | trekkpåleggene | I test etter «Oppdater i Altinn» (bryteren er på der). I produksjon først med `TREKKPAALEGG`. |
 | Skatt næring (`…:skatt-naering`) | skattemeldingen | Nei. Den som sender skattemeldingen, trenger pakken. Systembrukeren trenger den først når hele innsendingen kan gjøres med systembruker. |
 | Merverdiavgift | mva-meldingen | Nei. Skatteetaten tar imot mva-meldingen med ID-porten, og den som sender, trenger pakken. |
 
@@ -157,7 +162,7 @@ bare når kunden har rapportert gjennom systemet minst én gang, for eksempel a-
 | Innrapportering a-melding (DM-1) | `skatteetaten:innrapporteringamelding` | a-meldingen og avstemmingsrapporten | Har | Har |
 | Krav og betalinger (DM-47) | `skatteetaten:kravogbetalinger` | Regnskap → Skatteetaten | Har | Har |
 | Frister (DM-49) | `skatteetaten:frister` | Regnskap → Skatteetaten | Har | Har |
-| Trekkpålegg | `skatteetaten:trekkpaalegg` | trekkpåleggene rett inn i lønnstrekkene (ikke bygget) | **Venter** | **Venter** |
+| Trekkpålegg | `skatteetaten:trekkpaalegg` | Lønn → Trekkpålegg, og trekket i lønnskjøringen | Har (20.10) | **Venter** (etter testen) |
 | Mva-meldingen | `skatteetaten:mvameldingvalidering` (ID-porten) | Regnskap → Mva → «Send til Skatteetaten» | **Ikke søkt** | **Ikke søkt** |
 | Skattemeldingen | `skatteetaten:formueinntekt/skattemelding` (ID-porten og Maskinporten) | skattemeldingen for AS med næringsspesifikasjon (ikke bygget) | **Ikke søkt** | **Ikke søkt** |
 | Aksjonærregisteroppgaven (RF-1086) | `skatteetaten:innrapporteringaksjonaerregisteroppgave` | aksjonærregisteroppgaven (ikke bygget) | **Ikke søkt** | **Ikke søkt** |
@@ -165,11 +170,13 @@ bare når kunden har rapportert gjennom systemet minst én gang, for eksempel a-
 ### Trekkpålegg
 
 - Søkt sammen med Krav og betalinger og Frister («Tilgangsforespørsel hente data»). Skatteetaten
-  skrev 15.10 at avgjørelsen kommer i en egen oppdatering.
-- Test-scopet bestilles også med en e-post til fremtidensinnkreving@skatteetaten.no, med
-  organisasjonsnummeret til Medinnova (ikke et syntetisk). Produksjon bestilles på samme måte.
+  ga test-scopet 20.10.
+- Produksjon bestilles med en e-post til fremtidensinnkreving@skatteetaten.no, med
+  organisasjonsnummeret til Medinnova (ikke et syntetisk), når testen er oppsummert.
 - Med systembruker må forespørselen til kunden ha ressursen `ske-informasjon-om-trekkpaalegg`.
-- Skatteetaten varsler nye trekkpålegg gjennom Dialogporten.
+  Systemet ber om den når `TREKKPAALEGG` er på.
+- Skatteetaten varsler nye trekkpålegg gjennom Dialogporten. Appen henter dem hver morgen.
+- Oppsettet og testplanen står i [trekkpaalegg.md](trekkpaalegg.md).
 
 ### Mva-meldingen
 
@@ -266,6 +273,7 @@ Bryterne godtar «true» i alle varianter («True», «TRUE»); andre verdier st
 | `AMELDING_INNSENDING` | true | true |
 | `NAV_SYKEPENGER` | true | true |
 | `KRAV_OG_FRISTER` | true | true |
+| `TREKKPAALEGG` | på i `test.tfvars` (fra 20.10) | false (ikke satt) |
 | `AARSREGNSKAP_INNSENDING` | true (fra Infrastruktur #45) | false |
 | `MVA_INNSENDING` | på i `test.tfvars`, men skjult til `IDPORTEN_KLIENT_ID` er satt | false |
 | `IDPORTEN_KLIENT_ID` | tom | tom |

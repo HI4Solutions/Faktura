@@ -17,6 +17,10 @@ skatteetaten_miljo = "test"
 # Den vises når ID-porten-klienten er satt opp (IDPORTEN_KLIENT_ID i miljøet «test» i GitHub).
 mva_innsending = true
 
+# Trekkpålegg fra Skatteetaten (docs/trekkpaalegg.md): Skatteetaten har gitt scopet
+# skatteetaten:trekkpaalegg i testmiljøet (20.10.2026).
+trekkpaalegg = true
+
 # Minste database som holder (50 tilkoblinger), og PDF-ene kan slettes etter en dag.
 db_tier                = "db-g1-small"
 faktura_retention_days = 1

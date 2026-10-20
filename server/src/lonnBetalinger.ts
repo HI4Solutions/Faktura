@@ -104,6 +104,9 @@ export async function hentBetalinger(
     trekkdato,
     forskuddstrekk,
     forventetKid,
-    trekk: [...per.values()].map(({ ansatte: _, ...x }) => x).sort((a, b) => a.mottaker.localeCompare(b.mottaker, "nb")),
+    // Etter mottakeren, og så KID-en (flere pålegg til Skatteetaten), så rekkefølgen er den samme hver gang.
+    trekk: [...per.values()]
+      .map(({ ansatte: _, ...x }) => x)
+      .sort((a, b) => a.mottaker.localeCompare(b.mottaker, "nb") || (a.kid ?? "").localeCompare(b.kid ?? "") || (a.kontonr ?? "").localeCompare(b.kontonr ?? "")),
   };
 }

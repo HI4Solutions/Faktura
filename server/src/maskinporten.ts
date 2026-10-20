@@ -43,6 +43,7 @@ const ADRESSER = {
     nav: "https://sykepenger-api.ekstern.dev.nav.no",
     krav: "https://kravogbetalinger.api.skatteetaten-test.no/v1/regnskapssystem",
     frister: "https://frister.api.skatteetaten-test.no/v1/regnskapssystem",
+    trekkpaalegg: "https://api-test.sits.no/api/trekkpaalegg/v1",
     brreg: "https://brg.apps.tt02.altinn.no",
     idporten: "https://test.idporten.no",
     mvaValidering: "https://idporten-api-test.sits.no/api/mva/grensesnittstoette/mva-melding/valider",
@@ -57,6 +58,7 @@ const ADRESSER = {
     nav: "https://sykepenger-api.nav.no",
     krav: "https://kravogbetalinger.api.skatteetaten.no/v1/regnskapssystem",
     frister: "https://frister.api.skatteetaten.no/v1/regnskapssystem",
+    trekkpaalegg: "https://api.skatteetaten.no/api/trekkpaalegg/v1",
     brreg: "https://brg.apps.altinn.no",
     idporten: "https://idporten.no",
     mvaValidering: "https://idporten.api.skatteetaten.no/api/mva/grensesnittstoette/mva-melding/valider",
@@ -75,6 +77,8 @@ export function adresser() {
     nav: config.navUrl ?? a.nav,
     krav: config.kravUrl ?? a.krav,
     frister: config.fristerUrl ?? a.frister,
+    // Trekkpålegg (api-dokumentasjonen: api-test.sits.no i test, api.skatteetaten.no i produksjon).
+    trekkpaalegg: config.trekkpaaleggUrl ?? a.trekkpaalegg,
     // Brønnøysundregistrenes apper i Altinn 3 (årsregnskapet).
     brreg: config.brregAppUrl ?? a.brreg,
     // Mva-meldingen (mvaInnsending.ts): utstederen i ID-porten, valideringen hos Skatteetaten og
@@ -106,6 +110,8 @@ export const SCOPE = {
   // Krav og betalinger og frister fra Skatteetaten (hvert sitt token, så det ene virker uten det andre).
   krav: "skatteetaten:kravogbetalinger",
   frister: "skatteetaten:frister",
+  // Trekkpålegg fra Skatteetaten (utleggstrekk i lønnen).
+  trekkpaalegg: "skatteetaten:trekkpaalegg",
   // Årsregnskapet: instansene i Brønnøysunds app i Altinn (Maskinporten-tokenet byttes til et
   // Altinn-token).
   aarsregnskap: "altinn:instances.read altinn:instances.write",

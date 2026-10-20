@@ -31,6 +31,7 @@ export const VARSELTYPER = {
   regnskap: "Månedsavslutningen i regnskapet",
   ansatte: "Opplysninger fra de ansatte: sendt inn, godkjent og avvist",
   sjekklister: "Sjekklister: avvik og når de er lukket",
+  trekkpaalegg: "Trekkpålegg fra Skatteetaten: nye, endrede og avsluttede",
 } as const;
 export type Varseltype = keyof typeof VARSELTYPER;
 

@@ -16,7 +16,7 @@ import { lonnsart, LONNSARTER } from "./lonnsarter.js";
 import { bokforKjoring } from "./lonnBokforing.js";
 import { fribelopBrukt as fribelopIAar } from "./afpPremier.js";
 import { endringstekster, etterbetaling, fastlonnLinjer, gjeldende, kjent, ukeDato, type Etterbetalt, type GodkjentKjoring, type Lonnsendring } from "./lonnsendringer.js";
-import { aktive, fagforeningslinjer, trekkEtterSkatt, type Lonnstrekk } from "./lonnstrekk.js";
+import { aktive, fagforeningslinjer, iRekkefolge, paaleggstrekk, trekkEtterSkatt, trekkNokkel, type Lonnstrekk, type Paaleggsperiode } from "./lonnstrekk.js";
 import { hentBetalinger } from "./lonnBetalinger.js";
 import { naturallinjer, type Naturalytelse } from "./naturalytelser.js";
 import type { Reiselinje } from "./reise.js";
@@ -137,6 +137,48 @@ const ANSATTE = `
          a.skattekort_resultat, a.skattekort_tillegg, a.aktiv, a.arbeidsforhold_type, a.honorar_art, to_char(a.dodsdato, 'YYYY-MM-DD') as dodsdato, a.kildeskatt, a.virksomhet_id
     from faktura.ansatte a`;
 
+// Trekkene fra pålegg fra Skatteetaten (0127_trekkpaalegg.sql) i kjøringen: det som gjelder på
+// utbetalingsdatoen (lonnstrekk.ts, paaleggstrekk), med det som alt er trukket i de andre godkjente
+// kjøringene med utbetaling i samme måned (et beløp trekkes én gang i måneden).
+async function trekkFraPaalegg(db: Db, k: Kjoring, ordinar: boolean): Promise<Lonnstrekk[]> {
+  const rader = await alle<Lonnstrekk & { perioder: Paaleggsperiode[] }>(
+    db,
+    `select t.id, t.ansatt_id, t.type, t.tekst, null::float8 as belop, null::float8 as prosent, null::float8 as totalt,
+            to_char(t.fra, 'YYYY-MM-DD') as fra, to_char(t.til, 'YYYY-MM-DD') as til, t.mottaker, t.kontonr, t.kid, t.melding, p.perioder
+       from faktura.lonnstrekk t join faktura.trekkpaalegg p on p.id = t.paalegg_id
+      where t.org_id = $1`,
+    [k.org_id],
+  );
+  if (!rader.length) return [];
+  const iMaaneden = new Map(
+    (
+      await alle<{ nokkel: string; trukket: number }>(
+        db,
+        `select l.nokkel, -sum(l.belop)::float8 as trukket
+           from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id join faktura.lonnskjoringer k on k.id = s.kjoring_id
+          where l.org_id = $1 and k.status = 'godkjent' and k.id <> $2 and not l.fjernet and l.nokkel = any($3::text[])
+            and date_trunc('month', k.utbetalingsdato) = date_trunc('month', $4::date)
+          group by l.nokkel`,
+        [k.org_id, k.id, rader.map((r) => trekkNokkel(r.id)), k.utbetalingsdato],
+      )
+    ).map((x) => [x.nokkel, Number(x.trukket)]),
+  );
+  const ordinarGodkjent =
+    ordinar ||
+    Boolean(
+      await en(
+        db,
+        `select 1 from faktura.lonnskjoringer
+          where org_id = $1 and type = 'ordinar' and status = 'godkjent' and date_trunc('month', utbetalingsdato) = date_trunc('month', $2::date) limit 1`,
+        [k.org_id, k.utbetalingsdato],
+      ),
+    );
+  return rader.flatMap(({ perioder, ...t }) => {
+    const x = paaleggstrekk(t, perioder, k.utbetalingsdato, { trukketIMaaneden: iMaaneden.get(trekkNokkel(t.id)) ?? 0, ordinar, ordinarGodkjent });
+    return x ? [x] : [];
+  });
+}
+
 // Regner ut kjøringen på nytt og lagrer slippene (bare et utkast). De manuelle linjene (lagt til,
 // endret eller fjernet) og et trekk satt for hånd beholdes.
 export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
@@ -160,21 +202,25 @@ export async function beregnKjoring(db: Db, kjoringId: string): Promise<void> {
   const ordinar = k.type === "ordinar";
 
   const ansatte = await alle<Ansatt & { aktiv: boolean }>(db, `${ANSATTE} where a.org_id = $1 and a.arbeidstaker order by a.ansattnummer`, [org]);
-  // Faste trekk (0082, lonnstrekk.ts) i den ordinære kjøringen, og det som alt er trukket for
-  // hvert av dem i godkjente kjøringer.
-  const lonnstrekk = ordinar
-    ? aktive(
-        await alle<Lonnstrekk>(
-          db,
-          `select id, ansatt_id, type, tekst, belop::float8 as belop, prosent::float8 as prosent, totalt::float8 as totalt,
-                  to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, mottaker, kontonr, kid, melding
-             from faktura.lonnstrekk where org_id = $1 and fra <= $3::date and (til is null or til >= $2::date)`,
-          [org, fra, til],
-        ),
-        fra,
-        til,
-      )
-    : [];
+  // Faste trekk (0082, lonnstrekk.ts) i den ordinære kjøringen, trekkene fra pålegg fra
+  // Skatteetaten (0127) i alle kjøringene, og det som alt er trukket for hvert av dem i godkjente
+  // kjøringer.
+  const lonnstrekk = iRekkefolge([
+    ...(ordinar
+      ? aktive(
+          await alle<Lonnstrekk>(
+            db,
+            `select id, ansatt_id, type, tekst, belop::float8 as belop, prosent::float8 as prosent, totalt::float8 as totalt,
+                    to_char(fra, 'YYYY-MM-DD') as fra, to_char(til, 'YYYY-MM-DD') as til, mottaker, kontonr, kid, melding
+               from faktura.lonnstrekk where org_id = $1 and paalegg_id is null and fra <= $3::date and (til is null or til >= $2::date)`,
+            [org, fra, til],
+          ),
+          fra,
+          til,
+        )
+      : []),
+    ...(await trekkFraPaalegg(db, k, ordinar)),
+  ]);
   const trukketSum = new Map(
     (lonnstrekk.length
       ? await alle<{ nokkel: string; trukket: number }>(

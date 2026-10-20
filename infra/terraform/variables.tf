@@ -175,6 +175,12 @@ variable "krav_og_frister" {
   default     = false
 }
 
+variable "trekkpaalegg" {
+  description = "Trekkpåleggene hentes fra Skatteetaten til fanen «Trekkpålegg» under Lønn og trekkes i lønnskjøringen (Medinnova AS har fått scopet skatteetaten:trekkpaalegg på Maskinporten-klienten), og systemet i Altinn ber om ressursen «Informasjon om trekkpålegg». På i testmiljøet (miljo/test.tfvars); i produksjon med GitHub-variabelen TREKKPAALEGG (true)."
+  type        = bool
+  default     = false
+}
+
 variable "aarsregnskap_innsending" {
   description = "Årsregnskapet sendes til signering i Altinn (Brønnøysundregistrenes app for årsregnskapet; Medinnova AS har lagt scopene altinn:instances.read og altinn:instances.write på Maskinporten-klienten), og systemet i Altinn ber om tilgangspakken «Regnskap og økonomirapportering». Settes med GitHub-variabelen AARSREGNSKAP_INNSENDING (true)."
   type        = bool

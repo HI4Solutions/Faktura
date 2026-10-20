@@ -65,7 +65,8 @@ workflow), så nettstedet publiseres uten merket.
    Variables), så testflaten beholder testklienten i Maskinporten når produksjon får sin egen:
    - `MASKINPORTEN_KLIENT_ID` og `MASKINPORTEN_NOKKEL_ID`;
    - `AMELDING_INNSENDING`, og `NAV_SYKEPENGER`, `KRAV_OG_FRISTER` og `AARSREGNSKAP_INNSENDING` om de
-     er satt;
+     er satt (trekkpålegg er alltid på i testmiljøet, `test.tfvars`; se
+     [trekkpaalegg.md](trekkpaalegg.md));
    - `IDPORTEN_KLIENT_ID` og `IDPORTEN_NOKKEL_ID` (ID-porten-klienten i testmiljøet, mva-meldingen fra
      appen; se [mva-innsending.md](mva-innsending.md)). Innsendingen er på i testmiljøet
      (`test.tfvars`) og av i produksjon til `MVA_INNSENDING` settes der.

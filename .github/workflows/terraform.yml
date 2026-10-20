@@ -54,6 +54,9 @@ jobs:
       TF_VAR_nav_sykepenger: ${{ vars.NAV_SYKEPENGER == 'true' }}
       # Krav og frister fra Skatteetaten (docs/skatteetaten-krav.md): av til scopene er på klienten.
       TF_VAR_krav_og_frister: ${{ vars.KRAV_OG_FRISTER == 'true' }}
+      # Trekkpålegg fra Skatteetaten (docs/trekkpaalegg.md): på i testmiljøet (miljo/test.tfvars), av i
+      # produksjon til scopet skatteetaten:trekkpaalegg er gitt der og TREKKPAALEGG settes.
+      TF_VAR_trekkpaalegg: ${{ vars.TREKKPAALEGG == 'true' }}
       # Årsregnskapet til Altinn (docs/aarsregnskap.md): av til scopene altinn:instances.* er på klienten.
       TF_VAR_aarsregnskap_innsending: ${{ vars.AARSREGNSKAP_INNSENDING == 'true' }}
       # Mva-meldingen til Skatteetaten (docs/mva-innsending.md): på i testmiljøet (miljo/test.tfvars),
@@ -83,11 +86,12 @@ jobs:
           AMELDING_INNSENDING: ${{ vars.AMELDING_INNSENDING }}
           NAV_SYKEPENGER: ${{ vars.NAV_SYKEPENGER }}
           KRAV_OG_FRISTER: ${{ vars.KRAV_OG_FRISTER }}
+          TREKKPAALEGG: ${{ vars.TREKKPAALEGG }}
           AARSREGNSKAP_INNSENDING: ${{ vars.AARSREGNSKAP_INNSENDING }}
           MVA_INNSENDING: ${{ vars.MVA_INNSENDING }}
         run: |
           feil=0
-          for navn in AI_AKTIV AMELDING_INNSENDING NAV_SYKEPENGER KRAV_OG_FRISTER AARSREGNSKAP_INNSENDING MVA_INNSENDING; do
+          for navn in AI_AKTIV AMELDING_INNSENDING NAV_SYKEPENGER KRAV_OG_FRISTER TREKKPAALEGG AARSREGNSKAP_INNSENDING MVA_INNSENDING; do
             verdi="${!navn}"
             case "${verdi,,}" in
               "" | true | false) echo "$navn: ${verdi:-(ikke satt)}" ;;

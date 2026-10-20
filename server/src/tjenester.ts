@@ -119,6 +119,8 @@ export type Oppgave =
   | { type: "nav-inntektsmelding"; org_id: string; inntektsmelding_id: string }
   // Skatteetaten: kravene og betalingene, og fristene (skatteetatenKrav.ts).
   | { type: "skatteetaten-hent"; org_id: string }
+  // Trekkpålegg fra Skatteetaten (trekkpaalegg.ts).
+  | { type: "trekkpaalegg-hent"; org_id: string }
   // Årsregnskapet til Brønnøysundregistrene i Altinn (aarsregnskapInnsending.ts): sendingen til
   // signering, statusen til det er signert, og tilbaketrekkingen.
   | { type: "aarsregnskap-send"; org_id: string; aarsregnskap_id: string }
@@ -168,6 +170,7 @@ export const OPPGAVETYPER = [
   "nav-hent",
   "nav-inntektsmelding",
   "skatteetaten-hent",
+  "trekkpaalegg-hent",
   "aarsregnskap-send",
   "aarsregnskap-status",
   "aarsregnskap-tilbake",

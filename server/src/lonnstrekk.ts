@@ -1,6 +1,9 @@
 // Faste trekk i lønnen (0082_lonnstrekk.sql): trekk etter pålegg (utleggstrekk og bidragstrekk),
 // fagforeningskontingent, tilbakebetaling av forskudd på lønn og andre trekk, per ansatt.
 //
+// Trekkpålegg fra Skatteetaten (0127_trekkpaalegg.sql, trekkpaalegg.ts) er faste trekk med
+// størrelsen i pålegget: det som gjelder på utbetalingsdatoen (paaleggstrekk under).
+//
 // Den ordinære lønnskjøringen trekker dem i to steg: fagforeningskontingenten først (den gjør
 // grunnlaget for forskuddstrekket mindre), og de andre etter forskuddstrekket, i rekkefølgen
 // dekningsloven gir (bidrag før utlegg, så forskudd og andre trekk; innen samme type det eldste
@@ -44,11 +47,55 @@ const kr = (n: number) => `${n.toLocaleString("nb-NO", { minimumFractionDigits: 
 // Nøkkelen på linjen for et trekk (så en linje som er endret eller fjernet for hånd, gjelder).
 export const trekkNokkel = (id: string) => `trekk:${id}`;
 
+// Trekkene i rekkefølgen de trekkes.
+export const iRekkefolge = (trekk: Lonnstrekk[]): Lonnstrekk[] =>
+  [...trekk].sort((x, y) => TREKKTYPER[x.type].rekke - TREKKTYPER[y.type].rekke || x.fra.localeCompare(y.fra) || x.id.localeCompare(y.id));
+
 // Trekkene som gjelder i perioden (minst én dag), i rekkefølgen de trekkes.
 export function aktive(trekk: Lonnstrekk[], fra: string, til: string): Lonnstrekk[] {
-  return trekk
-    .filter((t) => t.fra <= til && (!t.til || t.til >= fra))
-    .sort((x, y) => TREKKTYPER[x.type].rekke - TREKKTYPER[y.type].rekke || x.fra.localeCompare(y.fra) || x.id.localeCompare(y.id));
+  return iRekkefolge(trekk.filter((t) => t.fra <= til && (!t.til || t.til >= fra)));
+}
+
+// --- Trekkpålegg fra Skatteetaten ----------------------------------------------------------------
+
+// Trekkstørrelsen i en periode av pålegget: et beløp per måned eller en prosent av bruttolønnen
+// (kan være 0). til: null når perioden ikke har en sluttdato; den kan være før fra (pålegget ble
+// avsluttet før det startet).
+export type Paaleggsperiode = { fra: string; til: string | null; belop: number | null; prosent: number | null };
+
+// Perioden som gjelder på utbetalingsdatoen (Skatteetaten: «Trekkpliktig skal trekke det som står i
+// den perioden som gjelder lønnsutbetalingsdatoen»). Gjelder flere, den som startet sist.
+export function gjeldendePeriode(perioder: Paaleggsperiode[], dato: string): Paaleggsperiode | null {
+  let funnet: Paaleggsperiode | null = null;
+  for (const p of perioder) if (p.fra <= dato && (!p.til || dato <= p.til) && (!funnet || p.fra >= funnet.fra)) funnet = p;
+  return funnet;
+}
+
+// Størrelsen som tekst («17 % av bruttolønnen», «5 000 kr per måned», «ikke noe trekk»).
+export function storrelseTekst(p: Pick<Paaleggsperiode, "belop" | "prosent">) {
+  if (p.prosent != null && p.prosent > 0) return `${String(p.prosent).replace(".", ",")} % av bruttolønnen`;
+  if (p.belop != null && p.belop > 0) return `${kr(p.belop)} per måned`;
+  return "ikke noe trekk";
+}
+
+// Trekket fra et pålegg i en lønnskjøring med utbetaling på datoen. En prosent trekkes av
+// bruttolønnen ved hver utbetaling (også i en ekstra kjøring). Et beløp trekkes én gang i måneden:
+// det som ikke alt er trukket i en annen godkjent kjøring med utbetaling i samme måned, i den
+// ordinære kjøringen, eller i en ekstra kjøring når den ordinære i måneden er godkjent (det den ikke
+// rakk). null: ikke noe trekk i kjøringen.
+export function paaleggstrekk(
+  t: Lonnstrekk,
+  perioder: Paaleggsperiode[],
+  dato: string,
+  v: { trukketIMaaneden: number; ordinar: boolean; ordinarGodkjent: boolean },
+): Lonnstrekk | null {
+  const p = gjeldendePeriode(perioder, dato);
+  if (!p) return null;
+  if (p.prosent != null && Number(p.prosent) > 0) return { ...t, prosent: Number(p.prosent), belop: null, totalt: null };
+  if (p.belop == null || !(Number(p.belop) > 0)) return null;
+  if (!v.ordinar && !v.ordinarGodkjent) return null;
+  const igjen = rund(Number(p.belop) - Math.max(0, v.trukketIMaaneden));
+  return igjen > 0 ? { ...t, belop: igjen, prosent: null, totalt: null } : null;
 }
 
 const navn = (t: Lonnstrekk) => `${TREKKTYPER[t.type].navn}${t.tekst ? ` – ${t.tekst}` : ""}`;

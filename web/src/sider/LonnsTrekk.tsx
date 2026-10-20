@@ -2,12 +2,16 @@
 // utleggstrekk og bidragstrekk etter pålegg, fagforeningskontingent, tilbakebetaling av forskudd
 // og andre trekk, med det som er trukket. Den ordinære lønnskjøringen trekker dem etter
 // forskuddstrekket (fagforeningen før), aldri mer enn nettolønnen. Eier og administrator legger
-// inn, endrer og fjerner; et trekk som er brukt i en godkjent kjøring, avsluttes i stedet.
+// inn, endrer og fjerner; et trekk som er brukt i en godkjent kjøring, avsluttes i stedet. Et trekk
+// fra et trekkpålegg fra Skatteetaten (LonnTrekkpaalegg.tsx) står med det som gjelder nå, og endres
+// bare av Skatteetaten.
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api, hent } from "../api";
 import { Feil, Laster, tall, useData, useHandling } from "../felles";
 import { useKonto } from "../konto";
 import { dato, iDag, kr } from "../format";
+import { storrelse } from "./LonnTrekkpaalegg";
 
 type Trekktype = "utlegg_samordnet" | "utlegg_skatt" | "utlegg_annet" | "bidrag" | "fagforening" | "forskudd" | "annet";
 type Trekk = {
@@ -24,6 +28,16 @@ type Trekk = {
   kid: string | null;
   melding: string | null;
   trukket: number;
+  // Pålegget fra Skatteetaten (0127_trekkpaalegg.sql): størrelsen står i periodene.
+  paalegg: {
+    id: string;
+    trekkid: string;
+    saksnummer: string | null;
+    trekkstatus: "aktiv" | "avsluttet";
+    trekkversjon: number;
+    formidlet: string | null;
+    perioder: { fra: string; til: string | null; belop: number | null; prosent: number | null }[];
+  } | null;
 };
 
 const TYPER: Record<Trekktype, { navn: string; hjelp: string }> = {
@@ -65,7 +79,24 @@ const tilUtkast = (t: Trekk): Utkast => ({
   melding: t.melding ?? "",
 });
 
+// Et trekk fra et pålegg: det som gjelder i dag (perioden som gjelder på datoen), og den neste endringen.
+function paaleggTekst(t: Trekk, idag: string) {
+  const p = t.paalegg!;
+  let naa: (typeof p.perioder)[number] | null = null;
+  for (const x of p.perioder) if (x.fra <= idag && (!x.til || idag <= x.til) && (!naa || x.fra >= naa.fra)) naa = x;
+  const neste = p.perioder.filter((x) => x.fra > idag).sort((x, y) => x.fra.localeCompare(y.fra))[0];
+  return [
+    naa ? `${storrelse(naa)} nå` : p.trekkstatus === "avsluttet" ? "Avsluttet av Skatteetaten" : "Ikke noe trekk nå",
+    neste ? `fra ${dato(neste.fra)}: ${storrelse(neste)}` : null,
+    t.trukket ? `${kr(t.trukket)} kr trukket` : null,
+    t.kid ? `KID ${t.kid}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function beskrivelse(t: Trekk) {
+  if (t.paalegg) return paaleggTekst(t, iDag());
   const mengde = t.prosent != null ? `${String(t.prosent).replace(".", ",")} % av bruttolønnen` : `${kr(Number(t.belop))} kr per måned`;
   const periode = t.til ? `${dato(t.fra)}–${dato(t.til)}` : `fra ${dato(t.fra)}`;
   return [mengde, periode, t.totalt != null ? `${kr(t.trukket)} av ${kr(t.totalt)} kr trukket` : t.trukket ? `${kr(t.trukket)} kr trukket` : null, t.mottaker ? `til ${t.mottaker}` : null]
@@ -121,7 +152,7 @@ export function LonnsTrekk({ ansattId, kanEndre }: { ansattId: string; kanEndre:
       <summary>Faste trekk</summary>
       <p className="felt-hjelp">
         Trekkes i den ordinære lønnskjøringen etter forskuddstrekket (fagforeningskontingenten før), aldri mer enn nettolønnen. Trekk med kontonummer betales med
-        betalingsfila første virkedag etter lønnsdagen.
+        betalingsfila første virkedag etter lønnsdagen. Trekkpålegg fra Skatteetaten kommer inn av seg selv (Lønn → Trekkpålegg).
       </p>
       {liste.feil ? (
         <Feil melding={liste.feil} />
@@ -135,10 +166,18 @@ export function LonnsTrekk({ ansattId, kanEndre }: { ansattId: string; kanEndre:
                 <span>
                   {TYPER[t.type].navn}
                   {t.tekst ? ` – ${t.tekst}` : ""}
+                  {t.paalegg && <span className="merke merke-noytral merke-skatt">Fra Skatteetaten</span>}
                   {t.til && t.til < idag && <span className="merke merke-noytral">Avsluttet</span>}
                   {t.totalt != null && t.trukket >= t.totalt && <span className="merke merke-ok">Ferdig trukket</span>}
                 </span>
-                {kanEndre && !(t.til && t.til < idag && t.trukket > 0) && (
+                {t.paalegg && (
+                  <span className="lonnstrekk-knapper">
+                    <Link className="lenke" to="/lonn?fane=trekkpaalegg">
+                      Se pålegget
+                    </Link>
+                  </span>
+                )}
+                {kanEndre && !t.paalegg && !(t.til && t.til < idag && t.trukket > 0) && (
                   <span className="lonnstrekk-knapper">
                     <button type="button" className="lenke" disabled={h.opptatt} onClick={() => settSkjema(tilUtkast(t))}>
                       Endre

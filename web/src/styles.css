@@ -3320,6 +3320,25 @@ td.idag .pt-dato { background: var(--aksent); color: var(--aksent-tekst); }
 .skatt-rad .tittel, .skatt-rad .under { white-space: normal; }
 
 /* --------------------------------------------------------------------------
+   Trekkpålegg fra Skatteetaten under Lønn (sider/LonnTrekkpaalegg.tsx)
+   -------------------------------------------------------------------------- */
+.trekkpaalegg-rad { cursor: default; }
+.trekkpaalegg-rad:hover:not(:disabled), .trekkpaalegg-rad:active:not(:disabled) { background: none; }
+.trekkpaalegg-rad .tittel, .trekkpaalegg-rad .under { white-space: normal; }
+.trekkpaalegg-rad .linje > span:last-child:not(.under) { display: inline-flex; gap: 6px; flex: none; }
+.trekkpaalegg-rad .melding { margin: 6px 0 0; padding: 8px 12px; }
+.trekkpaalegg-betaling { display: flex; flex-wrap: wrap; gap: 2px 14px; font-variant-numeric: tabular-nums; }
+.trekkpaalegg-betaling span { white-space: nowrap; }
+.trekkpaalegg-betaling button.lenke { margin-left: 4px; font-size: 0.82rem; }
+.trekkpaalegg-perioder { margin-top: 4px; }
+.trekkpaalegg-perioder summary { cursor: pointer; color: var(--dempet); }
+.trekkpaalegg-perioder ul { margin: 6px 0 0; padding-left: 18px; }
+.trekkpaalegg-perioder p { margin: 4px 0 0; }
+.trekkpaalegg-avsluttede > summary { cursor: pointer; font-weight: 600; }
+.trekkpaalegg-avsluttede .liste { margin-top: 8px; }
+.lonnstrekk-liste .merke-skatt { margin-left: 6px; }
+
+/* --------------------------------------------------------------------------
    Enklere å legge inn ansatte: ny ansatt i steg (NyAnsatt.tsx), opplysningene den ansatte fyller
    ut (AnsattUtfylling.tsx), «Mangler» i ansattkortet og hentingen fra a-ordningen (Aordning.tsx)
    -------------------------------------------------------------------------- */

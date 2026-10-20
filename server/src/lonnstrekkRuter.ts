@@ -1,6 +1,7 @@
 // De faste trekkene i lønnen til en ansatt (0082_lonnstrekk.sql, lonnstrekk.ts): lista med det som
 // er trukket i godkjente kjøringer, og nye, endrede og fjernede trekk. De som ser lønnen, og den
-// ansatte selv, ser trekkene; eier og administrator endrer dem.
+// ansatte selv, ser trekkene; eier og administrator endrer dem. Et trekk fra et pålegg fra
+// Skatteetaten (0127_trekkpaalegg.sql) står med pålegget, og endres bare av Skatteetaten.
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { alle, en, somBruker, type Db } from "./db.js";
@@ -36,18 +37,31 @@ const trekkSkjema = z
 
 const FELT = ["type", "tekst", "belop", "prosent", "totalt", "fra", "til", "mottaker", "kontonr", "kid", "melding"] as const;
 
-// Trekkene til en ansatt, med det som er trukket i godkjente kjøringer.
+// Trekkene til en ansatt, med det som er trukket i godkjente kjøringer, og pålegget fra
+// Skatteetaten for et trekk fra et pålegg.
 function liste(db: Db, org: string, ansatt: string) {
   return alle(
     db,
     `select t.id, t.type, t.tekst, t.belop::float8 as belop, t.prosent::float8 as prosent, t.totalt::float8 as totalt,
             to_char(t.fra, 'YYYY-MM-DD') as fra, to_char(t.til, 'YYYY-MM-DD') as til, t.mottaker, t.kontonr, t.kid, t.melding,
             coalesce((select -sum(l.belop) from faktura.lonnslinjer l join faktura.lonnsslipper s on s.id = l.slipp_id join faktura.lonnskjoringer k on k.id = s.kjoring_id
-                       where l.org_id = t.org_id and l.nokkel = 'trekk:' || t.id::text and not l.fjernet and k.status = 'godkjent'), 0)::float8 as trukket
-       from faktura.lonnstrekk t where t.org_id = $1 and t.ansatt_id = $2
+                       where l.org_id = t.org_id and l.nokkel = 'trekk:' || t.id::text and not l.fjernet and k.status = 'godkjent'), 0)::float8 as trukket,
+            case when p.id is not null then
+              json_build_object('id', p.id, 'trekkid', p.trekkid, 'saksnummer', p.saksnummer, 'trekkstatus', p.trekkstatus, 'trekkversjon', p.trekkversjon,
+                                'formidlet', p.formidlet, 'perioder', p.perioder) end as paalegg
+       from faktura.lonnstrekk t left join faktura.trekkpaalegg p on p.id = t.paalegg_id
+      where t.org_id = $1 and t.ansatt_id = $2
       order by t.til is not null and t.til < faktura.i_dag(), t.fra, t.opprettet`,
     [org, ansatt],
   );
+}
+
+// Et trekk fra et pålegg fra Skatteetaten endres bare av Skatteetaten (en ny versjon av pålegget).
+async function krevForHaand(db: Db, org: string, ansatt: string, trekk: string) {
+  const t = await en<{ paalegg_id: string | null }>(db, "select paalegg_id from faktura.lonnstrekk where org_id = $1 and ansatt_id = $2 and id = $3", [org, ansatt, trekk]);
+  if (!t) throw new ApiFeil(404, "Fant ikke trekket");
+  if (t.paalegg_id)
+    throw new ApiFeil(409, "Trekket kommer fra et trekkpålegg fra Skatteetaten, og endres bare når Skatteetaten sender en ny versjon av pålegget (Lønn → Trekkpålegg).");
 }
 
 export function lonnstrekkRuter() {
@@ -78,6 +92,7 @@ export function lonnstrekkRuter() {
     return c.json(
       await bruk(c, async (db) => {
         await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+        await krevForHaand(db, orgId(c), ansatt(c), trekk);
         const res = await db.query(
           `update faktura.lonnstrekk set ${FELT.map((f, i) => `${f} = $${i + 4}`).join(", ")} where org_id = $1 and ansatt_id = $2 and id = $3`,
           [orgId(c), ansatt(c), trekk, ...FELT.map((f) => b[f] ?? null)],
@@ -95,6 +110,7 @@ export function lonnstrekkRuter() {
     return c.json(
       await bruk(c, async (db) => {
         await db.query("select faktura.krev($1, 'personal')", [orgId(c)]);
+        await krevForHaand(db, orgId(c), ansatt(c), trekk);
         const t = await en<{ sist: string | null }>(
           db,
           `select (select to_char(max((k.periode + interval '1 month' - interval '1 day')::date), 'YYYY-MM-DD')

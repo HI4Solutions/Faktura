@@ -5,12 +5,12 @@
 // lønnsslippen. Regnskap ser kjøringene. De ansatte ser sine egne lønnsslipper («Mine
 // lønnsslipper»).
 //
-// Fanen står i adressen (?fane=kjoringer|amelding|skattekort|sykepenger|afp|reiser|aar|mine),
+// Fanen står i adressen (?fane=kjoringer|amelding|skattekort|trekkpaalegg|sykepenger|afp|reiser|aar|mine),
 // kjøringen som er åpen med ?kjoring=, måneden i a-meldingen med ?maaned= og oppsettet med
 // ?oppsett=1 (LonnAmelding.tsx), forespørselen fra NAV med ?foresporsel= (LonnSykepenger.tsx),
 // reiseregningen med ?reise= (LonnReiser.tsx), og året for årsoversikten med ?aar= (LonnAar.tsx).
 // Skattekortene (koblingen til Skatteetaten og de ansattes skattekort) er på ?fane=skattekort
-// (Skattekort.tsx).
+// (Skattekort.tsx), og trekkpåleggene fra Skatteetaten på ?fane=trekkpaalegg (LonnTrekkpaalegg.tsx).
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, hent, lastNed } from "../api";
@@ -27,6 +27,7 @@ import { LonnBetalinger } from "./LonnBetalinger";
 import { Reiser } from "./LonnReiser";
 import { Afp } from "./LonnAfp";
 import { LonnSkattekort } from "./Skattekort";
+import { Trekkpaalegg } from "./LonnTrekkpaalegg";
 
 export interface Linje {
   id: string;
@@ -178,9 +179,10 @@ export function Lonn() {
   const oppsett = useData(() => (leder && org?.personal ? hent<{ afp?: boolean }>(`/org/${org.id}/lonn-oppsett`) : Promise.resolve(null)), [org?.id, leder]);
   const faner: [string, string][] = [];
   // Skattekortene ved a-meldingen: koblingen til Skatteetaten og skattekortene lønnen bruker.
-  if (leder) faner.push(["kjoringer", "Lønnskjøringer"], ["amelding", "A-melding"], ["skattekort", "Skattekort"], ["aar", "Årsoversikt"]);
+  // Trekkpåleggene fra Skatteetaten ved skattekortene (begge kommer fra Skatteetaten).
+  if (leder) faner.push(["kjoringer", "Lønnskjøringer"], ["amelding", "A-melding"], ["skattekort", "Skattekort"], ["trekkpaalegg", "Trekkpålegg"], ["aar", "Årsoversikt"]);
   // Sykepenger og NAV: helseopplysninger, så bare eier og administrator.
-  if (leder && kanLonn(org)) faner.splice(3, 0, ["sykepenger", "Sykepenger"]);
+  if (leder && kanLonn(org)) faner.splice(4, 0, ["sykepenger", "Sykepenger"]);
   if (leder && (oppsett.data?.afp || sok.get("fane") === "afp")) faner.splice(faner.length - 1, 0, ["afp", "AFP"]);
   // Reiseregningene: de som ser lønnen, ser alle; den ansatte fører og ser sine egne (etter
   // lønnsslippene, som er det den ansatte ser først).
@@ -240,6 +242,7 @@ export function Lonn() {
       {fane === "kjoringer" && (kjoring ? <KjoringSide id={kjoring} tilbake={() => ga({ kjoring: null })} /> : <Kjoringer apne={(id) => ga({ kjoring: id })} />)}
       {fane === "amelding" && <Ameldinger />}
       {fane === "skattekort" && <LonnSkattekort />}
+      {fane === "trekkpaalegg" && <Trekkpaalegg />}
       {fane === "sykepenger" && <Sykepenger />}
       {fane === "afp" && <Afp />}
       {fane === "reiser" && <Reiser leder={leder} reise={sok.get("reise")} apne={(id) => ga({ reise: id })} />}

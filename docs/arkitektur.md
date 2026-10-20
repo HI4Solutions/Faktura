@@ -1092,6 +1092,20 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   `regnskap.skatteetaten_betalinger` (bare når hentingen er på, `Rapportdef.aktiv`). Av til
   `KRAV_OG_FRISTER` er satt; da ber systemet i Altinn også om tilgangspakken, og kunder som er
   koblet til, utvider tilgangen som for a-meldingen
+- Trekkpålegg fra Skatteetaten (`0127_trekkpaalegg.sql`, `server/src/trekkpaalegg.ts`,
+  `server/src/trekkpaaleggRuter.ts`, `server/src/trekkpaaleggRapporter.ts`,
+  `web/src/sider/LonnTrekkpaalegg.tsx`, `docs/trekkpaalegg.md`): Trekkpålegg API (siste versjon av
+  alle påleggene) med systembrukeren i Altinn og scopet `skatteetaten:trekkpaalegg`. Altinn får
+  ressursen «Informasjon om trekkpålegg» som enkeltrettighet (`rights` og `requiredRights`;
+  `tilAltinn` i `server/src/altinn.ts`), ved siden av tilgangspakkene. Hjerteslaget legger
+  organisasjonene med ressursen og Lønn i kø når de ikke er hentet ennå og hver morgen fra kl. 06
+  (`trekkpaalegg_henting.forsokt`). Hvert pålegg lagres med siste versjon; skyldneren kobles til
+  den ansatte med fødselsnummeret (bare fødselsdatoen lagres), og `faktura.koble_trekkpaalegg`
+  lager det faste trekket (`lonnstrekk.paalegg_id`, uten beløp og prosent). Lønnskjøringen trekker
+  perioden som gjelder på utbetalingsdatoen (`gjeldendePeriode` og `paaleggstrekk` i
+  `server/src/lonnstrekk.ts`): prosenten ved hver utbetaling, beløpet én gang i måneden. Fanen
+  «Trekkpålegg» under Lønn, varseltypen `trekkpaalegg` og rapporten `lonn.trekkpaalegg`. Av til
+  `TREKKPAALEGG` er satt (på i testmiljøet)
 - Årsregnskapet til Brønnøysundregistrene (`0120_aarsregnskap.sql`, `server/src/aarsregnskap.ts`,
   `server/src/aarsregnskapXml.ts`, `server/src/aarsregnskapInnsending.ts`,
   `server/src/aarsregnskapPdf.ts`, `web/src/sider/RegnskapAarsregnskap.tsx`,

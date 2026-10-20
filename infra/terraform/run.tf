@@ -60,6 +60,7 @@ locals {
     AMELDING_INNSENDING     = var.amelding_innsending ? "1" : ""
     NAV_SYKEPENGER          = var.nav_sykepenger ? "1" : ""
     KRAV_OG_FRISTER         = var.krav_og_frister ? "1" : ""
+    TREKKPAALEGG            = var.trekkpaalegg ? "1" : ""
     AARSREGNSKAP_INNSENDING = var.aarsregnskap_innsending ? "1" : ""
     # Mva-meldingen til Skatteetaten (docs/mva-innsending.md): ID-porten-klienten, som den som sender,
     # logger inn med. Nøkkelen eller klienthemmeligheten har bare workeren (idporten-nokkel og

@@ -1,5 +1,8 @@
 // Altinn 3: systemet i Altinns systemregister og forespørslene om systemtilgang (systembruker).
 // Leverandøren registrerer systemet én gang, med tilgangspakken «Lønn» og Maskinporten-klienten.
+// Tilgangene er tilgangspakker (urn:altinn:accesspackage:…) og enkeltressurser
+// (urn:altinn:resource:…, som «Informasjon om trekkpålegg»); de lagres i samme liste
+// (skattekort_tilgang.pakker), og Altinn får dem hver for seg (accessPackages og rights).
 // For hver organisasjon lager appen en forespørsel; daglig leder (eller den som har
 // tilgangsstyring i Altinn) godkjenner den på adressen i svaret (confirmUrl), og Altinn sender
 // brukeren tilbake til appen. Deretter kan workeren hente token for organisasjonen.
@@ -20,13 +23,17 @@ export const NAV_SYKEPENGER = "urn:altinn:accesspackage:lonn-personopplysninger-
 export const KRAV_OG_UTLEGG = "urn:altinn:accesspackage:krav-og-utlegg";
 // Tilgangspakken for årsregnskapet til Brønnøysundregistrene (docs/aarsregnskap.md).
 export const REGNSKAP_OKONOMI_RAPPORT = "urn:altinn:accesspackage:regnskap-okonomi-rapport";
-// Tilgangspakkene systemet trenger nå: «Lønn» alltid, og de for funksjonene som er slått på.
+// Ressursen Skatteetaten krever for trekkpålegg (docs/trekkpaalegg.md): en enkeltrettighet, ikke en
+// tilgangspakke.
+export const TREKKPAALEGG_RESSURS = "urn:altinn:resource:ske-informasjon-om-trekkpaalegg";
+// Tilgangene systemet trenger nå: «Lønn» alltid, og de for funksjonene som er slått på.
 export const tilgangspakker = () => [
   TILGANGSPAKKE,
   ...(config.ameldingInnsending ? [A_ORDNING] : []),
   ...(config.navSykepenger ? [NAV_SYKEPENGER] : []),
   ...(config.kravOgFrister ? [KRAV_OG_UTLEGG] : []),
   ...(config.aarsregnskapInnsending ? [REGNSKAP_OKONOMI_RAPPORT] : []),
+  ...(config.trekkpaalegg ? [TREKKPAALEGG_RESSURS] : []),
 ];
 export const PAKKENAVN: Record<string, string> = {
   [TILGANGSPAKKE]: "Lønn",
@@ -34,15 +41,26 @@ export const PAKKENAVN: Record<string, string> = {
   [NAV_SYKEPENGER]: "Lønn med personopplysninger av særlig kategori",
   [KRAV_OG_UTLEGG]: "Krav, betalinger og utlegg",
   [REGNSKAP_OKONOMI_RAPPORT]: "Regnskap og økonomirapportering",
+  [TREKKPAALEGG_RESSURS]: "Informasjon om trekkpålegg",
 };
-// Hva hver tilgangspakke brukes til (teksten i appen når den mangler).
+// Hva hver tilgang brukes til (teksten i appen når den mangler).
 export const PAKKEBRUK: Record<string, string> = {
   [TILGANGSPAKKE]: "skattekortene",
   [A_ORDNING]: "a-meldingen",
   [NAV_SYKEPENGER]: "sykmeldinger og inntektsmeldinger hos NAV",
   [KRAV_OG_UTLEGG]: "krav, betalinger og frister fra Skatteetaten",
   [REGNSKAP_OKONOMI_RAPPORT]: "årsregnskapet til Brønnøysundregistrene",
+  [TREKKPAALEGG_RESSURS]: "trekkpålegg fra Skatteetaten",
 };
+
+// Tilgangene slik Altinn vil ha dem: tilgangspakkene og enkeltressursene hver for seg.
+const RESSURS = "urn:altinn:resource:";
+export function tilAltinn(tilganger: string[]) {
+  return {
+    accessPackages: tilganger.filter((t) => !t.startsWith(RESSURS)).map((urn) => ({ urn })),
+    rights: tilganger.filter((t) => t.startsWith(RESSURS)).map((t) => ({ resource: [{ id: "urn:altinn:resource", value: t.slice(RESSURS.length) }] })),
+  };
+}
 // Adressen Altinn sender brukeren tilbake til (må stå i systemregisteret, nøyaktig slik). Forespørslene
 // lages i bakgrunnen og bruker hoveddomenet; systemregisteret har adressen på alle appens domener, så
 // hoveddomenet kan byttes uten at systemet må registreres på nytt først (appadresse.ts).
@@ -97,22 +115,31 @@ function beskrivelse(navn: string) {
         nn: `${tekst.nn} Rekneskapen viser krava, betalingane og fristane hos Skatteetaten.`,
         en: `${tekst.en} The accounts show the claims, payments and deadlines at the Norwegian Tax Administration.`,
       };
-  if (!config.aarsregnskapInnsending) return medKrav;
+  const medAarsregnskap = !config.aarsregnskapInnsending
+    ? medKrav
+    : {
+        nb: `${medKrav.nb} Årsregnskapet fylles ut i Altinn til Brønnøysundregistrene, og signeres der.`,
+        nn: `${medKrav.nn} Årsrekneskapen blir fylt ut i Altinn til Brønnøysundregistera, og signert der.`,
+        en: `${medKrav.en} The annual accounts are filled in in Altinn for the Brønnøysund Register Centre, and signed there.`,
+      };
+  if (!config.trekkpaalegg) return medAarsregnskap;
   return {
-    nb: `${medKrav.nb} Årsregnskapet fylles ut i Altinn til Brønnøysundregistrene, og signeres der.`,
-    nn: `${medKrav.nn} Årsrekneskapen blir fylt ut i Altinn til Brønnøysundregistera, og signert der.`,
-    en: `${medKrav.en} The annual accounts are filled in in Altinn for the Brønnøysund Register Centre, and signed there.`,
+    nb: `${medAarsregnskap.nb} Trekkpåleggene fra Skatteetaten hentes til lønnskjøringen.`,
+    nn: `${medAarsregnskap.nn} Trekkpålegga frå Skatteetaten blir henta til lønnskøyringa.`,
+    en: `${medAarsregnskap.en} Wage deduction orders from the Norwegian Tax Administration are retrieved for payroll.`,
   };
 }
 
 export function systemdefinisjon() {
   const navn = config.altinnSystemnavn;
+  const { accessPackages, rights } = tilAltinn(tilgangspakker());
   return {
     id: systemId(),
     vendor: { authority: "iso6523-actorid-upis", ID: `0192:${config.leverandorOrgnr}` },
     name: { nb: navn, nn: navn, en: navn },
     description: beskrivelse(navn),
-    accessPackages: tilgangspakker().map((urn) => ({ urn })),
+    accessPackages,
+    ...(rights.length ? { rights } : {}),
     clientId: config.maskinportenKlientId ? [config.maskinportenKlientId] : [],
     allowedRedirectUrls: appUrler().map((u) => godkjentUrl(u)),
     // Bare leverandøren lager forespørsler (fra appen); systemet vises ikke i Altinn-portalen.
@@ -179,9 +206,10 @@ async function slettForesporsel(id: string) {
 // ble avslått eller avvist (AUTH-00008, AUTH-00009), slettes og lages på nytt.
 export async function lagForesporsel(orgnr: string, forsok = 0): Promise<Foresporsel> {
   const token = await hentToken(SCOPE.foresporselSkriv);
+  const { accessPackages, rights } = tilAltinn(tilgangspakker());
   const r = await etatKall(`${api()}/systemuser/request/vendor`, token, {
     metode: "POST",
-    kropp: { systemId: systemId(), partyOrgNo: orgnr, accessPackages: tilgangspakker().map((urn) => ({ urn })), redirectUrl: godkjentUrl() },
+    kropp: { systemId: systemId(), partyOrgNo: orgnr, accessPackages, ...(rights.length ? { rights } : {}), redirectUrl: godkjentUrl() },
     hvem: "Altinn",
   });
   if (r.status < 300) return somForesporsel(r.data);
@@ -225,18 +253,24 @@ export async function hentSystembrukerId(orgnr: string): Promise<string | null> 
   return typeof r.data?.id === "string" ? r.data.id : null;
 }
 
-// Ber kunden godkjenne flere tilgangspakker for systembrukeren (f.eks. «A-ordningen» når
-// a-meldingen slås på). Altinn vil ha ID-en til systembrukeren og en ny korrelasjons-ID for hver
-// endring (den blir ID-en til endringsforespørselen). Har systembrukeren pakkene alt, er den godkjent.
+// Ber kunden godkjenne flere tilgangspakker (og enkeltressurser) for systembrukeren (f.eks.
+// «A-ordningen» når a-meldingen slås på). Altinn vil ha ID-en til systembrukeren og en ny
+// korrelasjons-ID for hver endring (den blir ID-en til endringsforespørselen). Har systembrukeren
+// pakkene alt, er den godkjent.
 // https://docs.altinn.studio/nb/authorization/guides/system-vendor/system-user/changerequest/
 export async function lagEndringsforesporsel(orgnr: string, pakker: string[]): Promise<Foresporsel> {
   const brukerId = await hentSystembrukerId(orgnr);
   if (!brukerId) throw new EtatFeil("Fant ikke systembrukeren i Altinn. Koble fra og koble til Skatteetaten på nytt.", 404);
   const token = await hentToken(SCOPE.foresporselSkriv);
   const q = new URLSearchParams({ "correlation-id": randomUUID(), "system-user-id": brukerId });
+  const { accessPackages, rights } = tilAltinn(pakker);
   const r = await etatKall(`${api()}/systemuser/changerequest/vendor?${q}`, token, {
     metode: "POST",
-    kropp: { requiredAccessPackages: pakker.map((urn) => ({ urn })), redirectUrl: godkjentUrl() },
+    kropp: {
+      ...(accessPackages.length ? { requiredAccessPackages: accessPackages } : {}),
+      ...(rights.length ? { requiredRights: rights } : {}),
+      redirectUrl: godkjentUrl(),
+    },
     hvem: "Altinn",
   });
   if (r.status < 300) return somForesporsel(r.data);

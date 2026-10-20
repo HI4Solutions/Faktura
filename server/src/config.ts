@@ -126,6 +126,12 @@ export const config = {
   kravOgFrister: ["1", "true", "ja"].includes((valgfri("KRAV_OG_FRISTER") ?? "").toLowerCase()),
   kravUrl: valgfri("KRAV_OG_BETALINGER_URL"),
   fristerUrl: valgfri("FRISTER_URL"),
+  // Trekkpålegg fra Skatteetaten (docs/trekkpaalegg.md): på når Medinnova AS har fått scopet
+  // skatteetaten:trekkpaalegg (i testmiljøet fra 20.10.2026). Da ber systemet også om ressursen
+  // «Informasjon om trekkpålegg» i Altinn, og Lønn får fanen «Trekkpålegg»: workeren henter
+  // påleggene, og lønnskjøringen trekker dem. Adressen følger miljøet; den kan overstyres (tester).
+  trekkpaalegg: ["1", "true", "ja"].includes((valgfri("TREKKPAALEGG") ?? "").toLowerCase()),
+  trekkpaaleggUrl: valgfri("TREKKPAALEGG_URL"),
   // Årsregnskapet til Brønnøysundregistrene gjennom Altinn (docs/aarsregnskap.md): på når Medinnova
   // AS har lagt scopene altinn:instances.read og altinn:instances.write på Maskinporten-klienten. Da
   // ber systemet også om tilgangspakken «Regnskap og økonomirapportering», og årsregnskapet kan sendes

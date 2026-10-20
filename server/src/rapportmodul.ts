@@ -40,6 +40,7 @@ import { skatteberegningRapporter } from "./skatteberegning.js";
 import { mvaJusteringRapporter } from "./mvaJustering.js";
 import { naeringsspesifikasjonRapporter } from "./naeringsspesifikasjon.js";
 import { skatteetatenRapporter } from "./skatteetatenRapporter.js";
+import { trekkpaaleggRapporter } from "./trekkpaaleggRapporter.js";
 
 // --- Typene ---------------------------------------------------------------------------------------
 
@@ -96,6 +97,7 @@ export const RAPPORTER: Rapportdef[] = [
   ...virksomhetRapporter,
   ...avstemmingRapporter,
   ...sykepengerRapporter,
+  ...trekkpaaleggRapporter,
   ...regnskapRapporter,
   ...utgiftRapporter,
   ...bankRapporter,

@@ -62,6 +62,17 @@ describe("rapportmodulen: valg og perioder", () => {
     expect([r.modul, r.navn, r.parameter, r.tilgang, r.funksjon, r.maanedlig ?? false]).toEqual(["regnskap", "Årsregnskap", "aar", "regnskap", "regnskap", false]);
   });
 
+  it("trekkpåleggene fra Skatteetaten: for Lønn, månedlig, bare når hentingen er slått på", () => {
+    const r = rapport("lonn.trekkpaalegg")!;
+    expect([r.modul, r.navn, r.parameter, r.tilgang, r.funksjon, r.maanedlig]).toEqual(["lonn", "Trekkpålegg fra Skatteetaten", "ingen", "personal_les", "lonn", true]);
+    const foer = config.trekkpaalegg;
+    config.trekkpaalegg = false;
+    expect(r.aktiv?.()).toBe(false);
+    config.trekkpaalegg = true;
+    expect(r.aktiv?.()).toBe(true);
+    config.trekkpaalegg = foer;
+  });
+
   it("kravene, fristene og betalingene fra Skatteetaten er med bare når hentingen er slått på", () => {
     const skatt = RAPPORTER.filter((r) => r.id.startsWith("regnskap.skatteetaten_"));
     expect(skatt.map((r) => [r.id, r.parameter, r.maanedlig, r.tilgang, r.funksjon])).toEqual([

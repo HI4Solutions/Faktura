@@ -266,7 +266,7 @@ function SkattekortKobling() {
             )}
           </p>
           {t.siste_feil && <p className="liten fare-tekst">Siste henting feilet: {t.siste_feil}</p>}
-          <p className="liten dempet">Tilgangspakker i Altinn: {t.pakkenavn.join(", ")}.</p>
+          <p className="liten dempet">Tilganger i Altinn: {t.pakkenavn.join(", ")}.</p>
           {(t.mangler.length > 0 || endres) && (
             <div className="melding info">
               {t.endring_status === "venter" ? (
@@ -275,7 +275,7 @@ function SkattekortKobling() {
                 </>
               ) : t.endring_status === "ny" ? (
                 <>
-                  Endringen venter på godkjenning i Altinn (tilgangspakken {t.mangler.map((m) => `«${m}»`).join(" og ")}).{" "}
+                  Endringen venter på godkjenning i Altinn ({t.mangler.map((m) => `«${m}»`).join(" og ")}).{" "}
                   {t.endring_url && (
                     <a className="lenke" href={t.endring_url}>
                       Godkjenn i Altinn
@@ -284,7 +284,7 @@ function SkattekortKobling() {
                 </>
               ) : (
                 <>
-                  {d.systemnavn} trenger også {t.mangler.length > 1 ? "tilgangspakkene" : "tilgangspakken"} {t.mangler.map((m) => `«${m}»`).join(" og ")}
+                  {d.systemnavn} trenger også tilgang til {t.mangler.map((m) => `«${m}»`).join(" og ")}
                   {t.mangler_bruk?.length ? ` (for ${t.mangler_bruk.join(" og ")})` : ""}. Daglig leder godkjenner det i Altinn.
                   {t.endring_feil && <span className="fare-tekst"> {t.endring_feil}</span>}
                   {admin && (
@@ -620,7 +620,7 @@ export function SkattekortOppsett() {
                 : "Systemet er ikke registrert i Altinn ennå."}
           </p>
           <p className="liten dempet">
-            Tilgangspakker: {o.tilgangspakker.join(", ")}. Tilbake til {o.tilbake_url}. Registreringen oppdaterer også navnet, klient-ID-en og tilgangspakkene.
+            Tilganger: {o.tilgangspakker.join(", ")}. Tilbake til {o.tilbake_url}. Registreringen oppdaterer også navnet, klient-ID-en og tilgangene.
           </p>
           <p className="liten dempet">
             A-meldingen:{" "}

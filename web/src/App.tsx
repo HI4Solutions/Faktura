@@ -443,6 +443,8 @@ function Ramme() {
                 lonnLeder && punkt("/lonn?fane=amelding", IkonRapport, "A-melding", paa("/lonn", "amelding")),
                 // Skattekortene (koblingen til Skatteetaten og de ansattes skattekort), også siden Altinn sender tilbake til.
                 lonnLeder && punkt("/lonn?fane=skattekort", IkonSkattekort, "Skattekort", paa("/lonn", "skattekort") || sted.pathname.startsWith("/skattekort")),
+                // Trekkpåleggene fra Skatteetaten (utleggstrekk i lønnen).
+                lonnLeder && punkt("/lonn?fane=trekkpaalegg", IkonSkatteetaten, "Trekkpålegg", paa("/lonn", "trekkpaalegg")),
                 lonnLeder && kanLonn(org) && punkt("/lonn?fane=sykepenger", IkonFravaer, "Sykepenger", paa("/lonn", "sykepenger")),
                 lonnLeder && punkt("/lonn?fane=aar", IkonKalender, "Årsoversikt", paa("/lonn", "aar")),
                 lonnLeder && punkt("/lonn?fane=reiser", IkonReise, "Reiser", paa("/lonn", "reiser")),

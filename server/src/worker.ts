@@ -18,6 +18,7 @@ import { endreTilgang, hentSkattekort, hentSkattekortSvar, lagTilgang, planleggD
 import { lagAmelding, planleggAmeldingssjekk, sjekkAmelding } from "./ameldingInnsending.js";
 import { hentFraNav, planleggNavHenting, sendInntektsmelding } from "./navSykepenger.js";
 import { hentKravOgFrister, planleggKravOgFrister } from "./skatteetatenKrav.js";
+import { hentTrekkpaalegg, planleggTrekkpaalegg } from "./trekkpaalegg.js";
 import { planleggAarsregnskapssjekk, sendAarsregnskap, sjekkAarsregnskap, trekkTilbakeAarsregnskap } from "./aarsregnskapInnsending.js";
 import { hentFraAordningen } from "./aordning.js";
 import { hentMvaTilbakemelding, ryddMvaInnsendinger, sendMvaMelding } from "./mvaInnsending.js";
@@ -182,6 +183,7 @@ export async function kjorOppgave(o: Oppgave & { oppgave_id: string }) {
   if (o.type === "nav-hent") return hentFraNav(o.org_id);
   if (o.type === "nav-inntektsmelding") return sendInntektsmelding(o.org_id, o.inntektsmelding_id);
   if (o.type === "skatteetaten-hent") return void (await hentKravOgFrister(o.org_id));
+  if (o.type === "trekkpaalegg-hent") return void (await hentTrekkpaalegg(o.org_id));
   if (o.type === "aarsregnskap-send") return sendAarsregnskap(o.org_id, o.aarsregnskap_id);
   if (o.type === "aarsregnskap-status") return sjekkAarsregnskap(o.org_id, o.aarsregnskap_id);
   if (o.type === "aarsregnskap-tilbake") return trekkTilbakeAarsregnskap(o.org_id, o.aarsregnskap_id);
@@ -663,6 +665,11 @@ export function lagWorker() {
     const o = skattOppgave.parse(await c.req.json());
     return c.json((await hentKravOgFrister(o.org_id)) ?? { ok: true });
   });
+  // Skatteetaten: trekkpåleggene.
+  app.post("/oppgaver/trekkpaalegg-hent", async (c) => {
+    const o = skattOppgave.parse(await c.req.json());
+    return c.json((await hentTrekkpaalegg(o.org_id)) ?? { ok: true });
+  });
 
   // Årsregnskapet i Altinn: sendingen til signering, statusen og tilbaketrekkingen.
   const aarsregnskapOppgave = skattOppgave.extend({ aarsregnskap_id: z.string().uuid() });
@@ -739,8 +746,9 @@ export function lagWorker() {
   // EHF (litt om gangen), sender bursdagsvarslene (fra kl. 08, én gang per bursdag) og sjekker
   // forespørslene om tilgang til skattekort som venter på godkjenning i Altinn, og
   // a-meldingene som venter på tilbakemelding. Krav og frister fra Skatteetaten hentes når tilgangen
-  // er godkjent og hver morgen fra kl. 06 (skatteetatenKrav.ts), og årsregnskapene som venter på
-  // signering i Altinn, sjekkes (aarsregnskapInnsending.ts). Mva-innsendinger der innloggingen i
+  // er godkjent og hver morgen fra kl. 06 (skatteetatenKrav.ts), det samme for trekkpåleggene
+  // (trekkpaalegg.ts), og årsregnskapene som venter på signering i Altinn, sjekkes
+  // (aarsregnskapInnsending.ts). Mva-innsendinger der innloggingen i
   // ID-porten ikke ble fullført, avbrytes (mvaInnsending.ts). Lønnsutkastene der noe er endret, regnes ut på nytt,
   // fakturaene og innbetalingene som ikke er bokført, bokføres (salgBokforing.ts), og bankpostene
   // avstemmes (bankAvstemming.ts). Fra kl. 08 den 1. går månedsavslutningen (maanedsavslutning.ts), og
@@ -755,6 +763,7 @@ export function lagWorker() {
     await planleggAmeldingssjekk().catch((e) => logg("ERROR", "Sjekk av a-meldingene feilet", { feil: (e as Error).message }));
     await planleggNavHenting().catch((e) => logg("ERROR", "Planlegging av hentingen fra NAV feilet", { feil: (e as Error).message }));
     await planleggKravOgFrister().catch((e) => logg("ERROR", "Planlegging av krav og frister fra Skatteetaten feilet", { feil: (e as Error).message }));
+    await planleggTrekkpaalegg().catch((e) => logg("ERROR", "Planlegging av trekkpåleggene fra Skatteetaten feilet", { feil: (e as Error).message }));
     await planleggAarsregnskapssjekk().catch((e) => logg("ERROR", "Sjekk av årsregnskapene i Altinn feilet", { feil: (e as Error).message }));
     await ryddMvaInnsendinger().catch((e) => logg("ERROR", "Oppryddingen i mva-innsendingene feilet", { feil: (e as Error).message }));
     await oppdaterLonnsutkast().catch((e) => logg("ERROR", "Omregningen av lønnsutkastene feilet", { feil: (e as Error).message }));
