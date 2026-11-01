@@ -1,9 +1,9 @@
 // Avsenderen i Resend (tjenester.ts): e-posten sendes fra avsenderadressen, og fra reserveadressen
 // når Resend sier at avsenderdomenet ikke er verifisert, så fakturaene ikke stopper etter et
-// domenebytte. Andre feil sendes videre.
+// domenebytte. Andre feil sendes videre. HTML-en sendes som et helt dokument.
 import { describe, expect, it } from "vitest";
 import type { Resend } from "resend";
-import { avsenderIkkeVerifisert, sendGjennomResend, type EpostMelding } from "../src/tjenester.js";
+import { avsenderIkkeVerifisert, heltDokument, sendGjennomResend, type EpostMelding } from "../src/tjenester.js";
 
 type Kall = { from: string; idempotencyKey?: string };
 const ikkeVerifisert = { name: "validation_error", message: "The adminkonsoll.no domain is not verified. Please, add and verify your domain on https://resend.com/domains" };
@@ -11,15 +11,17 @@ const ikkeVerifisert = { name: "validation_error", message: "The adminkonsoll.no
 // En falsk Resend-klient som svarer med svarene i rekkefølge og husker forespørslene.
 function klient(svar: { data: { id: string } | null; error: { name: string; message: string } | null }[]) {
   const kall: Kall[] = [];
+  const html: string[] = [];
   const k = {
     emails: {
-      async send(e: { from: string }, valg?: { idempotencyKey?: string }) {
+      async send(e: { from: string; html: string }, valg?: { idempotencyKey?: string }) {
         kall.push({ from: e.from, idempotencyKey: valg?.idempotencyKey });
+        html.push(e.html);
         return svar.shift() ?? { data: null, error: { name: "application_error", message: "Ingen flere svar" } };
       },
     },
   } as unknown as Pick<Resend, "emails">;
-  return { k, kall };
+  return { k, kall, html };
 }
 
 const melding: EpostMelding = { fraNavn: 'Nordmann "Eiendom" AS', til: ["kunde@example.no"], emne: "Faktura 1", tekst: "Hei", html: "<p>Hei</p>", idempotensnokkel: "faktura-1" };
@@ -58,6 +60,18 @@ describe("avsenderen i Resend", () => {
     const utenReserve = klient([{ data: null, error: ikkeVerifisert }]);
     await expect(sendGjennomResend(utenReserve.k, melding, "post@adminkonsoll.no")).rejects.toThrow(/not verified/);
     expect(utenReserve.kall).toHaveLength(1);
+  });
+
+  it("sender HTML-en som et helt dokument, med språk, tegnsett og emnet som tittel", async () => {
+    const { k, html } = klient([{ data: { id: "re_3" }, error: null }]);
+    await sendGjennomResend(k, { ...melding, emne: "Faktura 1 fra <Nordmann> & Co" }, "post@adminkonsoll.no");
+    expect(html[0]).toMatch(/^<!DOCTYPE html>\n<html lang="nb">\n<head>\n<meta charset="utf-8">/);
+    expect(html[0]).toContain("<title>Faktura 1 fra &lt;Nordmann&gt; &amp; Co</title>");
+    expect(html[0]).toContain('<body style="margin:0;padding:16px;background:#ffffff">\n<p>Hei</p>\n</body>\n</html>');
+    // Et helt dokument fra før pakkes ikke inn igjen.
+    const helt = "<!doctype html><html><body><p>Hei</p></body></html>";
+    expect(heltDokument(helt, "Emne")).toBe(helt);
+    expect(heltDokument(`  <HTML><body>x</body></HTML>`, "Emne")).toBe(`  <HTML><body>x</body></HTML>`);
   });
 
   it("kjenner igjen svaret om domenet som ikke er verifisert", () => {

@@ -1269,6 +1269,14 @@ input.klokkeslett { font-variant-numeric: tabular-nums; }
 .kontoer-venter .admin-rader li > :first-child { flex: 1 1 320px; }
 .kontoer-venter .konto-moduler { display: block; margin-top: 4px; }
 .kontoer-venter .konto-registrering { display: block; margin-top: 4px; }
+/* E-post fra domenet under Plattform → Drift: DKIM og DMARC (server/src/epostDns.ts). */
+.epost-domene { display: grid; gap: 10px; margin-top: 12px; }
+.epost-domene .epost-sjekk { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.epost-domene .melding { margin: 6px 0 0; }
+.epost-domene code.kan-velges { user-select: all; overflow-wrap: anywhere; }
+.epost-domene > button { justify-self: start; }
+/* Organisasjonen godkjennes sammen med kontoen (0128_en_godkjenning.sql). */
+.kontoer-venter .konto-verifiser { display: flex; align-items: center; margin: 6px 0 0; font-size: 0.83rem; }
 /* E-postadressen er ikke bekreftet: status for lenken (0105_epostbekreftelse.sql). */
 .kontoer-venter .konto-epost { display: block; margin-top: 6px; }
 .kontoer-venter .konto-epost .merke { margin-right: 4px; }

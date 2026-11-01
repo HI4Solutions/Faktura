@@ -51,6 +51,16 @@ organisasjoner og kobles via `medlemmer` med en rolle.
   avslaget). Den som tar imot en invitasjon fra en organisasjon (sendt til e-postadressen
   sin), godkjennes da; organisasjonen går god for den. Plattformadministratorene og de som
   hadde konto fra før, er godkjent (`0043_kontogodkjenning.sql`)
+- `brukere.godkjent_orgnr`: én godkjenning (`0128_en_godkjenning.sql`). Når
+  plattformadministratoren godkjenner en konto som er registrert som organisasjon
+  (`registrert_som`, `oppgitt_orgnr`), går den god for organisasjonen også: nummeret lagres her,
+  og organisasjonen brukeren lager med det (eller legger det inn på senere), er verifisert med en
+  gang (`verifisert_metode = 'kontogodkjenning'`), uten grensene for nye organisasjoner. Før måtte
+  brukeren verifisere den etterpå, ofte med en ny, manuell godkjenning. Administratoren kan ta bort
+  haken «Verifiser organisasjonen samtidig»; da gjelder den vanlige verifiseringen. Kontoer som er
+  godkjent ved en invitasjon, og nummer som alt er verifisert hos en annen organisasjon, får det
+  ikke. Kontoer som var godkjent som organisasjon før endringen, fikk det samme da migreringen ble
+  kjørt
 - `brukere.epost_bekreftet` og `epostbekreftelser`: lenken som bekrefter e-postadressen til en
   ny konto. Identity Platform sendte den før selv, fra sin egen avsender
   (noreply@<prosjekt>.firebaseapp.com), og hos noen kom den ikke fram eller havnet i
@@ -1661,7 +1671,9 @@ kontrollene:
    Enhetsregisteret (også Gmail o.l.), **eller**
 3. e-postdomenet til brukeren samsvarer med foretakets domene, **eller**
 4. en kode sendes til e-postadressen som er registrert i Enhetsregisteret, **eller**
-5. en administrator godkjenner manuelt.
+5. en administrator godkjenner manuelt, **eller**
+6. plattformadministratoren godkjente kontoen med organisasjonen brukeren registrerte seg med
+   (`brukere.godkjent_orgnr`, `0128_en_godkjenning.sql`): den er verifisert når den lages.
 
 Rollene i Brreg (daglig leder, styreleder, innehaver, deltakere, kontaktperson o.l.) slås
 opp samtidig. Står navnet brukeren oppgir som en rolleinnehaver, får brukeren beskjed om det,

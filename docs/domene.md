@@ -43,18 +43,33 @@ domenet og skal stå.
 
 E-posten fra appen sendes fra `post@adminkonsoll.no` gjennom Resend. Oppføringene Resend viser
 under Domains → `adminkonsoll.no` (DKIM-nøkkelen `resend._domainkey`, og MX og SPF for
-underdomenet `send`) skal stå; det er dem som gjør domenet verifisert. I tillegg har domenet en
-DMARC-oppføring, så mottakerne (Gmail, Outlook og andre) vet hvordan e-post fra domenet skal
-kontrolleres, og Gmail og Yahoo krever den av avsendere som sender mye:
+underdomenet til returadressen, `rsend`) skal stå; det er dem som gjør domenet verifisert. I
+tillegg skal domenet ha en DMARC-oppføring, så mottakerne (Gmail, Outlook og andre) vet hvordan
+e-post fra domenet skal kontrolleres. Gmail og Yahoo krever den av avsendere som sender mye, og
+Outlook og Hotmail viser «We can't verify this email came from the sender» og legger e-posten i
+søppelposten når den mangler:
 
 | Navn | Type | Verdi |
 |---|---|---|
 | `_dmarc` | TXT | `v=DMARC1; p=none; rua=mailto:post@adminkonsoll.no; adkim=r; aspf=r` |
 
 E-post fra Resend består kontrollen: DKIM-signaturen gjelder `adminkonsoll.no`, og returadressen
-(Return-Path) er på `send.adminkonsoll.no`, som regnes som samme domene med `aspf=r`. Med `p=none`
+(Return-Path) er på `rsend.adminkonsoll.no`, som regnes som samme domene med `aspf=r`. Med `p=none`
 stoppes ingenting ennå; mottakerne sender bare daglige rapporter (XML) til adressen i `rua`, som må
-kunne ta imot e-post. Sjekk oppføringen i Cloud Shell med `dig +short TXT _dmarc.adminkonsoll.no`.
+kunne ta imot e-post. Plattform → Drift → E-post viser om DKIM-nøkkelen og DMARC-oppføringen står i
+DNS for avsenderadressen og reserveadressen (`server/src/epostDns.ts`), og hvilken oppføring som
+mangler. I Cloud Shell: `dig +short TXT _dmarc.adminkonsoll.no`.
+
+**Status 01.11.2026:** DMARC-oppføringen mangler. Hodene i en e-post fra `post@adminkonsoll.no`
+til Gmail viser `dkim=pass` (adminkonsoll.no, nøkkelen `resend`) og `spf=pass`
+(rsend.adminkonsoll.no), men ikke noe DMARC-resultat. Outlook og Hotmail legger derfor e-posten i
+søppelposten med «We can't verify this email came from the sender». Legg inn oppføringen over hos
+domeneleverandøren; Drift viser ✓ når den er på plass. Den som har fått e-post i søppelposten, kan
+trykke «Ikke søppelpost», så lærer Outlook avsenderen.
+
+E-postene sendes som hele HTML-dokumenter (språk, tegnsett og emnet som tittel,
+`heltDokument` i `server/src/tjenester.ts`), med en ren tekstdel ved siden av; et løst
+HTML-utdrag gir dårligere poeng i søppelpostfiltrene.
 
 Når rapportene i et par uker viser at all e-post fra domenet består, skjerpes regelen til
 `p=quarantine` (e-post som ikke består, havner i søppelposten) og senere `p=reject` (den avvises).
@@ -74,6 +89,16 @@ det ikke har selv, så `/bank/tilbake` blir `/app/bank/tilbake`). På testflaten
   APIs & Services → Credentials: `https://adminkonsoll.no` og `https://app.adminkonsoll.no` under
   «Authorized JavaScript origins» (mappevalget), og `https://adminkonsoll.no/api/offentlig/google/callback`
   og `https://app.adminkonsoll.no/api/offentlig/google/callback` under «Authorized redirect URIs».
+  Samtykkeskjermen (Google Auth Platform) må være publisert, «In production»: står den i
+  «Testing», kommer bare testbrukerne inn, og alle andre får «Access blocked: adminkonsoll.no has
+  not completed the Google verification process» (Error 403: access_denied) når de kobler til
+  Google Disk. Appen ber bare om `openid`, `email` og `drive.file`, som Google ikke regner som
+  sensitive, så publiseringen krever ingen gjennomgang hos Google. I Testing utløper tilgangen dessuten
+  etter sju dager, så de som alt har koblet til, må koble til på nytt etter publiseringen. Under
+  Branding: appnavnet «Admin Konsoll», e-post for brukerstøtte, hjemmesiden `https://adminkonsoll.no`,
+  personvernerklæringen `https://adminkonsoll.no/personvern.html`, bruksvilkårene
+  `https://adminkonsoll.no/vilkar.html`, og `adminkonsoll.no` under «Authorized domains». Appen
+  har ingen innlogging med Google; dette gjelder bare Google Disk.
 - **Enable Banking** (hver organisasjon har sin egen applikasjon): «Allowed redirect URL»
   `https://adminkonsoll.no/bank/tilbake` og `https://app.adminkonsoll.no/bank/tilbake`. Mangler den,
   sier appen fra med adressen når banken kobles til eller tilgangen fornyes.

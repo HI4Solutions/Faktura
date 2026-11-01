@@ -105,7 +105,12 @@ type Funksjonsoversikt = {
 
 const statusMerke: Record<string, string> = { ny: "merke-advarsel", verifisert: "merke-ok", sperret: "merke-fare" };
 const statusTekst: Record<string, string> = { ny: "Ikke verifisert", verifisert: "Verifisert", sperret: "Sperret" };
-const metodeTekst: Record<string, string> = { epostdomene: "e-postdomene", brreg_epost: "e-posten i Enhetsregisteret", manuell: "manuelt" };
+const metodeTekst: Record<string, string> = {
+  epostdomene: "e-postdomene",
+  brreg_epost: "e-posten i Enhetsregisteret",
+  manuell: "manuelt",
+  kontogodkjenning: "sammen med kontoen",
+};
 const rolleTekst: Record<string, string> = { eier: "eier", admin: "admin", fakturerer: "fakturerer", regnskap: "regnskap", les: "les", ansatt: "ansatt", tilpasset: "egen rolle" };
 // Rollen i organisasjonen, med navnet på den egne rollen (0111_tilgangsroller.sql) når den er med.
 const rollenTil = (m: { rolle: string; tilgangsrolle?: string | null }) => (m.rolle === "tilpasset" && m.tilgangsrolle ? m.tilgangsrolle : (rolleTekst[m.rolle] ?? m.rolle));
@@ -1148,6 +1153,10 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
   // Modulene kontoen godkjennes med: dem brukeren ba om, til administratoren endrer dem.
   const [endret_, settEndret] = useState<Record<string, string[]>>({});
   const valgte = (k: KontoVenter) => endret_[k.id] ?? k.moduler;
+  // Organisasjonen godkjennes sammen med kontoen (0128_en_godkjenning.sql), til administratoren
+  // tar bort haken.
+  const [utenOrg, settUtenOrg] = useState<Record<string, boolean>>({});
+  const medOrg = (k: KontoVenter) => k.registrert_som === "organisasjon" && !!k.oppgitt_orgnr && !utenOrg[k.id];
   const behandle = (k: KontoVenter, godkjent: boolean) =>
     h.kjor(async () => {
       let grunn: string | undefined;
@@ -1159,14 +1168,17 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
         if (svar === null) return;
         grunn = svar.trim() || undefined;
       }
-      const r = await api<{ moduler?: string[] }>("POST", `/admin/brukere/${k.id}/godkjenning`, {
+      const r = await api<{ moduler?: string[]; godkjent_orgnr?: string | null }>("POST", `/admin/brukere/${k.id}/godkjenning`, {
         godkjent,
         grunn,
         moduler: godkjent && valgte(k).length ? valgte(k) : undefined,
+        verifiser_org: godkjent && k.registrert_som === "organisasjon" ? medOrg(k) : undefined,
       });
       settMelding(
         godkjent
-          ? `${k.navn ?? k.epost} er godkjent${r.moduler?.length ? ` med ${opplisting(r.moduler)}` : ""} og har fått e-post om det.`
+          ? `${k.navn ?? k.epost} er godkjent${r.moduler?.length ? ` med ${opplisting(r.moduler)}` : ""} og har fått e-post om det.${
+              r.godkjent_orgnr ? ` ${k.oppgitt_orgnavn ?? "Organisasjonen"} er verifisert når den blir laget.` : ""
+            }`
           : `${k.navn ?? k.epost} er avvist og har fått e-post om det.`,
       );
       endret();
@@ -1211,6 +1223,17 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
                       <>
                         Organisasjon: <strong>{k.oppgitt_orgnavn ?? "navnet ble ikke funnet i Enhetsregisteret"}</strong>
                         {k.oppgitt_orgnr && <span className="dempet"> · org.nr. {orgnr(k.oppgitt_orgnr)}</span>}
+                        {k.oppgitt_orgnr && (
+                          <label className="avkrysning konto-verifiser">
+                            <input
+                              type="checkbox"
+                              checked={medOrg(k)}
+                              onChange={(e) => settUtenOrg((u) => ({ ...u, [k.id]: !e.target.checked }))}
+                              disabled={h.opptatt}
+                            />{" "}
+                            Verifiser organisasjonen samtidig
+                          </label>
+                        )}
                       </>
                     ) : (
                       <>
@@ -1263,8 +1286,10 @@ function KontoerVenter({ kontoer, endret }: { kontoer: KontoVenter[]; endret: ()
       )}
       <p className="liten dempet" style={{ marginBottom: 0 }}>
         Nye kontoer kommer ikke inn før de er godkjent og har bekreftet e-postadressen. Organisasjonene de lager, får bare funksjonene i modulene de er
-        godkjent med (du kan endre dem i organisasjonen under Organisasjoner). Den som blir invitert av en organisasjon, godkjennes når invitasjonen tas
-        imot. Lenken som bekrefter e-postadressen, sendes fra Admin Konsoll; her ser du om den kom fram.
+        godkjent med (du kan endre dem i organisasjonen under Organisasjoner). Er kontoen registrert som organisasjon, godkjenner du organisasjonen
+        samtidig: den er verifisert når brukeren lager den, så brukeren slipper å verifisere den etterpå. Ta bort haken hvis du vil at den skal
+        verifiseres som før. Den som blir invitert av en organisasjon, godkjennes når invitasjonen tas imot. Lenken som bekrefter e-postadressen, sendes
+        fra Admin Konsoll; her ser du om den kom fram.
       </p>
     </div>
   );
@@ -1569,6 +1594,67 @@ function Trekktabeller() {
   );
 }
 
+// E-post fra domenet (server/src/epostDns.ts): DKIM-nøkkelen fra Resend og DMARC-oppføringen for
+// avsenderadressen og reserveadressen, slått opp i DNS. Uten DMARC viser Outlook og Hotmail at
+// avsenderen ikke kan bekreftes, og e-posten havner ofte i søppelposten.
+type Domenesjekk = {
+  domene: string;
+  adresse: string;
+  dkim: { ok: boolean; navn: string; feil: string | null };
+  dmarc: { ok: boolean; navn: string; verdi: string | null; policy: string | null; feil: string | null; forslag: string };
+};
+const policyTekst: Record<string, string> = {
+  none: "p=none: mottakerne kontrollerer, men stopper ingenting",
+  quarantine: "p=quarantine: det som ikke består, havner i søppelposten",
+  reject: "p=reject: det som ikke består, avvises",
+};
+function EpostDomene() {
+  const { data, feil, last, laster } = useData(() => hent<Domenesjekk[]>("/admin/epost-dns"), []);
+  if (feil) return <Feil melding={feil} />;
+  if (!data) return <p className="dempet liten">Sjekker DNS for avsenderdomenet …</p>;
+  return (
+    <div className="epost-domene">
+      {data.map((d, i) => (
+        <div key={d.domene} className="epost-domene-rad">
+          <p className="liten" style={{ margin: 0 }}>
+            <strong>{d.domene}</strong>{" "}
+            <span className="dempet">
+              ({i === 0 ? "avsender" : "reserve"}, {d.adresse})
+            </span>
+          </p>
+          <ul className="liten epost-sjekk">
+            <li className={d.dkim.ok ? "ok-tekst" : "fare-tekst"}>
+              {d.dkim.ok ? "✓" : "✗"} DKIM fra Resend <span className="dempet">({d.dkim.navn})</span>
+              {d.dkim.feil ? `: ${d.dkim.feil}` : d.dkim.ok ? "" : ": mangler. Legg inn oppføringene Resend viser under Domains."}
+            </li>
+            <li className={d.dmarc.ok ? "ok-tekst" : "fare-tekst"}>
+              {d.dmarc.ok ? "✓" : "✗"} DMARC <span className="dempet">({d.dmarc.navn})</span>
+              {d.dmarc.feil
+                ? `: ${d.dmarc.feil}`
+                : d.dmarc.ok
+                  ? `: ${policyTekst[d.dmarc.policy!] ?? d.dmarc.policy}`
+                  : d.dmarc.verdi
+                    ? `: ugyldig (${d.dmarc.verdi})`
+                    : ": mangler"}
+            </li>
+          </ul>
+          {!d.dmarc.ok && !d.dmarc.feil && (
+            <div className="melding advarsel liten">
+              Uten DMARC viser Outlook og Hotmail «We can't verify this email came from the sender», og e-posten havner ofte i søppelposten. Legg inn
+              en TXT-oppføring hos domeneleverandøren: navn <code className="kan-velges">_dmarc</code> og verdi{" "}
+              <code className="kan-velges">{d.dmarc.forslag}</code>
+              {d.dmarc.verdi ? ", i stedet for den som står der nå" : ""}. Se docs/domene.md.
+            </div>
+          )}
+        </div>
+      ))}
+      <button type="button" className="lenke liten" onClick={last} disabled={laster}>
+        Sjekk DNS på nytt
+      </button>
+    </div>
+  );
+}
+
 function Drift({ apne }: { apne: (id: string) => void }) {
   const { data: d, feil, last, laster } = useData(() => hent<any>("/admin/drift"), []);
   if (feil) return <Feil melding={feil} />;
@@ -1613,6 +1699,7 @@ function Drift({ apne }: { apne: (id: string) => void }) {
         <section className="kort">
           <h2>E-post</h2>
           <Tellinger tall={d.epost} navn={epostStatus} />
+          <EpostDomene />
           {d.epost_problemer.length > 0 && (
             <ul className="admin-rader">
               {d.epost_problemer.map((p: any, i: number) => (

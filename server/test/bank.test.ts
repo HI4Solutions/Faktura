@@ -745,9 +745,10 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     const u = await api("POST", `/api/org/${org}/fakturaer/${f.id}/utsted`, { send_epost: false });
     expect(u.data.fakturanummer).toBe(4);
     fakturaer[4] = f.id;
-    // Husleien for september (betalt før startdatoen) har samme beløp og fakturanummer i meldingen.
+    // Husleien for forrige måned (betalt før startdatoen) har samme beløp og fakturanummer i meldingen.
+    // Datoene er regnet fra i dag: banken hentes høyst 60 dager tilbake.
     svar["GET /accounts/:uid/transactions"] = () =>
-      json(200, { transactions: [{ ...inn("g1", 1000, "PER OLSEN", "Faktura 4"), booking_date: "2026-09-15" }, { ...inn("g2", 77, "Ukjent"), booking_date: "2026-09-16" }, inn("n1", 55, "Ukjent")] });
+      json(200, { transactions: [{ ...inn("g1", 1000, "PER OLSEN", "Faktura 4"), booking_date: dagerSiden(30) }, { ...inn("g2", 77, "Ukjent"), booking_date: dagerSiden(29) }, inn("n1", 55, "Ukjent")] });
     expect(await hentInnbetalinger(org)).toEqual({ nye: 3, koblet: 1, forslag: 0 });
     expect(await status(4)).toBe("betalt");
 
@@ -771,10 +772,11 @@ describe.skipIf(!process.env.DATABASE_URL)("innbetalinger fra banken", () => {
     // Standard er dagen organisasjonen ble opprettet (i dag).
     expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: null })).data).toMatchObject({ fra: dag, fra_satt: false, fjernet: 0 });
     // Bakover: kontoene hentes på nytt fra den nye datoen.
-    expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: "2026-09-01" })).data).toMatchObject({ fra: "2026-09-01", fra_satt: true });
+    const tilbake = dagerSiden(40);
+    expect((await api("PUT", `/api/org/${org}/bank/fra`, { fra: tilbake })).data).toMatchObject({ fra: tilbake, fra_satt: true });
     const for2 = kall.length;
     expect(await hentInnbetalinger(org)).toEqual({ nye: 2, koblet: 1, forslag: 0 });
-    expect(kall.slice(for2).map((k) => k.sti)).toEqual(["/accounts/k-drift-2/transactions?date_from=2026-09-01"]);
+    expect(kall.slice(for2).map((k) => k.sti)).toEqual([`/accounts/k-drift-2/transactions?date_from=${tilbake}`]);
   });
 
   it("reserverte innbetalinger: vises, påminnelsen venter, og de registreres når banken har bokført dem", async () => {

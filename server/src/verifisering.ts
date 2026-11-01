@@ -28,6 +28,7 @@ import { assistentForesporsel, type AiKommando } from "./aiAssistent.js";
 import type { PersonalGrunnlag } from "./aiPersonal.js";
 import { taleForesporsel, talefra, type Tale } from "./aiTale.js";
 import { testEhf } from "./peppol.js";
+import { sjekkEpostdomener } from "./epostDns.js";
 
 let hentEnhet = ekteHentEnhet;
 let hentRoller = ekteHentRoller;
@@ -339,6 +340,10 @@ export function adminRuter() {
     const start = Date.now();
     return c.json({ orgnr, ...(await testEhf(orgnr)), ms: Date.now() - start });
   });
+
+  // E-post fra domenet: DKIM-nøkkelen og DMARC-oppføringen for avsenderadressen og
+  // reserveadressen, slått opp i DNS (epostDns.ts).
+  r.get("/epost-dns", async (c) => c.json(await sjekkEpostdomener([config.epostAvsender, config.epostAvsenderReserve])));
 
   r.get("/organisasjoner", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_organisasjoner()"))));
 

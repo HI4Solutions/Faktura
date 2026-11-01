@@ -34,6 +34,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Kontoen fra gjentakelser og påminne
   it("gjentakelsen fra en faktura bruker kontoen fakturaen fikk (Send nå)", async () => {
     const f = await kall("POST", `/api/org/${org}/fakturaer`, {
       kunde_id: kunde,
+      fakturadato: "2026-10-06",
       forfallsdato: "2026-10-20",
       konto_id: konto,
       avsender: "innehaver",

@@ -174,9 +174,44 @@ describe.skipIf(!process.env.DATABASE_URL)("kontogodkjenning", () => {
 
     // Etter godkjenningen endres det ikke; den første organisasjonen fylles ut fra det.
     const id = venter.find((v: any) => v.epost === "olga.konto@server.test").id;
-    await kall("POST", `/api/admin/brukere/${id}/godkjenning`, admin, { godkjent: true });
+    expect((await kall("POST", `/api/admin/brukere/${id}/godkjenning`, admin, { godkjent: true })).data).toMatchObject({
+      status: "godkjent",
+      godkjent_orgnr: "315000300",
+    });
     expect((await kall("PATCH", "/api/meg", olga, { registrert_som: "person" })).data.error).toBe("Kontoen er alt behandlet");
     expect((await kall("GET", "/api/meg", olga)).data.bruker).toMatchObject({ status: "godkjent", registrert_som: "organisasjon", oppgitt_orgnr: "315000300" });
+  });
+
+  it("én godkjenning: organisasjonen kontoen ble godkjent med, er verifisert når brukeren lager den", async () => {
+    // Forespørselen sa at organisasjonen blir verifisert, og e-posten til brukeren sier det samme.
+    expect(tilAdmin("olga.konto@server.test")[0]!.tekst).toContain("Godkjenner du kontoen, er organisasjonen også verifisert");
+    expect(tilAdmin("pia.konto@server.test")[0]!.tekst).not.toContain("verifisert");
+    const e = eposter("olga.konto@server.test").at(-1)!;
+    expect(e.emne).toBe("Kontoen din i Admin Konsoll er godkjent");
+    expect(e.tekst).toContain("Registrering Test AS (org.nr. 315 000 300) er godkjent samtidig.");
+    // Organisasjonen er verifisert med en gang, uten grensene for nye organisasjoner, og appen
+    // ber ikke om verifisering.
+    const org = (await kall("POST", "/api/organisasjoner", olga, { navn: "Registrering Test AS", orgnr: "315000300" })).data;
+    expect(org).toMatchObject({ verifisering: "verifisert", verifisert_metode: "kontogodkjenning", maks_fakturaer_mnd: null, maks_belop_mnd: null });
+    expect((await kall("GET", "/api/meg", olga)).data.organisasjoner.find((o: any) => o.id === org.id)).toMatchObject({ verifisering: "verifisert" });
+    expect((await kall("GET", `/api/org/${org.id}/verifisering`, olga)).data).toMatchObject({ verifisering: "verifisert", verifisert_metode: "kontogodkjenning" });
+    // Plattformadministratoren ser hvordan den ble verifisert.
+    expect((await kall("GET", "/api/admin/organisasjoner", admin)).data.find((o: any) => o.id === org.id)).toMatchObject({
+      verifisering: "verifisert",
+      verifisert_metode: "kontogodkjenning",
+    });
+  });
+
+  it("administratoren kan godkjenne kontoen uten organisasjonen; da gjelder den vanlige verifiseringen", async () => {
+    const id = (await kall("GET", "/api/admin/kontoer", admin)).data.find((v: any) => v.epost === "rune.konto@server.test").id;
+    expect((await kall("POST", `/api/admin/brukere/${id}/godkjenning`, admin, { godkjent: true, verifiser_org: false })).data).toMatchObject({
+      status: "godkjent",
+      godkjent_orgnr: null,
+    });
+    expect(eposter("rune.konto@server.test").at(-1)!.tekst).not.toContain("godkjent samtidig");
+    const org = (await kall("POST", "/api/organisasjoner", rune, { navn: "Rune Register AS", orgnr: "315000319" })).data;
+    expect(org).toMatchObject({ verifisering: "ny", maks_fakturaer_mnd: 20 });
+    expect((await kall("POST", `/api/admin/brukere/${id}/godkjenning`, admin, { godkjent: true, verifiser_org: "ja" })).status).toBe(400);
   });
 
   it("bare plattformadministratoren ser og godkjenner kontoene, med modulene", async () => {

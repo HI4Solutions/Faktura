@@ -3,9 +3,11 @@
 // inn og modulene valgt (0044_moduler.sql), får administratorene e-post om forespørselen, med
 // det brukeren registrerte seg som (person eller organisasjon, 0126_registrering.sql); de
 // godkjenner (med modulene brukeren ba om, eller andre) eller avviser under Administrasjon →
-// Venter, og brukeren får e-post om utfallet. Til da slipper API-et bare gjennom /meg (status,
-// navn, moduler og lenken som bekrefter e-postadressen, epostbekreftelse.ts) og invitasjoner (en
-// invitasjon fra en organisasjon godkjenner kontoen).
+// Venter, og brukeren får e-post om utfallet. Godkjennes en konto som er registrert som
+// organisasjon, er organisasjonen brukeren lager med det nummeret, verifisert med en gang
+// (0128_en_godkjenning.sql); administratoren kan velge det bort. Til da slipper API-et bare
+// gjennom /meg (status, navn, moduler og lenken som bekrefter e-postadressen,
+// epostbekreftelse.ts) og invitasjoner (en invitasjon fra en organisasjon godkjenner kontoen).
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { config } from "./config.js";
@@ -108,6 +110,9 @@ export async function meldNyKonto(c: Context) {
       `Moduler: ${opplisting(ny.moduler)}`,
       ``,
       `Kontoen kommer ikke inn før den er godkjent. Godkjenn eller avvis den på ${config.appUrl}/admin`,
+      ...(ny.registrert_som === "organisasjon" && ny.oppgitt_orgnr
+        ? [``, `Godkjenner du kontoen, er organisasjonen også verifisert når brukeren lager den (det kan du velge bort).`]
+        : []),
     ].join("\n"),
   }).catch((e) => console.warn("Kunne ikke varsle administratorer om ny konto", e));
 }
@@ -121,18 +126,29 @@ export function kontoAdminRuter() {
   // Kontoene som venter på godkjenning.
   r.get("/kontoer", async (c) => c.json(await somBetrodd(c.get("bruker").id, (db) => alle(db, "select * from faktura.admin_kontoer_venter()"))));
 
-  // Godkjenn eller avvis en konto, eventuelt med andre moduler enn brukeren ba om. Brukeren får
-  // e-post om utfallet.
+  // Godkjenn eller avvis en konto, eventuelt med andre moduler enn brukeren ba om. En konto som er
+  // registrert som organisasjon, godkjennes med organisasjonen (verifiser_org, standard): den er
+  // verifisert når brukeren lager den (0128_en_godkjenning.sql). Brukeren får e-post om utfallet.
   r.post("/brukere/:id/godkjenning", async (c) => {
     const k = z
-      .object({ godkjent: z.boolean(), grunn: z.string().trim().max(500).optional(), moduler: modulKoder.optional() })
+      .object({ godkjent: z.boolean(), grunn: z.string().trim().max(500).optional(), moduler: modulKoder.optional(), verifiser_org: z.boolean().optional() })
       .parse(await c.req.json().catch(() => ({})));
     const b = (await somBetrodd(c.get("bruker").id, async (db) => {
-      const b = (await en<{ id: string; epost: string; navn: string | null; status: string; avvist_grunn: string | null }>(
-        db,
-        "select id, epost, navn, status, avvist_grunn from faktura.behandle_konto($1, $2, $3, $4)",
-        [id(c), k.godkjent, k.grunn ?? null, k.moduler ?? null],
-      ))!;
+      const b = (await en<{
+        id: string;
+        epost: string;
+        navn: string | null;
+        status: string;
+        avvist_grunn: string | null;
+        godkjent_orgnr: string | null;
+        oppgitt_orgnavn: string | null;
+      }>(db, "select id, epost, navn, status, avvist_grunn, godkjent_orgnr, oppgitt_orgnavn from faktura.behandle_konto($1, $2, $3, $4, $5)", [
+        id(c),
+        k.godkjent,
+        k.grunn ?? null,
+        k.moduler ?? null,
+        k.verifiser_org ?? true,
+      ]))!;
       return { ...b, moduler: await modulnavn(db, b.id) };
     }))!;
     const hei = b.navn ? `Hei ${b.navn.split(" ")[0]},` : "Hei,";
@@ -147,6 +163,12 @@ export function kontoAdminRuter() {
               ``,
               `Kontoen din i Admin Konsoll er godkjent${b.moduler.length ? ` med ${opplisting(b.moduler)}` : ""}, og du kan logge inn nå:`,
               config.appUrl,
+              ...(b.godkjent_orgnr
+                ? [
+                    ``,
+                    `${b.oppgitt_orgnavn ?? "Organisasjonen"} (org.nr. ${visOrgnr(b.godkjent_orgnr)}) er godkjent samtidig. Når du har laget den i appen, er den klar til bruk; du trenger ikke verifisere den.`,
+                  ]
+                : []),
             ].join("\n"),
           }
         : {
@@ -156,7 +178,7 @@ export function kontoAdminRuter() {
             ),
           }),
     }).catch((e) => console.warn("Kunne ikke sende e-post om kontoen", e));
-    return c.json({ id: b.id, status: b.status, avvist_grunn: b.avvist_grunn, moduler: b.moduler });
+    return c.json({ id: b.id, status: b.status, avvist_grunn: b.avvist_grunn, moduler: b.moduler, godkjent_orgnr: b.godkjent_orgnr });
   });
 
   // En ny lenke som bekrefter e-postadressen, eller bekreft den for brukeren (når administratoren

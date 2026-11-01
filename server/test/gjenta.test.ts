@@ -88,8 +88,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Gjenta fakturaen", () => {
   });
 
   it("neste forfall må være etter fakturaens forfall, og valget kan fjernes før sending", async () => {
+    // Med fakturadato: uten den er fakturadatoen i dag, og forfallsdatoen kan ikke være før den.
     const f = await kall("POST", `/api/org/${org}/fakturaer`, {
       kunde_id: kunde,
+      fakturadato: "2026-10-06",
       forfallsdato: "2026-10-20",
       gjenta: { intervall: "maaned", neste_forfall: "2026-10-20" },
       linjer,
@@ -99,7 +101,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Gjenta fakturaen", () => {
     expect((await kall("GET", `/api/org/${org}/fakturaer/${f.data.id}`)).data.status).toBe("utkast");
 
     const antall = (await gjentakelser()).length;
-    await kall("PUT", `/api/org/${org}/fakturaer/${f.data.id}`, { kunde_id: kunde, forfallsdato: "2026-10-20", gjenta: null, linjer });
+    await kall("PUT", `/api/org/${org}/fakturaer/${f.data.id}`, { kunde_id: kunde, fakturadato: "2026-10-06", forfallsdato: "2026-10-20", gjenta: null, linjer });
     expect((await kall("POST", `/api/org/${org}/fakturaer/${f.data.id}/utsted`, { send_epost: false })).status).toBe(200);
     expect((await gjentakelser()).length).toBe(antall);
     expect((await kall("POST", `/api/org/${org}/fakturaer`, { kunde_id: kunde, gjenta: { intervall: "uke" }, linjer })).status).toBe(400);

@@ -274,6 +274,28 @@ let resend: Resend | undefined;
 // Slik svarer Resend når avsenderdomenet ikke er verifisert i kontoen.
 export const avsenderIkkeVerifisert = (feil: { message?: string } | null | undefined) => /not verified|verify your domain/i.test(feil?.message ?? "");
 
+const escHtml = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+// E-postene lages som utdrag (<div>…</div>), og sendes som et helt HTML-dokument med språk,
+// tegnsett og tittel. E-post uten <html> og <body> får dårligere poeng i søppelpostfiltrene (også
+// hos Microsoft). Et dokument som alt er helt, sendes som det er.
+export function heltDokument(html: string, emne: string): string {
+  if (/^\s*(<!doctype|<html)/i.test(html)) return html;
+  return [
+    "<!DOCTYPE html>",
+    '<html lang="nb">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${escHtml(emne)}</title>`,
+    "</head>",
+    '<body style="margin:0;padding:16px;background:#ffffff">',
+    html,
+    "</body>",
+    "</html>",
+  ].join("\n");
+}
+
 // Sender én e-post gjennom Resend. Resend tar bare imot noen få e-poster i sekundet: når mange
 // fakturaer sendes samtidig, venter vi litt og prøver igjen (idempotensnøkkelen hindrer dobbel
 // sending). Er avsenderdomenet ikke verifisert i Resend (f.eks. etter et domenebytte), sendes
@@ -292,7 +314,7 @@ export async function sendGjennomResend(klient: Pick<Resend, "emails">, m: Epost
         bcc: m.blindkopi?.length ? m.blindkopi : undefined,
         subject: m.emne,
         text: m.tekst,
-        html: m.html,
+        html: heltDokument(m.html, m.emne),
         attachments: m.vedlegg?.map((v) => ({ filename: v.filnavn, content: Buffer.from(v.data), contentType: v.type })),
       },
       nokkel ? { idempotencyKey: nokkel } : undefined,
